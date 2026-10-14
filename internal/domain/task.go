@@ -1,0 +1,217 @@
+package domain
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+)
+
+type TaskStatus string
+
+const (
+	StatusInbox           TaskStatus = "inbox"
+	StatusQueued          TaskStatus = "queued"
+	StatusPlanning        TaskStatus = "planning"
+	StatusRunning         TaskStatus = "running"
+	StatusWaitingApproval TaskStatus = "waiting_approval"
+	StatusPaused          TaskStatus = "paused"
+	StatusVerifying       TaskStatus = "verifying"
+	StatusCompleted       TaskStatus = "completed"
+	StatusFailed          TaskStatus = "failed"
+	StatusCancelled       TaskStatus = "cancelled"
+)
+
+type Stage string
+
+const (
+	StageIntake        Stage = "intake"
+	StagePlanning      Stage = "planning"
+	StageSearch        Stage = "search"
+	StageFetch         Stage = "fetch"
+	StageExtract       Stage = "extract"
+	StageBrowser       Stage = "browser"
+	StageCodeExecution Stage = "code_execution"
+	StageSynthesis     Stage = "synthesis"
+	StageVerification  Stage = "verification"
+	StageFinalization  Stage = "finalization"
+)
+
+var ErrInvalidTransition = errors.New("invalid task status transition")
+
+var transitions = map[TaskStatus]map[TaskStatus]struct{}{
+	StatusInbox:           {StatusQueued: {}, StatusCancelled: {}},
+	StatusQueued:          {StatusPlanning: {}, StatusPaused: {}, StatusCancelled: {}},
+	StatusPlanning:        {StatusRunning: {}, StatusPaused: {}, StatusFailed: {}, StatusCancelled: {}},
+	StatusRunning:         {StatusWaitingApproval: {}, StatusPaused: {}, StatusVerifying: {}, StatusFailed: {}, StatusCancelled: {}},
+	StatusWaitingApproval: {StatusRunning: {}, StatusPaused: {}, StatusFailed: {}, StatusCancelled: {}},
+	StatusPaused:          {StatusQueued: {}, StatusRunning: {}, StatusCancelled: {}},
+	StatusVerifying:       {StatusCompleted: {}, StatusFailed: {}, StatusPaused: {}, StatusCancelled: {}},
+	StatusFailed:          {StatusQueued: {}},
+	StatusCompleted:       {},
+	StatusCancelled:       {},
+}
+
+func (s TaskStatus) Valid() bool {
+	_, ok := transitions[s]
+	return ok
+}
+
+func CanTransition(from, to TaskStatus) bool {
+	allowed, ok := transitions[from]
+	if !ok {
+		return false
+	}
+	_, ok = allowed[to]
+	return ok
+}
+
+func (s TaskStatus) Terminal() bool {
+	return s == StatusCompleted || s == StatusFailed || s == StatusCancelled
+}
+
+type Task struct {
+	ID          string     `json:"id"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	Status      TaskStatus `json:"status"`
+	Stage       *Stage     `json:"stage,omitempty"`
+	Priority    int        `json:"priority"`
+	Plan        *Plan      `json:"plan,omitempty"`
+	Version     int64      `json:"version"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+type Message struct {
+	ID        string    `json:"id"`
+	TaskID    string    `json:"task_id"`
+	Role      string    `json:"role"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type Event struct {
+	ID            string          `json:"id"`
+	TaskID        string          `json:"task_id"`
+	Seq           int64           `json:"seq"`
+	Type          string          `json:"type"`
+	SchemaVersion int             `json:"schema_version"`
+	CreatedAt     time.Time       `json:"created_at"`
+	Stage         *Stage          `json:"stage,omitempty"`
+	Visibility    string          `json:"visibility"`
+	Payload       json.RawMessage `json:"payload"`
+}
+
+type Checkpoint struct {
+	ID           string    `json:"id"`
+	TaskID       string    `json:"task_id"`
+	PlanVersion  int       `json:"plan_version"`
+	State        any       `json:"state"`
+	LastEventSeq int64     `json:"last_event_seq"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type Plan struct {
+	SchemaVersion    int        `json:"schema_version"`
+	Goal             string     `json:"goal"`
+	Subtasks         []PlanStep `json:"subtasks"`
+	MaxSteps         int        `json:"max_steps"`
+	FinalDeliverable string     `json:"final_deliverable"`
+}
+
+type PlanStep struct {
+	ID              string   `json:"id"`
+	Kind            string   `json:"kind"`
+	Description     string   `json:"description"`
+	Dependencies    []string `json:"dependencies"`
+	ExpectedOutput  string   `json:"expected_output"`
+	SuccessCriteria []string `json:"success_criteria"`
+}
+
+func ValidatePlan(plan Plan, maxSteps int) error {
+	if plan.SchemaVersion != 1 {
+		return fmt.Errorf("unsupported plan schema_version %d", plan.SchemaVersion)
+	}
+	if strings.TrimSpace(plan.Goal) == "" || len(plan.Goal) > 1000 {
+		return errors.New("plan goal must contain 1 to 1000 characters")
+	}
+	if len(plan.Subtasks) == 0 || len(plan.Subtasks) > maxSteps || len(plan.Subtasks) > 12 {
+		return fmt.Errorf("plan must contain between 1 and %d subtasks", min(maxSteps, 12))
+	}
+	if plan.MaxSteps < len(plan.Subtasks) || plan.MaxSteps > maxSteps || plan.MaxSteps > 12 {
+		return fmt.Errorf("plan max_steps must be between %d and %d", len(plan.Subtasks), min(maxSteps, 12))
+	}
+	if strings.TrimSpace(plan.FinalDeliverable) == "" || len(plan.FinalDeliverable) > 1000 {
+		return errors.New("plan final_deliverable must contain 1 to 1000 characters")
+	}
+	steps := make(map[string]PlanStep, len(plan.Subtasks))
+	for _, step := range plan.Subtasks {
+		if step.ID == "" || len(step.ID) > 64 {
+			return errors.New("plan step id must contain 1 to 64 characters")
+		}
+		if _, exists := steps[step.ID]; exists {
+			return fmt.Errorf("duplicate plan step id %q", step.ID)
+		}
+		if step.Kind != "analysis" && step.Kind != "search" && step.Kind != "fetch" && step.Kind != "extract" && step.Kind != "browser" && step.Kind != "code_execution" {
+			return fmt.Errorf("unsupported plan step kind %q", step.Kind)
+		}
+		if strings.TrimSpace(step.Description) == "" || len(step.Description) > 1000 {
+			return fmt.Errorf("step %q description must contain 1 to 1000 characters", step.ID)
+		}
+		if len(step.ExpectedOutput) > 500 {
+			return fmt.Errorf("step %q expected_output exceeds 500 characters", step.ID)
+		}
+		if len(step.SuccessCriteria) > 10 {
+			return fmt.Errorf("step %q has too many success criteria", step.ID)
+		}
+		steps[step.ID] = step
+	}
+	for _, step := range plan.Subtasks {
+		for _, dependency := range step.Dependencies {
+			if _, exists := steps[dependency]; !exists {
+				return fmt.Errorf("step %q references unknown dependency %q", step.ID, dependency)
+			}
+			if dependency == step.ID {
+				return fmt.Errorf("step %q cannot depend on itself", step.ID)
+			}
+		}
+	}
+	if hasDependencyCycle(steps) {
+		return errors.New("plan dependencies contain a cycle")
+	}
+	return nil
+}
+
+func hasDependencyCycle(steps map[string]PlanStep) bool {
+	const (
+		unvisited = iota
+		visiting
+		visited
+	)
+	marks := make(map[string]int, len(steps))
+	var visit func(string) bool
+	visit = func(id string) bool {
+		if marks[id] == visiting {
+			return true
+		}
+		if marks[id] == visited {
+			return false
+		}
+		marks[id] = visiting
+		for _, dependency := range steps[id].Dependencies {
+			if visit(dependency) {
+				return true
+			}
+		}
+		marks[id] = visited
+		return false
+	}
+	for id := range steps {
+		if marks[id] == unvisited && visit(id) {
+			return true
+		}
+	}
+	return false
+}
