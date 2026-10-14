@@ -41,8 +41,9 @@ func New(grants map[string][]string) *Evaluator {
 
 func NewDefaultEvaluator() *Evaluator {
 	return New(map[string][]string{
-		"analyst":  {"task.text.inspect"},
-		"verifier": {"task.text.inspect"},
+		"analyst":    {"task.text.inspect"},
+		"verifier":   {"task.text.inspect"},
+		"researcher": {"research.search", "research.fetch"},
 	})
 }
 

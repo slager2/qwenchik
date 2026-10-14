@@ -9,11 +9,14 @@ The first vertical slice is implemented:
 - task create/list/show and lifecycle controls through the API and CLI;
 - SQLite migrations, atomic status/event writes, sequential durable worker, recovery, and checkpoint history;
 - one local OpenAI-compatible LLM adapter with JSON mode and SSE streaming support;
-- strict planner validation and one safe `text.inspect` tool; unknown tools are denied;
+- deterministic capability/risk evaluation, per-tool role gates, and internal policy audit events;
+- strict planner validation and typed tools; unknown tools are denied and external side effects fail closed;
+- optional local SearXNG discovery, DNS-rebinding/SSRF-safe public HTTP fetch, and local HTML extraction;
+- fetched content stored as local artifacts with content hashes, provenance, excerpts, quote spans, and citation-ID validation;
 - SSE event replay using `Last-Event-ID`;
-- responsive Kanban, task inspector, chat, live event timeline, and keyboard command palette.
+- responsive Kanban, task inspector, chat, live event timeline, sources/artifacts panels, and keyboard command palette.
 
-Search providers, citations/evidence extraction, browser automation, approval decisions, code sandbox, and durable memory retrieval are later phases and are not exposed as working features yet. The only available runtime tool reads bounded task text and returns counts. No host shell or cloud LLM fallback is registered.
+SearXNG is disabled by default. Without it, the worker can still fetch a public URL included in the task; an arbitrary model-invented URL is rejected. PDF extraction, JS/browser automation, Tavily/Brave adapters, interactive approval workflow, rootless code sandbox, and durable memory retrieval are later phases. PDF input fails with `pdf_extractor_unavailable` rather than falling back to a host command. Host shell and cloud LLM fallback are not registered.
 
 ## Requirements
 
@@ -56,6 +59,8 @@ The server was not present in the development environment during the initial aud
 The backend and model server intentionally use different ports. The API rejects non-loopback app binds and remote LLM URLs; authenticated LAN mode is not implemented.
 The server holds an OS lock for its database so a second `qagent serve` process cannot recover or run the same queue concurrently.
 
+Optional local web search can be enabled by setting `SEARXNG_URL=http://127.0.0.1:8081` to a SearXNG instance configured for JSON output. `ALLOWED_DOMAINS=example.org,docs.example.com` optionally narrows fetch and search results. The fetcher rejects loopback, private, link-local, reserved, credential-bearing, nonstandard-port, and redirect-to-private URLs.
+
 Set `LLM_CONTEXT_LENGTH` to the context configured on the model server. The example file follows the API contract default of `131072`; for the conservative `-c 8192` llama.cpp command above, export `LLM_CONTEXT_LENGTH=8192`. The worker derives a bounded task-input budget from that value and the output-token reserve.
 
 ## CLI
@@ -66,6 +71,9 @@ Set `LLM_CONTEXT_LENGTH` to the context configured on the model server. The exam
 ./qagent task run TASK_ID
 ./qagent task show TASK_ID
 ./qagent events TASK_ID --follow
+./qagent evidence TASK_ID
+./qagent artifacts TASK_ID
+./qagent checkpoints TASK_ID
 ./qagent task pause TASK_ID
 ./qagent task resume TASK_ID
 ./qagent task cancel TASK_ID

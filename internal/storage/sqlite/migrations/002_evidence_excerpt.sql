@@ -1,0 +1,1 @@
+ALTER TABLE evidence ADD COLUMN excerpt TEXT NOT NULL DEFAULT '';

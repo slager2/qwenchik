@@ -2,13 +2,16 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"strconv"
@@ -42,6 +45,8 @@ type TaskService interface {
 	Events(context.Context, string, int64, int) ([]domain.Event, error)
 	Checkpoints(context.Context, string) ([]domain.Checkpoint, error)
 	Steps(context.Context, string) ([]domain.TaskStep, error)
+	Artifacts(context.Context, string) ([]domain.Artifact, error)
+	Evidence(context.Context, string) ([]domain.Evidence, error)
 }
 
 type WorkerControl interface {
@@ -49,22 +54,29 @@ type WorkerControl interface {
 	Interrupt(string)
 }
 
-type Server struct {
-	service TaskService
-	worker  WorkerControl
-	dbPing  func(context.Context) error
-	llmURL  string
-	llmKey  string
-	logger  *slog.Logger
-	client  *http.Client
+type ArtifactReader interface {
+	Read(context.Context, string, string) ([]byte, error)
 }
 
-func New(service TaskService, worker WorkerControl, dbPing func(context.Context) error, llmURL, llmKey string, logger *slog.Logger) *Server {
+type Server struct {
+	service        TaskService
+	worker         WorkerControl
+	dbPing         func(context.Context) error
+	llmURL         string
+	llmKey         string
+	searchURL      string
+	artifactReader ArtifactReader
+	logger         *slog.Logger
+	client         *http.Client
+}
+
+func New(service TaskService, worker WorkerControl, dbPing func(context.Context) error, llmURL, llmKey, searchURL string, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{service: service, worker: worker, dbPing: dbPing, llmURL: strings.TrimRight(llmURL, "/"), llmKey: llmKey, logger: logger, client: &http.Client{
+	return &Server{service: service, worker: worker, dbPing: dbPing, llmURL: strings.TrimRight(llmURL, "/"), llmKey: llmKey, searchURL: strings.TrimRight(searchURL, "/"), logger: logger, client: &http.Client{
 		Timeout:       3 * time.Second,
+		Transport:     &http.Transport{Proxy: nil},
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 	}}
 }
@@ -84,6 +96,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/doctor", s.doctor)
+	mux.HandleFunc("GET /api/providers", s.providers)
 	mux.HandleFunc("POST /api/tasks", s.createTask)
 	mux.HandleFunc("GET /api/tasks", s.listTasks)
 	mux.HandleFunc("GET /api/tasks/{taskID}", s.getTask)
@@ -97,6 +110,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tasks/{taskID}/events/stream", s.streamEvents)
 	mux.HandleFunc("GET /api/tasks/{taskID}/checkpoints", s.checkpoints)
 	mux.HandleFunc("GET /api/tasks/{taskID}/steps", s.steps)
+	mux.HandleFunc("GET /api/tasks/{taskID}/artifacts", s.artifacts)
+	mux.HandleFunc("GET /api/tasks/{taskID}/artifacts/{artifactID}", s.artifactContent)
+	mux.HandleFunc("GET /api/tasks/{taskID}/evidence", s.evidence)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
@@ -115,6 +131,8 @@ func (s *Server) Handler() http.Handler {
 		mux.ServeHTTP(w, r)
 	})
 }
+
+func (s *Server) SetArtifactReader(reader ArtifactReader) { s.artifactReader = reader }
 
 func loopbackHostHeader(value string) bool {
 	host := value
@@ -367,6 +385,72 @@ func (s *Server) steps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
+func (s *Server) artifacts(w http.ResponseWriter, r *http.Request) {
+	items, err := s.service.Artifacts(r.Context(), r.PathValue("taskID"))
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	if items == nil {
+		items = []domain.Artifact{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) artifactContent(w http.ResponseWriter, r *http.Request) {
+	taskID, artifactID := r.PathValue("taskID"), r.PathValue("artifactID")
+	if s.artifactReader == nil {
+		writeError(w, http.StatusServiceUnavailable, "artifact_store_unavailable", "Локальное хранилище артефактов недоступно.", true)
+		return
+	}
+	items, err := s.service.Artifacts(r.Context(), taskID)
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	var artifact *domain.Artifact
+	for i := range items {
+		if items[i].ID == artifactID {
+			artifact = &items[i]
+			break
+		}
+	}
+	if artifact == nil {
+		writeError(w, http.StatusNotFound, "not_found", "Артефакт не найден.", false)
+		return
+	}
+	content, err := s.artifactReader.Read(r.Context(), taskID, artifactID)
+	if err != nil {
+		s.logger.Warn("artifact read failed", "task_id", taskID, "artifact_id", artifactID, "error", err)
+		writeError(w, http.StatusNotFound, "not_found", "Артефакт не найден в локальном хранилище.", false)
+		return
+	}
+	hash := sha256.Sum256(content)
+	if hex.EncodeToString(hash[:]) != artifact.SHA256 {
+		s.logger.Error("artifact content hash mismatch", "task_id", taskID, "artifact_id", artifactID)
+		writeError(w, http.StatusInternalServerError, "artifact_integrity_error", "Хэш артефакта не совпадает с метаданными.", false)
+		return
+	}
+	w.Header().Set("Content-Type", artifact.MIMEType)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": artifact.Name}))
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(content)
+}
+
+func (s *Server) evidence(w http.ResponseWriter, r *http.Request) {
+	items, err := s.service.Evidence(r.Context(), r.PathValue("taskID"))
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	if items == nil {
+		items = []domain.Evidence{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	if err := s.dbPing(r.Context()); err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "error", "database": "unavailable"})
@@ -386,6 +470,23 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 		checks["database"] = map[string]string{"status": "error", "message": "SQLite connection failed"}
 	} else {
 		checks["database"] = map[string]string{"status": "ok", "message": "SQLite is writable"}
+	}
+	if s.searchURL == "" {
+		checks["search"] = map[string]string{"status": "warning", "message": "SearXNG is not configured"}
+	} else {
+		searchRequest, err := http.NewRequestWithContext(r.Context(), http.MethodGet, s.searchURL+"/search?q=qagent-doctor&format=json&safesearch=1", nil)
+		if err != nil {
+			checks["search"] = map[string]string{"status": "warning", "message": "SearXNG health request could not be created"}
+		} else if response, err := s.client.Do(searchRequest); err != nil {
+			checks["search"] = map[string]string{"status": "warning", "message": "Configured SearXNG endpoint is unavailable"}
+		} else {
+			_ = response.Body.Close()
+			if response.StatusCode >= 200 && response.StatusCode < 300 {
+				checks["search"] = map[string]string{"status": "ok", "message": "SearXNG search endpoint responded"}
+			} else {
+				checks["search"] = map[string]string{"status": "warning", "message": fmt.Sprintf("SearXNG returned HTTP %d", response.StatusCode)}
+			}
+		}
 	}
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, s.llmURL+"/models", nil)
 	if err == nil && s.llmKey != "" {
@@ -415,6 +516,19 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 		code = http.StatusServiceUnavailable
 	}
 	writeJSON(w, code, map[string]any{"status": status, "checks": checks})
+}
+
+func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
+	searchStatus := "disabled"
+	if s.searchURL != "" {
+		searchStatus = "configured"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"llm":     map[string]any{"type": "local-openai-compatible", "status": "configured", "base_url": s.llmURL},
+		"search":  map[string]any{"type": "searxng", "status": searchStatus, "base_url": s.searchURL},
+		"browser": map[string]string{"status": "disabled"},
+		"sandbox": map[string]string{"status": "disabled"},
+	})
 }
 
 func (s *Server) writeServiceError(w http.ResponseWriter, err error) {
@@ -484,7 +598,7 @@ func publicEvent(event domain.Event) bool {
 		return false
 	}
 	switch event.Type {
-	case "task.created", "task.status_changed", "task.recovered", "message.created", "plan.created", "step.started", "step.completed", "tool.started", "tool.completed", "approval.requested", "task.completed", "task.failed", "task.cancelled":
+	case "task.created", "task.status_changed", "task.recovered", "message.created", "plan.created", "step.started", "step.completed", "tool.started", "tool.completed", "approval.requested", "artifact.created", "evidence.created", "task.completed", "task.failed", "task.cancelled":
 		return true
 	default:
 		return false

@@ -16,9 +16,13 @@ Base path: `/api`. JSON errors use `{"error":{"code":"...","message":"...","retr
 | `GET` | `/tasks/{task_id}/events/stream` | Reconnecting SSE |
 | `GET` | `/tasks/{task_id}/checkpoints` | Checkpoint history |
 | `GET` | `/tasks/{task_id}/steps` | Backend-owned plan step states |
+| `GET` | `/tasks/{task_id}/artifacts` | Artifact metadata (bytes stay in the local artifact store) |
+| `GET` | `/tasks/{task_id}/artifacts/{artifact_id}` | Download one task-owned artifact |
+| `GET` | `/tasks/{task_id}/evidence` | Source provenance, excerpts, quote spans, and citations |
 | `GET` | `/tasks/{task_id}/messages` | Conversation history |
 | `GET` | `/health` | Process and storage health |
 | `GET` | `/doctor` | Runtime/provider checks, with no secret values |
+| `GET` | `/providers` | Configured local and optional provider status |
 
 Mutations are idempotent when an idempotency key is supplied. Unknown task IDs return 404. Invalid lifecycle transitions return 409; malformed request bodies return 400. Create returns 201; accepted worker commands return 202.
 

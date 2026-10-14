@@ -15,10 +15,10 @@ model JSON -> strict parse -> role allowlist -> schema validation
 
 Tool output is untrusted data and cannot directly invoke another tool. The orchestrator requests a fresh model decision before any next tool action. Unknown tools fail closed.
 
-## Phase 2 registry
+## Implemented registry
 
-Only `text.inspect` is registered. It accepts bounded user/task text and returns deterministic character, word, and line counts. It has no filesystem, network, process, or external side effect. It is a real deterministic utility used to validate the tool pipeline; it is not a stand-in executor for search, browser, sandbox, or shell.
+`text.inspect` is always registered. It accepts bounded user/task text and returns deterministic character, word, and line counts. When local SearXNG is configured, `search` is added. `fetch_url` is added when the local artifact/evidence store is available; it only accepts URLs found in user task text or prior search results, then validates SSRF policy again before dialing. `fetch_url` stores raw and extracted artifacts and an evidence record; external text is labeled `untrusted_external_content`.
 
 ## Deferred capabilities
 
-Search/fetch, browser, workspace writes, and sandbox execution are unavailable until their owning phases add typed executors and policy tests. Host shell is never a fallback. If Docker/Podman sandbox is unavailable, execution returns `sandbox_unavailable`.
+PDF text extraction, dynamic browser content, Tavily/Brave, workspace writes, and sandbox execution are not registered. A fetched PDF receives an explicit `pdf_extractor_unavailable` error; there is no host-command fallback. Host shell is never registered. If Docker/Podman sandbox is unavailable in a later phase, execution must return `sandbox_unavailable`.

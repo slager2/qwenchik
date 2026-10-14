@@ -509,6 +509,155 @@ func (s *Store) Steps(ctx context.Context, taskID string) ([]domain.TaskStep, er
 	return result, rows.Err()
 }
 
+func (s *Store) SaveArtifact(ctx context.Context, artifact domain.Artifact, storagePath string) (domain.Artifact, error) {
+	if artifact.ID == "" || artifact.TaskID == "" || !safeArtifactReference(storagePath) {
+		return domain.Artifact{}, errors.New("invalid artifact metadata or storage reference")
+	}
+	if _, err := s.GetTask(ctx, artifact.TaskID); err != nil {
+		return domain.Artifact{}, err
+	}
+	if artifact.CreatedAt.IsZero() {
+		artifact.CreatedAt = time.Now().UTC()
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Artifact{}, err
+	}
+	defer tx.Rollback()
+	var existing domain.Artifact
+	var existingPath string
+	var created string
+	err = tx.QueryRowContext(ctx, `SELECT id,task_id,name,mime_type,sha256,size_bytes,storage_path,created_at FROM artifacts WHERE task_id=? AND id=?`, artifact.TaskID, artifact.ID).
+		Scan(&existing.ID, &existing.TaskID, &existing.Name, &existing.MIMEType, &existing.SHA256, &existing.SizeBytes, &existingPath, &created)
+	if err == nil {
+		if existingPath != storagePath || existing.SHA256 != artifact.SHA256 || existing.MIMEType != artifact.MIMEType || existing.SizeBytes != artifact.SizeBytes {
+			return domain.Artifact{}, ErrConflict
+		}
+		existing.CreatedAt = parseTime(created)
+		return existing, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return domain.Artifact{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO artifacts(id,task_id,name,mime_type,sha256,size_bytes,storage_path,created_at) VALUES(?,?,?,?,?,?,?,?)`,
+		artifact.ID, artifact.TaskID, artifact.Name, artifact.MIMEType, artifact.SHA256, artifact.SizeBytes, storagePath, stamp(artifact.CreatedAt)); err != nil {
+		return domain.Artifact{}, err
+	}
+	if _, err := appendEvent(ctx, tx, artifact.TaskID, "artifact.created", nil, "user", map[string]any{
+		"artifact_id": artifact.ID, "name": artifact.Name, "mime_type": artifact.MIMEType,
+		"size_bytes": artifact.SizeBytes, "sha256": artifact.SHA256,
+	}); err != nil {
+		return domain.Artifact{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Artifact{}, err
+	}
+	return artifact, nil
+}
+
+func (s *Store) Artifacts(ctx context.Context, taskID string) ([]domain.Artifact, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,task_id,name,mime_type,sha256,size_bytes,created_at FROM artifacts WHERE task_id=? ORDER BY created_at DESC LIMIT 500`, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []domain.Artifact
+	for rows.Next() {
+		var artifact domain.Artifact
+		var created string
+		if err := rows.Scan(&artifact.ID, &artifact.TaskID, &artifact.Name, &artifact.MIMEType, &artifact.SHA256, &artifact.SizeBytes, &created); err != nil {
+			return nil, err
+		}
+		artifact.CreatedAt = parseTime(created)
+		result = append(result, artifact)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) SaveEvidence(ctx context.Context, evidence domain.Evidence) (domain.Evidence, error) {
+	if evidence.TaskID == "" || evidence.Provider == "" || evidence.CanonicalURL == "" || evidence.OriginalURL == "" || evidence.ContentSHA256 == "" {
+		return domain.Evidence{}, errors.New("evidence is missing required provenance fields")
+	}
+	if _, err := s.GetTask(ctx, evidence.TaskID); err != nil {
+		return domain.Evidence{}, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Evidence{}, err
+	}
+	defer tx.Rollback()
+	var existingID string
+	err = tx.QueryRowContext(ctx, `SELECT id FROM evidence WHERE task_id=? AND canonical_url=? AND content_sha256=?`, evidence.TaskID, evidence.CanonicalURL, evidence.ContentSHA256).Scan(&existingID)
+	if err == nil {
+		evidence.ID = existingID
+		return evidence, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return domain.Evidence{}, err
+	}
+	if evidence.ID == "" {
+		evidence.ID = newID()
+	}
+	if evidence.RetrievedAt.IsZero() {
+		evidence.RetrievedAt = time.Now().UTC()
+	}
+	quotes, err := json.Marshal(evidence.QuoteSpans)
+	if err != nil {
+		return domain.Evidence{}, err
+	}
+	flags, err := json.Marshal(evidence.QualityFlags)
+	if err != nil {
+		return domain.Evidence{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO evidence(id,task_id,provider,original_query,original_url,canonical_url,title,language,retrieved_at,http_status,content_sha256,extraction_method,raw_artifact_id,text_artifact_id,quote_spans_json,quality_flags_json,excerpt) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		evidence.ID, evidence.TaskID, evidence.Provider, evidence.OriginalQuery, evidence.OriginalURL, evidence.CanonicalURL,
+		evidence.Title, evidence.Language, stamp(evidence.RetrievedAt), evidence.HTTPStatus, evidence.ContentSHA256,
+		evidence.ExtractionMethod, nullableKey(evidence.RawArtifactID), nullableKey(evidence.TextArtifactID), string(quotes), string(flags), evidence.Excerpt); err != nil {
+		return domain.Evidence{}, err
+	}
+	if _, err := appendEvent(ctx, tx, evidence.TaskID, "evidence.created", nil, "user", map[string]any{
+		"evidence_id": evidence.ID, "title": evidence.Title, "canonical_url": evidence.CanonicalURL,
+	}); err != nil {
+		return domain.Evidence{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Evidence{}, err
+	}
+	if evidence.QuoteSpans == nil {
+		evidence.QuoteSpans = []domain.QuoteSpan{}
+	}
+	if evidence.QualityFlags == nil {
+		evidence.QualityFlags = []string{}
+	}
+	return evidence, nil
+}
+
+func (s *Store) Evidence(ctx context.Context, taskID string) ([]domain.Evidence, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,task_id,provider,original_query,original_url,canonical_url,title,language,retrieved_at,http_status,content_sha256,extraction_method,COALESCE(raw_artifact_id,''),COALESCE(text_artifact_id,''),quote_spans_json,quality_flags_json,excerpt FROM evidence WHERE task_id=? ORDER BY retrieved_at DESC LIMIT 500`, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []domain.Evidence
+	for rows.Next() {
+		var item domain.Evidence
+		var retrieved, quotes, flags string
+		if err := rows.Scan(&item.ID, &item.TaskID, &item.Provider, &item.OriginalQuery, &item.OriginalURL, &item.CanonicalURL, &item.Title, &item.Language, &retrieved, &item.HTTPStatus, &item.ContentSHA256, &item.ExtractionMethod, &item.RawArtifactID, &item.TextArtifactID, &quotes, &flags, &item.Excerpt); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(quotes), &item.QuoteSpans); err != nil {
+			return nil, fmt.Errorf("decode evidence quote spans: %w", err)
+		}
+		if err := json.Unmarshal([]byte(flags), &item.QualityFlags); err != nil {
+			return nil, fmt.Errorf("decode evidence quality flags: %w", err)
+		}
+		item.RetrievedAt = parseTime(retrieved)
+		item.Taint = "untrusted_external_content"
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) SaveCheckpoint(ctx context.Context, taskID string, planVersion int, state any) (domain.Checkpoint, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -841,6 +990,24 @@ func nullableKey(key string) any {
 		return nil
 	}
 	return key
+}
+
+func safeArtifactReference(value string) bool {
+	parts := strings.Split(filepath.ToSlash(value), "/")
+	if len(parts) != 2 || filepath.IsAbs(value) {
+		return false
+	}
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+		for _, character := range part {
+			if !(character >= 'a' && character <= 'z') && !(character >= 'A' && character <= 'Z') && !(character >= '0' && character <= '9') && character != '_' && character != '-' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func stamp(value time.Time) string { return value.UTC().Format(time.RFC3339Nano) }

@@ -19,6 +19,9 @@ var (
 	ErrUnknownTool      = errors.New("unknown tool")
 	ErrToolDenied       = errors.New("tool is not allowed for this role")
 	ErrApprovalRequired = errors.New("tool requires an approval")
+	ErrUnknownTarget    = errors.New("tool target is not in the approved task context")
+	ErrInvalidArguments = errors.New("tool arguments did not pass validation")
+	ErrInvalidOutput    = errors.New("tool output did not pass validation")
 )
 
 type Descriptor struct {
@@ -35,15 +38,18 @@ type Descriptor struct {
 }
 
 type Executor func(context.Context, json.RawMessage) (any, error)
+type ArgumentsValidator func(context.Context, json.RawMessage) error
 
 type registeredTool struct {
 	descriptor Descriptor
 	executor   Executor
+	validator  ArgumentsValidator
 }
 
 type Registry struct {
 	byName    map[string]registeredTool
 	evaluator *policy.Evaluator
+	urlLedger *URLLedger
 }
 
 func NewRegistry(evaluators ...*policy.Evaluator) *Registry {
@@ -52,13 +58,13 @@ func NewRegistry(evaluators ...*policy.Evaluator) *Registry {
 		evaluator = evaluators[0]
 	}
 	registry := &Registry{byName: make(map[string]registeredTool), evaluator: evaluator}
-	registry.MustRegister(Descriptor{
+	registry.MustRegisterValidated(Descriptor{
 		Name: "text.inspect", Description: "Count characters, words, and lines in bounded text.",
 		ArgumentsSchema:    json.RawMessage(`{"type":"object","properties":{"text":{"type":"string","maxLength":20000}},"required":["text"],"additionalProperties":false}`),
 		OutputSchema:       json.RawMessage(`{"type":"object","properties":{"characters":{"type":"integer"},"words":{"type":"integer"},"lines":{"type":"integer"}},"required":["characters","words","lines"],"additionalProperties":false}`),
 		RequiredCapability: "task.text.inspect", RiskClass: "read", TimeoutSeconds: 2,
 		Idempotent: true, MaxOutputBytes: 1024, AllowedRoles: []string{"analyst", "verifier"},
-	}, inspectText)
+	}, validateInspectArgs, inspectText)
 	return registry
 }
 
@@ -68,14 +74,24 @@ func (r *Registry) MustRegister(descriptor Descriptor, executor Executor) {
 	}
 }
 
+func (r *Registry) MustRegisterValidated(descriptor Descriptor, validator ArgumentsValidator, executor Executor) {
+	if err := r.RegisterValidated(descriptor, validator, executor); err != nil {
+		panic(err)
+	}
+}
+
 func (r *Registry) Register(descriptor Descriptor, executor Executor) error {
+	return r.RegisterValidated(descriptor, nil, executor)
+}
+
+func (r *Registry) RegisterValidated(descriptor Descriptor, validator ArgumentsValidator, executor Executor) error {
 	if descriptor.Name == "" || executor == nil || descriptor.MaxOutputBytes < 1 || descriptor.TimeoutSeconds < 1 || !json.Valid(descriptor.ArgumentsSchema) || !json.Valid(descriptor.OutputSchema) {
 		return errors.New("tool descriptor is incomplete")
 	}
 	if _, exists := r.byName[descriptor.Name]; exists {
 		return fmt.Errorf("tool %q already registered", descriptor.Name)
 	}
-	r.byName[descriptor.Name] = registeredTool{descriptor: descriptor, executor: executor}
+	r.byName[descriptor.Name] = registeredTool{descriptor: descriptor, executor: executor, validator: validator}
 	return nil
 }
 
@@ -86,6 +102,34 @@ func (r *Registry) Descriptors() []Descriptor {
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result
+}
+
+func (r *Registry) Has(name string) bool {
+	_, ok := r.byName[name]
+	return ok
+}
+
+func (r *Registry) Descriptor(name string) (Descriptor, bool) {
+	tool, ok := r.byName[name]
+	return tool.descriptor, ok
+}
+
+func (r *Registry) SeedTaskURLs(taskID, text string) {
+	if r.urlLedger != nil {
+		r.urlLedger.SeedText(taskID, text)
+	}
+}
+
+func (r *Registry) RememberURLs(taskID string, value any) {
+	if r.urlLedger != nil {
+		r.urlLedger.Remember(taskID, value)
+	}
+}
+
+func (r *Registry) ClearTaskURLs(taskID string) {
+	if r.urlLedger != nil {
+		r.urlLedger.Clear(taskID)
+	}
 }
 
 func (r *Registry) Decide(role, name string) (Descriptor, policy.Decision) {
@@ -102,21 +146,76 @@ func (r *Registry) Decide(role, name string) (Descriptor, policy.Decision) {
 	return descriptor, decision
 }
 
+func (r *Registry) Authorize(ctx context.Context, role, name string, arguments json.RawMessage) (Descriptor, policy.Decision, error) {
+	tool, ok := r.byName[name]
+	if !ok {
+		return Descriptor{Name: name}, policy.Decision{Action: policy.Deny, Reason: "tool is not registered"}, fmt.Errorf("%w: %s", ErrUnknownTool, name)
+	}
+	descriptor := tool.descriptor
+	roleAllowed := false
+	for _, allowedRole := range descriptor.AllowedRoles {
+		if allowedRole == role {
+			roleAllowed = true
+			break
+		}
+	}
+	if !roleAllowed {
+		_, decision := r.Decide(role, name)
+		return descriptor, decision, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(descriptor.TimeoutSeconds)*time.Second)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		decision := policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "tool authorization timed out or was cancelled"}
+		return descriptor, decision, err
+	}
+	trimmed := bytes.TrimSpace(arguments)
+	if len(trimmed) == 0 || trimmed[0] != '{' || !json.Valid(trimmed) {
+		decision := policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "arguments are not a JSON object"}
+		return descriptor, decision, ErrInvalidArguments
+	}
+	if err := ValidateJSONSchema(descriptor.ArgumentsSchema, trimmed); err != nil {
+		decision := policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "arguments did not match the registered schema"}
+		return descriptor, decision, errors.Join(ErrInvalidArguments, err)
+	}
+	if tool.validator != nil {
+		if err := tool.validator(ctx, trimmed); err != nil {
+			decision := policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "arguments failed backend validation"}
+			return descriptor, decision, errors.Join(ErrInvalidArguments, err)
+		}
+	}
+	_, decision := r.Decide(role, name)
+	return descriptor, decision, nil
+}
+
+func DecisionError(name string, decision policy.Decision) error {
+	switch decision.Action {
+	case policy.ApprovalRequired:
+		return fmt.Errorf("%w: %s", ErrApprovalRequired, name)
+	default:
+		return fmt.Errorf("%w: %s (%s)", ErrToolDenied, name, decision.Reason)
+	}
+}
+
 func (r *Registry) Execute(ctx context.Context, role, name string, arguments json.RawMessage) (any, error) {
 	tool, ok := r.byName[name]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownTool, name)
 	}
-	_, decision := r.Decide(role, name)
+	_, decision, err := r.Authorize(ctx, role, name, arguments)
+	if err != nil {
+		return nil, err
+	}
 	switch decision.Action {
 	case policy.Allow:
-	case policy.ApprovalRequired:
-		return nil, fmt.Errorf("%w: %s", ErrApprovalRequired, name)
 	default:
-		return nil, fmt.Errorf("%w: %s (%s)", ErrToolDenied, name, decision.Reason)
+		return nil, DecisionError(name, decision)
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(tool.descriptor.TimeoutSeconds)*time.Second)
 	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	result, err := tool.executor(ctx, arguments)
 	if err != nil {
 		return nil, err
@@ -128,6 +227,9 @@ func (r *Registry) Execute(ctx context.Context, role, name string, arguments jso
 	if len(encoded) > tool.descriptor.MaxOutputBytes {
 		return nil, errors.New("tool output exceeds configured limit")
 	}
+	if err := ValidateJSONSchema(tool.descriptor.OutputSchema, encoded); err != nil {
+		return nil, errors.Join(ErrInvalidOutput, err)
+	}
 	return result, nil
 }
 
@@ -135,24 +237,10 @@ type inspectArgs struct {
 	Text *string `json:"text"`
 }
 
-func inspectText(ctx context.Context, raw json.RawMessage) (any, error) {
-	if err := ctx.Err(); err != nil {
+func inspectText(_ context.Context, raw json.RawMessage) (any, error) {
+	args, err := parseInspectArgs(raw)
+	if err != nil {
 		return nil, err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	var args inspectArgs
-	if err := decoder.Decode(&args); err != nil {
-		return nil, fmt.Errorf("invalid text.inspect arguments: %w", err)
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return nil, errors.New("text.inspect accepts only one JSON object")
-	}
-	if args.Text == nil {
-		return nil, errors.New("text.inspect requires a text string")
-	}
-	if len(*args.Text) > 20000 {
-		return nil, errors.New("text.inspect text exceeds 20000 bytes")
 	}
 	text := *args.Text
 	lines := 0
@@ -164,4 +252,31 @@ func inspectText(ctx context.Context, raw json.RawMessage) (any, error) {
 		"words":      len(strings.Fields(text)),
 		"lines":      lines,
 	}, nil
+}
+
+func validateInspectArgs(ctx context.Context, raw json.RawMessage) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	_, err := parseInspectArgs(raw)
+	return err
+}
+
+func parseInspectArgs(raw json.RawMessage) (inspectArgs, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	var args inspectArgs
+	if err := decoder.Decode(&args); err != nil {
+		return inspectArgs{}, fmt.Errorf("invalid text.inspect arguments: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return inspectArgs{}, errors.New("text.inspect accepts only one JSON object")
+	}
+	if args.Text == nil {
+		return inspectArgs{}, errors.New("text.inspect requires a text string")
+	}
+	if len(*args.Text) > 20000 {
+		return inspectArgs{}, errors.New("text.inspect text exceeds 20000 bytes")
+	}
+	return args, nil
 }

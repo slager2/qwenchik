@@ -27,6 +27,8 @@ type Repository interface {
 	LatestCheckpoint(context.Context, string) (domain.Checkpoint, error)
 	SetStepStatus(context.Context, string, string, string) error
 	Steps(context.Context, string) ([]domain.TaskStep, error)
+	Artifacts(context.Context, string) ([]domain.Artifact, error)
+	Evidence(context.Context, string) ([]domain.Evidence, error)
 	CompleteTask(context.Context, string, string, any) (domain.Task, error)
 	ClaimNext(context.Context) (domain.Task, bool, error)
 	RecoverInterrupted(context.Context) (int64, error)
@@ -138,6 +140,20 @@ func (s *Service) Steps(ctx context.Context, taskID string) ([]domain.TaskStep, 
 		return nil, err
 	}
 	return s.repo.Steps(ctx, taskID)
+}
+
+func (s *Service) Artifacts(ctx context.Context, taskID string) ([]domain.Artifact, error) {
+	if _, err := s.repo.GetTask(ctx, taskID); err != nil {
+		return nil, err
+	}
+	return s.repo.Artifacts(ctx, taskID)
+}
+
+func (s *Service) Evidence(ctx context.Context, taskID string) ([]domain.Evidence, error) {
+	if _, err := s.repo.GetTask(ctx, taskID); err != nil {
+		return nil, err
+	}
+	return s.repo.Evidence(ctx, taskID)
 }
 
 func (s *Service) AddAssistantMessage(ctx context.Context, taskID, content string) (domain.Message, error) {

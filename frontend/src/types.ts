@@ -96,3 +96,41 @@ export interface Checkpoint {
   last_event_seq: number
   created_at: string
 }
+
+export interface Artifact {
+  id: string
+  task_id: string
+  name: string
+  mime_type: string
+  sha256: string
+  size_bytes: number
+  created_at: string
+}
+
+export interface QuoteSpan {
+  start: number
+  end: number
+  page?: number
+  text: string
+}
+
+export interface Evidence {
+  id: string
+  task_id: string
+  provider: string
+  original_query: string
+  original_url: string
+  canonical_url: string
+  title: string
+  language: string
+  retrieved_at: string
+  http_status: number
+  content_sha256: string
+  extraction_method: string
+  raw_artifact_id?: string
+  text_artifact_id?: string
+  excerpt: string
+  quote_spans: QuoteSpan[]
+  quality_flags: string[]
+  taint: string
+}

@@ -1,4 +1,4 @@
-import type { AgentEvent, Checkpoint, Message, Task, TaskStep } from './types'
+import type { AgentEvent, Artifact, Checkpoint, Evidence, Message, Task, TaskStep } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -35,6 +35,8 @@ export const api = {
   events: (id: string, after = 0) => request<AgentEvent[]>(`/api/tasks/${encodeURIComponent(id)}/events?after=${after}`),
   checkpoints: (id: string) => request<Checkpoint[]>(`/api/tasks/${encodeURIComponent(id)}/checkpoints`),
   steps: (id: string) => request<TaskStep[]>(`/api/tasks/${encodeURIComponent(id)}/steps`),
+  artifacts: (id: string) => request<Artifact[]>(`/api/tasks/${encodeURIComponent(id)}/artifacts`),
+  evidence: (id: string) => request<Evidence[]>(`/api/tasks/${encodeURIComponent(id)}/evidence`),
   createTask: (title: string, description: string) =>
     request<Task>('/api/tasks', { method: 'POST', body: JSON.stringify({ title, description }) }),
   sendMessage: (id: string, content: string) =>

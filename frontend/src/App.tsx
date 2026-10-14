@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { api } from './api'
-import type { AgentEvent, Checkpoint, Message, Task, TaskStatus, TaskStep } from './types'
+import type { AgentEvent, Artifact, Checkpoint, Evidence, Message, Task, TaskStatus, TaskStep } from './types'
 
 const columns: { id: string; title: string; statuses: TaskStatus[] }[] = [
   { id: 'inbox', title: 'Входящие', statuses: ['inbox'] },
@@ -49,6 +49,8 @@ const eventLabels: Record<string, string> = {
   'tool.started': 'Запущен инструмент',
   'tool.completed': 'Инструмент завершён',
   'approval.requested': 'Требуется подтверждение',
+  'artifact.created': 'Артефакт сохранён',
+  'evidence.created': 'Источник сохранён',
   'task.completed': 'Задача завершена',
   'task.failed': 'Задача завершилась с ошибкой',
   'task.cancelled': 'Задача отменена',
@@ -74,6 +76,8 @@ function eventSummary(event: AgentEvent) {
   if (typeof payload.error_code === 'string') return `Код: ${payload.error_code}`
   if (typeof payload.status === 'string') return `Статус: ${payload.status}`
   if (typeof payload.tool === 'string') return `Инструмент: ${payload.tool}`
+  if (typeof payload.evidence_id === 'string') return `Источник: ${payload.evidence_id}`
+  if (typeof payload.artifact_id === 'string') return `Файл: ${typeof payload.name === 'string' ? payload.name : payload.artifact_id}`
   if (typeof payload.steps === 'number') return `Шагов в плане: ${payload.steps}`
   return ''
 }
@@ -85,6 +89,8 @@ function App() {
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([])
   const [steps, setSteps] = useState<TaskStep[]>([])
+  const [artifacts, setArtifacts] = useState<Artifact[]>([])
+  const [evidence, setEvidence] = useState<Evidence[]>([])
   const [doctor, setDoctor] = useState<DoctorResponse | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createTitle, setCreateTitle] = useState('')
@@ -113,14 +119,16 @@ function App() {
 
   const refreshDetail = useCallback(async (id: string) => {
     try {
-      const [task, nextMessages, nextEvents, nextCheckpoints, nextSteps] = await Promise.all([
-        api.task(id), api.messages(id), api.events(id), api.checkpoints(id), api.steps(id),
+      const [task, nextMessages, nextEvents, nextCheckpoints, nextSteps, nextArtifacts, nextEvidence] = await Promise.all([
+        api.task(id), api.messages(id), api.events(id), api.checkpoints(id), api.steps(id), api.artifacts(id), api.evidence(id),
       ])
       setTasks((current) => current.map((item) => item.id === task.id ? task : item))
       setMessages(nextMessages)
       setEvents(nextEvents)
       setCheckpoints(nextCheckpoints)
       setSteps(nextSteps)
+      setArtifacts(nextArtifacts)
+      setEvidence(nextEvidence)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось загрузить задачу')
     }
@@ -138,6 +146,8 @@ function App() {
       setEvents([])
       setCheckpoints([])
       setSteps([])
+      setArtifacts([])
+      setEvidence([])
       return
     }
     void refreshDetail(selectedID)
@@ -393,6 +403,8 @@ function App() {
               events={events}
               checkpoints={checkpoints}
               steps={steps}
+              artifacts={artifacts}
+              evidence={evidence}
               reconnecting={reconnecting}
               busy={busy}
               chatText={chatText}
@@ -422,6 +434,8 @@ interface InspectorProps {
   events: AgentEvent[]
   checkpoints: Checkpoint[]
   steps: TaskStep[]
+  artifacts: Artifact[]
+  evidence: Evidence[]
   reconnecting: boolean
   busy: boolean
   chatText: string
@@ -434,7 +448,7 @@ interface InspectorProps {
 }
 
 function TaskInspector(props: InspectorProps) {
-  const { task, messages, events, checkpoints, steps, reconnecting, busy } = props
+  const { task, messages, events, checkpoints, steps, artifacts, evidence, reconnecting, busy } = props
   const canSend = ['inbox', 'queued', 'paused'].includes(task.status)
   const canPause = ['queued', 'planning', 'running', 'verifying'].includes(task.status)
   const canCancel = !['completed', 'failed', 'cancelled'].includes(task.status)
@@ -490,7 +504,10 @@ function TaskInspector(props: InspectorProps) {
       <div className="inspector-section resource-section">
         <div className="section-title"><div><span className="section-kicker">ВОССТАНОВЛЕНИЕ</span><h3>Checkpoint-ы</h3></div><span className="section-count">{checkpoints.length}</span></div>
         {checkpoints.length ? <ul className="checkpoint-list">{checkpoints.slice(-4).reverse().map((checkpoint) => <li key={checkpoint.id}><span className="checkpoint-dot" /><span>Последнее событие <b className="mono">#{checkpoint.last_event_seq}</b></span><time>{timeLabel(checkpoint.created_at)}</time></li>)}</ul> : <div className="inline-empty">Checkpoint появится после планирования.</div>}
-        <div className="resource-pair"><div><span className="section-kicker">ИСТОЧНИКИ</span><p>Поиск не настроен в этой фазе.</p></div><div><span className="section-kicker">АРТЕФАКТЫ</span><p>Сохранённых файлов нет.</p></div></div>
+        <div className="resource-pair">
+          <div><div className="resource-heading"><span className="section-kicker">ИСТОЧНИКИ</span><span className="section-count">{evidence.length}</span></div>{evidence.length ? <ul className="source-list">{evidence.map((source) => <li key={source.id}><a href={source.canonical_url} target="_blank" rel="noreferrer">{source.title || source.canonical_url}</a><p>{source.excerpt}</p><span className="source-meta">{source.provider} · {timeLabel(source.retrieved_at)} · <span className="mono">{source.content_sha256.slice(0, 10)}</span></span></li>)}</ul> : <p>Источники появятся после research-поиска.</p>}</div>
+          <div><div className="resource-heading"><span className="section-kicker">АРТЕФАКТЫ</span><span className="section-count">{artifacts.length}</span></div>{artifacts.length ? <ul className="artifact-list">{artifacts.map((artifact) => <li key={artifact.id}><span className="artifact-glyph">↳</span><span><a href={`/api/tasks/${encodeURIComponent(task.id)}/artifacts/${encodeURIComponent(artifact.id)}`}>{artifact.name}</a><small>{artifact.mime_type} · {artifact.size_bytes.toLocaleString('ru-RU')} байт</small></span></li>)}</ul> : <p>Сохранённых файлов пока нет.</p>}</div>
+        </div>
       </div>
     </section>
   )

@@ -24,6 +24,7 @@ type Config struct {
 	LLMEnableThinking     bool
 	LLMRequestTimeoutSecs int
 	LLMMaxConcurrency     int
+	SearXNGURL            string
 	MaxSteps              int
 	TaskTimeoutSeconds    int
 	MaxSearchQueries      int
@@ -41,6 +42,7 @@ func Load() (Config, error) {
 		LLMBaseURL:    env("LLM_BASE_URL", "http://127.0.0.1:8000/v1"),
 		LLMAPIKey:     env("LLM_API_KEY", "EMPTY"),
 		LLMModel:      env("LLM_MODEL", "local-qwen"),
+		SearXNGURL:    env("SEARXNG_URL", ""),
 		ApprovalMode:  env("APPROVAL_MODE", "per-risk"),
 	}
 	var err error
@@ -107,6 +109,27 @@ func (c Config) Validate() error {
 	if !isLoopbackHost(llmURL.Hostname()) {
 		return errors.New("LLM_BASE_URL must use a loopback host; remote LLM providers are not enabled")
 	}
+	if c.SearXNGURL != "" {
+		searchURL, err := url.Parse(c.SearXNGURL)
+		if err != nil || searchURL.Host == "" || searchURL.User != nil || searchURL.RawQuery != "" || searchURL.Fragment != "" || (searchURL.Scheme != "http" && searchURL.Scheme != "https") {
+			return errors.New("SEARXNG_URL must be an absolute local http(s) URL without credentials or query")
+		}
+		if !isLoopbackHost(searchURL.Hostname()) {
+			return errors.New("SEARXNG_URL must use a loopback host")
+		}
+		searchPort := searchURL.Port()
+		if searchPort == "" {
+			if searchURL.Scheme == "https" {
+				searchPort = "443"
+			} else {
+				searchPort = "80"
+			}
+		}
+		_, appPort, _ := net.SplitHostPort(c.BindAddr)
+		if searchPort == appPort {
+			return errors.New("SEARXNG_URL must use a port different from APP_BIND_ADDR")
+		}
+	}
 	llmPort := llmURL.Port()
 	if llmPort == "" {
 		if llmURL.Scheme == "https" {
@@ -134,7 +157,13 @@ func (c Config) Validate() error {
 	if c.LLMMaxConcurrency != 1 {
 		return errors.New("LLM_MAX_CONCURRENCY must be 1 for the single-slot runtime")
 	}
-	if c.MaxSteps < 1 || c.MaxSteps > 12 || c.TaskTimeoutSeconds < 1 || c.MaxSearchQueries < 0 || c.MaxBrowserActions < 0 || c.MaxFetchBytes < 1 {
+	for _, domain := range c.AllowedDomains {
+		domain = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(domain), "."))
+		if domain == "" || strings.ContainsAny(domain, "/:@?# \\[]") || (net.ParseIP(domain) == nil && !strings.Contains(domain, ".")) {
+			return errors.New("ALLOWED_DOMAINS must contain hostnames or IP addresses, not URLs or paths")
+		}
+	}
+	if c.MaxSteps < 1 || c.MaxSteps > 12 || c.TaskTimeoutSeconds < 1 || c.MaxSearchQueries < 1 || c.MaxBrowserActions < 0 || c.MaxFetchBytes < 1 {
 		return errors.New("task and tool budgets are invalid")
 	}
 	return nil

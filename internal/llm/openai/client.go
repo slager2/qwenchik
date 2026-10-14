@@ -36,6 +36,7 @@ func New(baseURL, apiKey, model string, timeout time.Duration, maxTokens int, te
 		thinking: thinking,
 		httpClient: &http.Client{
 			Timeout:       timeout,
+			Transport:     &http.Transport{Proxy: nil},
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 		},
 		defaultMaxTokens: maxTokens,

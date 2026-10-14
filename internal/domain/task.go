@@ -108,6 +108,44 @@ type TaskStep struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
+type Artifact struct {
+	ID        string    `json:"id"`
+	TaskID    string    `json:"task_id"`
+	Name      string    `json:"name"`
+	MIMEType  string    `json:"mime_type"`
+	SHA256    string    `json:"sha256"`
+	SizeBytes int64     `json:"size_bytes"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type QuoteSpan struct {
+	Start int    `json:"start"`
+	End   int    `json:"end"`
+	Page  int    `json:"page,omitempty"`
+	Text  string `json:"text"`
+}
+
+type Evidence struct {
+	ID               string      `json:"id"`
+	TaskID           string      `json:"task_id"`
+	Provider         string      `json:"provider"`
+	OriginalQuery    string      `json:"original_query"`
+	OriginalURL      string      `json:"original_url"`
+	CanonicalURL     string      `json:"canonical_url"`
+	Title            string      `json:"title"`
+	Language         string      `json:"language"`
+	RetrievedAt      time.Time   `json:"retrieved_at"`
+	HTTPStatus       int         `json:"http_status"`
+	ContentSHA256    string      `json:"content_sha256"`
+	ExtractionMethod string      `json:"extraction_method"`
+	RawArtifactID    string      `json:"raw_artifact_id,omitempty"`
+	TextArtifactID   string      `json:"text_artifact_id,omitempty"`
+	Excerpt          string      `json:"excerpt"`
+	QuoteSpans       []QuoteSpan `json:"quote_spans"`
+	QualityFlags     []string    `json:"quality_flags"`
+	Taint            string      `json:"taint"`
+}
+
 type Event struct {
 	ID            string          `json:"id"`
 	TaskID        string          `json:"task_id"`

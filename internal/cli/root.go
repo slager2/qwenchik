@@ -20,6 +20,8 @@ import (
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/llm/openai"
 	"github.com/slager2/qwenchik/internal/orchestrator"
+	"github.com/slager2/qwenchik/internal/providers/research"
+	"github.com/slager2/qwenchik/internal/storage/artifacts"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
 	"github.com/slager2/qwenchik/internal/tools"
 	"github.com/slager2/qwenchik/internal/workerlock"
@@ -53,9 +55,41 @@ func NewRoot() *cobra.Command {
 	root.AddCommand(newTaskCommand(&jsonMode))
 	root.AddCommand(newRunCommand(&jsonMode))
 	root.AddCommand(newEventsCommand(&jsonMode))
+	root.AddCommand(newTaskDataCommand("checkpoints", &jsonMode))
+	root.AddCommand(newTaskDataCommand("artifacts", &jsonMode))
+	root.AddCommand(newTaskDataCommand("evidence", &jsonMode))
 	root.AddCommand(newSimpleCommand("providers", "Show configured provider availability", &jsonMode))
 	root.AddCommand(newSimpleCommand("config", "Show non-secret configuration", &jsonMode))
 	return root
+}
+
+func newTaskDataCommand(name string, jsonMode *bool) *cobra.Command {
+	return &cobra.Command{
+		Use:   name + " TASK_ID",
+		Short: "List task " + name,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			deps, err := openDependencies(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer deps.store.Close()
+			var value any
+			switch name {
+			case "checkpoints":
+				value, err = deps.app.Checkpoints(cmd.Context(), args[0])
+			case "artifacts":
+				value, err = deps.app.Artifacts(cmd.Context(), args[0])
+			case "evidence":
+				value, err = deps.app.Evidence(cmd.Context(), args[0])
+			}
+			if err != nil {
+				return err
+			}
+			printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, value)
+			return nil
+		},
+	}
 }
 
 func newServeCommand() *cobra.Command {
@@ -286,12 +320,12 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 			case "providers":
 				printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{
 					"llm":    map[string]any{"type": "local-openai-compatible", "base_url": cfg.LLMBaseURL, "model": cfg.LLMModel},
-					"search": map[string]string{"status": "disabled", "reason": "no search provider configured in this phase"},
+					"search": map[string]any{"status": providerStatus(cfg.SearXNGURL), "type": "searxng", "base_url": cfg.SearXNGURL},
 				})
 			case "config":
 				printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{
 					"app_bind_addr": cfg.BindAddr, "database_path": cfg.DatabasePath, "artifacts_path": cfg.ArtifactsPath,
-					"llm_base_url": cfg.LLMBaseURL, "llm_model": cfg.LLMModel,
+					"llm_base_url": cfg.LLMBaseURL, "llm_model": cfg.LLMModel, "searxng_url": cfg.SearXNGURL,
 					"llm_context_length": cfg.LLMContextLength, "llm_max_output_tokens": cfg.LLMMaxOutputTokens,
 					"llm_max_concurrency": cfg.LLMMaxConcurrency, "allowed_domains": cfg.AllowedDomains,
 				})
@@ -318,12 +352,35 @@ func serve(parent context.Context) error {
 	defer lock.Close()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	model := openai.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, time.Duration(cfg.LLMRequestTimeoutSecs)*time.Second, cfg.LLMMaxOutputTokens, cfg.LLMTemperature, cfg.LLMTopP, cfg.LLMEnableThinking)
-	deps.worker = orchestrator.New(deps.store, model, tools.NewRegistry(), orchestrator.Options{
-		MaxSteps: cfg.MaxSteps, TaskTimeout: time.Duration(cfg.TaskTimeoutSeconds) * time.Second,
+	registry := tools.NewRegistry()
+	var searchProvider research.SearchProvider
+	if cfg.SearXNGURL != "" {
+		searchProvider, err = research.NewSearXNG(cfg.SearXNGURL, nil)
+		if err != nil {
+			return err
+		}
+	}
+	artifactStore, err := artifacts.New(cfg.ArtifactsPath, cfg.MaxFetchBytes)
+	if err != nil {
+		return err
+	}
+	if err := tools.RegisterResearchTools(registry, tools.ResearchTools{
+		SearchProvider: searchProvider,
+		Fetcher:        research.NewSafeFetcherWithPolicy(cfg.MaxFetchBytes, 20*time.Second, nil, cfg.AllowedDomains),
+		Extractor:      research.NewHTMLExtractor(100_000), Artifacts: artifactStore,
+		Repository: deps.store, MaxFetchBytes: cfg.MaxFetchBytes, AllowedDomains: cfg.AllowedDomains,
+	}); err != nil {
+		return err
+	}
+	deps.worker = orchestrator.New(deps.store, model, registry, orchestrator.Options{
+		MaxSteps: cfg.MaxSteps, MaxSearchQueries: cfg.MaxSearchQueries, MaxFetchBytes: cfg.MaxFetchBytes,
+		TaskTimeout:     time.Duration(cfg.TaskTimeoutSeconds) * time.Second,
 		MaxOutputTokens: cfg.LLMMaxOutputTokens, MaxInputBytes: maxInputBytes(cfg),
 		Temperature: cfg.LLMTemperature, TopP: cfg.LLMTopP, Logger: logger,
 	})
-	handler := api.New(deps.app, deps.worker, deps.store.Ping, cfg.LLMBaseURL, cfg.LLMAPIKey, logger).Handler()
+	apiServer := api.New(deps.app, deps.worker, deps.store.Ping, cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.SearXNGURL, logger)
+	apiServer.SetArtifactReader(artifactStore)
+	handler := apiServer.Handler()
 	server := &http.Server{Addr: cfg.BindAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -363,6 +420,13 @@ func serve(parent context.Context) error {
 		return serveErr
 	}
 	return nil
+}
+
+func providerStatus(baseURL string) string {
+	if baseURL == "" {
+		return "disabled"
+	}
+	return "configured"
 }
 
 func maxInputBytes(cfg config.Config) int {
@@ -433,6 +497,20 @@ func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 		_ = os.Remove(name)
 		checks["artifacts"] = doctorCheck{Status: "ok", Message: "artifact directory is writable"}
 	}
+	if cfg.SearXNGURL == "" {
+		checks["search"] = doctorCheck{Status: "warning", Message: "SearXNG is not configured; web discovery is disabled"}
+	} else if request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(cfg.SearXNGURL, "/")+"/search?q=qagent-doctor&format=json&safesearch=1", nil); err != nil {
+		checks["search"] = doctorCheck{Status: "warning", Message: "SearXNG health request is invalid"}
+	} else if response, err := (&http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}).Do(request); err != nil {
+		checks["search"] = doctorCheck{Status: "warning", Message: "Configured SearXNG endpoint is unavailable"}
+	} else {
+		_ = response.Body.Close()
+		if response.StatusCode >= 200 && response.StatusCode < 300 {
+			checks["search"] = doctorCheck{Status: "ok", Message: "SearXNG search endpoint responded"}
+		} else {
+			checks["search"] = doctorCheck{Status: "warning", Message: fmt.Sprintf("SearXNG returned HTTP %d", response.StatusCode)}
+		}
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(cfg.LLMBaseURL, "/")+"/models", nil)
 	if err == nil && cfg.LLMAPIKey != "" {
 		request.Header.Set("Authorization", "Bearer "+cfg.LLMAPIKey)
@@ -441,6 +519,7 @@ func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 		checks["llm"] = doctorCheck{Status: "error", Message: "local LLM health request is invalid"}
 	} else if response, err := (&http.Client{
 		Timeout:       3 * time.Second,
+		Transport:     &http.Transport{Proxy: nil},
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 	}).Do(request); err != nil {
 		checks["llm"] = doctorCheck{Status: "error", Message: "local OpenAI-compatible LLM endpoint is unavailable"}
