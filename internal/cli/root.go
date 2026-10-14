@@ -403,10 +403,14 @@ type doctorCheck struct {
 
 func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 	checks := map[string]doctorCheck{
-		"go":       {Status: "ok", Message: "qagent binary is running on Go"},
-		"bind":     {Status: "ok", Message: "application bind address is loopback-only"},
-		"frontend": {Status: "warning", Message: "frontend assets are not built yet"},
-		"sandbox":  {Status: "warning", Message: "sandbox executor is not included in this phase; host shell is disabled"},
+		"go":      {Status: "ok", Message: "qagent binary is running on Go"},
+		"bind":    {Status: "ok", Message: "application bind address is loopback-only"},
+		"sandbox": {Status: "warning", Message: "sandbox executor is not included in this phase; host shell is disabled"},
+	}
+	if api.FrontendAvailable() {
+		checks["frontend"] = doctorCheck{Status: "ok", Message: "embedded frontend assets are available"}
+	} else {
+		checks["frontend"] = doctorCheck{Status: "error", Message: "embedded frontend assets are missing; run make build"}
 	}
 	store, err := sqlite.Open(ctx, cfg.DatabasePath)
 	if err != nil {

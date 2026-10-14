@@ -24,6 +24,11 @@ const maxRequestBytes = 1 << 20
 //go:embed web/dist
 var frontendAssets embed.FS
 
+func FrontendAvailable() bool {
+	_, err := frontendAssets.Open("web/dist/index.html")
+	return err == nil
+}
+
 type TaskService interface {
 	CreateTask(context.Context, string, string, string) (domain.Task, error)
 	GetTask(context.Context, string) (domain.Task, error)
@@ -372,6 +377,11 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	checks := map[string]map[string]string{}
+	if FrontendAvailable() {
+		checks["frontend"] = map[string]string{"status": "ok", "message": "embedded frontend assets are available"}
+	} else {
+		checks["frontend"] = map[string]string{"status": "error", "message": "embedded frontend assets are missing"}
+	}
 	if err := s.dbPing(r.Context()); err != nil {
 		checks["database"] = map[string]string{"status": "error", "message": "SQLite connection failed"}
 	} else {

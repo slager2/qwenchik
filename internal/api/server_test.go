@@ -57,6 +57,9 @@ func TestCreateTaskAndRejectUnknownFields(t *testing.T) {
 }
 
 func TestEmbeddedUIAndSecurityHeaders(t *testing.T) {
+	if !FrontendAvailable() {
+		t.Fatal("expected embedded frontend assets to be present")
+	}
 	server, store := newTestServer(t)
 	defer store.Close()
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
