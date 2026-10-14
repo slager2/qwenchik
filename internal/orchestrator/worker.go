@@ -14,6 +14,7 @@ import (
 
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/llm"
+	"github.com/slager2/qwenchik/internal/policy"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
 	"github.com/slager2/qwenchik/internal/tools"
 )
@@ -194,6 +195,8 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 		code = "unsupported_step"
 	} else if errors.Is(err, errInputBudgetExceeded) {
 		code = "context_budget_exceeded"
+	} else if errors.Is(err, tools.ErrApprovalRequired) {
+		code = "approval_required"
 	} else if errors.Is(err, tools.ErrUnknownTool) || errors.Is(err, tools.ErrToolDenied) {
 		code = "tool_denied"
 	}
@@ -274,6 +277,18 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 		}
 		decision, err := w.chooseAction(ctx, task, goal, step)
 		if err != nil {
+			return err
+		}
+		descriptor, policyDecision := w.tools.Decide("analyst", decision.ToolCall.Name)
+		if _, err := w.repo.RecordEvent(ctx, task.ID, "policy.decision", &stage, "audit", map[string]any{
+			"tool": decision.ToolCall.Name, "action": policyDecision.Action,
+			"capability": descriptor.RequiredCapability, "risk_class": descriptor.RiskClass,
+			"reason": policyDecision.Reason,
+		}); err != nil {
+			return err
+		}
+		if policyDecision.Action != policy.Allow {
+			_, err := w.tools.Execute(ctx, "analyst", decision.ToolCall.Name, decision.ToolCall.Arguments)
 			return err
 		}
 		if _, err := w.repo.RecordEvent(ctx, task.ID, "tool.started", &stage, "user", map[string]any{"tool": decision.ToolCall.Name, "summary": decision.Summary}); err != nil {
@@ -515,6 +530,8 @@ func publicError(code string) string {
 		return "Превышено время выполнения задачи."
 	case "tool_denied":
 		return "Запрошенный инструмент не зарегистрирован или запрещён для этой роли."
+	case "approval_required":
+		return "Инструмент требует подтверждения; поток подтверждений для этого действия ещё не включён."
 	default:
 		return "Выполнение задачи завершилось ошибкой. Подробности доступны в локальном журнале."
 	}

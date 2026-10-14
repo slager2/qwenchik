@@ -11,11 +11,14 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/slager2/qwenchik/internal/policy"
 )
 
 var (
-	ErrUnknownTool = errors.New("unknown tool")
-	ErrToolDenied  = errors.New("tool is not allowed for this role")
+	ErrUnknownTool      = errors.New("unknown tool")
+	ErrToolDenied       = errors.New("tool is not allowed for this role")
+	ErrApprovalRequired = errors.New("tool requires an approval")
 )
 
 type Descriptor struct {
@@ -39,11 +42,16 @@ type registeredTool struct {
 }
 
 type Registry struct {
-	byName map[string]registeredTool
+	byName    map[string]registeredTool
+	evaluator *policy.Evaluator
 }
 
-func NewRegistry() *Registry {
-	registry := &Registry{byName: make(map[string]registeredTool)}
+func NewRegistry(evaluators ...*policy.Evaluator) *Registry {
+	evaluator := policy.NewDefaultEvaluator()
+	if len(evaluators) > 0 && evaluators[0] != nil {
+		evaluator = evaluators[0]
+	}
+	registry := &Registry{byName: make(map[string]registeredTool), evaluator: evaluator}
 	registry.MustRegister(Descriptor{
 		Name: "text.inspect", Description: "Count characters, words, and lines in bounded text.",
 		ArgumentsSchema:    json.RawMessage(`{"type":"object","properties":{"text":{"type":"string","maxLength":20000}},"required":["text"],"additionalProperties":false}`),
@@ -80,20 +88,32 @@ func (r *Registry) Descriptors() []Descriptor {
 	return result
 }
 
+func (r *Registry) Decide(role, name string) (Descriptor, policy.Decision) {
+	tool, ok := r.byName[name]
+	if !ok {
+		return Descriptor{Name: name}, policy.Decision{Action: policy.Deny, Reason: "tool is not registered"}
+	}
+	descriptor := tool.descriptor
+	decision := r.evaluator.Evaluate(role, policy.Tool{
+		Name: descriptor.Name, RequiredCapability: descriptor.RequiredCapability,
+		RiskClass: descriptor.RiskClass, Idempotent: descriptor.Idempotent,
+		AllowedRoles: descriptor.AllowedRoles,
+	})
+	return descriptor, decision
+}
+
 func (r *Registry) Execute(ctx context.Context, role, name string, arguments json.RawMessage) (any, error) {
 	tool, ok := r.byName[name]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownTool, name)
 	}
-	allowed := false
-	for _, candidate := range tool.descriptor.AllowedRoles {
-		if candidate == role {
-			allowed = true
-			break
-		}
-	}
-	if !allowed {
-		return nil, fmt.Errorf("%w: %s cannot call %s", ErrToolDenied, role, name)
+	_, decision := r.Decide(role, name)
+	switch decision.Action {
+	case policy.Allow:
+	case policy.ApprovalRequired:
+		return nil, fmt.Errorf("%w: %s", ErrApprovalRequired, name)
+	default:
+		return nil, fmt.Errorf("%w: %s (%s)", ErrToolDenied, name, decision.Reason)
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(tool.descriptor.TimeoutSeconds)*time.Second)
 	defer cancel()

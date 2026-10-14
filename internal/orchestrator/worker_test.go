@@ -87,15 +87,16 @@ func TestWorkerCompletesOneSafeToolStep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var sawTool, sawFinal bool
+	var sawTool, sawFinal, sawAudit bool
 	for i, event := range events {
 		if event.Seq != int64(i+1) {
 			t.Fatalf("event sequence gap: index %d, seq %d", i, event.Seq)
 		}
 		sawTool = sawTool || event.Type == "tool.completed"
 		sawFinal = sawFinal || event.Type == "task.completed"
+		sawAudit = sawAudit || (event.Type == "policy.decision" && event.Visibility == "audit")
 	}
-	if !sawTool || !sawFinal {
+	if !sawTool || !sawFinal || !sawAudit {
 		t.Fatalf("missing tool/final events: %#v", events)
 	}
 	steps, err := store.Steps(ctx, task.ID)
@@ -147,6 +148,20 @@ func TestWorkerRejectsUnknownToolWithoutHostExecution(t *testing.T) {
 	}
 	if _, err := store.GetTask(ctx, "unrelated"); !errors.Is(err, sqlite.ErrNotFound) {
 		t.Fatalf("unexpected storage error: %v", err)
+	}
+	events, err := store.EventsAfter(ctx, task.ID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawDeniedAudit, sawToolStart bool
+	for _, event := range events {
+		if event.Type == "policy.decision" && event.Visibility == "audit" && strings.Contains(string(event.Payload), "deny") {
+			sawDeniedAudit = true
+		}
+		sawToolStart = sawToolStart || event.Type == "tool.started"
+	}
+	if !sawDeniedAudit || sawToolStart {
+		t.Fatalf("denied tool decision was not audited or tool started: %#v", events)
 	}
 }
 

@@ -7,6 +7,8 @@
 - `LLM_BASE_URL` accepts only loopback hosts, rejects URL user info/query/fragment, and must use a port different from the app.
 - The local LLM adapter does not follow redirects, does not log request/response bodies, bounds response size, and never falls back to a cloud provider.
 - One worker calls the model sequentially. Lifecycle transitions and progress events are backend-owned.
+- A deterministic capability evaluator is the single allow/approval/deny decision point for registered tools. Every proposed tool gets an internal durable `policy.decision` audit event before execution.
+- `external_side_effect` returns `approval_required` without calling the executor; the approval runtime is not enabled yet, so the task fails closed.
 - `qagent serve` holds an OS-level database lock so two local server processes cannot concurrently recover or run the same queue.
 - Planner JSON is strictly decoded and validated for enum, size, unique IDs, dependencies, and cycles; malformed JSON gets one repair attempt.
 - Tool execution goes through a fixed registry and role allowlist. Only bounded, deterministic `text.inspect` is enabled. Unknown tools and invalid arguments are denied before execution.

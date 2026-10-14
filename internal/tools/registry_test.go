@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+
+	"github.com/slager2/qwenchik/internal/policy"
 )
 
 func TestRegistryRejectsUnknownAndDisallowedTools(t *testing.T) {
@@ -32,5 +34,27 @@ func TestTextInspectValidatesArguments(t *testing.T) {
 	}
 	if _, err := registry.Execute(context.Background(), "analyst", "text.inspect", json.RawMessage(`{"text":null}`)); err == nil {
 		t.Fatal("null text must be rejected")
+	}
+}
+
+func TestExternalToolNeverRunsWithoutApproval(t *testing.T) {
+	registry := NewRegistry(policy.New(map[string][]string{"analyst": {"external.submit"}}))
+	runs := 0
+	if err := registry.Register(Descriptor{
+		Name: "external.submit", Description: "test side effect",
+		ArgumentsSchema: json.RawMessage(`{"type":"object"}`), OutputSchema: json.RawMessage(`{"type":"object"}`),
+		RequiredCapability: "external.submit", RiskClass: "external_side_effect", TimeoutSeconds: 1,
+		MaxOutputBytes: 100, AllowedRoles: []string{"analyst"},
+	}, func(context.Context, json.RawMessage) (any, error) {
+		runs++
+		return map[string]any{}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.Execute(context.Background(), "analyst", "external.submit", json.RawMessage(`{}`)); !errors.Is(err, ErrApprovalRequired) {
+		t.Fatalf("external tool error = %v, want ErrApprovalRequired", err)
+	}
+	if runs != 0 {
+		t.Fatalf("external executor ran %d times without an approval", runs)
 	}
 }
