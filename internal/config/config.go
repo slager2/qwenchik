@@ -1,0 +1,233 @@
+package config
+
+import (
+	"errors"
+	"fmt"
+	"net"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+)
+
+type Config struct {
+	BindAddr              string
+	DatabasePath          string
+	ArtifactsPath         string
+	LLMBaseURL            string
+	LLMAPIKey             string
+	LLMModel              string
+	LLMContextLength      int
+	LLMMaxOutputTokens    int
+	LLMTemperature        float64
+	LLMTopP               float64
+	LLMEnableThinking     bool
+	LLMRequestTimeoutSecs int
+	LLMMaxConcurrency     int
+	MaxSteps              int
+	TaskTimeoutSeconds    int
+	MaxSearchQueries      int
+	MaxBrowserActions     int
+	MaxFetchBytes         int64
+	ApprovalMode          string
+	AllowedDomains        []string
+}
+
+func Load() (Config, error) {
+	cfg := Config{
+		BindAddr:      env("APP_BIND_ADDR", "127.0.0.1:8080"),
+		DatabasePath:  env("DATABASE_PATH", "./data/qagent.db"),
+		ArtifactsPath: env("ARTIFACTS_PATH", "./data/artifacts"),
+		LLMBaseURL:    env("LLM_BASE_URL", "http://127.0.0.1:8000/v1"),
+		LLMAPIKey:     env("LLM_API_KEY", "EMPTY"),
+		LLMModel:      env("LLM_MODEL", "local-qwen"),
+		ApprovalMode:  env("APPROVAL_MODE", "per-risk"),
+	}
+	var err error
+	if cfg.LLMContextLength, err = intEnv("LLM_CONTEXT_LENGTH", 131072); err != nil {
+		return Config{}, err
+	}
+	if cfg.LLMMaxOutputTokens, err = intEnv("LLM_MAX_OUTPUT_TOKENS", 4096); err != nil {
+		return Config{}, err
+	}
+	if cfg.LLMTemperature, err = floatEnv("LLM_TEMPERATURE", 0.2); err != nil {
+		return Config{}, err
+	}
+	if cfg.LLMTopP, err = floatEnv("LLM_TOP_P", 0.8); err != nil {
+		return Config{}, err
+	}
+	if cfg.LLMEnableThinking, err = boolEnv("LLM_ENABLE_THINKING", false); err != nil {
+		return Config{}, err
+	}
+	if cfg.LLMRequestTimeoutSecs, err = intEnv("LLM_REQUEST_TIMEOUT_SECONDS", 120); err != nil {
+		return Config{}, err
+	}
+	if cfg.LLMMaxConcurrency, err = intEnv("LLM_MAX_CONCURRENCY", 1); err != nil {
+		return Config{}, err
+	}
+	if cfg.MaxSteps, err = intEnv("MAX_STEPS", 12); err != nil {
+		return Config{}, err
+	}
+	if cfg.TaskTimeoutSeconds, err = intEnv("TASK_TIMEOUT_SECONDS", 7200); err != nil {
+		return Config{}, err
+	}
+	if cfg.MaxSearchQueries, err = intEnv("MAX_SEARCH_QUERIES", 12); err != nil {
+		return Config{}, err
+	}
+	if cfg.MaxBrowserActions, err = intEnv("MAX_BROWSER_ACTIONS", 40); err != nil {
+		return Config{}, err
+	}
+	if cfg.MaxFetchBytes, err = int64Env("MAX_FETCH_BYTES", 5_000_000); err != nil {
+		return Config{}, err
+	}
+	cfg.AllowedDomains = splitList(os.Getenv("ALLOWED_DOMAINS"))
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+func (c Config) Validate() error {
+	if strings.TrimSpace(c.DatabasePath) == "" {
+		return errors.New("DATABASE_PATH must not be empty")
+	}
+	if strings.TrimSpace(c.ArtifactsPath) == "" {
+		return errors.New("ARTIFACTS_PATH must not be empty")
+	}
+	if err := validateLoopbackAddr(c.BindAddr); err != nil {
+		return fmt.Errorf("APP_BIND_ADDR: %w", err)
+	}
+	llmURL, err := url.Parse(c.LLMBaseURL)
+	if err != nil || llmURL.Host == "" || (llmURL.Scheme != "http" && llmURL.Scheme != "https") {
+		return errors.New("LLM_BASE_URL must be an absolute http(s) URL")
+	}
+	if llmURL.User != nil || llmURL.RawQuery != "" || llmURL.Fragment != "" {
+		return errors.New("LLM_BASE_URL must not contain user info, query parameters, or a fragment")
+	}
+	if !isLoopbackHost(llmURL.Hostname()) {
+		return errors.New("LLM_BASE_URL must use a loopback host; remote LLM providers are not enabled")
+	}
+	llmPort := llmURL.Port()
+	if llmPort == "" {
+		if llmURL.Scheme == "https" {
+			llmPort = "443"
+		} else {
+			llmPort = "80"
+		}
+	}
+	_, appPort, _ := net.SplitHostPort(c.BindAddr)
+	if appPort == llmPort {
+		return errors.New("LLM_BASE_URL must use a different port from APP_BIND_ADDR")
+	}
+	if c.LLMModel == "" {
+		return errors.New("LLM_MODEL must not be empty")
+	}
+	if c.LLMContextLength < 1024 || c.LLMMaxOutputTokens < 1 || c.LLMContextLength-c.LLMMaxOutputTokens < 2304 {
+		return errors.New("LLM token budgets are invalid")
+	}
+	if c.LLMTemperature < 0 || c.LLMTemperature > 2 || c.LLMTopP <= 0 || c.LLMTopP > 1 {
+		return errors.New("LLM_TEMPERATURE must be 0..2 and LLM_TOP_P must be in (0,1]")
+	}
+	if c.LLMRequestTimeoutSecs < 1 || c.LLMRequestTimeoutSecs > 3600 {
+		return errors.New("LLM_REQUEST_TIMEOUT_SECONDS must be between 1 and 3600")
+	}
+	if c.LLMMaxConcurrency != 1 {
+		return errors.New("LLM_MAX_CONCURRENCY must be 1 for the single-slot runtime")
+	}
+	if c.MaxSteps < 1 || c.MaxSteps > 12 || c.TaskTimeoutSeconds < 1 || c.MaxSearchQueries < 0 || c.MaxBrowserActions < 0 || c.MaxFetchBytes < 1 {
+		return errors.New("task and tool budgets are invalid")
+	}
+	return nil
+}
+
+func validateLoopbackAddr(addr string) error {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("must be host:port: %w", err)
+	}
+	if !isLoopbackHost(host) {
+		return errors.New("must bind to a loopback address; LAN access requires a future authenticated mode")
+	}
+	n, err := strconv.Atoi(port)
+	if err != nil || n < 1 || n > 65535 {
+		return errors.New("port must be between 1 and 65535")
+	}
+	return nil
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func env(name, fallback string) string {
+	if value, ok := os.LookupEnv(name); ok {
+		return value
+	}
+	return fallback
+}
+
+func intEnv(name string, fallback int) (int, error) {
+	value, ok := os.LookupEnv(name)
+	if !ok {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer", name)
+	}
+	return parsed, nil
+}
+
+func int64Env(name string, fallback int64) (int64, error) {
+	value, ok := os.LookupEnv(name)
+	if !ok {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer", name)
+	}
+	return parsed, nil
+}
+
+func floatEnv(name string, fallback float64) (float64, error) {
+	value, ok := os.LookupEnv(name)
+	if !ok {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be numeric", name)
+	}
+	return parsed, nil
+}
+
+func boolEnv(name string, fallback bool) (bool, error) {
+	value, ok := os.LookupEnv(name)
+	if !ok {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a boolean", name)
+	}
+	return parsed, nil
+}
+
+func splitList(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	items := strings.Split(value, ",")
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		if item = strings.TrimSpace(item); item != "" {
+			result = append(result, item)
+		}
+	}
+	return result
+}

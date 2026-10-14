@@ -69,6 +69,9 @@ func (s *Store) Close() error { return s.db.Close() }
 func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
 
 func (s *Store) migrate(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`); err != nil {
+		return fmt.Errorf("create migration ledger: %w", err)
+	}
 	entries, err := migrationFiles.ReadDir("migrations")
 	if err != nil {
 		return fmt.Errorf("read migrations: %w", err)
@@ -81,6 +84,14 @@ func (s *Store) migrate(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
 		}
+		var applied int
+		err = s.db.QueryRowContext(ctx, `SELECT 1 FROM schema_migrations WHERE name=?`, entry.Name()).Scan(&applied)
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("check migration %s: %w", entry.Name(), err)
+		}
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("begin migration %s: %w", entry.Name(), err)
@@ -88,6 +99,10 @@ func (s *Store) migrate(ctx context.Context) error {
 		if _, err := tx.ExecContext(ctx, string(migration)); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("apply migration %s: %w", entry.Name(), err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(name,applied_at) VALUES(?,?)`, entry.Name(), stamp(time.Now().UTC())); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("record migration %s: %w", entry.Name(), err)
 		}
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("commit migration %s: %w", entry.Name(), err)
@@ -196,6 +211,9 @@ func (s *Store) TransitionTask(ctx context.Context, id string, to domain.TaskSta
 	payload["from"] = task.Status
 	payload["to"] = to
 	updated := time.Now().UTC()
+	if err := transitionStageTx(ctx, tx, id, task.Stage, stage, closeStageStatus(to), updated); err != nil {
+		return domain.Task{}, err
+	}
 	_, err = tx.ExecContext(ctx, `UPDATE tasks SET status=?,stage=?,version=version+1,updated_at=? WHERE id=?`, to, nullableStage(stage), stamp(updated), id)
 	if err != nil {
 		return domain.Task{}, fmt.Errorf("update task status: %w", err)
@@ -214,22 +232,50 @@ func (s *Store) TransitionTask(ctx context.Context, id string, to domain.TaskSta
 }
 
 func (s *Store) QueueTask(ctx context.Context, id, idempotencyKey string) (domain.Task, error) {
-	if idempotencyKey != "" {
-		if resourceID, err := findIdempotency(ctx, s.db, idempotencyKey, "tasks.run"); err == nil {
-			return s.GetTask(ctx, resourceID)
-		} else if !errors.Is(err, sql.ErrNoRows) {
-			return domain.Task{}, err
-		}
-	}
-	task, err := s.TransitionTask(ctx, id, domain.StatusQueued, nil, "task.status_changed", "user", nil)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.Task{}, err
 	}
+	defer tx.Rollback()
 	if idempotencyKey != "" {
-		_, err = s.db.ExecContext(ctx, `INSERT OR IGNORE INTO idempotency_keys(key,operation,resource_id,created_at) VALUES(?,?,?,?)`, idempotencyKey, "tasks.run", id, stamp(time.Now().UTC()))
-		if err != nil {
+		resourceID, err := findIdempotency(ctx, tx, idempotencyKey, "tasks.run")
+		if err == nil {
+			return getTask(ctx, tx, resourceID)
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
 			return domain.Task{}, err
 		}
+	}
+	task, err := getTask(ctx, tx, id)
+	if err != nil {
+		return domain.Task{}, err
+	}
+	if task.Status != domain.StatusQueued {
+		if !domain.CanTransition(task.Status, domain.StatusQueued) {
+			return domain.Task{}, fmt.Errorf("%w: %s -> %s", domain.ErrInvalidTransition, task.Status, domain.StatusQueued)
+		}
+		now := time.Now().UTC()
+		if err := transitionStageTx(ctx, tx, id, task.Stage, nil, "completed", now); err != nil {
+			return domain.Task{}, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status=?,stage=NULL,version=version+1,updated_at=? WHERE id=?`, domain.StatusQueued, stamp(now), id); err != nil {
+			return domain.Task{}, err
+		}
+		if _, err := appendEvent(ctx, tx, id, "task.status_changed", nil, "user", map[string]any{"from": task.Status, "to": domain.StatusQueued}); err != nil {
+			return domain.Task{}, err
+		}
+		task.Status = domain.StatusQueued
+		task.Stage = nil
+		task.Version++
+		task.UpdatedAt = now
+	}
+	if idempotencyKey != "" {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO idempotency_keys(key,operation,resource_id,created_at) VALUES(?,?,?,?)`, idempotencyKey, "tasks.run", id, stamp(time.Now().UTC())); err != nil {
+			return domain.Task{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Task{}, err
 	}
 	return task, nil
 }
@@ -241,6 +287,9 @@ func (s *Store) AddMessage(ctx context.Context, message domain.Message, idempote
 		err := s.db.QueryRowContext(ctx, `SELECT id,task_id,role,content,created_at FROM messages WHERE idempotency_key=?`, idempotencyKey).
 			Scan(&existing.ID, &existing.TaskID, &existing.Role, &existing.Content, &created)
 		if err == nil {
+			if existing.TaskID != message.TaskID || existing.Role != message.Role {
+				return domain.Message{}, ErrIdempotency
+			}
 			existing.CreatedAt = parseTime(created)
 			return existing, nil
 		}
@@ -254,8 +303,21 @@ func (s *Store) AddMessage(ctx context.Context, message domain.Message, idempote
 		return domain.Message{}, err
 	}
 	defer tx.Rollback()
-	if _, err := getTask(ctx, tx, message.TaskID); err != nil {
+	task, err := getTask(ctx, tx, message.TaskID)
+	if err != nil {
 		return domain.Message{}, err
+	}
+	if message.Role == "user" && task.Status != domain.StatusInbox && task.Status != domain.StatusQueued && task.Status != domain.StatusPaused {
+		return domain.Message{}, fmt.Errorf("%w: task is not accepting user messages", ErrConflict)
+	}
+	if message.Role == "user" {
+		var count int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE task_id=? AND role='user'`, message.TaskID).Scan(&count); err != nil {
+			return domain.Message{}, err
+		}
+		if count >= 100 {
+			return domain.Message{}, fmt.Errorf("%w: task message budget is exhausted", ErrConflict)
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO messages(id,task_id,role,content,created_at,idempotency_key) VALUES(?,?,?,?,?,?)`, message.ID, message.TaskID, message.Role, message.Content, stamp(message.CreatedAt), nullableKey(idempotencyKey)); err != nil {
 		return domain.Message{}, fmt.Errorf("insert message: %w", err)
@@ -270,7 +332,7 @@ func (s *Store) AddMessage(ctx context.Context, message domain.Message, idempote
 }
 
 func (s *Store) Messages(ctx context.Context, taskID string) ([]domain.Message, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,task_id,role,content,created_at FROM messages WHERE task_id=? ORDER BY created_at,id`, taskID)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,task_id,role,content,created_at FROM (SELECT id,task_id,role,content,created_at FROM messages WHERE task_id=? ORDER BY created_at DESC,id DESC LIMIT 200) ORDER BY created_at,id`, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +378,39 @@ func (s *Store) EventsAfter(ctx context.Context, taskID string, after int64, lim
 	return result, rows.Err()
 }
 
+func (s *Store) RecordEvent(ctx context.Context, taskID, eventType string, stage *domain.Stage, visibility string, payload map[string]any) (domain.Event, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Event{}, err
+	}
+	defer tx.Rollback()
+	if _, err := getTask(ctx, tx, taskID); err != nil {
+		return domain.Event{}, err
+	}
+	if visibility == "" {
+		visibility = "user"
+	}
+	seq, err := appendEvent(ctx, tx, taskID, eventType, stage, visibility, payload)
+	if err != nil {
+		return domain.Event{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Event{}, err
+	}
+	events, err := s.EventsAfter(ctx, taskID, seq-1, 1)
+	if err != nil {
+		return domain.Event{}, err
+	}
+	if len(events) != 1 {
+		return domain.Event{}, errors.New("committed event could not be read back")
+	}
+	return events[0], nil
+}
+
 func (s *Store) SavePlan(ctx context.Context, taskID string, plan domain.Plan, checkpointState any) (int64, error) {
+	if err := domain.ValidatePlan(plan, 12); err != nil {
+		return 0, err
+	}
 	planJSON, err := json.Marshal(plan)
 	if err != nil {
 		return 0, err
@@ -340,6 +434,24 @@ func (s *Store) SavePlan(ctx context.Context, taskID string, plan domain.Plan, c
 	if err != nil {
 		return 0, err
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM task_steps WHERE task_id=?`, taskID); err != nil {
+		return 0, err
+	}
+	for index, step := range plan.Subtasks {
+		dependencies, err := json.Marshal(step.Dependencies)
+		if err != nil {
+			return 0, err
+		}
+		criteria, err := json.Marshal(step.SuccessCriteria)
+		if err != nil {
+			return 0, err
+		}
+		now := stamp(time.Now().UTC())
+		if _, err := tx.ExecContext(ctx, `INSERT INTO task_steps(id,task_id,step_id,position,kind,description,dependencies_json,expected_output,success_criteria_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+			newID(), taskID, step.ID, index, step.Kind, step.Description, string(dependencies), step.ExpectedOutput, string(criteria), "pending", now, now); err != nil {
+			return 0, err
+		}
+	}
 	seq, err := appendEvent(ctx, tx, taskID, "plan.created", stagePointer(domain.StagePlanning), "user", map[string]any{"steps": len(plan.Subtasks), "goal": plan.Goal})
 	if err != nil {
 		return 0, err
@@ -351,6 +463,50 @@ func (s *Store) SavePlan(ctx context.Context, taskID string, plan domain.Plan, c
 		return 0, err
 	}
 	return seq, nil
+}
+
+func (s *Store) SetStepStatus(ctx context.Context, taskID, stepID, status string) error {
+	if status != "pending" && status != "running" && status != "completed" && status != "failed" {
+		return fmt.Errorf("invalid step status %q", status)
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE task_steps SET status=?,attempts=attempts+CASE WHEN ?='running' THEN 1 ELSE 0 END,updated_at=? WHERE task_id=? AND step_id=?`, status, status, stamp(time.Now().UTC()), taskID, stepID)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) Steps(ctx context.Context, taskID string) ([]domain.TaskStep, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,task_id,step_id,position,kind,description,dependencies_json,expected_output,success_criteria_json,status,attempts,created_at,updated_at FROM task_steps WHERE task_id=? ORDER BY position`, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []domain.TaskStep
+	for rows.Next() {
+		var step domain.TaskStep
+		var dependencies, criteria, created, updated string
+		if err := rows.Scan(&step.ID, &step.TaskID, &step.StepID, &step.Position, &step.Kind, &step.Description, &dependencies, &step.ExpectedOutput, &criteria, &step.Status, &step.Attempts, &created, &updated); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(dependencies), &step.Dependencies); err != nil {
+			return nil, fmt.Errorf("decode step dependencies: %w", err)
+		}
+		if err := json.Unmarshal([]byte(criteria), &step.SuccessCriteria); err != nil {
+			return nil, fmt.Errorf("decode step criteria: %w", err)
+		}
+		step.CreatedAt = parseTime(created)
+		step.UpdatedAt = parseTime(updated)
+		result = append(result, step)
+	}
+	return result, rows.Err()
 }
 
 func (s *Store) SaveCheckpoint(ctx context.Context, taskID string, planVersion int, state any) (domain.Checkpoint, error) {
@@ -381,7 +537,7 @@ func (s *Store) SaveCheckpoint(ctx context.Context, taskID string, planVersion i
 }
 
 func (s *Store) Checkpoints(ctx context.Context, taskID string) ([]domain.Checkpoint, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,task_id,plan_version,state_json,last_event_seq,created_at FROM checkpoints WHERE task_id=? ORDER BY created_at`, taskID)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,task_id,plan_version,state_json,last_event_seq,created_at FROM (SELECT id,task_id,plan_version,state_json,last_event_seq,created_at FROM checkpoints WHERE task_id=? ORDER BY created_at DESC,id DESC LIMIT 500) ORDER BY created_at,id`, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -400,6 +556,74 @@ func (s *Store) Checkpoints(ctx context.Context, taskID string) ([]domain.Checkp
 		result = append(result, item)
 	}
 	return result, rows.Err()
+}
+
+func (s *Store) LatestCheckpoint(ctx context.Context, taskID string) (domain.Checkpoint, error) {
+	var item domain.Checkpoint
+	var stateJSON, created string
+	err := s.db.QueryRowContext(ctx, `SELECT id,task_id,plan_version,state_json,last_event_seq,created_at FROM checkpoints WHERE task_id=? ORDER BY created_at DESC,id DESC LIMIT 1`, taskID).
+		Scan(&item.ID, &item.TaskID, &item.PlanVersion, &stateJSON, &item.LastEventSeq, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Checkpoint{}, ErrNotFound
+	}
+	if err != nil {
+		return domain.Checkpoint{}, err
+	}
+	if err := json.Unmarshal([]byte(stateJSON), &item.State); err != nil {
+		return domain.Checkpoint{}, fmt.Errorf("decode checkpoint %s: %w", item.ID, err)
+	}
+	item.CreatedAt = parseTime(created)
+	return item, nil
+}
+
+func (s *Store) CompleteTask(ctx context.Context, taskID, answer string, checkpointState any) (domain.Task, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Task{}, err
+	}
+	defer tx.Rollback()
+	task, err := getTask(ctx, tx, taskID)
+	if err != nil {
+		return domain.Task{}, err
+	}
+	if task.Status == domain.StatusCompleted {
+		return task, nil
+	}
+	if task.Status != domain.StatusVerifying {
+		return domain.Task{}, fmt.Errorf("%w: task must be verifying before finalization", ErrConflict)
+	}
+	now := time.Now().UTC()
+	stage := domain.StageFinalization
+	if err := transitionStageTx(ctx, tx, taskID, task.Stage, &stage, "completed", now); err != nil {
+		return domain.Task{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO messages(id,task_id,role,content,created_at) VALUES(?,?,?,?,?)`, newID(), taskID, "assistant", answer, stamp(now)); err != nil {
+		return domain.Task{}, err
+	}
+	if _, err := appendEvent(ctx, tx, taskID, "message.created", &stage, "user", map[string]any{"role": "assistant"}); err != nil {
+		return domain.Task{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status=?,stage=?,version=version+1,updated_at=? WHERE id=?`, domain.StatusCompleted, stage, stamp(now), taskID); err != nil {
+		return domain.Task{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE task_stages SET status='completed',finished_at=?,updated_at=? WHERE task_id=? AND stage=? AND status='running'`, stamp(now), stamp(now), taskID, stage); err != nil {
+		return domain.Task{}, err
+	}
+	seq, err := appendEvent(ctx, tx, taskID, "task.completed", &stage, "user", map[string]any{"status": domain.StatusCompleted})
+	if err != nil {
+		return domain.Task{}, err
+	}
+	if err := insertCheckpoint(ctx, tx, taskID, 1, seq, checkpointState); err != nil {
+		return domain.Task{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Task{}, err
+	}
+	task.Status = domain.StatusCompleted
+	task.Stage = &stage
+	task.Version++
+	task.UpdatedAt = now
+	return task, nil
 }
 
 func (s *Store) ClaimNext(ctx context.Context) (domain.Task, bool, error) {
@@ -422,6 +646,9 @@ func (s *Store) ClaimNext(ctx context.Context) (domain.Task, bool, error) {
 	}
 	stage := domain.StagePlanning
 	now := time.Now().UTC()
+	if err := transitionStageTx(ctx, tx, id, task.Stage, &stage, "completed", now); err != nil {
+		return domain.Task{}, false, err
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status=?,stage=?,version=version+1,updated_at=? WHERE id=? AND status=?`, domain.StatusPlanning, stage, stamp(now), id, domain.StatusQueued); err != nil {
 		return domain.Task{}, false, err
 	}
@@ -444,18 +671,19 @@ func (s *Store) RecoverInterrupted(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `SELECT id,status FROM tasks WHERE status IN (?,?,?)`, domain.StatusPlanning, domain.StatusRunning, domain.StatusVerifying)
+	rows, err := tx.QueryContext(ctx, `SELECT id,status,stage FROM tasks WHERE status IN (?,?,?)`, domain.StatusPlanning, domain.StatusRunning, domain.StatusVerifying)
 	if err != nil {
 		return 0, err
 	}
 	type interrupted struct {
 		id     string
 		status domain.TaskStatus
+		stage  sql.NullString
 	}
 	var tasks []interrupted
 	for rows.Next() {
 		var item interrupted
-		if err := rows.Scan(&item.id, &item.status); err != nil {
+		if err := rows.Scan(&item.id, &item.status, &item.stage); err != nil {
 			_ = rows.Close()
 			return 0, err
 		}
@@ -466,6 +694,14 @@ func (s *Store) RecoverInterrupted(ctx context.Context) (int64, error) {
 	}
 	for _, item := range tasks {
 		now := time.Now().UTC()
+		var previousStage *domain.Stage
+		if item.stage.Valid {
+			value := domain.Stage(item.stage.String)
+			previousStage = &value
+		}
+		if err := transitionStageTx(ctx, tx, item.id, previousStage, nil, "paused", now); err != nil {
+			return 0, err
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status=?,stage=NULL,version=version+1,updated_at=? WHERE id=?`, domain.StatusQueued, stamp(now), item.id); err != nil {
 			return 0, err
 		}
@@ -527,6 +763,33 @@ func appendEvent(ctx context.Context, tx *sql.Tx, taskID, eventType string, stag
 		return 0, fmt.Errorf("append event: %w", err)
 	}
 	return seq, nil
+}
+
+func transitionStageTx(ctx context.Context, tx *sql.Tx, taskID string, previous, next *domain.Stage, closeStatus string, now time.Time) error {
+	if previous != nil && (next == nil || *previous != *next) {
+		if _, err := tx.ExecContext(ctx, `UPDATE task_stages SET status=?,finished_at=?,updated_at=? WHERE task_id=? AND stage=? AND status='running'`, closeStatus, stamp(now), stamp(now), taskID, *previous); err != nil {
+			return err
+		}
+	}
+	if next != nil && (previous == nil || *previous != *next) {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO task_stages(id,task_id,stage,status,started_at,updated_at) VALUES(?,?,?,?,?,?)`, newID(), taskID, *next, "running", stamp(now), stamp(now)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func closeStageStatus(status domain.TaskStatus) string {
+	switch status {
+	case domain.StatusPaused:
+		return "paused"
+	case domain.StatusFailed:
+		return "failed"
+	case domain.StatusCancelled:
+		return "cancelled"
+	default:
+		return "completed"
+	}
 }
 
 func insertCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, planVersion int, seq int64, state any) error {

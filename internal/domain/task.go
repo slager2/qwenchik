@@ -92,6 +92,22 @@ type Message struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type TaskStep struct {
+	ID              string    `json:"id"`
+	TaskID          string    `json:"task_id"`
+	StepID          string    `json:"step_id"`
+	Position        int       `json:"position"`
+	Kind            string    `json:"kind"`
+	Description     string    `json:"description"`
+	Dependencies    []string  `json:"dependencies"`
+	ExpectedOutput  string    `json:"expected_output"`
+	SuccessCriteria []string  `json:"success_criteria"`
+	Status          string    `json:"status"`
+	Attempts        int       `json:"attempts"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
 type Event struct {
 	ID            string          `json:"id"`
 	TaskID        string          `json:"task_id"`

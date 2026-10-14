@@ -15,6 +15,7 @@ Base path: `/api`. JSON errors use `{"error":{"code":"...","message":"...","retr
 | `GET` | `/tasks/{task_id}/events?after=N` | Bounded event replay |
 | `GET` | `/tasks/{task_id}/events/stream` | Reconnecting SSE |
 | `GET` | `/tasks/{task_id}/checkpoints` | Checkpoint history |
+| `GET` | `/tasks/{task_id}/steps` | Backend-owned plan step states |
 | `GET` | `/tasks/{task_id}/messages` | Conversation history |
 | `GET` | `/health` | Process and storage health |
 | `GET` | `/doctor` | Runtime/provider checks, with no secret values |

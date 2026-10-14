@@ -1,7 +1,9 @@
 /data/
 /dist/
+/qagent
 /frontend/node_modules/
 /frontend/dist/
+/frontend/*.tsbuildinfo
 *.db
 *.db-shm
 *.db-wal

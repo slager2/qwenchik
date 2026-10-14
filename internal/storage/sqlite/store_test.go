@@ -90,3 +90,54 @@ func TestCreateTaskIdempotency(t *testing.T) {
 		t.Fatalf("idempotent create returned %#v after %#v", second, first)
 	}
 }
+
+func TestInterruptedTaskIsRequeuedWithRecoveryEvent(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "recover.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	task, err := store.CreateTask(ctx, domain.Task{ID: "recover-task", Title: "Recover"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.QueueTask(ctx, task.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.ClaimNext(ctx); err != nil || !ok {
+		t.Fatalf("claim next: ok=%t err=%v", ok, err)
+	}
+	runningStage := domain.StageSynthesis
+	if _, err := store.TransitionTask(ctx, task.ID, domain.StatusRunning, &runningStage, "", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := store.RecoverInterrupted(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered != 1 {
+		t.Fatalf("recovered count = %d, want 1", recovered)
+	}
+	got, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.StatusQueued || got.Stage != nil {
+		t.Fatalf("recovered task = %#v", got)
+	}
+	events, err := store.EventsAfter(ctx, task.ID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if events[len(events)-1].Type != "task.recovered" {
+		t.Fatalf("last event = %q, want task.recovered", events[len(events)-1].Type)
+	}
+	var stageStatus string
+	if err := store.db.QueryRowContext(ctx, `SELECT status FROM task_stages WHERE task_id=? AND stage=? ORDER BY started_at DESC LIMIT 1`, task.ID, runningStage).Scan(&stageStatus); err != nil {
+		t.Fatal(err)
+	}
+	if stageStatus != "paused" {
+		t.Fatalf("interrupted stage status = %q, want paused", stageStatus)
+	}
+}
