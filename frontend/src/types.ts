@@ -134,3 +134,18 @@ export interface Evidence {
   quality_flags: string[]
   taint: string
 }
+
+export interface Approval {
+  id: string
+  task_id: string
+  tool_name: string
+  arguments: Record<string, unknown>
+  target: string
+  risk_explanation: string
+  expires_at: string
+  status: 'pending' | 'approved' | 'rejected' | 'expired'
+  created_at: string
+  decision_at?: string
+  actor?: string
+  consumed_at?: string
+}

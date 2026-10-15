@@ -25,9 +25,10 @@
 | P2 backend vertical slice | `cmd/qagent/`, `internal/{api,app,config,domain,llm,orchestrator,storage}` | SQLite persistence, task lifecycle, one worker, local LLM contract and SSE tests |
 | P3 policy/tools | `internal/{policy,tools}` | Unknown tools rejected; policy tests pass |
 | P4 research | `internal/providers/`, `internal/provenance/` | SSRF, injection and citation tests pass |
-| P5/P6 browser and sandbox | `internal/runtime/`, `internal/tools/` | isolated browser and rootless sandbox gates pass |
-| P7 UI/CLI | `frontend/`, `internal/cli/` | real events, no client-owned lifecycle |
-| P8/P9 recovery and hardening | storage, worker, tests, docs | restart/replay/security tests pass |
+| P5 browser | `internal/runtime/`, `internal/tools/` | deferred until browser traffic can be forced through a public-IP-pinning path; see `docs/security/browser-gate.md` |
+| P6 sandbox | `internal/runtime/sandbox/`, `internal/tools/` | rootless Docker command contract and fail-closed fake-runner tests pass; live daemon gate remains unverified |
+| P7 UI/CLI and approvals | `frontend/`, `internal/cli/`, API, worker | event-driven UI, backend-owned lifecycle, durable one-time approval and resume flow |
+| P8/P9 recovery and hardening | storage, worker, tests, docs | restart/replay/security tests pass; live provider and daemon checks remain environment-dependent |
 
 ## Initial verification
 

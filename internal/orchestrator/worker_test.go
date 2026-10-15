@@ -13,6 +13,7 @@ import (
 
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/llm"
+	"github.com/slager2/qwenchik/internal/policy"
 	"github.com/slager2/qwenchik/internal/providers/research"
 	"github.com/slager2/qwenchik/internal/storage/artifacts"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
@@ -345,6 +346,78 @@ func TestRecoveryDoesNotReplayUnknownNonIdempotentSandboxAction(t *testing.T) {
 	last := events[len(events)-1]
 	if last.Type != "task.failed" || !strings.Contains(string(last.Payload), "failed_recovery_required") {
 		t.Fatalf("recovery-required failure event missing: %#v", last)
+	}
+}
+
+func TestExternalActionPausesForApprovalAndConsumesGrantOnce(t *testing.T) {
+	ctx := context.Background()
+	store, err := sqlite.Open(ctx, t.TempDir()+"/approval-worker.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	task, err := store.CreateTask(ctx, domain.Task{ID: "approval-worker", Title: "External action", Description: "Submit the prepared request"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.QueueTask(ctx, task.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	claimed, ok, err := store.ClaimNext(ctx)
+	if err != nil || !ok {
+		t.Fatalf("claim task: ok=%t err=%v", ok, err)
+	}
+	registry := tools.NewRegistry(policy.New(map[string][]string{"analyst": {"task.text.inspect", "external.submit"}, "verifier": {"task.text.inspect"}}))
+	executions := 0
+	var usedApproval string
+	if err := registry.Register(tools.Descriptor{
+		Name: "external.submit", Description: "Submit an external request",
+		ArgumentsSchema:    json.RawMessage(`{"type":"object","properties":{"payload":{"type":"string"}},"required":["payload"],"additionalProperties":false}`),
+		OutputSchema:       json.RawMessage(`{"type":"object","properties":{"submitted":{"type":"boolean"}},"required":["submitted"],"additionalProperties":false}`),
+		RequiredCapability: "external.submit", RiskClass: "external_side_effect", TimeoutSeconds: 2,
+		Idempotent: false, MaxOutputBytes: 128, AllowedRoles: []string{"analyst"},
+	}, func(ctx context.Context, _ json.RawMessage) (any, error) {
+		executions++
+		usedApproval = tools.ApprovalIDFromContext(ctx)
+		return map[string]any{"submitted": true}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	model := &scriptedLLM{responses: []string{
+		`{"schema_version":1,"goal":"submit request","subtasks":[{"id":"step_1","kind":"external_action","description":"Submit the prepared request","dependencies":[],"expected_output":"submission result","success_criteria":["request submitted"]}],"max_steps":1,"final_deliverable":"confirm result"}`,
+		`{"status":"continue","summary":"The request is ready to submit.","tool_call":{"name":"external.submit","arguments":{"payload":"prepared"}}}`,
+		`{"complete":true,"summary":"The approved action completed.","missing":[]}`,
+		`The prepared request was submitted successfully.`,
+	}}
+	worker := New(store, model, registry, Options{MaxSteps: 12, TaskTimeout: time.Minute, MaxOutputTokens: 512})
+	worker.runTask(ctx, claimed)
+	waiting, err := store.GetTask(ctx, task.ID)
+	if err != nil || waiting.Status != domain.StatusWaitingApproval || executions != 0 {
+		t.Fatalf("task status=%q executions=%d err=%v", waiting.Status, executions, err)
+	}
+	pending, err := store.PendingApprovals(ctx)
+	if err != nil || len(pending) != 1 || pending[0].Target != "" || pending[0].RiskExplanation == "" {
+		t.Fatalf("unexpected pending approvals: %#v err=%v", pending, err)
+	}
+	if string(pending[0].Arguments) != `{"payload":"prepared"}` {
+		t.Fatalf("approval arguments were not normalized: %s", pending[0].Arguments)
+	}
+	approved, err := store.DecideApproval(ctx, pending[0].ID, true, "local_user", "approve-action-1")
+	if err != nil || approved.Status != domain.ApprovalApproved {
+		t.Fatalf("approve decision=%#v err=%v", approved, err)
+	}
+	reclaimed, ok, err := store.ClaimNext(ctx)
+	if err != nil || !ok {
+		t.Fatalf("claim approved task: ok=%t err=%v", ok, err)
+	}
+	worker.runTask(ctx, reclaimed)
+	completed, err := store.GetTask(ctx, task.ID)
+	if err != nil || completed.Status != domain.StatusCompleted || executions != 1 || usedApproval != approved.ID {
+		t.Fatalf("completed=%q executions=%d approval=%q err=%v", completed.Status, executions, usedApproval, err)
+	}
+	finalApproval, err := store.Approval(ctx, approved.ID)
+	if err != nil || finalApproval.ConsumedAt == nil {
+		t.Fatalf("approval was not marked consumed: %#v err=%v", finalApproval, err)
 	}
 }
 

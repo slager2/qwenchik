@@ -1,4 +1,4 @@
-import type { AgentEvent, Artifact, Checkpoint, Evidence, Message, Task, TaskStep } from './types'
+import type { AgentEvent, Approval, Artifact, Checkpoint, Evidence, Message, Task, TaskStep } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -37,6 +37,7 @@ export const api = {
   steps: (id: string) => request<TaskStep[]>(`/api/tasks/${encodeURIComponent(id)}/steps`),
   artifacts: (id: string) => request<Artifact[]>(`/api/tasks/${encodeURIComponent(id)}/artifacts`),
   evidence: (id: string) => request<Evidence[]>(`/api/tasks/${encodeURIComponent(id)}/evidence`),
+  approvals: (id: string) => request<Approval[]>(`/api/tasks/${encodeURIComponent(id)}/approvals`),
   createTask: (title: string, description: string) =>
     request<Task>('/api/tasks', { method: 'POST', body: JSON.stringify({ title, description }) }),
   sendMessage: (id: string, content: string) =>
@@ -45,4 +46,6 @@ export const api = {
   pause: (id: string) => request<Task>(`/api/tasks/${encodeURIComponent(id)}/pause`, { method: 'POST' }),
   resume: (id: string) => request<Task>(`/api/tasks/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
   cancel: (id: string) => request<Task>(`/api/tasks/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  approve: (id: string) => request<Approval>(`/api/approvals/${encodeURIComponent(id)}/approve`, { method: 'POST' }),
+  reject: (id: string) => request<Approval>(`/api/approvals/${encodeURIComponent(id)}/reject`, { method: 'POST' }),
 }

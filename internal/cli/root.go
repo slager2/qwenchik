@@ -56,12 +56,59 @@ func NewRoot() *cobra.Command {
 	root.AddCommand(newTaskCommand(&jsonMode))
 	root.AddCommand(newRunCommand(&jsonMode))
 	root.AddCommand(newEventsCommand(&jsonMode))
+	root.AddCommand(newApprovalDecisionCommand("approve", true, &jsonMode))
+	root.AddCommand(newApprovalDecisionCommand("reject", false, &jsonMode))
+	root.AddCommand(newPendingApprovalsCommand(&jsonMode))
 	root.AddCommand(newTaskDataCommand("checkpoints", &jsonMode))
 	root.AddCommand(newTaskDataCommand("artifacts", &jsonMode))
 	root.AddCommand(newTaskDataCommand("evidence", &jsonMode))
 	root.AddCommand(newSimpleCommand("providers", "Show configured provider availability", &jsonMode))
 	root.AddCommand(newSimpleCommand("config", "Show non-secret configuration", &jsonMode))
 	return root
+}
+
+func newPendingApprovalsCommand(jsonMode *bool) *cobra.Command {
+	return &cobra.Command{
+		Use:   "approvals",
+		Short: "List pending action approvals",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			deps, err := openDependencies(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer deps.store.Close()
+			items, err := deps.app.PendingApprovals(cmd.Context())
+			if err != nil {
+				return err
+			}
+			printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, items)
+			return nil
+		},
+	}
+}
+
+func newApprovalDecisionCommand(name string, approve bool, jsonMode *bool) *cobra.Command {
+	var idempotencyKey string
+	command := &cobra.Command{
+		Use:   name + " APPROVAL_ID",
+		Short: strings.ToUpper(name[:1]) + name[1:] + " a pending dangerous action",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			deps, err := openDependencies(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer deps.store.Close()
+			approval, err := deps.app.DecideApproval(cmd.Context(), args[0], approve, idempotencyKey)
+			if err != nil {
+				return err
+			}
+			printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, approval)
+			return nil
+		},
+	}
+	command.Flags().StringVar(&idempotencyKey, "idempotency-key", "", "idempotency key for the decision")
+	return command
 }
 
 func newTaskDataCommand(name string, jsonMode *bool) *cobra.Command {

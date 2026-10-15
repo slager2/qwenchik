@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { api } from './api'
-import type { AgentEvent, Artifact, Checkpoint, Evidence, Message, Task, TaskStatus, TaskStep } from './types'
+import type { AgentEvent, Approval, Artifact, Checkpoint, Evidence, Message, Task, TaskStatus, TaskStep } from './types'
 
 const columns: { id: string; title: string; statuses: TaskStatus[] }[] = [
   { id: 'inbox', title: 'Входящие', statuses: ['inbox'] },
@@ -49,6 +49,9 @@ const eventLabels: Record<string, string> = {
   'tool.started': 'Запущен инструмент',
   'tool.completed': 'Инструмент завершён',
   'approval.requested': 'Требуется подтверждение',
+  'approval.approved': 'Действие подтверждено',
+  'approval.rejected': 'Действие отклонено',
+  'approval.expired': 'Подтверждение истекло',
   'artifact.created': 'Артефакт сохранён',
   'evidence.created': 'Источник сохранён',
   'task.completed': 'Задача завершена',
@@ -91,6 +94,7 @@ function App() {
   const [steps, setSteps] = useState<TaskStep[]>([])
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const [evidence, setEvidence] = useState<Evidence[]>([])
+  const [approvals, setApprovals] = useState<Approval[]>([])
   const [doctor, setDoctor] = useState<DoctorResponse | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createTitle, setCreateTitle] = useState('')
@@ -119,8 +123,8 @@ function App() {
 
   const refreshDetail = useCallback(async (id: string) => {
     try {
-      const [task, nextMessages, nextEvents, nextCheckpoints, nextSteps, nextArtifacts, nextEvidence] = await Promise.all([
-        api.task(id), api.messages(id), api.events(id), api.checkpoints(id), api.steps(id), api.artifacts(id), api.evidence(id),
+      const [task, nextMessages, nextEvents, nextCheckpoints, nextSteps, nextArtifacts, nextEvidence, nextApprovals] = await Promise.all([
+        api.task(id), api.messages(id), api.events(id), api.checkpoints(id), api.steps(id), api.artifacts(id), api.evidence(id), api.approvals(id),
       ])
       setTasks((current) => current.map((item) => item.id === task.id ? task : item))
       setMessages(nextMessages)
@@ -129,6 +133,7 @@ function App() {
       setSteps(nextSteps)
       setArtifacts(nextArtifacts)
       setEvidence(nextEvidence)
+      setApprovals(nextApprovals)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось загрузить задачу')
     }
@@ -148,6 +153,7 @@ function App() {
       setSteps([])
       setArtifacts([])
       setEvidence([])
+      setApprovals([])
       return
     }
     void refreshDetail(selectedID)
@@ -256,6 +262,20 @@ function App() {
       await refreshDetail(taskID)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось изменить задачу')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function decideApproval(action: 'approve' | 'reject', approvalID: string) {
+    setBusy(true)
+    setError('')
+    try {
+      await api[action](approvalID)
+      if (selectedID) await refreshDetail(selectedID)
+      await refreshTasks(true)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось записать решение')
     } finally {
       setBusy(false)
     }
@@ -405,6 +425,7 @@ function App() {
               steps={steps}
               artifacts={artifacts}
               evidence={evidence}
+              approvals={approvals}
               reconnecting={reconnecting}
               busy={busy}
               chatText={chatText}
@@ -413,6 +434,8 @@ function App() {
               onPause={() => void controlTask('pause', selectedTask.id)}
               onResume={() => void controlTask('resume', selectedTask.id)}
               onCancel={() => void controlTask('cancel', selectedTask.id)}
+              onApprove={(id) => void decideApproval('approve', id)}
+              onReject={(id) => void decideApproval('reject', id)}
               onSend={sendMessage}
             />
           ) : (
@@ -436,6 +459,7 @@ interface InspectorProps {
   steps: TaskStep[]
   artifacts: Artifact[]
   evidence: Evidence[]
+  approvals: Approval[]
   reconnecting: boolean
   busy: boolean
   chatText: string
@@ -444,11 +468,13 @@ interface InspectorProps {
   onPause: () => void
   onResume: () => void
   onCancel: () => void
+  onApprove: (approvalID: string) => void
+  onReject: (approvalID: string) => void
   onSend: (event: FormEvent<HTMLFormElement>) => void
 }
 
 function TaskInspector(props: InspectorProps) {
-  const { task, messages, events, checkpoints, steps, artifacts, evidence, reconnecting, busy } = props
+  const { task, messages, events, checkpoints, steps, artifacts, evidence, approvals, reconnecting, busy } = props
   const canSend = ['inbox', 'queued', 'paused'].includes(task.status)
   const canPause = ['queued', 'planning', 'running', 'verifying'].includes(task.status)
   const canCancel = !['completed', 'failed', 'cancelled'].includes(task.status)
@@ -468,6 +494,8 @@ function TaskInspector(props: InspectorProps) {
         {canCancel && <button className="button button-danger-quiet" type="button" onClick={props.onCancel} disabled={busy}>Отменить</button>}
         {busy && <span className="action-feedback" role="status">Сохраняем…</span>}
       </div>
+
+      {task.status === 'waiting_approval' && approvals.filter((approval) => approval.status === 'pending').map((approval) => <ApprovalCard key={approval.id} approval={approval} busy={busy} onApprove={() => props.onApprove(approval.id)} onReject={() => props.onReject(approval.id)} />)}
 
       <div className="inspector-section goal-section">
         <div className="section-kicker">ЦЕЛЬ</div>
@@ -509,6 +537,22 @@ function TaskInspector(props: InspectorProps) {
           <div><div className="resource-heading"><span className="section-kicker">АРТЕФАКТЫ</span><span className="section-count">{artifacts.length}</span></div>{artifacts.length ? <ul className="artifact-list">{artifacts.map((artifact) => <li key={artifact.id}><span className="artifact-glyph">↳</span><span><a href={`/api/tasks/${encodeURIComponent(task.id)}/artifacts/${encodeURIComponent(artifact.id)}`}>{artifact.name}</a><small>{artifact.mime_type} · {artifact.size_bytes.toLocaleString('ru-RU')} байт</small></span></li>)}</ul> : <p>Сохранённых файлов пока нет.</p>}</div>
         </div>
       </div>
+    </section>
+  )
+}
+
+function ApprovalCard({ approval, busy, onApprove, onReject }: { approval: Approval; busy: boolean; onApprove: () => void; onReject: () => void }) {
+  return (
+    <section className="approval-card" aria-labelledby={`approval-${approval.id}`}>
+      <div className="approval-kicker"><span className="approval-pulse" /> ОЖИДАЕТ ВАШЕГО РЕШЕНИЯ</div>
+      <h3 id={`approval-${approval.id}`}>{approval.tool_name}</h3>
+      <dl className="approval-details">
+        <div><dt>Адресат</dt><dd>{approval.target || 'не указан'}</dd></div>
+        <div><dt>Почему</dt><dd>{approval.risk_explanation}</dd></div>
+        <div><dt>Аргументы действия</dt><dd><pre>{JSON.stringify(approval.arguments, null, 2)}</pre></dd></div>
+        <div><dt>Истекает</dt><dd>{timeLabel(approval.expires_at)}</dd></div>
+      </dl>
+      <div className="approval-actions"><button className="button button-danger-quiet" type="button" onClick={onReject} disabled={busy}>Отклонить</button><button className="button button-primary" type="button" onClick={onApprove} disabled={busy}>{busy ? 'Сохраняем…' : 'Подтвердить действие'}</button></div>
     </section>
   )
 }

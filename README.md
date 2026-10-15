@@ -4,7 +4,7 @@ Local-first Kanban, chat, and durable task runner for one local Qwen model. The 
 
 ## Current implementation
 
-The first vertical slice is implemented:
+The current implementation includes:
 
 - task create/list/show and lifecycle controls through the API and CLI;
 - SQLite migrations, atomic status/event writes, sequential durable worker, recovery, and checkpoint history;
@@ -17,7 +17,7 @@ The first vertical slice is implemented:
 - SSE event replay using `Last-Event-ID`;
 - responsive Kanban, task inspector, chat, live event timeline, sources/artifacts panels, and keyboard command palette.
 
-SearXNG is disabled by default. Without it, the worker can still fetch a public URL included in the task; an arbitrary model-invented URL is rejected. The sandbox tool fails with `sandbox_unavailable` unless rootless Docker and the configured local image are available; it never falls back to host execution. PDF extraction, JS/browser automation, Tavily/Brave adapters, interactive approval workflow, and durable memory retrieval remain later phases. PDF input fails with `pdf_extractor_unavailable`. Host shell and cloud LLM fallback are not registered.
+SearXNG is disabled by default. Without it, the worker can still fetch a public URL included in the task; an arbitrary model-invented URL is rejected. The sandbox tool fails with `sandbox_unavailable` unless rootless Docker and the configured local image are available; it never falls back to host execution. Approval records, one-time decisions, API/CLI actions, and UI cards are implemented, but no external side-effect executor is registered by default. PDF extraction, JS/browser automation, Tavily/Brave adapters, and durable memory retrieval remain later phases. PDF input fails with `pdf_extractor_unavailable`. Host shell and cloud LLM fallback are not registered.
 
 ## Requirements
 
@@ -78,6 +78,9 @@ Set `LLM_CONTEXT_LENGTH` to the context configured on the model server. The exam
 ./qagent evidence TASK_ID
 ./qagent artifacts TASK_ID
 ./qagent checkpoints TASK_ID
+./qagent approvals
+./qagent approve APPROVAL_ID
+./qagent reject APPROVAL_ID
 ./qagent task pause TASK_ID
 ./qagent task resume TASK_ID
 ./qagent task cancel TASK_ID

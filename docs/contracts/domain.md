@@ -30,7 +30,7 @@ inbox -> queued | cancelled
 queued -> planning | paused | cancelled
 planning -> running | paused | failed | cancelled
 running -> waiting_approval | paused | verifying | failed | cancelled
-waiting_approval -> running | paused | cancelled | failed
+waiting_approval -> queued (approved) | running | paused | cancelled | failed
 paused -> queued | running | cancelled
 verifying -> completed | failed | paused | cancelled
 failed -> queued
@@ -71,3 +71,7 @@ The runtime always supports `analysis`. `fetch` is available with the local arti
 ## Checkpoint
 
 Checkpoint JSON contains task ID, plan version, current step/stage, completed and pending steps, evidence/artifact IDs, remaining budgets, last error, and last durable event sequence. It is written transactionally after meaningful worker actions.
+
+## Approval
+
+An approval stores the task and tool IDs, normalized JSON arguments plus a SHA-256 argument hash, target, deterministic risk explanation, expiry, status, actor, and decision/consumption timestamps. Status is `pending`, `approved`, `rejected`, or `expired`. Approve/reject is idempotent; consuming an approval is a separate one-time transaction matched to the exact task, tool, and normalized arguments. A non-idempotent action with an unknown outcome after recovery is not replayed and requires task review.

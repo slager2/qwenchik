@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/slager2/qwenchik/internal/app"
 	"github.com/slager2/qwenchik/internal/domain"
@@ -171,5 +172,59 @@ func TestEvidenceAndArtifactMetadataEndpoints(t *testing.T) {
 	server.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusOK || response.Body.String() != "stored bytes" {
 		t.Fatalf("artifact download status=%d body=%q", response.Code, response.Body.String())
+	}
+}
+
+func TestApprovalEndpointsPersistDecisionAndQueueApprovedTask(t *testing.T) {
+	server, store := newTestServer(t)
+	defer store.Close()
+	ctx := context.Background()
+	task, err := app.New(store).CreateTask(ctx, "Approval", "Confirm external request", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.QueueTask(ctx, task.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.ClaimNext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	stage := domain.StageSynthesis
+	if _, err := store.TransitionTask(ctx, task.ID, domain.StatusRunning, &stage, "", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	approval, err := store.CreateApproval(ctx, domain.Approval{
+		TaskID: task.ID, ToolName: "external.submit", Arguments: json.RawMessage(`{"target":"example"}`),
+		Target: "example", RiskExplanation: "External submission", ExpiresAt: time.Now().Add(time.Minute),
+	}, map[string]any{"pending_approval": true, "current_step": "step_1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pendingRequest := httptest.NewRequest(http.MethodGet, "/api/approvals", nil)
+	pendingRequest.Host = "127.0.0.1:8080"
+	pendingResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(pendingResponse, pendingRequest)
+	if pendingResponse.Code != http.StatusOK || !strings.Contains(pendingResponse.Body.String(), approval.ID) {
+		t.Fatalf("pending approvals response status=%d body=%s", pendingResponse.Code, pendingResponse.Body.String())
+	}
+	approveRequest := httptest.NewRequest(http.MethodPost, "/api/approvals/"+approval.ID+"/approve", nil)
+	approveRequest.Host = "127.0.0.1:8080"
+	approveRequest.Header.Set("Idempotency-Key", "approve-api-1")
+	approveResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(approveResponse, approveRequest)
+	if approveResponse.Code != http.StatusAccepted || !strings.Contains(approveResponse.Body.String(), "approved") {
+		t.Fatalf("approve response status=%d body=%s", approveResponse.Code, approveResponse.Body.String())
+	}
+	queued, err := store.GetTask(ctx, task.ID)
+	if err != nil || queued.Status != domain.StatusQueued {
+		t.Fatalf("task status after approval=%q err=%v", queued.Status, err)
+	}
+	approveRequest = httptest.NewRequest(http.MethodPost, "/api/approvals/"+approval.ID+"/approve", nil)
+	approveRequest.Host = "127.0.0.1:8080"
+	approveRequest.Header.Set("Idempotency-Key", "approve-api-1")
+	approveResponse = httptest.NewRecorder()
+	server.Handler().ServeHTTP(approveResponse, approveRequest)
+	if approveResponse.Code != http.StatusAccepted {
+		t.Fatalf("idempotent approval retry status=%d body=%s", approveResponse.Code, approveResponse.Body.String())
 	}
 }

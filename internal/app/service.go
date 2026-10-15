@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -29,6 +30,12 @@ type Repository interface {
 	Steps(context.Context, string) ([]domain.TaskStep, error)
 	Artifacts(context.Context, string) ([]domain.Artifact, error)
 	Evidence(context.Context, string) ([]domain.Evidence, error)
+	CreateApproval(context.Context, domain.Approval, any) (domain.Approval, error)
+	Approval(context.Context, string) (domain.Approval, error)
+	ApprovalsForTask(context.Context, string) ([]domain.Approval, error)
+	PendingApprovals(context.Context) ([]domain.Approval, error)
+	DecideApproval(context.Context, string, bool, string, string) (domain.Approval, error)
+	ConsumeApproval(context.Context, string, string, json.RawMessage) (string, bool, error)
 	CompleteTask(context.Context, string, string, any) (domain.Task, error)
 	ClaimNext(context.Context) (domain.Task, bool, error)
 	RecoverInterrupted(context.Context) (int64, error)
@@ -154,6 +161,28 @@ func (s *Service) Evidence(ctx context.Context, taskID string) ([]domain.Evidenc
 		return nil, err
 	}
 	return s.repo.Evidence(ctx, taskID)
+}
+
+func (s *Service) Approval(ctx context.Context, id string) (domain.Approval, error) {
+	return s.repo.Approval(ctx, id)
+}
+
+func (s *Service) ApprovalsForTask(ctx context.Context, taskID string) ([]domain.Approval, error) {
+	if _, err := s.repo.GetTask(ctx, taskID); err != nil {
+		return nil, err
+	}
+	return s.repo.ApprovalsForTask(ctx, taskID)
+}
+
+func (s *Service) PendingApprovals(ctx context.Context) ([]domain.Approval, error) {
+	return s.repo.PendingApprovals(ctx)
+}
+
+func (s *Service) DecideApproval(ctx context.Context, approvalID string, approve bool, idempotencyKey string) (domain.Approval, error) {
+	if idempotencyKey != "" && len(idempotencyKey) > 200 {
+		return domain.Approval{}, errors.New("idempotency key must not exceed 200 characters")
+	}
+	return s.repo.DecideApproval(ctx, approvalID, approve, "local_user", idempotencyKey)
 }
 
 func (s *Service) AddAssistantMessage(ctx context.Context, taskID, content string) (domain.Message, error) {

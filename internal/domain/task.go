@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+type ApprovalStatus string
+
+const (
+	ApprovalPending  ApprovalStatus = "pending"
+	ApprovalApproved ApprovalStatus = "approved"
+	ApprovalRejected ApprovalStatus = "rejected"
+	ApprovalExpired  ApprovalStatus = "expired"
+)
+
 type TaskStatus string
 
 const (
@@ -45,7 +54,7 @@ var transitions = map[TaskStatus]map[TaskStatus]struct{}{
 	StatusQueued:          {StatusPlanning: {}, StatusPaused: {}, StatusCancelled: {}},
 	StatusPlanning:        {StatusRunning: {}, StatusPaused: {}, StatusFailed: {}, StatusCancelled: {}},
 	StatusRunning:         {StatusWaitingApproval: {}, StatusPaused: {}, StatusVerifying: {}, StatusFailed: {}, StatusCancelled: {}},
-	StatusWaitingApproval: {StatusRunning: {}, StatusPaused: {}, StatusFailed: {}, StatusCancelled: {}},
+	StatusWaitingApproval: {StatusRunning: {}, StatusQueued: {}, StatusPaused: {}, StatusFailed: {}, StatusCancelled: {}},
 	StatusPaused:          {StatusQueued: {}, StatusRunning: {}, StatusCancelled: {}},
 	StatusVerifying:       {StatusCompleted: {}, StatusFailed: {}, StatusPaused: {}, StatusCancelled: {}},
 	StatusFailed:          {StatusQueued: {}},
@@ -146,6 +155,22 @@ type Evidence struct {
 	Taint            string      `json:"taint"`
 }
 
+type Approval struct {
+	ID              string          `json:"id"`
+	TaskID          string          `json:"task_id"`
+	ToolName        string          `json:"tool_name"`
+	Arguments       json.RawMessage `json:"arguments"`
+	ArgumentsSHA256 string          `json:"-"`
+	Target          string          `json:"target"`
+	RiskExplanation string          `json:"risk_explanation"`
+	ExpiresAt       time.Time       `json:"expires_at"`
+	Status          ApprovalStatus  `json:"status"`
+	CreatedAt       time.Time       `json:"created_at"`
+	DecisionAt      *time.Time      `json:"decision_at,omitempty"`
+	Actor           string          `json:"actor,omitempty"`
+	ConsumedAt      *time.Time      `json:"consumed_at,omitempty"`
+}
+
 type Event struct {
 	ID            string          `json:"id"`
 	TaskID        string          `json:"task_id"`
@@ -208,7 +233,7 @@ func ValidatePlan(plan Plan, maxSteps int) error {
 		if _, exists := steps[step.ID]; exists {
 			return fmt.Errorf("duplicate plan step id %q", step.ID)
 		}
-		if step.Kind != "analysis" && step.Kind != "search" && step.Kind != "fetch" && step.Kind != "extract" && step.Kind != "browser" && step.Kind != "code_execution" {
+		if step.Kind != "analysis" && step.Kind != "search" && step.Kind != "fetch" && step.Kind != "extract" && step.Kind != "browser" && step.Kind != "code_execution" && step.Kind != "external_action" {
 			return fmt.Errorf("unsupported plan step kind %q", step.Kind)
 		}
 		if strings.TrimSpace(step.Description) == "" || len(step.Description) > 1000 {

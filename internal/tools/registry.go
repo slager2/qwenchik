@@ -122,6 +122,27 @@ func (r *Registry) Descriptors() []Descriptor {
 	return result
 }
 
+func (r *Registry) DescriptorsForRole(role, riskClass string) []Descriptor {
+	result := make([]Descriptor, 0)
+	for _, tool := range r.byName {
+		if riskClass != "" && tool.descriptor.RiskClass != riskClass {
+			continue
+		}
+		for _, allowedRole := range tool.descriptor.AllowedRoles {
+			if allowedRole == role {
+				result = append(result, tool.descriptor)
+				break
+			}
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	return result
+}
+
+func (r *Registry) HasRiskForRole(role, riskClass string) bool {
+	return len(r.DescriptorsForRole(role, riskClass)) > 0
+}
+
 func (r *Registry) Has(name string) bool {
 	_, ok := r.byName[name]
 	return ok
@@ -216,6 +237,17 @@ func DecisionError(name string, decision policy.Decision) error {
 }
 
 func (r *Registry) Execute(ctx context.Context, role, name string, arguments json.RawMessage) (any, error) {
+	return r.execute(ctx, role, name, arguments, "")
+}
+
+func (r *Registry) ExecuteApproved(ctx context.Context, role, name string, arguments json.RawMessage, approvalID string) (any, error) {
+	if approvalID == "" {
+		return nil, ErrApprovalRequired
+	}
+	return r.execute(ctx, role, name, arguments, approvalID)
+}
+
+func (r *Registry) execute(ctx context.Context, role, name string, arguments json.RawMessage, approvalID string) (any, error) {
 	tool, ok := r.byName[name]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownTool, name)
@@ -226,11 +258,18 @@ func (r *Registry) Execute(ctx context.Context, role, name string, arguments jso
 	}
 	switch decision.Action {
 	case policy.Allow:
+	case policy.ApprovalRequired:
+		if approvalID == "" {
+			return nil, DecisionError(name, decision)
+		}
 	default:
 		return nil, DecisionError(name, decision)
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(tool.descriptor.TimeoutSeconds)*time.Second)
 	defer cancel()
+	if approvalID != "" {
+		ctx = context.WithValue(ctx, approvalContextKey{}, approvalID)
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -249,6 +288,13 @@ func (r *Registry) Execute(ctx context.Context, role, name string, arguments jso
 		return nil, errors.Join(ErrInvalidOutput, err)
 	}
 	return result, nil
+}
+
+type approvalContextKey struct{}
+
+func ApprovalIDFromContext(ctx context.Context) string {
+	value, _ := ctx.Value(approvalContextKey{}).(string)
+	return value
 }
 
 type inspectArgs struct {

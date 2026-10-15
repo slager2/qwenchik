@@ -18,7 +18,7 @@
 
 `seq` is monotonically increasing within a task. Events are append-only. A task state mutation and its event are committed in the same transaction. Internal/audit events are not sent to user-facing SSE without explicit redaction.
 
-Initial public event types: `task.created`, `task.status_changed`, `message.created`, `plan.created`, `step.started`, `step.completed`, `tool.started`, `tool.completed`, `evidence.created`, `artifact.created`, `approval.requested`, `task.completed`, `task.failed`, `task.cancelled`. `checkpoint.saved` and `policy.decision` remain internal.
+Initial public event types: `task.created`, `task.status_changed`, `task.recovered`, `message.created`, `plan.created`, `step.started`, `step.completed`, `tool.started`, `tool.completed`, `evidence.created`, `artifact.created`, `approval.requested`, `approval.approved`, `approval.rejected`, `approval.expired`, `task.completed`, `task.failed`, `task.cancelled`. `checkpoint.saved`, `policy.decision`, and `approval.consumed` remain internal/audit.
 
 ## SSE
 

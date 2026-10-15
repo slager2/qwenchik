@@ -23,7 +23,12 @@ Base path: `/api`. JSON errors use `{"error":{"code":"...","message":"...","retr
 | `GET` | `/health` | Process and storage health |
 | `GET` | `/doctor` | Runtime/provider checks, with no secret values |
 | `GET` | `/providers` | Configured local and optional provider status |
+| `GET` | `/approvals` | Pending approval requests |
+| `GET` | `/approvals/{approval_id}` | One approval request |
+| `POST` | `/approvals/{approval_id}/approve` | Approve the exact stored action |
+| `POST` | `/approvals/{approval_id}/reject` | Reject the pending action |
+| `GET` | `/tasks/{task_id}/approvals` | Approval history for one task |
 
-Mutations are idempotent when an idempotency key is supplied. Unknown task IDs return 404. Invalid lifecycle transitions return 409; malformed request bodies return 400. Create returns 201; accepted worker commands return 202.
+Mutations are idempotent when an idempotency key is supplied. Unknown task IDs return 404. Invalid lifecycle transitions return 409; malformed request bodies return 400. Create returns 201; accepted worker commands and approval decisions return 202. Approval decisions bind to the stored normalized action arguments and cannot be replayed for different arguments.
 
 The server defaults to `127.0.0.1:8080`. Non-loopback binding is rejected unless a future explicit LAN mode also provides authentication.

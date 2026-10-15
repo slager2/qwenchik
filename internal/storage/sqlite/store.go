@@ -1,13 +1,17 @@
 package sqlite
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -22,9 +26,11 @@ import (
 var migrationFiles embed.FS
 
 var (
-	ErrNotFound    = errors.New("not found")
-	ErrConflict    = errors.New("conflict")
-	ErrIdempotency = errors.New("idempotency key was used for another operation")
+	ErrNotFound                = errors.New("not found")
+	ErrConflict                = errors.New("conflict")
+	ErrIdempotency             = errors.New("idempotency key was used for another operation")
+	ErrApprovalExpired         = errors.New("approval expired")
+	ErrApprovalAlreadyConsumed = errors.New("approval was already consumed")
 )
 
 type Store struct {
@@ -658,6 +664,506 @@ func (s *Store) Evidence(ctx context.Context, taskID string) ([]domain.Evidence,
 	return result, rows.Err()
 }
 
+func (s *Store) CreateApproval(ctx context.Context, approval domain.Approval, checkpointState any) (domain.Approval, error) {
+	arguments, hash, err := normalizeApprovalArguments(approval.Arguments)
+	if err != nil {
+		return domain.Approval{}, err
+	}
+	if approval.TaskID == "" || approval.ToolName == "" || strings.TrimSpace(approval.RiskExplanation) == "" || len(arguments) > 64<<10 {
+		return domain.Approval{}, errors.New("approval is missing required or bounded fields")
+	}
+	now := time.Now().UTC()
+	if approval.ID == "" {
+		approval.ID = newID()
+	}
+	if approval.ExpiresAt.IsZero() {
+		approval.ExpiresAt = now.Add(10 * time.Minute)
+	}
+	if !approval.ExpiresAt.After(now) {
+		return domain.Approval{}, errors.New("approval expiry must be in the future")
+	}
+	approval.Arguments = arguments
+	approval.ArgumentsSHA256 = hash
+	approval.Status = domain.ApprovalPending
+	approval.CreatedAt = now
+	if approval.Actor == "" {
+		approval.Actor = "policy"
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Approval{}, err
+	}
+	defer tx.Rollback()
+	task, err := getTask(ctx, tx, approval.TaskID)
+	if err != nil {
+		return domain.Approval{}, err
+	}
+	if err := expireMatchingApprovalsTx(ctx, tx, approval.TaskID, approval.ToolName, hash, now); err != nil {
+		return domain.Approval{}, err
+	}
+	var existing domain.Approval
+	existing, err = scanApproval(tx.QueryRowContext(ctx, `SELECT id,task_id,tool_name,arguments_json,arguments_sha256,target,risk_explanation,expires_at,status,created_at,decision_at,actor,consumed_at FROM approvals WHERE task_id=? AND tool_name=? AND arguments_sha256=? AND status='pending' AND consumed_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1`, approval.TaskID, approval.ToolName, hash, stamp(now)))
+	if err == nil {
+		if task.Status == domain.StatusRunning {
+			if err := s.moveTaskForApproval(ctx, tx, task, now); err != nil {
+				return domain.Approval{}, err
+			}
+			if err := saveApprovalCheckpoint(ctx, tx, approval.TaskID, checkpointState, existing.ID, string(existing.Status)); err != nil {
+				return domain.Approval{}, err
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return domain.Approval{}, err
+		}
+		return existing, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return domain.Approval{}, err
+	}
+	if task.Status != domain.StatusRunning {
+		return domain.Approval{}, fmt.Errorf("%w: approval can only be requested while running", ErrConflict)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO approvals(id,task_id,tool_name,arguments_json,target,risk_explanation,expires_at,status,created_at,actor,arguments_sha256) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		approval.ID, approval.TaskID, approval.ToolName, string(approval.Arguments), approval.Target, approval.RiskExplanation, stamp(approval.ExpiresAt), approval.Status, stamp(approval.CreatedAt), approval.Actor, approval.ArgumentsSHA256); err != nil {
+		return domain.Approval{}, err
+	}
+	if err := s.moveTaskForApproval(ctx, tx, task, now); err != nil {
+		return domain.Approval{}, err
+	}
+	if _, err := appendEvent(ctx, tx, approval.TaskID, "approval.requested", nil, "user", map[string]any{
+		"approval_id": approval.ID, "tool": approval.ToolName, "target": approval.Target,
+		"risk_explanation": approval.RiskExplanation, "expires_at": stamp(approval.ExpiresAt),
+	}); err != nil {
+		return domain.Approval{}, err
+	}
+	if err := saveApprovalCheckpoint(ctx, tx, approval.TaskID, checkpointState, approval.ID, string(approval.Status)); err != nil {
+		return domain.Approval{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Approval{}, err
+	}
+	return approval, nil
+}
+
+func (s *Store) Approval(ctx context.Context, id string) (domain.Approval, error) {
+	approval, err := getApproval(ctx, s.db, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Approval{}, ErrNotFound
+	}
+	return approval, err
+}
+
+func (s *Store) ApprovalsForTask(ctx context.Context, taskID string) ([]domain.Approval, error) {
+	return queryApprovals(ctx, s.db, `SELECT id,task_id,tool_name,arguments_json,arguments_sha256,target,risk_explanation,expires_at,status,created_at,decision_at,actor,consumed_at FROM approvals WHERE task_id=? ORDER BY created_at DESC LIMIT 100`, taskID)
+}
+
+func (s *Store) PendingApprovals(ctx context.Context) ([]domain.Approval, error) {
+	return queryApprovals(ctx, s.db, `SELECT id,task_id,tool_name,arguments_json,arguments_sha256,target,risk_explanation,expires_at,status,created_at,decision_at,actor,consumed_at FROM approvals WHERE status='pending' AND expires_at>? ORDER BY created_at LIMIT 100`, stamp(time.Now().UTC()))
+}
+
+func (s *Store) ExpireApprovals(ctx context.Context) (int, error) {
+	now := time.Now().UTC()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT id,task_id FROM approvals WHERE status='pending' AND expires_at<=? ORDER BY expires_at LIMIT 100`, stamp(now))
+	if err != nil {
+		return 0, err
+	}
+	type expiredApproval struct{ id, taskID string }
+	var expired []expiredApproval
+	for rows.Next() {
+		var item expiredApproval
+		if err := rows.Scan(&item.id, &item.taskID); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		expired = append(expired, item)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	for _, item := range expired {
+		if _, err := tx.ExecContext(ctx, `UPDATE approvals SET status=?,decision_at=?,actor='policy' WHERE id=? AND status='pending'`, domain.ApprovalExpired, stamp(now), item.id); err != nil {
+			return 0, err
+		}
+		if _, err := appendEvent(ctx, tx, item.taskID, "approval.expired", nil, "user", map[string]any{"approval_id": item.id}); err != nil {
+			return 0, err
+		}
+		task, err := getTask(ctx, tx, item.taskID)
+		if err != nil {
+			return 0, err
+		}
+		activeApproval, err := hasActivePendingApprovalTx(ctx, tx, item.taskID, now)
+		if err != nil {
+			return 0, err
+		}
+		if task.Status == domain.StatusWaitingApproval && !activeApproval {
+			if err := transitionStatusTx(ctx, tx, task, domain.StatusFailed, nil, "task.failed", map[string]any{"error_code": "approval_expired"}, now); err != nil {
+				return 0, err
+			}
+		}
+		if err := saveApprovalCheckpoint(ctx, tx, item.taskID, nil, item.id, string(domain.ApprovalExpired)); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return len(expired), nil
+}
+
+func (s *Store) DecideApproval(ctx context.Context, id string, approve bool, actor, idempotencyKey string) (domain.Approval, error) {
+	operation := "approvals.reject"
+	approvalStatus := domain.ApprovalRejected
+	taskStatus := domain.StatusCancelled
+	if approve {
+		operation = "approvals.approve"
+		approvalStatus = domain.ApprovalApproved
+		taskStatus = domain.StatusQueued
+	}
+	if actor == "" {
+		actor = "local_user"
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Approval{}, err
+	}
+	defer tx.Rollback()
+	if idempotencyKey != "" {
+		resourceID, err := findIdempotency(ctx, tx, idempotencyKey, operation)
+		if err == nil {
+			return getApproval(ctx, tx, resourceID)
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return domain.Approval{}, err
+		}
+	}
+	approval, err := getApproval(ctx, tx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Approval{}, ErrNotFound
+	}
+	if err != nil {
+		return domain.Approval{}, err
+	}
+	if approval.Status != domain.ApprovalPending {
+		if approval.Status != approvalStatus {
+			return domain.Approval{}, fmt.Errorf("%w: approval already has a different decision", ErrConflict)
+		}
+		if idempotencyKey != "" {
+			if err := insertApprovalIdempotency(ctx, tx, idempotencyKey, operation, id); err != nil {
+				return domain.Approval{}, err
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return domain.Approval{}, err
+		}
+		return approval, nil
+	}
+	now := time.Now().UTC()
+	approval.Actor = actor
+	approval.DecisionAt = &now
+	if !now.Before(approval.ExpiresAt) {
+		approval.Status = domain.ApprovalExpired
+		if _, err := tx.ExecContext(ctx, `UPDATE approvals SET status=?,decision_at=?,actor=? WHERE id=? AND status='pending'`, approval.Status, stamp(now), actor, id); err != nil {
+			return domain.Approval{}, err
+		}
+		if _, err := appendEvent(ctx, tx, approval.TaskID, "approval.expired", nil, "user", map[string]any{"approval_id": id}); err != nil {
+			return domain.Approval{}, err
+		}
+		task, err := getTask(ctx, tx, approval.TaskID)
+		if err != nil {
+			return domain.Approval{}, err
+		}
+		activeApproval, err := hasActivePendingApprovalTx(ctx, tx, approval.TaskID, now)
+		if err != nil {
+			return domain.Approval{}, err
+		}
+		if task.Status == domain.StatusWaitingApproval && !activeApproval {
+			if err := transitionStatusTx(ctx, tx, task, domain.StatusFailed, nil, "task.failed", map[string]any{"error_code": "approval_expired"}, now); err != nil {
+				return domain.Approval{}, err
+			}
+		}
+		if err := saveApprovalCheckpoint(ctx, tx, approval.TaskID, nil, id, string(domain.ApprovalExpired)); err != nil {
+			return domain.Approval{}, err
+		}
+		if idempotencyKey != "" {
+			if err := insertApprovalIdempotency(ctx, tx, idempotencyKey, operation, id); err != nil {
+				return domain.Approval{}, err
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return domain.Approval{}, err
+		}
+		return approval, ErrApprovalExpired
+	}
+	approval.Status = approvalStatus
+	if _, err := tx.ExecContext(ctx, `UPDATE approvals SET status=?,decision_at=?,actor=? WHERE id=? AND status='pending'`, approvalStatus, stamp(now), actor, id); err != nil {
+		return domain.Approval{}, err
+	}
+	task, err := getTask(ctx, tx, approval.TaskID)
+	if err != nil {
+		return domain.Approval{}, err
+	}
+	if task.Status != taskStatus {
+		if !domain.CanTransition(task.Status, taskStatus) {
+			return domain.Approval{}, fmt.Errorf("%w: task status %s cannot accept approval decision", ErrConflict, task.Status)
+		}
+		if err := transitionStatusTx(ctx, tx, task, taskStatus, nil, "task.status_changed", map[string]any{"approval_id": id}, now); err != nil {
+			return domain.Approval{}, err
+		}
+	}
+	decisionEvent := "approval.rejected"
+	if approve {
+		decisionEvent = "approval.approved"
+	}
+	if _, err := appendEvent(ctx, tx, approval.TaskID, decisionEvent, nil, "user", map[string]any{"approval_id": id, "actor": actor}); err != nil {
+		return domain.Approval{}, err
+	}
+	if err := saveApprovalCheckpoint(ctx, tx, approval.TaskID, nil, id, string(approvalStatus)); err != nil {
+		return domain.Approval{}, err
+	}
+	if idempotencyKey != "" {
+		if err := insertApprovalIdempotency(ctx, tx, idempotencyKey, operation, id); err != nil {
+			return domain.Approval{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Approval{}, err
+	}
+	return approval, nil
+}
+
+func (s *Store) ConsumeApproval(ctx context.Context, taskID, toolName string, arguments json.RawMessage) (string, bool, error) {
+	_, hash, err := normalizeApprovalArguments(arguments)
+	if err != nil {
+		return "", false, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", false, err
+	}
+	defer tx.Rollback()
+	var id string
+	var status domain.ApprovalStatus
+	var expires string
+	var consumed sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT id,status,expires_at,consumed_at FROM approvals WHERE task_id=? AND tool_name=? AND arguments_sha256=? ORDER BY created_at DESC LIMIT 1`, taskID, toolName, hash).Scan(&id, &status, &expires, &consumed)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if status == domain.ApprovalPending {
+		return "", false, nil
+	}
+	if status == domain.ApprovalExpired {
+		return "", false, ErrApprovalExpired
+	}
+	if status != domain.ApprovalApproved {
+		return "", false, ErrConflict
+	}
+	if consumed.Valid {
+		return "", false, ErrApprovalAlreadyConsumed
+	}
+	now := time.Now().UTC()
+	if !now.Before(parseTime(expires)) {
+		if _, err := tx.ExecContext(ctx, `UPDATE approvals SET status=?,decision_at=?,actor='policy' WHERE id=? AND status='approved' AND consumed_at IS NULL`, domain.ApprovalExpired, stamp(now), id); err != nil {
+			return "", false, err
+		}
+		if _, err := appendEvent(ctx, tx, taskID, "approval.expired", nil, "user", map[string]any{"approval_id": id}); err != nil {
+			return "", false, err
+		}
+		if err := tx.Commit(); err != nil {
+			return "", false, err
+		}
+		return "", false, ErrApprovalExpired
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE approvals SET consumed_at=? WHERE id=? AND status='approved' AND consumed_at IS NULL`, stamp(now), id)
+	if err != nil {
+		return "", false, err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return "", false, err
+	}
+	if count != 1 {
+		return "", false, ErrApprovalAlreadyConsumed
+	}
+	if _, err := appendEvent(ctx, tx, taskID, "approval.consumed", nil, "audit", map[string]any{"approval_id": id, "tool": toolName}); err != nil {
+		return "", false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", false, err
+	}
+	return id, true, nil
+}
+
+func (s *Store) moveTaskForApproval(ctx context.Context, tx *sql.Tx, task domain.Task, now time.Time) error {
+	if task.Status == domain.StatusWaitingApproval {
+		return nil
+	}
+	if !domain.CanTransition(task.Status, domain.StatusWaitingApproval) {
+		return fmt.Errorf("%w: task status %s cannot wait for approval", ErrConflict, task.Status)
+	}
+	return transitionStatusTx(ctx, tx, task, domain.StatusWaitingApproval, nil, "task.status_changed", nil, now)
+}
+
+func hasActivePendingApprovalTx(ctx context.Context, tx *sql.Tx, taskID string, now time.Time) (bool, error) {
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM approvals WHERE task_id=? AND status='pending' AND expires_at>?`, taskID, stamp(now)).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func expireMatchingApprovalsTx(ctx context.Context, tx *sql.Tx, taskID, toolName, argumentsHash string, now time.Time) error {
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM approvals WHERE task_id=? AND tool_name=? AND arguments_sha256=? AND status='pending' AND consumed_at IS NULL AND expires_at<=?`, taskID, toolName, argumentsHash, stamp(now))
+	if err != nil {
+		return err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if _, err := tx.ExecContext(ctx, `UPDATE approvals SET status=?,decision_at=?,actor='policy' WHERE id=? AND status='pending'`, domain.ApprovalExpired, stamp(now), id); err != nil {
+			return err
+		}
+		if _, err := appendEvent(ctx, tx, taskID, "approval.expired", nil, "user", map[string]any{"approval_id": id}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func transitionStatusTx(ctx context.Context, tx *sql.Tx, task domain.Task, to domain.TaskStatus, stage *domain.Stage, eventType string, payload map[string]any, now time.Time) error {
+	if payload == nil {
+		payload = make(map[string]any)
+	}
+	payload["from"] = task.Status
+	payload["to"] = to
+	if err := transitionStageTx(ctx, tx, task.ID, task.Stage, stage, closeStageStatus(to), now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status=?,stage=?,version=version+1,updated_at=? WHERE id=?`, to, nullableStage(stage), stamp(now), task.ID); err != nil {
+		return err
+	}
+	_, err := appendEvent(ctx, tx, task.ID, eventType, stage, "user", payload)
+	return err
+}
+
+func saveApprovalCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, state any, approvalID, status string) error {
+	planVersion := 1
+	if state == nil {
+		var stateJSON string
+		var latestVersion int
+		err := tx.QueryRowContext(ctx, `SELECT state_json,plan_version FROM checkpoints WHERE task_id=? ORDER BY created_at DESC,id DESC LIMIT 1`, taskID).Scan(&stateJSON, &latestVersion)
+		if err == nil {
+			var decoded map[string]any
+			if err := json.Unmarshal([]byte(stateJSON), &decoded); err != nil {
+				return err
+			}
+			decoded["approval_id"] = approvalID
+			decoded["approval_status"] = status
+			state = decoded
+			planVersion = latestVersion
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		} else {
+			state = map[string]any{"approval_id": approvalID, "approval_status": status}
+		}
+	}
+	seq, err := appendEvent(ctx, tx, taskID, "checkpoint.saved", nil, "internal", map[string]any{"approval_id": approvalID, "status": status})
+	if err != nil {
+		return err
+	}
+	return insertCheckpoint(ctx, tx, taskID, planVersion, seq, state)
+}
+
+func insertApprovalIdempotency(ctx context.Context, tx *sql.Tx, key, operation, approvalID string) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO idempotency_keys(key,operation,resource_id,created_at) VALUES(?,?,?,?)`, key, operation, approvalID, stamp(time.Now().UTC()))
+	return err
+}
+
+func normalizeApprovalArguments(raw json.RawMessage) (json.RawMessage, string, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, "", err
+	}
+	if _, ok := value.(map[string]any); !ok {
+		return nil, "", errors.New("approval arguments must be a JSON object")
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return nil, "", errors.New("approval arguments must contain one JSON object")
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, "", err
+	}
+	hash := sha256.Sum256(encoded)
+	return encoded, hex.EncodeToString(hash[:]), nil
+}
+
+func queryApprovals(ctx context.Context, q interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}, query string, args ...any) ([]domain.Approval, error) {
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var approvals []domain.Approval
+	for rows.Next() {
+		approval, err := scanApproval(rows)
+		if err != nil {
+			return nil, err
+		}
+		approvals = append(approvals, approval)
+	}
+	return approvals, rows.Err()
+}
+
+func getApproval(ctx context.Context, q interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, id string) (domain.Approval, error) {
+	return scanApproval(q.QueryRowContext(ctx, `SELECT id,task_id,tool_name,arguments_json,arguments_sha256,target,risk_explanation,expires_at,status,created_at,decision_at,actor,consumed_at FROM approvals WHERE id=?`, id))
+}
+
+func scanApproval(row scanner) (domain.Approval, error) {
+	var approval domain.Approval
+	var arguments, expires, created sql.NullString
+	var decisionAt, consumedAt sql.NullString
+	if err := row.Scan(&approval.ID, &approval.TaskID, &approval.ToolName, &arguments, &approval.ArgumentsSHA256, &approval.Target, &approval.RiskExplanation, &expires, &approval.Status, &created, &decisionAt, &approval.Actor, &consumedAt); err != nil {
+		return domain.Approval{}, err
+	}
+	approval.Arguments = json.RawMessage(arguments.String)
+	approval.ExpiresAt = parseTime(expires.String)
+	approval.CreatedAt = parseTime(created.String)
+	if decisionAt.Valid {
+		value := parseTime(decisionAt.String)
+		approval.DecisionAt = &value
+	}
+	if consumedAt.Valid {
+		value := parseTime(consumedAt.String)
+		approval.ConsumedAt = &value
+	}
+	return approval, nil
+}
+
 func (s *Store) SaveCheckpoint(ctx context.Context, taskID string, planVersion int, state any) (domain.Checkpoint, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -931,6 +1437,8 @@ func transitionStageTx(ctx context.Context, tx *sql.Tx, taskID string, previous,
 func closeStageStatus(status domain.TaskStatus) string {
 	switch status {
 	case domain.StatusPaused:
+		return "paused"
+	case domain.StatusWaitingApproval:
 		return "paused"
 	case domain.StatusFailed:
 		return "failed"

@@ -47,6 +47,10 @@ type TaskService interface {
 	Steps(context.Context, string) ([]domain.TaskStep, error)
 	Artifacts(context.Context, string) ([]domain.Artifact, error)
 	Evidence(context.Context, string) ([]domain.Evidence, error)
+	Approval(context.Context, string) (domain.Approval, error)
+	ApprovalsForTask(context.Context, string) ([]domain.Approval, error)
+	PendingApprovals(context.Context) ([]domain.Approval, error)
+	DecideApproval(context.Context, string, bool, string) (domain.Approval, error)
 }
 
 type WorkerControl interface {
@@ -99,6 +103,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/doctor", s.doctor)
 	mux.HandleFunc("GET /api/providers", s.providers)
+	mux.HandleFunc("GET /api/approvals", s.pendingApprovals)
+	mux.HandleFunc("GET /api/approvals/{approvalID}", s.getApproval)
+	mux.HandleFunc("POST /api/approvals/{approvalID}/approve", s.approve)
+	mux.HandleFunc("POST /api/approvals/{approvalID}/reject", s.reject)
 	mux.HandleFunc("POST /api/tasks", s.createTask)
 	mux.HandleFunc("GET /api/tasks", s.listTasks)
 	mux.HandleFunc("GET /api/tasks/{taskID}", s.getTask)
@@ -115,6 +123,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tasks/{taskID}/artifacts", s.artifacts)
 	mux.HandleFunc("GET /api/tasks/{taskID}/artifacts/{artifactID}", s.artifactContent)
 	mux.HandleFunc("GET /api/tasks/{taskID}/evidence", s.evidence)
+	mux.HandleFunc("GET /api/tasks/{taskID}/approvals", s.taskApprovals)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
@@ -458,6 +467,59 @@ func (s *Server) evidence(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
+func (s *Server) pendingApprovals(w http.ResponseWriter, r *http.Request) {
+	items, err := s.service.PendingApprovals(r.Context())
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	if items == nil {
+		items = []domain.Approval{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) getApproval(w http.ResponseWriter, r *http.Request) {
+	approval, err := s.service.Approval(r.Context(), r.PathValue("approvalID"))
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, approval)
+}
+
+func (s *Server) taskApprovals(w http.ResponseWriter, r *http.Request) {
+	items, err := s.service.ApprovalsForTask(r.Context(), r.PathValue("taskID"))
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	if items == nil {
+		items = []domain.Approval{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
+	s.decideApproval(w, r, true)
+}
+
+func (s *Server) reject(w http.ResponseWriter, r *http.Request) {
+	s.decideApproval(w, r, false)
+}
+
+func (s *Server) decideApproval(w http.ResponseWriter, r *http.Request, approve bool) {
+	approval, err := s.service.DecideApproval(r.Context(), r.PathValue("approvalID"), approve, r.Header.Get("Idempotency-Key"))
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	if approve {
+		s.worker.Wake()
+	}
+	writeJSON(w, http.StatusAccepted, approval)
+}
+
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	if err := s.dbPing(r.Context()); err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "error", "database": "unavailable"})
@@ -557,6 +619,8 @@ func (s *Server) writeServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "not_found", "Задача не найдена.", false)
 	case errors.Is(err, domain.ErrInvalidTransition), errors.Is(err, sqlite.ErrConflict), errors.Is(err, sqlite.ErrIdempotency):
 		writeError(w, http.StatusConflict, "conflict", "Операция не соответствует текущему состоянию задачи.", false)
+	case errors.Is(err, sqlite.ErrApprovalExpired):
+		writeError(w, http.StatusConflict, "approval_expired", "Срок подтверждения истёк. Создайте новую задачу, если действие всё ещё нужно.", false)
 	default:
 		if strings.Contains(err.Error(), "must contain") || strings.Contains(err.Error(), "must not exceed") {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error(), false)
@@ -618,7 +682,7 @@ func publicEvent(event domain.Event) bool {
 		return false
 	}
 	switch event.Type {
-	case "task.created", "task.status_changed", "task.recovered", "message.created", "plan.created", "step.started", "step.completed", "tool.started", "tool.completed", "approval.requested", "artifact.created", "evidence.created", "task.completed", "task.failed", "task.cancelled":
+	case "task.created", "task.status_changed", "task.recovered", "message.created", "plan.created", "step.started", "step.completed", "tool.started", "tool.completed", "approval.requested", "approval.approved", "approval.rejected", "approval.expired", "artifact.created", "evidence.created", "task.completed", "task.failed", "task.cancelled":
 		return true
 	default:
 		return false

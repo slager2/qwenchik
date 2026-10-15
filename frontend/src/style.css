@@ -269,6 +269,17 @@ input.text-field { height: 39px; padding: 0 11px; }
 .inspector-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 11px 18px; border-bottom: 1px solid var(--color-rule); background: var(--color-paper); }
 .inspector-actions .button { min-height: 32px; font-size: 10px; }
 .action-feedback { margin-left: auto; color: var(--color-muted); font-size: 10px; }
+.approval-card { margin: 14px 18px 0; padding: 14px; border: 1px solid var(--color-warning-rule); border-left: 3px solid var(--color-warning); border-radius: var(--radius-control); background: var(--color-warning-soft); }
+.approval-kicker { display: flex; align-items: center; gap: 7px; color: var(--color-warning-ink); font: 500 8px var(--font-mono); letter-spacing: 0.06em; }
+.approval-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--color-warning); }
+.approval-card h3 { margin-top: 7px; color: var(--color-ink); font: 550 14px var(--font-display); }
+.approval-details { display: grid; gap: 8px; margin: 12px 0; }
+.approval-details > div { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 8px; }
+.approval-details dt { color: var(--color-warning-ink); font-size: 10px; }
+.approval-details dd { min-width: 0; margin: 0; color: var(--color-ink-2); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.approval-details pre { max-height: 140px; overflow: auto; padding: 8px; border: 1px solid var(--color-rule); border-radius: 4px; color: var(--color-ink-2); background: var(--color-paper-raised); font: 9px/1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.approval-actions { display: flex; justify-content: flex-end; gap: 7px; }
+.approval-actions .button { min-height: 32px; font-size: 10px; }
 .inspector-section { padding: 16px 18px; border-bottom: 1px solid var(--color-rule); }
 .inspector-section:last-child { border-bottom: 0; }
 .goal-section { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 9px 16px; }
@@ -413,6 +424,9 @@ input.text-field { height: 39px; padding: 0 11px; }
   .inspector-section { padding: 13px; }
   .inspector-header { padding: 14px 13px 11px; }
   .inspector-actions { padding: 9px 13px; }
+  .approval-card { margin-right: 13px; margin-left: 13px; padding: 11px; }
+  .approval-details > div { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  .approval-actions { align-items: stretch; flex-direction: column-reverse; }
   .plan-list li { grid-template-columns: 24px minmax(0, 1fr); }
   .plan-kind { grid-column: 2; }
   .chat-form { align-items: stretch; flex-direction: column; }
