@@ -14,8 +14,9 @@
 - Tool execution goes through a fixed registry, JSON argument/output schemas, a role allowlist, and deterministic capabilities. Unknown tools and invalid arguments are denied before execution.
 - Optional SearXNG uses a loopback-only endpoint and safe search. HTTP fetching rejects private/reserved targets, revalidates DNS at dial and redirect time, disables proxies, limits response bytes/MIME/ports, and requires task-known URLs.
 - HTML extraction drops executable and navigation content. External results remain tainted and cannot select tools; evidence IDs are backend-generated and citation IDs are validated.
+- Code execution calls only the Docker client with an argv array after verifying a local Unix socket, rootless mode, and a local image. `doctor` also runs a fixed isolated `true` smoke container. The task container has no network, a read-only root, one task-workspace mount, dropped capabilities, no-new-privileges, PID/CPU/memory limits, bounded output, and cleanup on client failure. No host shell fallback exists.
 - Tool results cannot trigger nested tools. The worker performs a fresh model call before another tool decision.
-- Host shell, browser, workspace writes, and sandbox execution are absent from the registry. Search is registered only when SearXNG is configured.
+- Host shell, browser, and direct workspace-write tools are absent. Sandbox command tools fail with `sandbox_unavailable` when rootless Docker or the image is unavailable. Search is registered only when SearXNG is configured.
 - SQLite state transitions and public events are transactionally persisted. SSE replays by monotonic task sequence and emits only allowlisted user-visible events.
 - Embedded UI responses carry same-origin CSP, `X-Frame-Options: DENY`, `nosniff`, and `no-referrer` headers.
 
@@ -32,4 +33,4 @@
 
 ## Deferred gates
 
-Browser isolation, interactive approval workflow, sandbox escape, Tavily/Brave adapters, PDF parsing, JS-only extraction, and durable memory provenance remain gated on later phases. No claim is made that those future components have already been tested.
+Browser isolation, interactive approval workflow, real-daemon sandbox smoke/escape review, Tavily/Brave adapters, PDF parsing, JS-only extraction, and durable memory provenance remain gated on later phases. The current sandbox tests inspect the exact Docker arguments with a fake runner; no live rootless Docker daemon was available during implementation.

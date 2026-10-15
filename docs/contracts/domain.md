@@ -66,7 +66,7 @@ Planner output is JSON only and validated before persistence:
 }
 ```
 
-The runtime always supports `analysis`. `fetch` is available with the local artifact/evidence store; `search` is available only when SearXNG is configured. Browser and code-execution kinds remain unavailable and are rejected rather than mapped to a shell or an unimplemented tool. A search plan must include a fetch step before synthesis, and a user-provided URL must be fetched before discovery search. Plans are limited to 12 unique steps, bounded descriptions and valid acyclic dependencies; dependencies must be completed before dependent steps run.
+The runtime always supports `analysis`. `fetch` is available with the local artifact/evidence store; `search` is available only when SearXNG is configured; `code_execution` is routed only to the isolated sandbox tool and returns `sandbox_unavailable` if rootless Docker/image checks fail. Browser kinds remain unavailable and are rejected. A search plan must include a fetch step before synthesis, and a user-provided URL must be fetched before discovery search. Plans are limited to 12 unique steps, bounded descriptions and valid acyclic dependencies; dependencies must be completed before dependent steps run.
 
 ## Checkpoint
 

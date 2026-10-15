@@ -59,15 +59,17 @@ type ArtifactReader interface {
 }
 
 type Server struct {
-	service        TaskService
-	worker         WorkerControl
-	dbPing         func(context.Context) error
-	llmURL         string
-	llmKey         string
-	searchURL      string
-	artifactReader ArtifactReader
-	logger         *slog.Logger
-	client         *http.Client
+	service          TaskService
+	worker           WorkerControl
+	dbPing           func(context.Context) error
+	llmURL           string
+	llmKey           string
+	searchURL        string
+	artifactReader   ArtifactReader
+	sandboxAvailable bool
+	sandboxMessage   string
+	logger           *slog.Logger
+	client           *http.Client
 }
 
 func New(service TaskService, worker WorkerControl, dbPing func(context.Context) error, llmURL, llmKey, searchURL string, logger *slog.Logger) *Server {
@@ -133,6 +135,11 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) SetArtifactReader(reader ArtifactReader) { s.artifactReader = reader }
+
+func (s *Server) SetSandboxStatus(available bool, message string) {
+	s.sandboxAvailable = available
+	s.sandboxMessage = message
+}
 
 func loopbackHostHeader(value string) bool {
 	host := value
@@ -488,6 +495,15 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if s.sandboxAvailable {
+		checks["sandbox"] = map[string]string{"status": "ok", "message": s.sandboxMessage}
+	} else {
+		message := s.sandboxMessage
+		if message == "" {
+			message = "rootless sandbox is unavailable; host execution is disabled"
+		}
+		checks["sandbox"] = map[string]string{"status": "warning", "message": message}
+	}
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, s.llmURL+"/models", nil)
 	if err == nil && s.llmKey != "" {
 		request.Header.Set("Authorization", "Bearer "+s.llmKey)
@@ -523,11 +539,15 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 	if s.searchURL != "" {
 		searchStatus = "configured"
 	}
+	sandboxStatus := "unavailable"
+	if s.sandboxAvailable {
+		sandboxStatus = "available"
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"llm":     map[string]any{"type": "local-openai-compatible", "status": "configured", "base_url": s.llmURL},
 		"search":  map[string]any{"type": "searxng", "status": searchStatus, "base_url": s.searchURL},
 		"browser": map[string]string{"status": "disabled"},
-		"sandbox": map[string]string{"status": "disabled"},
+		"sandbox": map[string]string{"status": sandboxStatus, "message": s.sandboxMessage},
 	})
 }
 

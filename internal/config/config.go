@@ -14,6 +14,10 @@ type Config struct {
 	BindAddr              string
 	DatabasePath          string
 	ArtifactsPath         string
+	WorkspaceRoot         string
+	SandboxRuntime        string
+	SandboxImage          string
+	SandboxNetwork        string
 	LLMBaseURL            string
 	LLMAPIKey             string
 	LLMModel              string
@@ -36,14 +40,18 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		BindAddr:      env("APP_BIND_ADDR", "127.0.0.1:8080"),
-		DatabasePath:  env("DATABASE_PATH", "./data/qagent.db"),
-		ArtifactsPath: env("ARTIFACTS_PATH", "./data/artifacts"),
-		LLMBaseURL:    env("LLM_BASE_URL", "http://127.0.0.1:8000/v1"),
-		LLMAPIKey:     env("LLM_API_KEY", "EMPTY"),
-		LLMModel:      env("LLM_MODEL", "local-qwen"),
-		SearXNGURL:    env("SEARXNG_URL", ""),
-		ApprovalMode:  env("APPROVAL_MODE", "per-risk"),
+		BindAddr:       env("APP_BIND_ADDR", "127.0.0.1:8080"),
+		DatabasePath:   env("DATABASE_PATH", "./data/qagent.db"),
+		ArtifactsPath:  env("ARTIFACTS_PATH", "./data/artifacts"),
+		WorkspaceRoot:  env("WORKSPACE_ROOT", "./data/workspaces"),
+		SandboxRuntime: env("SANDBOX_RUNTIME", "auto"),
+		SandboxImage:   env("SANDBOX_IMAGE", "golang:1.23-alpine"),
+		SandboxNetwork: env("SANDBOX_NETWORK", "disabled"),
+		LLMBaseURL:     env("LLM_BASE_URL", "http://127.0.0.1:8000/v1"),
+		LLMAPIKey:      env("LLM_API_KEY", "EMPTY"),
+		LLMModel:       env("LLM_MODEL", "local-qwen"),
+		SearXNGURL:     env("SEARXNG_URL", ""),
+		ApprovalMode:   env("APPROVAL_MODE", "per-risk"),
 	}
 	var err error
 	if cfg.LLMContextLength, err = intEnv("LLM_CONTEXT_LENGTH", 131072); err != nil {
@@ -95,6 +103,15 @@ func (c Config) Validate() error {
 	}
 	if strings.TrimSpace(c.ArtifactsPath) == "" {
 		return errors.New("ARTIFACTS_PATH must not be empty")
+	}
+	if strings.TrimSpace(c.WorkspaceRoot) == "" || strings.TrimSpace(c.SandboxImage) == "" {
+		return errors.New("WORKSPACE_ROOT and SANDBOX_IMAGE must not be empty")
+	}
+	if c.SandboxRuntime != "auto" && c.SandboxRuntime != "docker" {
+		return errors.New("SANDBOX_RUNTIME must be auto or docker in this build")
+	}
+	if c.SandboxNetwork != "disabled" {
+		return errors.New("SANDBOX_NETWORK must remain disabled in this build")
 	}
 	if err := validateLoopbackAddr(c.BindAddr); err != nil {
 		return fmt.Errorf("APP_BIND_ADDR: %w", err)

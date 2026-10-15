@@ -278,6 +278,76 @@ func TestCitationValidationRejectsMissingAndInventedEvidence(t *testing.T) {
 	}
 }
 
+func TestRecoveryDoesNotReplayUnknownNonIdempotentSandboxAction(t *testing.T) {
+	ctx := context.Background()
+	store, err := sqlite.Open(ctx, t.TempDir()+"/sandbox-recovery.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	task, err := store.CreateTask(ctx, domain.Task{ID: "sandbox-recovery", Title: "Run isolated check", Description: "Run a command in a sandbox"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.QueueTask(ctx, task.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	claimed, _, err := store.ClaimNext(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := domain.Plan{SchemaVersion: 1, Goal: "run sandbox", MaxSteps: 1, FinalDeliverable: "result", Subtasks: []domain.PlanStep{{ID: "step_1", Kind: "code_execution", Description: "run once"}}}
+	state := checkpointState{PlanVersion: 1, CompletedSteps: []string{}, ToolResults: map[string]any{}}
+	if _, err := store.SavePlan(ctx, task.ID, plan, state); err != nil {
+		t.Fatal(err)
+	}
+	state.CurrentStep = "step_1"
+	state.PendingTool = "run_command_sandbox"
+	state.PendingToolIdempotent = false
+	if _, err := store.SaveCheckpoint(ctx, task.ID, 1, state); err != nil {
+		t.Fatal(err)
+	}
+	stage := domain.StageSynthesis
+	if _, err := store.TransitionTask(ctx, task.ID, domain.StatusRunning, &stage, "", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecoverInterrupted(ctx); err != nil {
+		t.Fatal(err)
+	}
+	claimed, ok, err := store.ClaimNext(ctx)
+	if err != nil || !ok {
+		t.Fatalf("reclaim recovered task: ok=%t err=%v", ok, err)
+	}
+	registry := tools.NewRegistry()
+	executions := 0
+	if err := registry.Register(tools.Descriptor{
+		Name: "run_command_sandbox", ArgumentsSchema: json.RawMessage(`{"type":"object"}`), OutputSchema: json.RawMessage(`{"type":"object"}`),
+		RequiredCapability: "sandbox.execute", RiskClass: "sandbox_execute", TimeoutSeconds: 1, MaxOutputBytes: 100, AllowedRoles: []string{"coder"},
+	}, func(context.Context, json.RawMessage) (any, error) { executions++; return map[string]any{}, nil }); err != nil {
+		t.Fatal(err)
+	}
+	worker := New(store, &scriptedLLM{}, registry, Options{MaxSteps: 12, TaskTimeout: time.Minute})
+	worker.runTask(ctx, claimed)
+	if executions != 0 {
+		t.Fatalf("non-idempotent executor ran %d times during recovery", executions)
+	}
+	failed, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed.Status != domain.StatusFailed {
+		t.Fatalf("recovery-required task status = %q", failed.Status)
+	}
+	events, err := store.EventsAfter(ctx, task.ID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := events[len(events)-1]
+	if last.Type != "task.failed" || !strings.Contains(string(last.Payload), "failed_recovery_required") {
+		t.Fatalf("recovery-required failure event missing: %#v", last)
+	}
+}
+
 func TestUserURLDetectionForcesFetchBeforeSearch(t *testing.T) {
 	if !hasUserURL("Read https://docs.example.com/page and summarize it.") {
 		t.Fatal("user-provided URL was not detected")

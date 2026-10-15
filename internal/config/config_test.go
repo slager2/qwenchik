@@ -7,7 +7,7 @@ import (
 
 func TestValidateRejectsNonLoopbackBindAndLLM(t *testing.T) {
 	cfg := Config{
-		BindAddr: "0.0.0.0:8080", DatabasePath: "./data/test.db", ArtifactsPath: "./data/artifacts",
+		BindAddr: "0.0.0.0:8080", DatabasePath: "./data/test.db", ArtifactsPath: "./data/artifacts", WorkspaceRoot: "./data/workspaces", SandboxRuntime: "auto", SandboxImage: "golang:1.23-alpine", SandboxNetwork: "disabled",
 		LLMBaseURL: "http://127.0.0.1:8000/v1", LLMModel: "test", LLMContextLength: 8192,
 		LLMMaxOutputTokens: 1024, LLMTemperature: 0.2, LLMTopP: 0.8, LLMRequestTimeoutSecs: 30,
 		LLMMaxConcurrency: 1, MaxSteps: 8, TaskTimeoutSeconds: 3600, MaxSearchQueries: 12, MaxFetchBytes: 1024,

@@ -50,6 +50,24 @@ type Registry struct {
 	byName    map[string]registeredTool
 	evaluator *policy.Evaluator
 	urlLedger *URLLedger
+	cleanup   []func(context.Context, string) error
+}
+
+func (r *Registry) RegisterTaskCleanup(cleanup func(context.Context, string) error) {
+	if cleanup != nil {
+		r.cleanup = append(r.cleanup, cleanup)
+	}
+}
+
+func (r *Registry) CleanupTask(ctx context.Context, taskID string) error {
+	r.ClearTaskURLs(taskID)
+	var firstErr error
+	for _, cleanup := range r.cleanup {
+		if err := cleanup(ctx, taskID); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 func NewRegistry(evaluators ...*policy.Evaluator) *Registry {

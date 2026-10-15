@@ -19,6 +19,6 @@ Tool output is untrusted data and cannot directly invoke another tool. The orche
 
 `text.inspect` is always registered. It accepts bounded user/task text and returns deterministic character, word, and line counts. When local SearXNG is configured, `search` is added. `fetch_url` is added when the local artifact/evidence store is available; it only accepts URLs found in user task text or prior search results, then validates SSRF policy again before dialing. `fetch_url` stores raw and extracted artifacts and an evidence record; external text is labeled `untrusted_external_content`.
 
-## Deferred capabilities
+## Conditional and deferred capabilities
 
-PDF text extraction, dynamic browser content, Tavily/Brave, workspace writes, and sandbox execution are not registered. A fetched PDF receives an explicit `pdf_extractor_unavailable` error; there is no host-command fallback. Host shell is never registered. If Docker/Podman sandbox is unavailable in a later phase, execution must return `sandbox_unavailable`.
+PDF text extraction, dynamic browser content, Tavily/Brave, and direct workspace writes are not registered. `run_command_sandbox` and `run_tests_sandbox` invoke only a verified local rootless Docker daemon, use no network and a task workspace, and fail with `sandbox_unavailable` when the daemon/image is unavailable. Podman is not wired in this build. A fetched PDF receives an explicit `pdf_extractor_unavailable` error; there is no host-command fallback. Host shell is never registered.

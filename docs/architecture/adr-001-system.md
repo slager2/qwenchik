@@ -14,7 +14,7 @@ The current master prompt requires a Go backend, local Qwen-compatible inference
 3. Use one OpenAI-compatible local LLM endpoint, defaulting to `http://127.0.0.1:8000/v1`; never silently fall back to a cloud LLM.
 4. Bind the application to `127.0.0.1:8080`. Non-loopback binds fail closed until authentication for explicit LAN mode exists.
 5. Use React + TypeScript + Vite for the UI. Until the UI is integrated, the API remains independently usable.
-6. Keep browser and code execution behind separate providers. An unavailable sandbox must fail with `sandbox_unavailable`; it must never fall back to host shell.
+6. Keep browser and code execution behind separate providers. The v1 sandbox adapter uses a verified local rootless Docker daemon. An unavailable sandbox must fail with `sandbox_unavailable`; it must never fall back to host shell. Podman remains a future adapter.
 7. Use a single worker loop and serialize LLM calls. Runtime roles are prompts over one model, not parallel model instances.
 8. Default model context configuration is 131072 as requested by the current prompt; runtime operation must still fit the configured server and use bounded context/compaction. The conservative 8K hardware profile in the architecture context is documented as a deployment recommendation, not as a change to the config contract.
 

@@ -13,16 +13,18 @@ The first vertical slice is implemented:
 - strict planner validation and typed tools; unknown tools are denied and external side effects fail closed;
 - optional local SearXNG discovery, DNS-rebinding/SSRF-safe public HTTP fetch, and local HTML extraction;
 - fetched content stored as local artifacts with content hashes, provenance, excerpts, quote spans, and citation-ID validation;
+- code commands are exposed only through rootless Docker, with a read-only container root, task-only workspace mount, disabled network, and resource/output limits;
 - SSE event replay using `Last-Event-ID`;
 - responsive Kanban, task inspector, chat, live event timeline, sources/artifacts panels, and keyboard command palette.
 
-SearXNG is disabled by default. Without it, the worker can still fetch a public URL included in the task; an arbitrary model-invented URL is rejected. PDF extraction, JS/browser automation, Tavily/Brave adapters, interactive approval workflow, rootless code sandbox, and durable memory retrieval are later phases. PDF input fails with `pdf_extractor_unavailable` rather than falling back to a host command. Host shell and cloud LLM fallback are not registered.
+SearXNG is disabled by default. Without it, the worker can still fetch a public URL included in the task; an arbitrary model-invented URL is rejected. The sandbox tool fails with `sandbox_unavailable` unless rootless Docker and the configured local image are available; it never falls back to host execution. PDF extraction, JS/browser automation, Tavily/Brave adapters, interactive approval workflow, and durable memory retrieval remain later phases. PDF input fails with `pdf_extractor_unavailable`. Host shell and cloud LLM fallback are not registered.
 
 ## Requirements
 
 - Go 1.23+ with CGO compiler support (the SQLite driver uses CGO);
 - Node.js 20+ and npm, needed when rebuilding the embedded frontend;
 - local `llama-server` exposing the OpenAI-compatible API. The app uses `http://127.0.0.1:8000/v1` by default.
+- rootless Docker with the configured image available locally, needed for code execution. No daemon/image is assumed or pulled automatically.
 
 The server was not present in the development environment during the initial audit. `qagent doctor` reports it as an error until it is running.
 
@@ -60,6 +62,8 @@ The backend and model server intentionally use different ports. The API rejects 
 The server holds an OS lock for its database so a second `qagent serve` process cannot recover or run the same queue concurrently.
 
 Optional local web search can be enabled by setting `SEARXNG_URL=http://127.0.0.1:8081` to a SearXNG instance configured for JSON output. `ALLOWED_DOMAINS=example.org,docs.example.com` optionally narrows fetch and search results. The fetcher rejects loopback, private, link-local, reserved, credential-bearing, nonstandard-port, and redirect-to-private URLs.
+
+For sandbox execution, start a rootless Docker daemon and make the configured image available locally (for example, `docker pull golang:1.23-alpine` in that rootless context). Qwenchik uses `--pull=never`, `--network=none`, a read-only container root, and only the per-task workspace mount.
 
 Set `LLM_CONTEXT_LENGTH` to the context configured on the model server. The example file follows the API contract default of `131072`; for the conservative `-c 8192` llama.cpp command above, export `LLM_CONTEXT_LENGTH=8192`. The worker derives a bounded task-input budget from that value and the output-token reserve.
 

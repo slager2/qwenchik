@@ -21,6 +21,7 @@ import (
 	"github.com/slager2/qwenchik/internal/llm/openai"
 	"github.com/slager2/qwenchik/internal/orchestrator"
 	"github.com/slager2/qwenchik/internal/providers/research"
+	"github.com/slager2/qwenchik/internal/runtime/sandbox"
 	"github.com/slager2/qwenchik/internal/storage/artifacts"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
 	"github.com/slager2/qwenchik/internal/tools"
@@ -319,13 +320,16 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 			switch name {
 			case "providers":
 				printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{
-					"llm":    map[string]any{"type": "local-openai-compatible", "base_url": cfg.LLMBaseURL, "model": cfg.LLMModel},
-					"search": map[string]any{"status": providerStatus(cfg.SearXNGURL), "type": "searxng", "base_url": cfg.SearXNGURL},
+					"llm":     map[string]any{"type": "local-openai-compatible", "base_url": cfg.LLMBaseURL, "model": cfg.LLMModel},
+					"search":  map[string]any{"status": providerStatus(cfg.SearXNGURL), "type": "searxng", "base_url": cfg.SearXNGURL},
+					"sandbox": map[string]any{"runtime": cfg.SandboxRuntime, "image": cfg.SandboxImage},
 				})
 			case "config":
 				printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{
 					"app_bind_addr": cfg.BindAddr, "database_path": cfg.DatabasePath, "artifacts_path": cfg.ArtifactsPath,
 					"llm_base_url": cfg.LLMBaseURL, "llm_model": cfg.LLMModel, "searxng_url": cfg.SearXNGURL,
+					"workspace_root": cfg.WorkspaceRoot, "sandbox_runtime": cfg.SandboxRuntime,
+					"sandbox_image": cfg.SandboxImage, "sandbox_network": cfg.SandboxNetwork,
 					"llm_context_length": cfg.LLMContextLength, "llm_max_output_tokens": cfg.LLMMaxOutputTokens,
 					"llm_max_concurrency": cfg.LLMMaxConcurrency, "allowed_domains": cfg.AllowedDomains,
 				})
@@ -364,12 +368,19 @@ func serve(parent context.Context) error {
 	if err != nil {
 		return err
 	}
+	sandboxRuntime, err := sandbox.New(cfg.SandboxImage, cfg.WorkspaceRoot, nil, sandbox.Limits{OutputBytes: 64 << 10, MaxFileCount: 100, MaxFileBytes: cfg.MaxFetchBytes})
+	if err != nil {
+		return err
+	}
 	if err := tools.RegisterResearchTools(registry, tools.ResearchTools{
 		SearchProvider: searchProvider,
 		Fetcher:        research.NewSafeFetcherWithPolicy(cfg.MaxFetchBytes, 20*time.Second, nil, cfg.AllowedDomains),
 		Extractor:      research.NewHTMLExtractor(100_000), Artifacts: artifactStore,
 		Repository: deps.store, MaxFetchBytes: cfg.MaxFetchBytes, AllowedDomains: cfg.AllowedDomains,
 	}); err != nil {
+		return err
+	}
+	if err := tools.RegisterSandboxTools(registry, tools.SandboxTools{Runtime: sandboxRuntime, Artifacts: artifactStore, Repository: deps.store}); err != nil {
 		return err
 	}
 	deps.worker = orchestrator.New(deps.store, model, registry, orchestrator.Options{
@@ -380,6 +391,8 @@ func serve(parent context.Context) error {
 	})
 	apiServer := api.New(deps.app, deps.worker, deps.store.Ping, cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.SearXNGURL, logger)
 	apiServer.SetArtifactReader(artifactStore)
+	sandboxStatus := sandboxRuntime.Doctor(parent)
+	apiServer.SetSandboxStatus(sandboxStatus.Available, sandboxStatus.Message)
 	handler := apiServer.Handler()
 	server := &http.Server{Addr: cfg.BindAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
@@ -467,14 +480,21 @@ type doctorCheck struct {
 
 func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 	checks := map[string]doctorCheck{
-		"go":      {Status: "ok", Message: "qagent binary is running on Go"},
-		"bind":    {Status: "ok", Message: "application bind address is loopback-only"},
-		"sandbox": {Status: "warning", Message: "sandbox executor is not included in this phase; host shell is disabled"},
+		"go":   {Status: "ok", Message: "qagent binary is running on Go"},
+		"bind": {Status: "ok", Message: "application bind address is loopback-only"},
 	}
 	if api.FrontendAvailable() {
 		checks["frontend"] = doctorCheck{Status: "ok", Message: "embedded frontend assets are available"}
 	} else {
 		checks["frontend"] = doctorCheck{Status: "error", Message: "embedded frontend assets are missing; run make build"}
+	}
+	sandboxRuntime, sandboxErr := sandbox.New(cfg.SandboxImage, cfg.WorkspaceRoot, nil, sandbox.Limits{OutputBytes: 64 << 10, MaxFileCount: 100, MaxFileBytes: cfg.MaxFetchBytes})
+	if sandboxErr != nil {
+		checks["sandbox"] = doctorCheck{Status: "error", Message: "sandbox configuration is invalid"}
+	} else if status := sandboxRuntime.Doctor(ctx); status.Available {
+		checks["sandbox"] = doctorCheck{Status: "ok", Message: status.Message}
+	} else {
+		checks["sandbox"] = doctorCheck{Status: "warning", Message: status.Message}
 	}
 	store, err := sqlite.Open(ctx, cfg.DatabasePath)
 	if err != nil {
