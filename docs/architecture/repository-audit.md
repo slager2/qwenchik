@@ -28,7 +28,7 @@
 | P5 browser | `internal/runtime/`, `internal/tools/` | deferred until browser traffic can be forced through a public-IP-pinning path; see `docs/security/browser-gate.md` |
 | P6 sandbox | `internal/runtime/sandbox/`, `internal/tools/` | rootless Docker command contract and fail-closed fake-runner tests pass; live daemon gate remains unverified |
 | P7 UI/CLI and approvals | `frontend/`, `internal/cli/`, API, worker | event-driven UI, backend-owned lifecycle, durable one-time approval and resume flow |
-| P8/P9 recovery and hardening | storage, worker, tests, docs | restart/replay/security tests pass; live provider and daemon checks remain environment-dependent |
+| P8/P9 recovery, memory, and hardening | storage, worker, tests, docs | accepted-only durable lexical memory retrieval; restart/replay/security tests pass; live provider and daemon checks remain environment-dependent |
 
 ## Initial verification
 

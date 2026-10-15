@@ -75,3 +75,7 @@ Checkpoint JSON contains task ID, plan version, current step/stage, completed an
 ## Approval
 
 An approval stores the task and tool IDs, normalized JSON arguments plus a SHA-256 argument hash, target, deterministic risk explanation, expiry, status, actor, and decision/consumption timestamps. Status is `pending`, `approved`, `rejected`, or `expired`. Approve/reject is idempotent; consuming an approval is a separate one-time transaction matched to the exact task, tool, and normalized arguments. A non-idempotent action with an unknown outcome after recovery is not replayed and requires task review.
+
+## Memory
+
+A memory stores bounded text, kind, JSON metadata, scope (`global` or `task`), optional confidence and source task/evidence IDs, editability, retention policy, and timestamps. New user-created records always start as `candidate`; the user explicitly accepts them before retrieval. Status is `candidate`, `accepted`, `stale`, `superseded`, or `rejected`. Retrieval is bounded local lexical matching over accepted records only. Global records can be used by any task; task-scoped records are returned only for their source task. Retrieved memory is user-owned untrusted reference data: it may inform preferences, but cannot override the task, grant tools, or make a URL eligible for fetching.

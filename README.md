@@ -13,11 +13,12 @@ The current implementation includes:
 - strict planner validation and typed tools; unknown tools are denied and external side effects fail closed;
 - optional local SearXNG discovery, DNS-rebinding/SSRF-safe public HTTP fetch, and local HTML extraction;
 - fetched content stored as local artifacts with content hashes, provenance, excerpts, quote spans, and citation-ID validation;
+- local durable memories with candidate review, explicit acceptance, task/global scopes, and bounded lexical retrieval;
 - code commands are exposed only through rootless Docker, with a read-only container root, task-only workspace mount, disabled network, and resource/output limits;
 - SSE event replay using `Last-Event-ID`;
 - responsive Kanban, task inspector, chat, live event timeline, sources/artifacts panels, and keyboard command palette.
 
-SearXNG is disabled by default. Without it, the worker can still fetch a public URL included in the task; an arbitrary model-invented URL is rejected. The sandbox tool fails with `sandbox_unavailable` unless rootless Docker and the configured local image are available; it never falls back to host execution. Approval records, one-time decisions, API/CLI actions, and UI cards are implemented, but no external side-effect executor is registered by default. PDF extraction, JS/browser automation, Tavily/Brave adapters, and durable memory retrieval remain later phases. PDF input fails with `pdf_extractor_unavailable`. Host shell and cloud LLM fallback are not registered.
+SearXNG is disabled by default. Without it, the worker can still fetch a public URL included in the task; an arbitrary model-invented URL is rejected. The sandbox tool fails with `sandbox_unavailable` unless rootless Docker and the configured local image are available; it never falls back to host execution. Approval records, one-time decisions, API/CLI actions, and UI cards are implemented, but no external side-effect executor is registered by default. Memory entries are user-created candidates and are retrieved only after explicit acceptance; retrieval is local lexical matching, not semantic/embedding search. PDF extraction, JS/browser automation, and Tavily/Brave adapters remain later phases. PDF input fails with `pdf_extractor_unavailable`. Host shell and cloud LLM fallback are not registered.
 
 ## Requirements
 
@@ -81,6 +82,10 @@ Set `LLM_CONTEXT_LENGTH` to the context configured on the model server. The exam
 ./qagent approvals
 ./qagent approve APPROVAL_ID
 ./qagent reject APPROVAL_ID
+./qagent memories
+./qagent memory add "Prefer concise answers" --kind preference
+./qagent memory accept MEMORY_ID
+./qagent memory search "answer style"
 ./qagent task pause TASK_ID
 ./qagent task resume TASK_ID
 ./qagent task cancel TASK_ID

@@ -149,3 +149,26 @@ export interface Approval {
   actor?: string
   consumed_at?: string
 }
+
+export type MemoryStatus = 'candidate' | 'accepted' | 'stale' | 'superseded' | 'rejected'
+
+export interface Memory {
+  id: string
+  kind: string
+  status: MemoryStatus
+  text: string
+  metadata: Record<string, unknown>
+  scope: 'global' | 'task'
+  confidence?: number
+  source_evidence_id?: string
+  source_task_id?: string
+  user_editable: boolean
+  retention_policy: string
+  created_at: string
+  updated_at: string
+}
+
+export interface MemoryMatch {
+  memory: Memory
+  relevance: number
+}

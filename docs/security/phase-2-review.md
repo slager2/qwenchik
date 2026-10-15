@@ -1,4 +1,4 @@
-# Implemented security gates (P2–P7)
+# Implemented security gates (P2–P9)
 
 ## Implemented controls
 
@@ -14,6 +14,7 @@
 - Tool execution goes through a fixed registry, JSON argument/output schemas, a role allowlist, and deterministic capabilities. Unknown tools and invalid arguments are denied before execution.
 - Optional SearXNG uses a loopback-only endpoint and safe search. HTTP fetching rejects private/reserved targets, revalidates DNS at dial and redirect time, disables proxies, limits response bytes/MIME/ports, and requires task-known URLs.
 - HTML extraction drops executable and navigation content. External results remain tainted and cannot select tools; evidence IDs are backend-generated and citation IDs are validated.
+- Memory search reads only explicitly accepted local records, filters task scope by source task, and records retrieved IDs in an internal audit event. Prompt roles treat memory text as untrusted reference data; memory content cannot grant tools or seed allowed fetch URLs.
 - Code execution calls only the Docker client with an argv array after verifying a local Unix socket, rootless mode, and a local image. `doctor` also runs a fixed isolated `true` smoke container. The task container has no network, a read-only root, one task-workspace mount, dropped capabilities, no-new-privileges, PID/CPU/memory limits, bounded output, and cleanup on client failure. No host shell fallback exists.
 - Tool results cannot trigger nested tools. The worker performs a fresh model call before another tool decision.
 - Host shell, browser, and direct workspace-write tools are absent. Sandbox command tools fail with `sandbox_unavailable` when rootless Docker or the image is unavailable. Search is registered only when SearXNG is configured.
@@ -25,12 +26,14 @@
 - `internal/config`: rejects wildcard bind and remote model URLs.
 - `internal/domain`: rejects illegal lifecycle transitions, plan cycles, and unsupported kinds.
 - `internal/storage/sqlite`: verifies atomic failed transitions, event sequence, persistence/recovery, approval expiration, idempotent decisions, and one-time approval consumption.
+- `internal/storage/sqlite`: verifies memory candidates stay out of retrieval until accepted, accepted records respect task scope, and stale records are excluded.
 - `internal/tools`: rejects unknown tool names, disallowed roles, and extra argument fields.
 - `internal/tools`: validates JSON schemas before policy execution; denies unknown tools and unknown URLs; verifies evidence/artifact persistence and per-task fetch budgets.
 - `internal/orchestrator`: completes mocked analysis and research tasks with citations; pauses for approval and executes a test side-effect exactly once after approval; rejects `run_command_sandbox` recovery replay without starting a host process.
 - `internal/providers/research`: tests private IPv4/IPv6, metadata IP, restricted ports, sensitive query parameters, redirect-to-private, DNS rebinding, MIME and byte limits, SearXNG response filtering, and HTML script/nav removal.
 - `internal/api`: verifies strict request decoding, SSE replay with internal event redaction, evidence/artifact metadata, task-scoped artifact download, and approval decisions.
+- `internal/api`: verifies memory creation always starts as candidate and only explicit acceptance makes it retrievable.
 
 ## Deferred gates
 
-Browser isolation, real-daemon sandbox smoke/escape review, Tavily/Brave adapters, PDF parsing, JS-only extraction, and durable memory provenance remain gated on later phases. The current sandbox tests inspect the exact Docker arguments with a fake runner; no live rootless Docker daemon was available during implementation.
+Browser isolation, real-daemon sandbox smoke/escape review, Tavily/Brave adapters, PDF parsing, and JS-only extraction remain gated on later phases. Memory retrieval currently uses bounded lexical matching; embedding-based semantic search and automatic candidate extraction remain deferred. The current sandbox tests inspect the exact Docker arguments with a fake runner; no live rootless Docker daemon was available during implementation.

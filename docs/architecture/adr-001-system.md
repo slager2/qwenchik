@@ -21,7 +21,7 @@ The current master prompt requires a Go backend, local Qwen-compatible inference
 ## Consequences
 
 - SQLite and one worker keep v1 deployable on one local machine and make recovery auditable.
-- Browser, remote search providers, approvals for external side effects, and sandbox execution are not implied by their future interfaces; each requires an explicit implementation and test gate.
+- Browser, remote search providers, and sandbox execution require explicit implementation and test gates. The approval workflow is implemented, but no external side-effect executor is registered by default.
 - A local inference server is an external runtime dependency. Health checks must report it as unavailable rather than fabricate model output.
 - Python-specific implementation suggestions in the context document are replaced by Go packages while retaining the modular boundaries and product goals.
 

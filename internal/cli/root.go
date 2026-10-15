@@ -59,12 +59,170 @@ func NewRoot() *cobra.Command {
 	root.AddCommand(newApprovalDecisionCommand("approve", true, &jsonMode))
 	root.AddCommand(newApprovalDecisionCommand("reject", false, &jsonMode))
 	root.AddCommand(newPendingApprovalsCommand(&jsonMode))
+	root.AddCommand(newMemoriesCommand(&jsonMode))
+	root.AddCommand(newMemoryCommand(&jsonMode))
 	root.AddCommand(newTaskDataCommand("checkpoints", &jsonMode))
 	root.AddCommand(newTaskDataCommand("artifacts", &jsonMode))
 	root.AddCommand(newTaskDataCommand("evidence", &jsonMode))
 	root.AddCommand(newSimpleCommand("providers", "Show configured provider availability", &jsonMode))
 	root.AddCommand(newSimpleCommand("config", "Show non-secret configuration", &jsonMode))
 	return root
+}
+
+func newMemoriesCommand(jsonMode *bool) *cobra.Command {
+	var status, scope string
+	command := &cobra.Command{
+		Use:   "memories",
+		Short: "List locally stored memories",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			deps, err := openDependencies(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer deps.store.Close()
+			items, err := deps.app.Memories(cmd.Context(), domain.MemoryStatus(status), scope)
+			if err != nil {
+				return err
+			}
+			printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, items)
+			return nil
+		},
+	}
+	command.Flags().StringVar(&status, "status", "", "filter by candidate, accepted, stale, superseded, or rejected")
+	command.Flags().StringVar(&scope, "scope", "", "filter by global or task scope")
+	return command
+}
+
+func newMemoryCommand(jsonMode *bool) *cobra.Command {
+	command := &cobra.Command{Use: "memory", Short: "Create, review, search, and edit durable memories"}
+	command.AddCommand(newMemoryAddCommand(jsonMode))
+	command.AddCommand(newMemoryEditCommand(jsonMode))
+	command.AddCommand(newMemorySearchCommand(jsonMode))
+	for _, decision := range []struct {
+		name   string
+		status domain.MemoryStatus
+	}{
+		{name: "accept", status: domain.MemoryAccepted},
+		{name: "reject", status: domain.MemoryRejected},
+		{name: "stale", status: domain.MemoryStale},
+		{name: "supersede", status: domain.MemorySuperseded},
+	} {
+		decision := decision
+		command.AddCommand(&cobra.Command{
+			Use:   decision.name + " MEMORY_ID",
+			Short: strings.ToUpper(decision.name[:1]) + decision.name[1:] + " a memory record",
+			Args:  cobra.ExactArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				deps, err := openDependencies(cmd.Context())
+				if err != nil {
+					return err
+				}
+				defer deps.store.Close()
+				memory, err := deps.app.SetMemoryStatus(cmd.Context(), args[0], decision.status)
+				if err != nil {
+					return err
+				}
+				printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, memory)
+				return nil
+			},
+		})
+	}
+	return command
+}
+
+func newMemoryAddCommand(jsonMode *bool) *cobra.Command {
+	var kind, scope, taskID, evidenceID string
+	command := &cobra.Command{
+		Use:   "add TEXT",
+		Short: "Add a candidate memory; accept it explicitly before retrieval",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			deps, err := openDependencies(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer deps.store.Close()
+			memory, err := deps.app.CreateMemory(cmd.Context(), domain.Memory{
+				Kind: kind, Text: args[0], Scope: scope, SourceTaskID: taskID, SourceEvidenceID: evidenceID,
+			})
+			if err != nil {
+				return err
+			}
+			printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, memory)
+			return nil
+		},
+	}
+	command.Flags().StringVar(&kind, "kind", "fact", "memory kind, such as preference, fact, workflow, or constraint")
+	command.Flags().StringVar(&scope, "scope", "global", "global or task")
+	command.Flags().StringVar(&taskID, "task-id", "", "source task ID (required for task scope)")
+	command.Flags().StringVar(&evidenceID, "evidence-id", "", "optional source evidence ID from the source task")
+	return command
+}
+
+func newMemoryEditCommand(jsonMode *bool) *cobra.Command {
+	var kind, text, metadataJSON string
+	command := &cobra.Command{
+		Use:   "edit MEMORY_ID",
+		Short: "Edit a user-editable memory",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			deps, err := openDependencies(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer deps.store.Close()
+			var metadata map[string]any
+			if metadataJSON != "" {
+				if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
+					return fmt.Errorf("metadata must be valid JSON object: %w", err)
+				}
+			} else {
+				current, err := deps.app.Memory(cmd.Context(), args[0])
+				if err != nil {
+					return err
+				}
+				metadata = current.Metadata
+			}
+			memory, err := deps.app.UpdateMemory(cmd.Context(), args[0], kind, text, metadata)
+			if err != nil {
+				return err
+			}
+			printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, memory)
+			return nil
+		},
+	}
+	command.Flags().StringVar(&kind, "kind", "", "memory kind")
+	command.Flags().StringVar(&text, "text", "", "replacement memory text")
+	command.Flags().StringVar(&metadataJSON, "metadata", "", "replacement metadata JSON object (defaults to current metadata)")
+	_ = command.MarkFlagRequired("kind")
+	_ = command.MarkFlagRequired("text")
+	return command
+}
+
+func newMemorySearchCommand(jsonMode *bool) *cobra.Command {
+	var taskID string
+	var limit int
+	command := &cobra.Command{
+		Use:   "search QUERY",
+		Short: "Search accepted memories with bounded lexical retrieval",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			deps, err := openDependencies(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer deps.store.Close()
+			matches, err := deps.app.SearchMemories(cmd.Context(), args[0], taskID, limit)
+			if err != nil {
+				return err
+			}
+			printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, matches)
+			return nil
+		},
+	}
+	command.Flags().StringVar(&taskID, "task-id", "", "include task-scoped memories for this task")
+	command.Flags().IntVar(&limit, "limit", 5, "maximum matches (1 to 20)")
+	return command
 }
 
 func newPendingApprovalsCommand(jsonMode *bool) *cobra.Command {

@@ -28,7 +28,18 @@ Base path: `/api`. JSON errors use `{"error":{"code":"...","message":"...","retr
 | `POST` | `/approvals/{approval_id}/approve` | Approve the exact stored action |
 | `POST` | `/approvals/{approval_id}/reject` | Reject the pending action |
 | `GET` | `/tasks/{task_id}/approvals` | Approval history for one task |
+| `GET` | `/memories` | List memories; optionally filter by `status` and `scope` |
+| `POST` | `/memories` | Create a candidate memory (never accepted implicitly) |
+| `GET` | `/memories/{memory_id}` | Read one memory |
+| `PUT` | `/memories/{memory_id}` | Edit kind, text, and metadata |
+| `POST` | `/memories/{memory_id}/accept` | Explicitly accept a candidate or stale memory |
+| `POST` | `/memories/{memory_id}/reject` | Reject or remove a memory from retrieval |
+| `POST` | `/memories/{memory_id}/stale` | Mark an accepted memory stale |
+| `POST` | `/memories/{memory_id}/supersede` | Mark a memory as replaced |
+| `GET` | `/memories/search?q=...&task_id=...&limit=...` | Bounded lexical retrieval of accepted global and task-scoped memories |
 
-Mutations are idempotent when an idempotency key is supplied. Unknown task IDs return 404. Invalid lifecycle transitions return 409; malformed request bodies return 400. Create returns 201; accepted worker commands and approval decisions return 202. Approval decisions bind to the stored normalized action arguments and cannot be replayed for different arguments.
+Task creation/queueing and approval decisions are idempotent when an `Idempotency-Key` is supplied. Memory status changes are idempotent by current state; candidate creation has no idempotency-key support. Unknown resource IDs return 404. Invalid lifecycle transitions return 409; malformed request bodies return 400. Create returns 201; accepted worker commands and approval decisions return 202. Approval decisions bind to the stored normalized action arguments and cannot be replayed for different arguments.
+
+New memories always start as `candidate`. Only `accepted` records are returned by memory search; `stale`, `superseded`, and `rejected` records are excluded. `scope=task` records are only eligible when their source task ID matches the query's `task_id`.
 
 The server defaults to `127.0.0.1:8080`. Non-loopback binding is rejected unless a future explicit LAN mode also provides authentication.

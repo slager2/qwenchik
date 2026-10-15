@@ -51,6 +51,12 @@ type TaskService interface {
 	ApprovalsForTask(context.Context, string) ([]domain.Approval, error)
 	PendingApprovals(context.Context) ([]domain.Approval, error)
 	DecideApproval(context.Context, string, bool, string) (domain.Approval, error)
+	CreateMemory(context.Context, domain.Memory) (domain.Memory, error)
+	Memory(context.Context, string) (domain.Memory, error)
+	Memories(context.Context, domain.MemoryStatus, string) ([]domain.Memory, error)
+	UpdateMemory(context.Context, string, string, string, map[string]any) (domain.Memory, error)
+	SetMemoryStatus(context.Context, string, domain.MemoryStatus) (domain.Memory, error)
+	SearchMemories(context.Context, string, string, int) ([]domain.MemoryMatch, error)
 }
 
 type WorkerControl interface {
@@ -107,6 +113,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/approvals/{approvalID}", s.getApproval)
 	mux.HandleFunc("POST /api/approvals/{approvalID}/approve", s.approve)
 	mux.HandleFunc("POST /api/approvals/{approvalID}/reject", s.reject)
+	mux.HandleFunc("GET /api/memories", s.memories)
+	mux.HandleFunc("POST /api/memories", s.createMemory)
+	mux.HandleFunc("GET /api/memories/search", s.searchMemories)
+	mux.HandleFunc("GET /api/memories/{memoryID}", s.getMemory)
+	mux.HandleFunc("PUT /api/memories/{memoryID}", s.updateMemory)
+	mux.HandleFunc("POST /api/memories/{memoryID}/accept", s.acceptMemory)
+	mux.HandleFunc("POST /api/memories/{memoryID}/reject", s.rejectMemory)
+	mux.HandleFunc("POST /api/memories/{memoryID}/stale", s.staleMemory)
+	mux.HandleFunc("POST /api/memories/{memoryID}/supersede", s.supersedeMemory)
 	mux.HandleFunc("POST /api/tasks", s.createTask)
 	mux.HandleFunc("GET /api/tasks", s.listTasks)
 	mux.HandleFunc("GET /api/tasks/{taskID}", s.getTask)
@@ -520,6 +535,117 @@ func (s *Server) decideApproval(w http.ResponseWriter, r *http.Request, approve 
 	writeJSON(w, http.StatusAccepted, approval)
 }
 
+func (s *Server) memories(w http.ResponseWriter, r *http.Request) {
+	items, err := s.service.Memories(r.Context(), domain.MemoryStatus(r.URL.Query().Get("status")), r.URL.Query().Get("scope"))
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	if items == nil {
+		items = []domain.Memory{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) createMemory(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Kind             string         `json:"kind"`
+		Text             string         `json:"text"`
+		Metadata         map[string]any `json:"metadata"`
+		Scope            string         `json:"scope"`
+		Confidence       *float64       `json:"confidence"`
+		SourceEvidenceID string         `json:"source_evidence_id"`
+		SourceTaskID     string         `json:"source_task_id"`
+	}
+	if err := decodeRequest(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "Некорректное тело запроса.", false)
+		return
+	}
+	memory, err := s.service.CreateMemory(r.Context(), domain.Memory{
+		Kind: request.Kind, Text: request.Text, Metadata: request.Metadata, Scope: request.Scope,
+		Confidence: request.Confidence, SourceEvidenceID: request.SourceEvidenceID, SourceTaskID: request.SourceTaskID,
+	})
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	w.Header().Set("Location", "/api/memories/"+memory.ID)
+	writeJSON(w, http.StatusCreated, memory)
+}
+
+func (s *Server) getMemory(w http.ResponseWriter, r *http.Request) {
+	memory, err := s.service.Memory(r.Context(), r.PathValue("memoryID"))
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, memory)
+}
+
+func (s *Server) updateMemory(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Kind     string         `json:"kind"`
+		Text     string         `json:"text"`
+		Metadata map[string]any `json:"metadata"`
+	}
+	if err := decodeRequest(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "Некорректное тело запроса.", false)
+		return
+	}
+	memory, err := s.service.UpdateMemory(r.Context(), r.PathValue("memoryID"), request.Kind, request.Text, request.Metadata)
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, memory)
+}
+
+func (s *Server) searchMemories(w http.ResponseWriter, r *http.Request) {
+	limit := 5
+	if value := r.URL.Query().Get("limit"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1 || parsed > 20 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "Параметр limit должен быть от 1 до 20.", false)
+			return
+		}
+		limit = parsed
+	}
+	matches, err := s.service.SearchMemories(r.Context(), r.URL.Query().Get("q"), r.URL.Query().Get("task_id"), limit)
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	if matches == nil {
+		matches = []domain.MemoryMatch{}
+	}
+	writeJSON(w, http.StatusOK, matches)
+}
+
+func (s *Server) acceptMemory(w http.ResponseWriter, r *http.Request) {
+	s.decideMemory(w, r, domain.MemoryAccepted)
+}
+
+func (s *Server) rejectMemory(w http.ResponseWriter, r *http.Request) {
+	s.decideMemory(w, r, domain.MemoryRejected)
+}
+
+func (s *Server) staleMemory(w http.ResponseWriter, r *http.Request) {
+	s.decideMemory(w, r, domain.MemoryStale)
+}
+
+func (s *Server) supersedeMemory(w http.ResponseWriter, r *http.Request) {
+	s.decideMemory(w, r, domain.MemorySuperseded)
+}
+
+func (s *Server) decideMemory(w http.ResponseWriter, r *http.Request, status domain.MemoryStatus) {
+	memory, err := s.service.SetMemoryStatus(r.Context(), r.PathValue("memoryID"), status)
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, memory)
+}
+
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	if err := s.dbPing(r.Context()); err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "error", "database": "unavailable"})
@@ -619,6 +745,8 @@ func (s *Server) writeServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "not_found", "Задача не найдена.", false)
 	case errors.Is(err, domain.ErrInvalidTransition), errors.Is(err, sqlite.ErrConflict), errors.Is(err, sqlite.ErrIdempotency):
 		writeError(w, http.StatusConflict, "conflict", "Операция не соответствует текущему состоянию задачи.", false)
+	case errors.Is(err, domain.ErrInvalidMemory):
+		writeError(w, http.StatusBadRequest, "invalid_memory", err.Error(), false)
 	case errors.Is(err, sqlite.ErrApprovalExpired):
 		writeError(w, http.StatusConflict, "approval_expired", "Срок подтверждения истёк. Создайте новую задачу, если действие всё ещё нужно.", false)
 	default:

@@ -1,4 +1,4 @@
-import type { AgentEvent, Approval, Artifact, Checkpoint, Evidence, Message, Task, TaskStep } from './types'
+import type { AgentEvent, Approval, Artifact, Checkpoint, Evidence, Memory, MemoryMatch, MemoryStatus, Message, Task, TaskStep } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -48,4 +48,11 @@ export const api = {
   cancel: (id: string) => request<Task>(`/api/tasks/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
   approve: (id: string) => request<Approval>(`/api/approvals/${encodeURIComponent(id)}/approve`, { method: 'POST' }),
   reject: (id: string) => request<Approval>(`/api/approvals/${encodeURIComponent(id)}/reject`, { method: 'POST' }),
+  memories: () => request<Memory[]>('/api/memories'),
+  searchMemories: (query: string) => request<MemoryMatch[]>(`/api/memories/search?q=${encodeURIComponent(query)}`),
+  createMemory: (kind: string, text: string) => request<Memory>('/api/memories', { method: 'POST', body: JSON.stringify({ kind, text, scope: 'global' }) }),
+  updateMemory: (id: string, kind: string, text: string, metadata: Record<string, unknown>) =>
+    request<Memory>(`/api/memories/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ kind, text, metadata }) }),
+  decideMemory: (id: string, status: Extract<MemoryStatus, 'accepted' | 'rejected' | 'stale' | 'superseded'>) =>
+    request<Memory>(`/api/memories/${encodeURIComponent(id)}/${status === 'accepted' ? 'accept' : status === 'rejected' ? 'reject' : status === 'superseded' ? 'supersede' : 'stale'}`, { method: 'POST' }),
 }

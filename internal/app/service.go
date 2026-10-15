@@ -36,6 +36,12 @@ type Repository interface {
 	PendingApprovals(context.Context) ([]domain.Approval, error)
 	DecideApproval(context.Context, string, bool, string, string) (domain.Approval, error)
 	ConsumeApproval(context.Context, string, string, json.RawMessage) (string, bool, error)
+	CreateMemory(context.Context, domain.Memory) (domain.Memory, error)
+	Memory(context.Context, string) (domain.Memory, error)
+	ListMemories(context.Context, domain.MemoryStatus, string, int) ([]domain.Memory, error)
+	UpdateMemory(context.Context, string, string, string, map[string]any) (domain.Memory, error)
+	SetMemoryStatus(context.Context, string, domain.MemoryStatus) (domain.Memory, error)
+	SearchMemories(context.Context, string, string, int) ([]domain.MemoryMatch, error)
 	CompleteTask(context.Context, string, string, any) (domain.Task, error)
 	ClaimNext(context.Context) (domain.Task, bool, error)
 	RecoverInterrupted(context.Context) (int64, error)
@@ -183,6 +189,67 @@ func (s *Service) DecideApproval(ctx context.Context, approvalID string, approve
 		return domain.Approval{}, errors.New("idempotency key must not exceed 200 characters")
 	}
 	return s.repo.DecideApproval(ctx, approvalID, approve, "local_user", idempotencyKey)
+}
+
+func (s *Service) CreateMemory(ctx context.Context, memory domain.Memory) (domain.Memory, error) {
+	memory.Text = strings.TrimSpace(memory.Text)
+	memory.Status = domain.MemoryCandidate
+	memory.UserEditable = true
+	if memory.Scope == "" {
+		memory.Scope = "global"
+	}
+	if memory.RetentionPolicy == "" {
+		memory.RetentionPolicy = "until_deleted"
+	}
+	if memory.Metadata == nil {
+		memory.Metadata = map[string]any{}
+	}
+	if err := memory.Validate(); err != nil {
+		return domain.Memory{}, err
+	}
+	return s.repo.CreateMemory(ctx, memory)
+}
+
+func (s *Service) Memory(ctx context.Context, id string) (domain.Memory, error) {
+	return s.repo.Memory(ctx, id)
+}
+
+func (s *Service) Memories(ctx context.Context, status domain.MemoryStatus, scope string) ([]domain.Memory, error) {
+	return s.repo.ListMemories(ctx, status, scope, 200)
+}
+
+func (s *Service) UpdateMemory(ctx context.Context, id, kind, text string, metadata map[string]any) (domain.Memory, error) {
+	text = strings.TrimSpace(text)
+	if len(text) > 4000 {
+		return domain.Memory{}, errors.New("memory text must not exceed 4000 bytes")
+	}
+	return s.repo.UpdateMemory(ctx, id, kind, text, metadata)
+}
+
+func (s *Service) SetMemoryStatus(ctx context.Context, id string, status domain.MemoryStatus) (domain.Memory, error) {
+	if status != domain.MemoryAccepted && status != domain.MemoryStale && status != domain.MemorySuperseded && status != domain.MemoryRejected {
+		return domain.Memory{}, fmt.Errorf("%w: invalid memory decision %q", domain.ErrInvalidMemory, status)
+	}
+	return s.repo.SetMemoryStatus(ctx, id, status)
+}
+
+func (s *Service) SearchMemories(ctx context.Context, query, taskID string, limit int) ([]domain.MemoryMatch, error) {
+	query = strings.TrimSpace(query)
+	if taskID != "" {
+		if _, err := s.repo.GetTask(ctx, taskID); err != nil {
+			return nil, err
+		}
+	}
+	if query == "" {
+		return []domain.MemoryMatch{}, nil
+	}
+	if len(query) > 20000 {
+		return nil, fmt.Errorf("%w: memory query exceeds 20000 bytes", domain.ErrInvalidMemory)
+	}
+	if limit < 1 || limit > 20 {
+		limit = 5
+	}
+	return s.repo.SearchMemories(ctx, query, taskID, limit)
 }
 
 func (s *Service) AddAssistantMessage(ctx context.Context, taskID, content string) (domain.Message, error) {

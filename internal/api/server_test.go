@@ -228,3 +228,60 @@ func TestApprovalEndpointsPersistDecisionAndQueueApprovedTask(t *testing.T) {
 		t.Fatalf("idempotent approval retry status=%d body=%s", approveResponse.Code, approveResponse.Body.String())
 	}
 }
+
+func TestMemoryAPIRequiresExplicitAcceptanceForRetrieval(t *testing.T) {
+	server, store := newTestServer(t)
+	defer store.Close()
+
+	request := httptest.NewRequest(http.MethodPost, "/api/memories", strings.NewReader(`{"kind":"preference","text":"Prefer concise Russian answers.","scope":"global"}`))
+	request.Host = "127.0.0.1:8080"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("memory create status=%d body=%s", response.Code, response.Body.String())
+	}
+	var memory domain.Memory
+	if err := json.Unmarshal(response.Body.Bytes(), &memory); err != nil {
+		t.Fatal(err)
+	}
+	if memory.Status != domain.MemoryCandidate || memory.ID == "" {
+		t.Fatalf("memory creation bypassed review: %#v", memory)
+	}
+
+	search := httptest.NewRequest(http.MethodGet, "/api/memories/search?q=concise+Russian", nil)
+	search.Host = "127.0.0.1:8080"
+	searchResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(searchResponse, search)
+	var matches []domain.MemoryMatch
+	if err := json.Unmarshal(searchResponse.Body.Bytes(), &matches); err != nil {
+		t.Fatal(err)
+	}
+	if searchResponse.Code != http.StatusOK || len(matches) != 0 {
+		t.Fatalf("candidate search status=%d matches=%#v", searchResponse.Code, matches)
+	}
+
+	accept := httptest.NewRequest(http.MethodPost, "/api/memories/"+memory.ID+"/accept", nil)
+	accept.Host = "127.0.0.1:8080"
+	acceptResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(acceptResponse, accept)
+	if acceptResponse.Code != http.StatusOK {
+		t.Fatalf("memory accept status=%d body=%s", acceptResponse.Code, acceptResponse.Body.String())
+	}
+
+	searchResponse = httptest.NewRecorder()
+	server.Handler().ServeHTTP(searchResponse, search)
+	if err := json.Unmarshal(searchResponse.Body.Bytes(), &matches); err != nil {
+		t.Fatal(err)
+	}
+	if searchResponse.Code != http.StatusOK || len(matches) != 1 || matches[0].Memory.Status != domain.MemoryAccepted {
+		t.Fatalf("accepted memory search status=%d matches=%#v", searchResponse.Code, matches)
+	}
+
+	invalid := httptest.NewRequest(http.MethodPost, "/api/memories", strings.NewReader(`{"kind":"fact","text":"candidate","status":"accepted"}`))
+	invalid.Host = "127.0.0.1:8080"
+	invalidResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(invalidResponse, invalid)
+	if invalidResponse.Code != http.StatusBadRequest {
+		t.Fatalf("attempt to set memory status on create returned %d, want 400", invalidResponse.Code)
+	}
+}
