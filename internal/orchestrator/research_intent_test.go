@@ -24,6 +24,7 @@ func TestRequiresWebResearchRecognizesRussianAndEnglishRequests(t *testing.T) {
 		"Find the latest public information about this topic.",
 		"библиотеки в астане",
 		"рестораны алматы",
+		"по ищи компьютеры в астане на бюджет 400к тенге",
 		"новости ии",
 		"новинки смартфонов 2026",
 		"новинки смартфонов 2026",
@@ -406,7 +407,7 @@ func TestResearchTaskWithoutSearchFailsClearlyBeforeCallingModel(t *testing.T) {
 	}
 	defer store.Close()
 	task, err := store.CreateTask(ctx, domain.Task{
-		ID: "research-unavailable-task", Title: "Библиотеки в Астане", Description: "библиотеки в астане",
+		ID: "research-unavailable-task", Title: "Компьютеры", Description: "по ищи компьютеры в астане на бюджет 400к тенге",
 	}, "")
 	if err != nil {
 		t.Fatal(err)
