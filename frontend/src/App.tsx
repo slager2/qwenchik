@@ -76,6 +76,12 @@ function eventSummary(event: AgentEvent) {
   const payload = event.payload
   if (typeof payload.summary === 'string') return payload.summary
   if (typeof payload.description === 'string') return payload.description
+  if (typeof payload.message === 'string') {
+    const missing = Array.isArray(payload.missing) ? payload.missing.filter((item): item is string => typeof item === 'string') : []
+    const verification = typeof payload.verification_summary === 'string' ? payload.verification_summary : ''
+    return [payload.message, verification, missing.length ? `Не хватает: ${missing.join('; ')}` : ''].filter(Boolean).join(' ')
+  }
+  if (typeof payload.verification_summary === 'string') return payload.verification_summary
   if (typeof payload.error_code === 'string') return `Код: ${payload.error_code}`
   if (typeof payload.status === 'string') return `Статус: ${payload.status}`
   if (typeof payload.tool === 'string') return `Инструмент: ${payload.tool}`
@@ -483,7 +489,7 @@ interface InspectorProps {
 
 function TaskInspector(props: InspectorProps) {
   const { task, messages, events, checkpoints, steps, artifacts, evidence, approvals, reconnecting, busy } = props
-  const canSend = ['inbox', 'queued', 'paused'].includes(task.status)
+  const canSend = ['inbox', 'queued', 'paused', 'failed'].includes(task.status)
   const canPause = ['queued', 'planning', 'running', 'verifying'].includes(task.status)
   const canCancel = !['completed', 'failed', 'cancelled'].includes(task.status)
   const timeline = [...events].sort((a, b) => b.seq - a.seq).slice(0, 30)
@@ -496,7 +502,7 @@ function TaskInspector(props: InspectorProps) {
         <span className={`status-tag status-${task.status}`}>{statusLabels[task.status]}</span>
       </header>
       <div className="inspector-actions">
-        {task.status === 'inbox' && <button className="button button-primary" type="button" onClick={props.onRun} disabled={busy}>Запустить</button>}
+        {['inbox', 'failed'].includes(task.status) && <button className="button button-primary" type="button" onClick={props.onRun} disabled={busy}>{task.status === 'failed' ? 'Повторить' : 'Запустить'}</button>}
         {canPause && <button className="button button-secondary" type="button" onClick={props.onPause} disabled={busy}>Пауза</button>}
         {task.status === 'paused' && <button className="button button-primary" type="button" onClick={props.onResume} disabled={busy}>Продолжить</button>}
         {canCancel && <button className="button button-danger-quiet" type="button" onClick={props.onCancel} disabled={busy}>Отменить</button>}
@@ -526,7 +532,7 @@ function TaskInspector(props: InspectorProps) {
         </div>
         <form className="chat-form" onSubmit={props.onSend}>
           <label className="sr-only" htmlFor="chat-message">Добавить сообщение к задаче</label>
-          <textarea id="chat-message" className="text-field chat-input" value={props.chatText} onChange={(event) => props.setChatText(event.target.value)} placeholder={canSend ? 'Добавить уточнение…' : 'Сообщение доступно до запуска или на паузе'} rows={2} maxLength={20000} disabled={!canSend || busy} />
+          <textarea id="chat-message" className="text-field chat-input" value={props.chatText} onChange={(event) => props.setChatText(event.target.value)} placeholder={canSend ? (task.status === 'failed' ? 'Уточнить задачу и запустить повторно…' : 'Добавить уточнение…') : 'Сообщение доступно до запуска или на паузе'} rows={2} maxLength={20000} disabled={!canSend || busy} />
           <button className="button button-secondary send-button" type="submit" aria-label="Отправить сообщение" disabled={!canSend || busy || !props.chatText.trim()}>{busy ? '…' : 'Отправить'}</button>
         </form>
         {!canSend && <p className="field-hint">Новые сообщения принимаются до запуска, в очереди и на паузе.</p>}

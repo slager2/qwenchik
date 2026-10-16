@@ -15,9 +15,15 @@ import (
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
 )
 
-type searchStub struct{ url string }
+type searchStub struct {
+	url     string
+	options *research.SearchOptions
+}
 
 func (s searchStub) Search(_ context.Context, options research.SearchOptions) ([]research.SearchHit, error) {
+	if s.options != nil {
+		*s.options = options
+	}
 	return []research.SearchHit{{Provider: "searxng", Query: options.Query, URL: s.url, Title: "A source", Snippet: "snippet", Taint: research.TaintExternal}}, nil
 }
 
@@ -59,21 +65,28 @@ func TestResearchToolsRequireKnownURLAndPersistEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	fetcher := &fetchStub{}
+	var capturedSearch research.SearchOptions
 	registry := NewRegistry()
 	if err := RegisterResearchTools(registry, ResearchTools{
-		SearchProvider: searchStub{url: "https://docs.example.com/guide"},
+		SearchProvider: searchStub{url: "https://docs.example.com/guide", options: &capturedSearch},
 		Fetcher:        fetcher, Extractor: extractorStub{}, Artifacts: artifactStore,
 		Repository: store, MaxFetchBytes: 1024, AllowedDomains: []string{"example.com"},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	toolContext := WithTaskID(ctx, "research-task")
-	searchResult, err := registry.Execute(toolContext, "researcher", "search", json.RawMessage(`{"query":"local Qwen","max_results":3}`))
+	searchResult, err := registry.Execute(toolContext, "researcher", "search", json.RawMessage(`{"query":"official protocol transport documentation","max_results":3}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(searchResult.([]research.SearchHit)) != 1 {
 		t.Fatalf("search result = %#v", searchResult)
+	}
+	if len(capturedSearch.PreferredDomains) != 0 || len(capturedSearch.Domains) != 1 || capturedSearch.Domains[0] != "example.com" {
+		t.Fatalf("search did not preserve the hard allowlist without injecting topic-specific preferences: %#v", capturedSearch)
+	}
+	if _, err := registry.Execute(toolContext, "researcher", "search", json.RawMessage(`{"query":"local Qwen","domains":["example.com"]}`)); !errors.Is(err, ErrInvalidArguments) {
+		t.Fatalf("model-supplied domain filter error = %v, want ErrInvalidArguments", err)
 	}
 	if _, err := registry.Execute(WithFetchByteLimit(toolContext, 2), "researcher", "fetch_url", json.RawMessage(`{"url":"https://docs.example.com/guide","original_query":"local Qwen"}`)); !errors.Is(err, research.ErrResponseTooBig) {
 		t.Fatalf("task fetch byte budget error = %v", err)
@@ -83,7 +96,7 @@ func TestResearchToolsRequireKnownURLAndPersistEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	metadata := fetched.(map[string]any)
-	if metadata["evidence_id"] == "" || metadata["taint"] != research.TaintExternal || fetcher.calls != 2 {
+	if metadata["evidence_id"] == "" || metadata["taint"] != research.TaintExternal || metadata["requested_url"] != "https://docs.example.com/guide" || fetcher.calls != 2 {
 		t.Fatalf("unexpected fetch metadata %#v; fetch calls=%d", metadata, fetcher.calls)
 	}
 	evidence, err := store.Evidence(ctx, "research-task")
@@ -92,6 +105,9 @@ func TestResearchToolsRequireKnownURLAndPersistEvidence(t *testing.T) {
 	}
 	if len(evidence) != 1 || evidence[0].Title != "Fetched source" || evidence[0].RawArtifactID == "" || evidence[0].TextArtifactID == "" {
 		t.Fatalf("evidence not persisted with artifacts: %#v", evidence)
+	}
+	if _, err := registry.Execute(toolContext, "researcher", "fetch_url", json.RawMessage(`{"url":"https://docs.example.com/guide","original_query":"local Qwen"}`)); !errors.Is(err, ErrDuplicateResearchTarget) {
+		t.Fatalf("duplicate fetch error = %v, want ErrDuplicateResearchTarget", err)
 	}
 	if _, err := registry.Execute(toolContext, "researcher", "fetch_url", json.RawMessage(`{"url":"https://unknown.example/secret"}`)); !errors.Is(err, ErrUnknownTarget) {
 		t.Fatalf("unsearched URL error = %v, want ErrUnknownTarget", err)

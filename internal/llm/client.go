@@ -1,6 +1,9 @@
 package llm
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 type ChatMessage struct {
 	Role    string `json:"role"`
@@ -13,6 +16,7 @@ type ChatRequest struct {
 	Temperature float64
 	TopP        float64
 	JSONMode    bool
+	JSONSchema  json.RawMessage
 }
 
 type ChatResponse struct {

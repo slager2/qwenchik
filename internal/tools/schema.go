@@ -32,6 +32,19 @@ func validateSchemaNode(schema map[string]any, value any, path string, depth int
 	if depth > 32 {
 		return fmt.Errorf("%s exceeds maximum schema validation depth", path)
 	}
+	if alternatives, ok := schema["anyOf"].([]any); ok {
+		matched := false
+		for _, alternative := range alternatives {
+			branch, ok := alternative.(map[string]any)
+			if ok && validateSchemaNode(branch, value, path, depth+1) == nil {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return fmt.Errorf("%s does not match any allowed schema", path)
+		}
+	}
 	typeName, _ := schema["type"].(string)
 	if typeName != "" && !matchesJSONType(typeName, value) {
 		return fmt.Errorf("%s must be %s", path, typeName)
@@ -80,9 +93,17 @@ func validateSchemaNode(schema map[string]any, value any, path string, depth int
 		if min, ok := schemaNumber(schema["minItems"]); ok && float64(len(typed)) < min {
 			return fmt.Errorf("%s is below minItems", path)
 		}
-		if itemSchema, ok := schema["items"].(map[string]any); ok {
-			for i, child := range typed {
-				if err := validateSchemaNode(itemSchema, child, fmt.Sprintf("%s[%d]", path, i), depth+1); err != nil {
+		prefixSchemas, _ := schema["prefixItems"].([]any)
+		itemSchema, hasItemSchema := schema["items"].(map[string]any)
+		for i, child := range typed {
+			var childSchema map[string]any
+			if i < len(prefixSchemas) {
+				childSchema, _ = prefixSchemas[i].(map[string]any)
+			} else if hasItemSchema {
+				childSchema = itemSchema
+			}
+			if childSchema != nil {
+				if err := validateSchemaNode(childSchema, child, fmt.Sprintf("%s[%d]", path, i), depth+1); err != nil {
 					return err
 				}
 			}

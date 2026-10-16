@@ -48,6 +48,7 @@ const (
 )
 
 var ErrInvalidTransition = errors.New("invalid task status transition")
+var ErrUnsupportedPlanKind = errors.New("unsupported plan step kind")
 
 var transitions = map[TaskStatus]map[TaskStatus]struct{}{
 	StatusInbox:           {StatusQueued: {}, StatusCancelled: {}},
@@ -233,8 +234,8 @@ func ValidatePlan(plan Plan, maxSteps int) error {
 		if _, exists := steps[step.ID]; exists {
 			return fmt.Errorf("duplicate plan step id %q", step.ID)
 		}
-		if step.Kind != "analysis" && step.Kind != "search" && step.Kind != "fetch" && step.Kind != "extract" && step.Kind != "browser" && step.Kind != "code_execution" && step.Kind != "external_action" {
-			return fmt.Errorf("unsupported plan step kind %q", step.Kind)
+		if step.Kind != "analysis" && step.Kind != "search" && step.Kind != "fetch" && step.Kind != "code_execution" && step.Kind != "external_action" {
+			return fmt.Errorf("%w: %q", ErrUnsupportedPlanKind, step.Kind)
 		}
 		if strings.TrimSpace(step.Description) == "" || len(step.Description) > 1000 {
 			return fmt.Errorf("step %q description must contain 1 to 1000 characters", step.ID)
@@ -242,8 +243,13 @@ func ValidatePlan(plan Plan, maxSteps int) error {
 		if len(step.ExpectedOutput) > 500 {
 			return fmt.Errorf("step %q expected_output exceeds 500 characters", step.ID)
 		}
-		if len(step.SuccessCriteria) > 10 {
-			return fmt.Errorf("step %q has too many success criteria", step.ID)
+		if len(step.SuccessCriteria) == 0 || len(step.SuccessCriteria) > 10 {
+			return fmt.Errorf("step %q must have between 1 and 10 success criteria", step.ID)
+		}
+		for _, criterion := range step.SuccessCriteria {
+			if strings.TrimSpace(criterion) == "" || len(criterion) > 500 {
+				return fmt.Errorf("step %q success criteria must contain 1 to 500 non-whitespace characters", step.ID)
+			}
 		}
 		steps[step.ID] = step
 	}

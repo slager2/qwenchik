@@ -113,8 +113,38 @@ func TestFetchBoundsBodyAndBlocksPrivateRedirect(t *testing.T) {
 	fetcher.client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusFound, Header: http.Header{"Location": []string{"http://127.0.0.1/private"}}, Body: io.NopCloser(strings.NewReader("")), Request: request}, nil
 	})
-	if _, err := fetcher.Fetch(context.Background(), "https://public.example/redirect", FetchOptions{}); !errors.Is(err, ErrUnsafeURL) {
-		t.Fatalf("private redirect error = %v, want ErrUnsafeURL", err)
+	if _, err := fetcher.Fetch(context.Background(), "https://public.example/redirect", FetchOptions{}); !errors.Is(err, ErrUnsafeURL) || errors.Is(err, ErrFetchRequestFailed) {
+		t.Fatalf("private redirect error = %v, want ErrUnsafeURL without retry marker", err)
+	}
+}
+
+func TestFetchRequestFailureIsRetryableButDoesNotHidePolicyOrCancellation(t *testing.T) {
+	resolver := resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	})
+	fetcher := NewSafeFetcherWithResolver(1024, time.Second, resolver)
+	dialError := errors.New("connection refused")
+	fetcher.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, dialError })
+	_, err := fetcher.Fetch(context.Background(), "https://public.example/article", FetchOptions{})
+	if !errors.Is(err, ErrFetchRequestFailed) || !errors.Is(err, dialError) || err.Error() != "fetch request failed" {
+		t.Fatalf("request error = %v, want opaque retryable network error preserving cause", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = fetcher.Fetch(ctx, "https://public.example/article", FetchOptions{})
+	if errors.Is(err, ErrFetchRequestFailed) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation error = %v, want cancellation without retry marker", err)
+	}
+
+	fetcher.client.Timeout = 10 * time.Millisecond
+	fetcher.client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		<-request.Context().Done()
+		return nil, request.Context().Err()
+	})
+	_, err = fetcher.Fetch(context.Background(), "https://public.example/article", FetchOptions{})
+	if !errors.Is(err, ErrFetchRequestFailed) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("fetcher's bounded request timeout error = %v, want retry marker preserving timeout cause", err)
 	}
 }
 

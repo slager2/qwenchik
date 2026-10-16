@@ -57,7 +57,14 @@ type requestBody struct {
 }
 
 type responseFormat struct {
-	Type string `json:"type"`
+	Type       string              `json:"type"`
+	JSONSchema *jsonSchemaResponse `json:"json_schema,omitempty"`
+}
+
+type jsonSchemaResponse struct {
+	Name   string          `json:"name"`
+	Strict bool            `json:"strict"`
+	Schema json.RawMessage `json:"schema"`
 }
 
 type completionResponse struct {
@@ -202,7 +209,14 @@ func (c *Client) prepare(request llm.ChatRequest, stream bool) requestBody {
 		Temperature: temperature, TopP: topP, Stream: stream,
 		ChatTemplateKwargs: map[string]bool{"enable_thinking": c.thinking},
 	}
-	if request.JSONMode {
+	if len(request.JSONSchema) != 0 {
+		body.ResponseFormat = &responseFormat{
+			Type: "json_schema",
+			JSONSchema: &jsonSchemaResponse{
+				Name: "qagent_response", Strict: true, Schema: append(json.RawMessage(nil), request.JSONSchema...),
+			},
+		}
+	} else if request.JSONMode {
 		body.ResponseFormat = &responseFormat{Type: "json_object"}
 	}
 	return body

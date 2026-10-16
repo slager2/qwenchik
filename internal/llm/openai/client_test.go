@@ -44,6 +44,42 @@ func TestCompleteUsesOpenAICompatibleJSONContract(t *testing.T) {
 	}
 }
 
+func TestCompleteUsesStrictJSONSchemaResponseFormat(t *testing.T) {
+	schema := json.RawMessage(`{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"],"additionalProperties":false}`)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			ResponseFormat struct {
+				Type       string `json:"type"`
+				JSONSchema struct {
+					Name   string          `json:"name"`
+					Strict bool            `json:"strict"`
+					Schema json.RawMessage `json:"schema"`
+				} `json:"json_schema"`
+			} `json:"response_format"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			return
+		}
+		if request.ResponseFormat.Type != "json_schema" || request.ResponseFormat.JSONSchema.Name != "qagent_response" || !request.ResponseFormat.JSONSchema.Strict {
+			t.Errorf("unexpected response format: %#v", request.ResponseFormat)
+		}
+		if string(request.ResponseFormat.JSONSchema.Schema) != string(schema) {
+			t.Errorf("schema = %s, want %s", request.ResponseFormat.JSONSchema.Schema, schema)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"ok\":true}"}}]}`)
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "", "qwen-test", time.Second, 128, 0.2, 0.8, false)
+	if _, err := client.Complete(context.Background(), llm.ChatRequest{
+		Messages: []llm.ChatMessage{{Role: "user", Content: "hello"}}, JSONSchema: schema,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestStreamParsesSSEContentDeltas(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Accept") != "text/event-stream" {

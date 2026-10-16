@@ -5,6 +5,26 @@ import (
 	"testing"
 )
 
+func TestLoadTrimsOptionalTavilyAPIKey(t *testing.T) {
+	t.Setenv("TAVILY_API_KEY", "  test-key  ")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.TavilyAPIKey != "test-key" {
+		t.Fatalf("Tavily API key was not trimmed")
+	}
+
+	t.Setenv("TAVILY_API_KEY", " \t ")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.TavilyAPIKey != "" {
+		t.Fatal("blank optional Tavily key should disable Tavily")
+	}
+}
+
 func TestValidateRejectsNonLoopbackBindAndLLM(t *testing.T) {
 	cfg := Config{
 		BindAddr: "0.0.0.0:8080", DatabasePath: "./data/test.db", ArtifactsPath: "./data/artifacts", WorkspaceRoot: "./data/workspaces", SandboxRuntime: "auto", SandboxImage: "golang:1.23-alpine", SandboxNetwork: "disabled",

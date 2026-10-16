@@ -8,12 +8,13 @@ import (
 const TaintExternal = "untrusted_external_content"
 
 type SearchOptions struct {
-	Query      string
-	Language   string
-	Domains    []string
-	Recency    string
-	MaxResults int
-	SafeSearch bool
+	Query            string
+	Language         string
+	Domains          []string
+	PreferredDomains []string
+	Recency          string
+	MaxResults       int
+	SafeSearch       bool
 }
 
 type SearchHit struct {

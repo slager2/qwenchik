@@ -29,12 +29,11 @@ type Config struct {
 	LLMRequestTimeoutSecs int
 	LLMMaxConcurrency     int
 	SearXNGURL            string
+	TavilyAPIKey          string
 	MaxSteps              int
 	TaskTimeoutSeconds    int
 	MaxSearchQueries      int
-	MaxBrowserActions     int
 	MaxFetchBytes         int64
-	ApprovalMode          string
 	AllowedDomains        []string
 }
 
@@ -51,7 +50,7 @@ func Load() (Config, error) {
 		LLMAPIKey:      env("LLM_API_KEY", "EMPTY"),
 		LLMModel:       env("LLM_MODEL", "local-qwen"),
 		SearXNGURL:     env("SEARXNG_URL", ""),
-		ApprovalMode:   env("APPROVAL_MODE", "per-risk"),
+		TavilyAPIKey:   strings.TrimSpace(env("TAVILY_API_KEY", "")),
 	}
 	var err error
 	if cfg.LLMContextLength, err = intEnv("LLM_CONTEXT_LENGTH", 131072); err != nil {
@@ -82,9 +81,6 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.MaxSearchQueries, err = intEnv("MAX_SEARCH_QUERIES", 12); err != nil {
-		return Config{}, err
-	}
-	if cfg.MaxBrowserActions, err = intEnv("MAX_BROWSER_ACTIONS", 40); err != nil {
 		return Config{}, err
 	}
 	if cfg.MaxFetchBytes, err = int64Env("MAX_FETCH_BYTES", 5_000_000); err != nil {
@@ -180,7 +176,7 @@ func (c Config) Validate() error {
 			return errors.New("ALLOWED_DOMAINS must contain hostnames or IP addresses, not URLs or paths")
 		}
 	}
-	if c.MaxSteps < 1 || c.MaxSteps > 12 || c.TaskTimeoutSeconds < 1 || c.MaxSearchQueries < 1 || c.MaxBrowserActions < 0 || c.MaxFetchBytes < 1 {
+	if c.MaxSteps < 1 || c.MaxSteps > 12 || c.TaskTimeoutSeconds < 1 || c.MaxSearchQueries < 1 || c.MaxFetchBytes < 1 {
 		return errors.New("task and tool budgets are invalid")
 	}
 	return nil

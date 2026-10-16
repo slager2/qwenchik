@@ -159,10 +159,55 @@ func (r *Registry) SeedTaskURLs(taskID, text string) {
 	}
 }
 
+func (r *Registry) KnownTaskURLs(taskID string) []string {
+	if r.urlLedger == nil {
+		return []string{}
+	}
+	return r.urlLedger.URLs(taskID)
+}
+
+func (r *Registry) FetchedTaskURLs(taskID string) []string {
+	if r.urlLedger == nil {
+		return []string{}
+	}
+	return r.urlLedger.FetchedURLs(taskID)
+}
+
+func (r *Registry) WasTaskURLFetched(taskID, rawURL string) bool {
+	return r.urlLedger != nil && r.urlLedger.WasFetched(taskID, rawURL)
+}
+
 func (r *Registry) RememberURLs(taskID string, value any) {
 	if r.urlLedger != nil {
 		r.urlLedger.Remember(taskID, value)
 	}
+}
+
+func (r *Registry) RememberFetchedURLs(taskID string, value any) {
+	if r.urlLedger == nil {
+		return
+	}
+	var visit func(any)
+	visit = func(current any) {
+		switch item := current.(type) {
+		case map[string]any:
+			if evidenceID, ok := item["evidence_id"].(string); ok && evidenceID != "" {
+				for _, key := range []string{"url", "requested_url"} {
+					if rawURL, ok := item[key].(string); ok {
+						r.urlLedger.MarkFetched(taskID, rawURL)
+					}
+				}
+			}
+			for _, child := range item {
+				visit(child)
+			}
+		case []any:
+			for _, child := range item {
+				visit(child)
+			}
+		}
+	}
+	visit(value)
 }
 
 func (r *Registry) ClearTaskURLs(taskID string) {

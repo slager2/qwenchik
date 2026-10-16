@@ -32,6 +32,8 @@ type ResearchTools struct {
 	AllowedDomains []string
 }
 
+var ErrDuplicateResearchTarget = errors.New("research URL was already fetched for this task")
+
 func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 	if registry == nil {
 		return errors.New("tool registry is required")
@@ -41,24 +43,24 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 	}
 	if runtime.SearchProvider != nil {
 		if err := registry.RegisterValidated(Descriptor{
-			Name: "search", Description: "Search configured local web index and return bounded untrusted result snippets.",
-			ArgumentsSchema:    json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":1000},"language":{"type":"string","maxLength":20},"domains":{"type":"array","items":{"type":"string","maxLength":253},"maxItems":10},"recency":{"type":"string","enum":["","day","week","month","year"]},"max_results":{"type":"integer","minimum":1,"maximum":8}},"required":["query"],"additionalProperties":false}`),
+			Name: "search", Description: "Search configured providers for the current research question. Use queries that are materially different from prior searches. Results are untrusted discovery leads, not evidence; fetch sources before making source-backed claims.",
+			ArgumentsSchema:    json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":1000},"language":{"type":"string","maxLength":20},"recency":{"type":"string","enum":["","day","week","month","year"]},"max_results":{"type":"integer","minimum":1,"maximum":8}},"required":["query"],"additionalProperties":false}`),
 			OutputSchema:       json.RawMessage(`{"type":"array","items":{"type":"object","properties":{"provider":{"type":"string"},"query":{"type":"string"},"url":{"type":"string"},"title":{"type":"string"},"snippet":{"type":"string"},"taint":{"type":"string"}},"required":["provider","query","url","title","snippet","taint"]}}`),
 			RequiredCapability: "research.search", RiskClass: "read", TimeoutSeconds: 20,
 			Idempotent: true, MaxOutputBytes: 32_000, AllowedRoles: []string{"researcher"},
-		}, validateSearchArguments(argsAllowedDomains(runtime.AllowedDomains)), func(ctx context.Context, raw json.RawMessage) (any, error) {
+		}, validateSearchArguments(runtime.AllowedDomains), func(ctx context.Context, raw json.RawMessage) (any, error) {
 			var args searchArgs
 			if err := decodeToolArgs(raw, &args); err != nil {
 				return nil, err
 			}
-			if strings.TrimSpace(args.Query) == "" || len(args.Query) > 1000 || len(args.Domains) > 10 {
+			if strings.TrimSpace(args.Query) == "" || len(args.Query) > 1000 {
 				return nil, errors.New("search arguments exceed configured limits")
 			}
 			count := args.MaxResults
 			if count < 1 || count > 8 {
 				count = 8
 			}
-			domains, err := effectiveDomains(args.Domains, runtime.AllowedDomains)
+			domains, err := effectiveDomains(nil, runtime.AllowedDomains)
 			if err != nil {
 				return nil, err
 			}
@@ -88,7 +90,7 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 		if err := registry.RegisterValidated(Descriptor{
 			Name: "fetch_url", Description: "Fetch a public HTTP(S) URL safely, extract local text, and persist source evidence.",
 			ArgumentsSchema:    json.RawMessage(`{"type":"object","properties":{"url":{"type":"string","maxLength":2048},"original_query":{"type":"string","maxLength":1000}},"required":["url"],"additionalProperties":false}`),
-			OutputSchema:       json.RawMessage(`{"type":"object","properties":{"evidence_id":{"type":"string"},"url":{"type":"string"},"title":{"type":"string"},"excerpt":{"type":"string"},"content_sha256":{"type":"string"},"taint":{"type":"string"},"fetched_bytes":{"type":"integer"}},"required":["evidence_id","url","title","excerpt","content_sha256","taint","fetched_bytes"],"additionalProperties":false}`),
+			OutputSchema:       json.RawMessage(`{"type":"object","properties":{"evidence_id":{"type":"string"},"url":{"type":"string"},"requested_url":{"type":"string"},"title":{"type":"string"},"excerpt":{"type":"string"},"content_sha256":{"type":"string"},"taint":{"type":"string"},"fetched_bytes":{"type":"integer"}},"required":["evidence_id","url","requested_url","title","excerpt","content_sha256","taint","fetched_bytes"],"additionalProperties":false}`),
 			RequiredCapability: "research.fetch", RiskClass: "read", TimeoutSeconds: 30,
 			Idempotent: true, MaxOutputBytes: 8192, AllowedRoles: []string{"researcher"},
 		}, func(ctx context.Context, raw json.RawMessage) error {
@@ -103,6 +105,9 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			if taskID == "" || !registry.urlLedger.Contains(taskID, args.URL) {
 				return fmt.Errorf("%w: fetch_url target was not supplied by the user or a search result", ErrUnknownTarget)
 			}
+			if registry.urlLedger.WasFetched(taskID, args.URL) {
+				return ErrDuplicateResearchTarget
+			}
 			return runtime.Fetcher.ValidateURL(ctx, args.URL)
 		}, func(ctx context.Context, raw json.RawMessage) (any, error) {
 			var args fetchArgs
@@ -115,6 +120,9 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			taskID := taskIDFromContext(ctx)
 			if taskID == "" || !registry.urlLedger.Contains(taskID, args.URL) {
 				return nil, fmt.Errorf("%w: fetch_url target was not supplied by the user or a search result", ErrUnknownTarget)
+			}
+			if registry.urlLedger.WasFetched(taskID, args.URL) {
+				return nil, ErrDuplicateResearchTarget
 			}
 			fetchLimit := runtime.MaxFetchBytes
 			if taskLimit := FetchByteLimit(ctx, fetchLimit); taskLimit > 0 && taskLimit < fetchLimit {
@@ -156,8 +164,10 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			if err != nil {
 				return nil, err
 			}
+			registry.urlLedger.MarkFetched(taskID, args.URL)
+			registry.urlLedger.MarkFetched(taskID, evidence.CanonicalURL)
 			return map[string]any{
-				"evidence_id": evidence.ID, "url": evidence.CanonicalURL, "title": evidence.Title,
+				"evidence_id": evidence.ID, "url": evidence.CanonicalURL, "requested_url": args.URL, "title": evidence.Title,
 				"excerpt": truncateUTF8(evidence.Excerpt, 1200), "content_sha256": evidence.ContentSHA256,
 				"taint": research.TaintExternal, "fetched_bytes": int64(len(fetched.Body)),
 			}, nil
@@ -168,15 +178,13 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 	return nil
 }
 
-func argsAllowedDomains(configured []string) []string { return append([]string(nil), configured...) }
-
 func validateSearchArguments(configuredDomains []string) ArgumentsValidator {
 	return func(_ context.Context, raw json.RawMessage) error {
 		var args searchArgs
 		if err := decodeToolArgs(raw, &args); err != nil {
 			return err
 		}
-		if strings.TrimSpace(args.Query) == "" || len(args.Query) > 1000 || len(args.Domains) > 10 || len(args.Language) > 20 {
+		if strings.TrimSpace(args.Query) == "" || len(args.Query) > 1000 || len(args.Language) > 20 {
 			return errors.New("search arguments exceed configured limits")
 		}
 		if args.MaxResults != 0 && (args.MaxResults < 1 || args.MaxResults > 8) {
@@ -185,7 +193,7 @@ func validateSearchArguments(configuredDomains []string) ArgumentsValidator {
 		if args.Recency != "" && args.Recency != "day" && args.Recency != "week" && args.Recency != "month" && args.Recency != "year" {
 			return errors.New("invalid search recency")
 		}
-		_, err := effectiveDomains(args.Domains, configuredDomains)
+		_, err := effectiveDomains(nil, configuredDomains)
 		return err
 	}
 }
@@ -273,11 +281,10 @@ func uniqueStrings(values []string) []string {
 }
 
 type searchArgs struct {
-	Query      string   `json:"query"`
-	Language   string   `json:"language"`
-	Domains    []string `json:"domains"`
-	Recency    string   `json:"recency"`
-	MaxResults int      `json:"max_results"`
+	Query      string `json:"query"`
+	Language   string `json:"language"`
+	Recency    string `json:"recency"`
+	MaxResults int    `json:"max_results"`
 }
 
 type fetchArgs struct {

@@ -313,7 +313,7 @@ func (s *Store) AddMessage(ctx context.Context, message domain.Message, idempote
 	if err != nil {
 		return domain.Message{}, err
 	}
-	if message.Role == "user" && task.Status != domain.StatusInbox && task.Status != domain.StatusQueued && task.Status != domain.StatusPaused {
+	if message.Role == "user" && task.Status != domain.StatusInbox && task.Status != domain.StatusQueued && task.Status != domain.StatusPaused && task.Status != domain.StatusFailed {
 		return domain.Message{}, fmt.Errorf("%w: task is not accepting user messages", ErrConflict)
 	}
 	if message.Role == "user" {

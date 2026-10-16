@@ -16,9 +16,13 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/slager2/qwenchik/internal/domain"
+	"github.com/slager2/qwenchik/internal/llm"
+	"github.com/slager2/qwenchik/internal/llm/openai"
+	"github.com/slager2/qwenchik/internal/providers/research"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
 )
 
@@ -74,20 +78,25 @@ type Server struct {
 	dbPing           func(context.Context) error
 	llmURL           string
 	llmKey           string
+	llmModel         string
 	searchURL        string
+	tavilyConfigured bool
 	artifactReader   ArtifactReader
 	sandboxAvailable bool
 	sandboxMessage   string
 	logger           *slog.Logger
 	client           *http.Client
+	llmProbeMu       sync.Mutex
+	llmProbeAt       time.Time
+	llmProbeError    error
 }
 
 func New(service TaskService, worker WorkerControl, dbPing func(context.Context) error, llmURL, llmKey, searchURL string, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{service: service, worker: worker, dbPing: dbPing, llmURL: strings.TrimRight(llmURL, "/"), llmKey: llmKey, searchURL: strings.TrimRight(searchURL, "/"), logger: logger, client: &http.Client{
-		Timeout:       3 * time.Second,
+	return &Server{service: service, worker: worker, dbPing: dbPing, llmURL: strings.TrimRight(llmURL, "/"), llmKey: llmKey, llmModel: "local-qwen", searchURL: strings.TrimRight(searchURL, "/"), logger: logger, client: &http.Client{
+		Timeout:       10 * time.Second,
 		Transport:     &http.Transport{Proxy: nil},
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 	}}
@@ -159,6 +168,16 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) SetArtifactReader(reader ArtifactReader) { s.artifactReader = reader }
+
+func (s *Server) SetLLMModel(model string) {
+	if strings.TrimSpace(model) != "" {
+		s.llmModel = strings.TrimSpace(model)
+	}
+}
+
+func (s *Server) SetTavilyConfigured(configured bool) {
+	s.tavilyConfigured = configured
+}
 
 func (s *Server) SetSandboxStatus(available bool, message string) {
 	s.sandboxAvailable = available
@@ -233,7 +252,7 @@ func (s *Server) addMessage(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, err)
 		return
 	}
-	if task.Status != domain.StatusInbox && task.Status != domain.StatusQueued && task.Status != domain.StatusPaused {
+	if task.Status != domain.StatusInbox && task.Status != domain.StatusQueued && task.Status != domain.StatusPaused && task.Status != domain.StatusFailed {
 		writeError(w, http.StatusConflict, "task_not_accepting_messages", "Нельзя добавить сообщение во время выполнения или после завершения задачи.", false)
 		return
 	}
@@ -249,7 +268,7 @@ func (s *Server) addMessage(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, err)
 		return
 	}
-	if task.Status == domain.StatusInbox || task.Status == domain.StatusPaused {
+	if task.Status == domain.StatusInbox || task.Status == domain.StatusPaused || task.Status == domain.StatusFailed {
 		if _, err := s.service.QueueTask(r.Context(), taskID, ""); err != nil {
 			s.writeServiceError(w, err)
 			return
@@ -667,19 +686,29 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 		checks["database"] = map[string]string{"status": "ok", "message": "SQLite is writable"}
 	}
 	if s.searchURL == "" {
-		checks["search"] = map[string]string{"status": "warning", "message": "SearXNG is not configured"}
-	} else {
-		searchRequest, err := http.NewRequestWithContext(r.Context(), http.MethodGet, s.searchURL+"/search?q=qagent-doctor&format=json&safesearch=1", nil)
-		if err != nil {
-			checks["search"] = map[string]string{"status": "warning", "message": "SearXNG health request could not be created"}
-		} else if response, err := s.client.Do(searchRequest); err != nil {
-			checks["search"] = map[string]string{"status": "warning", "message": "Configured SearXNG endpoint is unavailable"}
+		if s.tavilyConfigured {
+			checks["search"] = map[string]string{"status": "warning", "message": "Tavily is configured; external API health is checked during research"}
 		} else {
-			_ = response.Body.Close()
-			if response.StatusCode >= 200 && response.StatusCode < 300 {
-				checks["search"] = map[string]string{"status": "ok", "message": "SearXNG search endpoint responded"}
+			checks["search"] = map[string]string{"status": "warning", "message": "No search provider is configured"}
+		}
+	} else {
+		searchProvider, err := research.NewSearXNG(s.searchURL, nil)
+		if err != nil {
+			checks["search"] = map[string]string{"status": "warning", "message": "Configured SearXNG endpoint is invalid"}
+		} else {
+			_, searchErr := searchProvider.Search(r.Context(), research.SearchOptions{Query: "qagent-doctor", MaxResults: 1, SafeSearch: true})
+			if searchErr != nil {
+				if s.tavilyConfigured {
+					checks["search"] = map[string]string{"status": "warning", "message": "SearXNG is unavailable; Tavily fallback is configured but not health-checked"}
+				} else {
+					checks["search"] = map[string]string{"status": "warning", "message": "Configured SearXNG endpoint is unavailable"}
+				}
 			} else {
-				checks["search"] = map[string]string{"status": "warning", "message": fmt.Sprintf("SearXNG returned HTTP %d", response.StatusCode)}
+				message := "SearXNG search endpoint returned valid JSON"
+				if s.tavilyConfigured {
+					message += "; Tavily fallback is configured"
+				}
+				checks["search"] = map[string]string{"status": "ok", "message": message}
 			}
 		}
 	}
@@ -703,7 +732,11 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_ = response.Body.Close()
 		if response.StatusCode >= 200 && response.StatusCode < 300 {
-			checks["llm"] = map[string]string{"status": "ok", "message": "OpenAI-compatible models endpoint responded"}
+			if err := s.probeStructuredLLM(r.Context()); err != nil {
+				checks["llm"] = map[string]string{"status": "error", "message": "local model failed the strict JSON Schema smoke request"}
+			} else {
+				checks["llm"] = map[string]string{"status": "ok", "message": "local model passed the strict JSON Schema smoke request"}
+			}
 		} else {
 			checks["llm"] = map[string]string{"status": "error", "message": fmt.Sprintf("LLM endpoint returned HTTP %d", response.StatusCode)}
 		}
@@ -722,21 +755,61 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, code, map[string]any{"status": status, "checks": checks})
 }
 
+func (s *Server) probeStructuredLLM(ctx context.Context) error {
+	s.llmProbeMu.Lock()
+	defer s.llmProbeMu.Unlock()
+	if !s.llmProbeAt.IsZero() && time.Since(s.llmProbeAt) < time.Minute {
+		return s.llmProbeError
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	client := openai.New(s.llmURL, s.llmKey, s.llmModel, 30*time.Second, 24, 0, 1, false)
+	s.llmProbeError = llm.ProbeStructuredOutput(probeCtx, client)
+	s.llmProbeAt = time.Now()
+	return s.llmProbeError
+}
+
 func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 	searchStatus := "disabled"
 	if s.searchURL != "" {
 		searchStatus = "configured"
+	}
+	if s.tavilyConfigured {
+		searchStatus = "configured"
+	}
+	searchMode := "none"
+	if s.searchURL != "" {
+		searchMode = "searxng"
+	}
+	if s.tavilyConfigured {
+		searchMode = "tavily"
+		if s.searchURL != "" {
+			searchMode = "composite"
+		}
 	}
 	sandboxStatus := "unavailable"
 	if s.sandboxAvailable {
 		sandboxStatus = "available"
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"llm":     map[string]any{"type": "local-openai-compatible", "status": "configured", "base_url": s.llmURL},
-		"search":  map[string]any{"type": "searxng", "status": searchStatus, "base_url": s.searchURL},
+		"llm": map[string]any{"type": "local-openai-compatible", "status": "configured", "base_url": s.llmURL},
+		"search": map[string]any{
+			"type": "searxng", "mode": searchMode, "status": searchStatus, "base_url": s.searchURL,
+			"providers": map[string]any{
+				"searxng": map[string]any{"status": providerState(s.searchURL != ""), "base_url": s.searchURL},
+				"tavily":  map[string]string{"status": providerState(s.tavilyConfigured)},
+			},
+		},
 		"browser": map[string]string{"status": "disabled"},
 		"sandbox": map[string]string{"status": sandboxStatus, "message": s.sandboxMessage},
 	})
+}
+
+func providerState(configured bool) string {
+	if configured {
+		return "configured"
+	}
+	return "disabled"
 }
 
 func (s *Server) writeServiceError(w http.ResponseWriter, err error) {

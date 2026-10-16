@@ -104,6 +104,25 @@ func TestEmbeddedUIAndSecurityHeaders(t *testing.T) {
 	}
 }
 
+func TestProvidersReportsTavilyConfiguredWithoutKey(t *testing.T) {
+	server, store := newTestServer(t)
+	defer store.Close()
+	server.SetTavilyConfigured(true)
+	request := httptest.NewRequest(http.MethodGet, "/api/providers", nil)
+	request.Host = "127.0.0.1:8080"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("provider status=%d body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"type":"searxng"`) || !strings.Contains(response.Body.String(), `"mode":"tavily"`) || !strings.Contains(response.Body.String(), `"status":"configured"`) {
+		t.Fatalf("Tavily configuration was not reported: %s", response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "api_key") || strings.Contains(response.Body.String(), "secret") {
+		t.Fatalf("provider response exposed credential details: %s", response.Body.String())
+	}
+}
+
 func TestSSEReplaysOnlyUserVisibleEvents(t *testing.T) {
 	server, store := newTestServer(t)
 	defer store.Close()
@@ -283,5 +302,122 @@ func TestMemoryAPIRequiresExplicitAcceptanceForRetrieval(t *testing.T) {
 	server.Handler().ServeHTTP(invalidResponse, invalid)
 	if invalidResponse.Code != http.StatusBadRequest {
 		t.Fatalf("attempt to set memory status on create returned %d, want 400", invalidResponse.Code)
+	}
+}
+
+func TestFailedTaskAcceptsClarificationAndCanBeRetried(t *testing.T) {
+	server, store := newTestServer(t)
+	defer store.Close()
+	ctx := context.Background()
+	task, err := app.New(store).CreateTask(ctx, "Retry research", "Research a distributed protocol", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.QueueTask(ctx, task.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.ClaimNext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.TransitionTask(ctx, task.ID, domain.StatusFailed, nil, "task.failed", "user", map[string]any{"error_code": "search_unavailable"}); err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/tasks/"+task.ID+"/messages", strings.NewReader(`{"content":"Use the configured local search provider and retry."}`))
+	request.Host = "127.0.0.1:8080"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("failed-task clarification status=%d body=%s", response.Code, response.Body.String())
+	}
+	queued, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queued.Status != domain.StatusQueued {
+		t.Fatalf("task status after clarification = %q, want queued", queued.Status)
+	}
+	messages, err := store.Messages(ctx, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 1 || messages[0].Content != "Use the configured local search provider and retry." {
+		t.Fatalf("clarification was not persisted: %#v", messages)
+	}
+}
+
+func TestDoctorRequiresStrictStructuredModelSmoke(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		modelReply string
+		wantStatus string
+	}{
+		{name: "valid structured output", modelReply: `{"ok":true}`, wantStatus: "ok"},
+		{name: "invalid structured output", modelReply: `{"ok":false}`, wantStatus: "error"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			llmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/v1/models" {
+					_, _ = w.Write([]byte(`{"data":[{"id":"doctor-test"}]}`))
+					return
+				}
+				if r.URL.Path != "/v1/chat/completions" {
+					http.NotFound(w, r)
+					return
+				}
+				response, _ := json.Marshal(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": test.modelReply}}}})
+				_, _ = w.Write(response)
+			}))
+			defer llmServer.Close()
+			store, err := sqlite.Open(context.Background(), t.TempDir()+"/doctor.db")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			server := New(app.New(store), testWorker{}, store.Ping, llmServer.URL+"/v1", "EMPTY", "", nil)
+			server.SetLLMModel("doctor-test")
+			request := httptest.NewRequest(http.MethodGet, "/api/doctor", nil)
+			request.Host = "127.0.0.1:8080"
+			response := httptest.NewRecorder()
+			server.Handler().ServeHTTP(response, request)
+			var body struct {
+				Status string                       `json:"status"`
+				Checks map[string]map[string]string `json:"checks"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if body.Status != test.wantStatus || body.Checks["llm"]["status"] != test.wantStatus {
+				t.Fatalf("doctor status=%q llm=%#v body=%s", body.Status, body.Checks["llm"], response.Body.String())
+			}
+		})
+	}
+}
+
+func TestDoctorDoesNotReportMalformedSearXNGResponseAsHealthy(t *testing.T) {
+	searchServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer searchServer.Close()
+	store, err := sqlite.Open(context.Background(), t.TempDir()+"/doctor-search.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	server := New(app.New(store), testWorker{}, store.Ping, "http://127.0.0.1:1/v1", "", searchServer.URL, nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/doctor", nil)
+	request.Host = "127.0.0.1:8080"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	var body struct {
+		Checks map[string]map[string]string `json:"checks"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Checks["search"]["status"] != "warning" || !strings.Contains(body.Checks["search"]["message"], "unavailable") {
+		t.Fatalf("doctor treated malformed SearXNG JSON as healthy: %#v", body.Checks["search"])
 	}
 }

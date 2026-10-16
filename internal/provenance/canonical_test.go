@@ -1,6 +1,7 @@
 package provenance
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,28 @@ func TestCanonicalURLNormalizesHostTrackingAndFragment(t *testing.T) {
 	}
 	if canonical != "https://example.com/path?a=1&b=2" {
 		t.Fatalf("canonical URL = %q", canonical)
+	}
+}
+
+func TestBuildEvidenceSelectsContiguousQueryRelevantExcerpt(t *testing.T) {
+	text := strings.Join([]string{
+		"Navigation: Home | Main Menu | Language options",
+		"NVMe over Fabrics exposes storage through queues over a network fabric.",
+		"Queue pairs allow hosts and controllers to exchange commands; measured throughput reached 12 GB/s in a PCIe 4.0 configuration.",
+		"Limitations include discovery setup, transport-specific recovery, and congestion under load.",
+		strings.Repeat("Additional general protocol information without performance details. ", 40),
+	}, "\n")
+	evidence, err := BuildEvidence("task", "NVMe over Fabrics queue pairs throughput limitations", research.FetchedDocument{
+		OriginalURL: "https://example.org/protocol", FinalURL: "https://example.org/protocol", ContentSHA256: "content-hash",
+	}, research.ExtractedDocument{Title: "Protocol documentation", Text: text, Method: "local_html_parser"}, "raw", "text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(evidence.Excerpt, "Queue pairs") || !strings.Contains(evidence.Excerpt, "12 GB/s") || strings.Contains(evidence.Excerpt, "Navigation:") {
+		t.Fatalf("evidence excerpt did not prioritize the query-relevant source passage: %q", evidence.Excerpt)
+	}
+	if len(evidence.QuoteSpans) != 1 || evidence.QuoteSpans[0].Text != evidence.Excerpt || evidence.QuoteSpans[0].End != len([]rune(evidence.Excerpt)) {
+		t.Fatalf("quote span does not match the selected source excerpt: %#v", evidence.QuoteSpans)
 	}
 }
 

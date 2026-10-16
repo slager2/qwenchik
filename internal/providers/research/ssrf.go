@@ -19,18 +19,24 @@ import (
 )
 
 var (
-	ErrUnsafeURL       = errors.New("URL is not allowed by outbound network policy")
-	ErrUnsupportedMIME = errors.New("unsupported content type")
-	ErrResponseTooBig  = errors.New("response exceeds configured byte limit")
+	ErrUnsafeURL              = errors.New("URL is not allowed by outbound network policy")
+	ErrUnsupportedMIME        = errors.New("unsupported content type")
+	ErrResponseTooBig         = errors.New("response exceeds configured byte limit")
+	ErrFetchSourceUnavailable = errors.New("fetched source returned a non-success HTTP status")
+	ErrFetchRequestFailed     = errors.New("fetch request failed")
 )
 
 type opaqueNetworkError struct {
 	operation string
 	cause     error
+	retryable bool
 }
 
 func (e opaqueNetworkError) Error() string { return e.operation + " failed" }
 func (e opaqueNetworkError) Unwrap() error { return e.cause }
+func (e opaqueNetworkError) Is(target error) bool {
+	return target == ErrFetchRequestFailed && e.operation == "fetch request" && e.retryable
+}
 
 type IPResolver interface {
 	LookupIPAddr(context.Context, string) ([]net.IPAddr, error)
@@ -159,11 +165,15 @@ func (f *SafeFetcher) Fetch(ctx context.Context, rawURL string, options FetchOpt
 	request.Header.Set("User-Agent", "QwenchikLocalResearch/1.0")
 	response, err := f.client.Do(request)
 	if err != nil {
-		return FetchedDocument{}, opaqueNetworkError{operation: "fetch request", cause: err}
+		retryable := ctx.Err() == nil && !errors.Is(err, ErrUnsafeURL)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			err = errors.Join(err, ctxErr)
+		}
+		return FetchedDocument{}, opaqueNetworkError{operation: "fetch request", cause: err, retryable: retryable}
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return FetchedDocument{}, fmt.Errorf("fetch returned HTTP %d", response.StatusCode)
+		return FetchedDocument{}, fmt.Errorf("%w: HTTP %d", ErrFetchSourceUnavailable, response.StatusCode)
 	}
 	if response.ContentLength > limit {
 		return FetchedDocument{}, ErrResponseTooBig

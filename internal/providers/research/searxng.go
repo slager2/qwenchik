@@ -15,6 +15,9 @@ import (
 
 const maxSearXNGResponse = 2 << 20
 
+var ErrSearchUnavailable = errors.New("configured search provider is unavailable")
+var ErrSearchResponseTooBig = errors.New("search provider response exceeds size limit")
+
 type SearXNG struct {
 	baseURL string
 	client  *http.Client
@@ -80,21 +83,30 @@ func (s *SearXNG) Search(ctx context.Context, options SearchOptions) ([]SearchHi
 	request.Header.Set("User-Agent", "QwenchikLocalResearch/1.0")
 	response, err := s.client.Do(request)
 	if err != nil {
-		return nil, opaqueNetworkError{operation: "SearXNG search", cause: err}
+		return nil, fmt.Errorf("%w: %v", ErrSearchUnavailable, opaqueNetworkError{operation: "SearXNG search", cause: err})
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("SearXNG returned HTTP %d", response.StatusCode)
+		return nil, fmt.Errorf("%w: SearXNG returned HTTP %d", ErrSearchUnavailable, response.StatusCode)
 	}
 	if response.ContentLength > maxSearXNGResponse {
-		return nil, ErrResponseTooBig
+		return nil, ErrSearchResponseTooBig
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxSearXNGResponse+1))
 	if err != nil {
-		return nil, fmt.Errorf("read SearXNG response: %w", err)
+		return nil, fmt.Errorf("%w: read SearXNG response: %v", ErrSearchUnavailable, err)
 	}
 	if len(body) > maxSearXNGResponse {
-		return nil, ErrResponseTooBig
+		return nil, ErrSearchResponseTooBig
+	}
+	var envelope struct {
+		Results json.RawMessage `json:"results"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return nil, fmt.Errorf("%w: decode SearXNG response: %v", ErrSearchUnavailable, err)
+	}
+	if len(envelope.Results) == 0 || strings.EqualFold(strings.TrimSpace(string(envelope.Results)), "null") {
+		return nil, fmt.Errorf("%w: SearXNG response omitted its results array", ErrSearchUnavailable)
 	}
 	var result struct {
 		Results []struct {
@@ -107,7 +119,10 @@ func (s *SearXNG) Search(ctx context.Context, options SearchOptions) ([]SearchHi
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("decode SearXNG response: %w", err)
+		return nil, fmt.Errorf("%w: decode SearXNG response: %v", ErrSearchUnavailable, err)
+	}
+	if result.Results == nil {
+		return nil, fmt.Errorf("%w: SearXNG response did not contain a valid results array", ErrSearchUnavailable)
 	}
 	hits := make([]SearchHit, 0, maxResults)
 	for _, item := range result.Results {

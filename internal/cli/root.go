@@ -18,6 +18,7 @@ import (
 	"github.com/slager2/qwenchik/internal/app"
 	"github.com/slager2/qwenchik/internal/config"
 	"github.com/slager2/qwenchik/internal/domain"
+	"github.com/slager2/qwenchik/internal/llm"
 	"github.com/slager2/qwenchik/internal/llm/openai"
 	"github.com/slager2/qwenchik/internal/orchestrator"
 	"github.com/slager2/qwenchik/internal/providers/research"
@@ -524,16 +525,40 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 			}
 			switch name {
 			case "providers":
+				searchMode := "none"
+				if cfg.SearXNGURL != "" {
+					searchMode = "searxng"
+				}
+				if cfg.TavilyAPIKey != "" {
+					searchMode = "tavily"
+					if cfg.SearXNGURL != "" {
+						searchMode = "composite"
+					}
+				}
+				searchStatus := providerStatus(cfg.SearXNGURL)
+				if cfg.TavilyAPIKey != "" {
+					searchStatus = "configured"
+				}
 				printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{
-					"llm":     map[string]any{"type": "local-openai-compatible", "base_url": cfg.LLMBaseURL, "model": cfg.LLMModel},
-					"search":  map[string]any{"status": providerStatus(cfg.SearXNGURL), "type": "searxng", "base_url": cfg.SearXNGURL},
+					"llm": map[string]any{"type": "local-openai-compatible", "base_url": cfg.LLMBaseURL, "model": cfg.LLMModel},
+					"search": map[string]any{
+						"status":   searchStatus,
+						"type":     "searxng",
+						"mode":     searchMode,
+						"base_url": cfg.SearXNGURL,
+						"providers": map[string]any{
+							"searxng": map[string]any{"status": providerStatus(cfg.SearXNGURL), "base_url": cfg.SearXNGURL},
+							"tavily":  map[string]string{"status": providerStatusFromBool(cfg.TavilyAPIKey != "")},
+						},
+					},
 					"sandbox": map[string]any{"runtime": cfg.SandboxRuntime, "image": cfg.SandboxImage},
 				})
 			case "config":
 				printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{
 					"app_bind_addr": cfg.BindAddr, "database_path": cfg.DatabasePath, "artifacts_path": cfg.ArtifactsPath,
 					"llm_base_url": cfg.LLMBaseURL, "llm_model": cfg.LLMModel, "searxng_url": cfg.SearXNGURL,
-					"workspace_root": cfg.WorkspaceRoot, "sandbox_runtime": cfg.SandboxRuntime,
+					"tavily_configured": cfg.TavilyAPIKey != "",
+					"workspace_root":    cfg.WorkspaceRoot, "sandbox_runtime": cfg.SandboxRuntime,
 					"sandbox_image": cfg.SandboxImage, "sandbox_network": cfg.SandboxNetwork,
 					"llm_context_length": cfg.LLMContextLength, "llm_max_output_tokens": cfg.LLMMaxOutputTokens,
 					"llm_max_concurrency": cfg.LLMMaxConcurrency, "allowed_domains": cfg.AllowedDomains,
@@ -562,12 +587,9 @@ func serve(parent context.Context) error {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	model := openai.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, time.Duration(cfg.LLMRequestTimeoutSecs)*time.Second, cfg.LLMMaxOutputTokens, cfg.LLMTemperature, cfg.LLMTopP, cfg.LLMEnableThinking)
 	registry := tools.NewRegistry()
-	var searchProvider research.SearchProvider
-	if cfg.SearXNGURL != "" {
-		searchProvider, err = research.NewSearXNG(cfg.SearXNGURL, nil)
-		if err != nil {
-			return err
-		}
+	searchProvider, err := configuredSearchProvider(cfg)
+	if err != nil {
+		return err
 	}
 	artifactStore, err := artifacts.New(cfg.ArtifactsPath, cfg.MaxFetchBytes)
 	if err != nil {
@@ -595,6 +617,8 @@ func serve(parent context.Context) error {
 		Temperature: cfg.LLMTemperature, TopP: cfg.LLMTopP, Logger: logger,
 	})
 	apiServer := api.New(deps.app, deps.worker, deps.store.Ping, cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.SearXNGURL, logger)
+	apiServer.SetLLMModel(cfg.LLMModel)
+	apiServer.SetTavilyConfigured(cfg.TavilyAPIKey != "")
 	apiServer.SetArtifactReader(artifactStore)
 	sandboxStatus := sandboxRuntime.Doctor(parent)
 	apiServer.SetSandboxStatus(sandboxStatus.Available, sandboxStatus.Message)
@@ -645,6 +669,35 @@ func providerStatus(baseURL string) string {
 		return "disabled"
 	}
 	return "configured"
+}
+
+func providerStatusFromBool(configured bool) string {
+	if configured {
+		return "configured"
+	}
+	return "disabled"
+}
+
+func configuredSearchProvider(cfg config.Config) (research.SearchProvider, error) {
+	providers := make([]research.SearchProvider, 0, 2)
+	if cfg.SearXNGURL != "" {
+		provider, err := research.NewSearXNG(cfg.SearXNGURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		providers = append(providers, provider)
+	}
+	if cfg.TavilyAPIKey != "" {
+		provider, err := research.NewTavily(cfg.TavilyAPIKey, nil)
+		if err != nil {
+			return nil, err
+		}
+		providers = append(providers, provider)
+	}
+	if len(providers) == 0 {
+		return nil, nil
+	}
+	return research.NewCompositeSearch(providers...), nil
 }
 
 func maxInputBytes(cfg config.Config) int {
@@ -723,17 +776,30 @@ func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 		checks["artifacts"] = doctorCheck{Status: "ok", Message: "artifact directory is writable"}
 	}
 	if cfg.SearXNGURL == "" {
-		checks["search"] = doctorCheck{Status: "warning", Message: "SearXNG is not configured; web discovery is disabled"}
-	} else if request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(cfg.SearXNGURL, "/")+"/search?q=qagent-doctor&format=json&safesearch=1", nil); err != nil {
-		checks["search"] = doctorCheck{Status: "warning", Message: "SearXNG health request is invalid"}
-	} else if response, err := (&http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}).Do(request); err != nil {
-		checks["search"] = doctorCheck{Status: "warning", Message: "Configured SearXNG endpoint is unavailable"}
-	} else {
-		_ = response.Body.Close()
-		if response.StatusCode >= 200 && response.StatusCode < 300 {
-			checks["search"] = doctorCheck{Status: "ok", Message: "SearXNG search endpoint responded"}
+		if cfg.TavilyAPIKey != "" {
+			checks["search"] = doctorCheck{Status: "warning", Message: "Tavily is configured; external API health is checked during research"}
 		} else {
-			checks["search"] = doctorCheck{Status: "warning", Message: fmt.Sprintf("SearXNG returned HTTP %d", response.StatusCode)}
+			checks["search"] = doctorCheck{Status: "warning", Message: "No search provider is configured; web discovery is disabled"}
+		}
+	} else {
+		searchProvider, err := research.NewSearXNG(cfg.SearXNGURL, nil)
+		if err != nil {
+			checks["search"] = doctorCheck{Status: "warning", Message: "Configured SearXNG endpoint is invalid"}
+		} else {
+			_, requestErr := searchProvider.Search(ctx, research.SearchOptions{Query: "qagent-doctor", MaxResults: 1, SafeSearch: true})
+			if requestErr != nil {
+				if cfg.TavilyAPIKey != "" {
+					checks["search"] = doctorCheck{Status: "warning", Message: "SearXNG is unavailable; Tavily fallback is configured but not health-checked"}
+				} else {
+					checks["search"] = doctorCheck{Status: "warning", Message: "Configured SearXNG endpoint is unavailable"}
+				}
+			} else {
+				message := "SearXNG search endpoint returned valid JSON"
+				if cfg.TavilyAPIKey != "" {
+					message += "; Tavily fallback is configured"
+				}
+				checks["search"] = doctorCheck{Status: "ok", Message: message}
+			}
 		}
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(cfg.LLMBaseURL, "/")+"/models", nil)
@@ -751,7 +817,15 @@ func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 	} else {
 		_ = response.Body.Close()
 		if response.StatusCode >= 200 && response.StatusCode < 300 {
-			checks["llm"] = doctorCheck{Status: "ok", Message: "local model endpoint responded"}
+			probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			probeClient := openai.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, 30*time.Second, 24, 0, 1, cfg.LLMEnableThinking)
+			probeErr := llm.ProbeStructuredOutput(probeCtx, probeClient)
+			cancel()
+			if probeErr != nil {
+				checks["llm"] = doctorCheck{Status: "error", Message: "local model failed the bounded strict JSON Schema smoke request"}
+			} else {
+				checks["llm"] = doctorCheck{Status: "ok", Message: "local model passed the bounded strict JSON Schema smoke request"}
+			}
 		} else {
 			checks["llm"] = doctorCheck{Status: "error", Message: fmt.Sprintf("local LLM returned HTTP %d", response.StatusCode)}
 		}

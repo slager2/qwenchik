@@ -2,6 +2,7 @@ package tools
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
@@ -12,12 +13,13 @@ import (
 var httpURLPattern = regexp.MustCompile(`https?://[^\s<>"']+`)
 
 type URLLedger struct {
-	mu     sync.RWMutex
-	byTask map[string]map[string]struct{}
+	mu            sync.RWMutex
+	byTask        map[string]map[string]struct{}
+	fetchedByTask map[string]map[string]struct{}
 }
 
 func NewURLLedger() *URLLedger {
-	return &URLLedger{byTask: make(map[string]map[string]struct{})}
+	return &URLLedger{byTask: make(map[string]map[string]struct{}), fetchedByTask: make(map[string]map[string]struct{})}
 }
 
 func (l *URLLedger) SeedText(taskID, text string) {
@@ -75,8 +77,62 @@ func (l *URLLedger) Contains(taskID, rawURL string) bool {
 	return ok
 }
 
+func (l *URLLedger) URLs(taskID string) []string {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	urls := make([]string, 0, len(l.byTask[taskID]))
+	for rawURL := range l.byTask[taskID] {
+		urls = append(urls, rawURL)
+	}
+	sort.Strings(urls)
+	return urls
+}
+
+func (l *URLLedger) MarkFetched(taskID, rawURL string) {
+	if taskID == "" {
+		return
+	}
+	canonical, err := provenance.CanonicalURL(strings.TrimSpace(rawURL))
+	if err != nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.fetchedByTask[taskID] == nil {
+		l.fetchedByTask[taskID] = make(map[string]struct{})
+	}
+	l.fetchedByTask[taskID][canonical] = struct{}{}
+	if l.byTask[taskID] == nil {
+		l.byTask[taskID] = make(map[string]struct{})
+	}
+	l.byTask[taskID][canonical] = struct{}{}
+}
+
+func (l *URLLedger) FetchedURLs(taskID string) []string {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	urls := make([]string, 0, len(l.fetchedByTask[taskID]))
+	for rawURL := range l.fetchedByTask[taskID] {
+		urls = append(urls, rawURL)
+	}
+	sort.Strings(urls)
+	return urls
+}
+
+func (l *URLLedger) WasFetched(taskID, rawURL string) bool {
+	canonical, err := provenance.CanonicalURL(strings.TrimSpace(rawURL))
+	if err != nil {
+		return false
+	}
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	_, ok := l.fetchedByTask[taskID][canonical]
+	return ok
+}
+
 func (l *URLLedger) Clear(taskID string) {
 	l.mu.Lock()
 	delete(l.byTask, taskID)
+	delete(l.fetchedByTask, taskID)
 	l.mu.Unlock()
 }
