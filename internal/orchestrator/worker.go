@@ -3,6 +3,8 @@ package orchestrator
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -45,6 +47,12 @@ var userURLPattern = regexp.MustCompile(`https?://[^\s<>"']+`)
 
 const maxToolCallArgumentsBytes = 64 << 10
 
+const (
+	maxSynthesisBytes           = 100000
+	maxSynthesisDeltaBytes      = 1024
+	synthesisDeltaFlushInterval = 150 * time.Millisecond
+)
+
 type Repository interface {
 	GetTask(context.Context, string) (domain.Task, error)
 	Messages(context.Context, string) ([]domain.Message, error)
@@ -53,6 +61,7 @@ type Repository interface {
 	TransitionTask(context.Context, string, domain.TaskStatus, *domain.Stage, string, string, map[string]any) (domain.Task, error)
 	EventsAfter(context.Context, string, int64, int) ([]domain.Event, error)
 	RecordEvent(context.Context, string, string, *domain.Stage, string, map[string]any) (domain.Event, error)
+	RecordMessageDelta(context.Context, string, string, string, int, string) (domain.Event, error)
 	SavePlan(context.Context, string, domain.Plan, any) (int64, error)
 	SaveCheckpoint(context.Context, string, int, any) (domain.Checkpoint, error)
 	LatestCheckpoint(context.Context, string) (domain.Checkpoint, error)
@@ -311,6 +320,12 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 			code = "unknown_research_target"
 		} else if errors.Is(err, research.ErrPDFExtractorUnavailable) {
 			code = "pdf_extractor_unavailable"
+		} else if errors.Is(err, research.ErrPDFTooManyPages) {
+			code = "pdf_page_limit_exceeded"
+		} else if errors.Is(err, research.ErrPDFEncrypted) {
+			code = "pdf_encrypted"
+		} else if errors.Is(err, research.ErrPDFTooLarge) || errors.Is(err, research.ErrPDFNoText) || errors.Is(err, research.ErrPDFExtractionFailed) {
+			code = "pdf_extraction_failed"
 		} else if errors.Is(err, research.ErrResponseTooBig) {
 			code = "fetch_budget_exceeded"
 		} else if errors.Is(err, sandbox.ErrSandboxUnavailable) {
@@ -794,21 +809,13 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 		return err
 	}
 	evidenceIDs := collectEvidenceIDs(state.ToolResults)
-	answer, err := w.synthesize(ctx, task, goal, memoryContext, state, verified.Summary, evidenceIDs, "")
+	messageID, err := newSynthesisID()
 	if err != nil {
 		return err
 	}
-	citationErr := validateCitations(answer, evidenceIDs)
-	if citationErr != nil {
-		correction := "The previous response failed citation validation: " + citationErr.Error() + ". Use only exact available evidence IDs or remove the unsupported claim."
-		answer, err = w.synthesize(ctx, task, goal, memoryContext, state, verified.Summary, evidenceIDs, correction)
-		if err != nil {
-			return err
-		}
-		citationErr = validateCitations(answer, evidenceIDs)
-		if citationErr != nil {
-			return fmt.Errorf("%w: final response citations are incomplete or unknown", errInvalidModelOutput)
-		}
+	answer, err := w.synthesizeValidated(ctx, task, goal, memoryContext, state, verified.Summary, evidenceIDs, messageID)
+	if err != nil {
+		return err
 	}
 	finalState := state
 	finalState.Summary = verified.Summary
@@ -1757,7 +1764,25 @@ func verificationCriterionMissing(plan domain.Plan, state checkpointState, asses
 	return missing
 }
 
-func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryContext string, state checkpointState, verificationSummary string, evidenceIDs []string, correction string) (string, error) {
+func (w *Worker) synthesizeValidated(ctx context.Context, task domain.Task, goal, memoryContext string, state checkpointState, verificationSummary string, evidenceIDs []string, messageID string) (string, error) {
+	answer, err := w.synthesize(ctx, task, goal, memoryContext, state, verificationSummary, evidenceIDs, "", messageID)
+	if err != nil {
+		return "", err
+	}
+	if citationErr := validateCitations(answer, evidenceIDs); citationErr != nil {
+		correction := "The previous response failed citation validation: " + citationErr.Error() + ". Use only exact available evidence IDs or remove the unsupported claim."
+		answer, err = w.synthesize(ctx, task, goal, memoryContext, state, verificationSummary, evidenceIDs, correction, messageID)
+		if err != nil {
+			return "", err
+		}
+		if citationErr = validateCitations(answer, evidenceIDs); citationErr != nil {
+			return "", fmt.Errorf("%w: final response citations are incomplete or unknown", errInvalidModelOutput)
+		}
+	}
+	return answer, nil
+}
+
+func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryContext string, state checkpointState, verificationSummary string, evidenceIDs []string, correction, messageID string) (string, error) {
 	system := synthesisSystemPrompt()
 	inputData := map[string]any{"task": task.Title, "goal": goal, "accepted_memories_untrusted": memoryContext, "tool_results": map[string]any{}, "analysis_summary": truncateRunes(state.Summary, 500), "verification": verificationSummary, "available_evidence_ids": evidenceIDs, "correction": correction}
 	resultsBudget := toolResultsBudget(w.options.MaxInputBytes, system, nil, inputData, "tool_results")
@@ -1769,15 +1794,129 @@ func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryC
 	if !w.requestFits(system, string(input), nil) {
 		return "", errInputBudgetExceeded
 	}
-	response, err := w.complete(ctx, system, string(input), nil)
+	if err := w.ensureActive(ctx, task.ID); err != nil {
+		return "", err
+	}
+	streamID, err := newSynthesisID()
 	if err != nil {
 		return "", err
 	}
-	answer := strings.TrimSpace(response.Content)
-	if answer == "" || len(answer) > 100000 {
-		return "", errInvalidModelOutput
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stream, err := w.client.Stream(streamCtx, llm.ChatRequest{
+		Messages:  []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: string(input)}},
+		MaxTokens: w.options.MaxOutputTokens, Temperature: w.options.Temperature, TopP: w.options.TopP,
+	})
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", errLLMUnavailable, err)
 	}
-	return answer, nil
+	if stream == nil {
+		return "", fmt.Errorf("%w: local LLM returned no synthesis stream", errLLMUnavailable)
+	}
+	var answer strings.Builder
+	var batch strings.Builder
+	chunkIndex := 0
+	persistBatch := func() error {
+		if batch.Len() == 0 {
+			return nil
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := w.ensureActive(ctx, task.ID); err != nil {
+			return err
+		}
+		delta := batch.String()
+		if _, err := w.repo.RecordMessageDelta(ctx, task.ID, streamID, messageID, chunkIndex, delta); err != nil {
+			return fmt.Errorf("persist synthesis delta: %w", err)
+		}
+		answer.WriteString(delta)
+		batch.Reset()
+		chunkIndex++
+		return nil
+	}
+	appendText := func(text string) error {
+		for len(text) > 0 {
+			available := maxSynthesisDeltaBytes - batch.Len()
+			part := utf8Prefix(text, available)
+			if part == "" {
+				if err := persistBatch(); err != nil {
+					return err
+				}
+				continue
+			}
+			batch.WriteString(part)
+			text = text[len(part):]
+			if batch.Len() == maxSynthesisDeltaBytes {
+				if err := persistBatch(); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	totalBytes := 0
+	flushTicker := time.NewTicker(synthesisDeltaFlushInterval)
+	defer flushTicker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-flushTicker.C:
+			if err := persistBatch(); err != nil {
+				return "", err
+			}
+		case event, open := <-stream:
+			if !open {
+				if err := persistBatch(); err != nil {
+					return "", err
+				}
+				final := strings.TrimSpace(answer.String())
+				if final == "" || len(final) > maxSynthesisBytes {
+					return "", errInvalidModelOutput
+				}
+				return final, nil
+			}
+			if event.Err != nil {
+				return "", fmt.Errorf("%w: %v", errLLMUnavailable, event.Err)
+			}
+			if event.Text == "" {
+				continue
+			}
+			if !utf8.ValidString(event.Text) {
+				return "", fmt.Errorf("%w: synthesis stream returned invalid UTF-8", errInvalidModelOutput)
+			}
+			totalBytes += len(event.Text)
+			if totalBytes > maxSynthesisBytes {
+				return "", errInvalidModelOutput
+			}
+			if err := appendText(event.Text); err != nil {
+				return "", err
+			}
+		}
+	}
+}
+
+func utf8Prefix(value string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(value) <= maxBytes {
+		return value
+	}
+	end := maxBytes
+	for end > 0 && !utf8.RuneStart(value[end]) {
+		end--
+	}
+	return value[:end]
+}
+
+func newSynthesisID() (string, error) {
+	value := make([]byte, 16)
+	if _, err := rand.Read(value); err != nil {
+		return "", fmt.Errorf("create synthesis ID: %w", err)
+	}
+	return hex.EncodeToString(value), nil
 }
 
 func synthesisSystemPrompt() string {
@@ -1910,7 +2049,7 @@ func compactToolResult(value any) any {
 		}
 		return items
 	case map[string]any:
-		keys := []string{"evidence_id", "url", "requested_url", "title", "excerpt", "content_sha256", "taint", "fetched_bytes", "characters", "words", "lines"}
+		keys := []string{"evidence_id", "url", "requested_url", "title", "excerpt", "content_sha256", "taint", "fetched_bytes", "page_count", "characters", "words", "lines"}
 		out := make(map[string]any)
 		for _, key := range keys {
 			if item, ok := result[key]; ok {
@@ -2480,7 +2619,13 @@ func publicError(code string) string {
 	case "unknown_research_target":
 		return "URL не был указан в задаче или получен из разрешённого поиска, поэтому загрузка заблокирована."
 	case "pdf_extractor_unavailable":
-		return "Извлечение текста из PDF пока недоступно; загрузка остановлена."
+		return "Для PDF нужен локальный rootless Docker и настроенный образ Poppler; загрузка остановлена."
+	case "pdf_page_limit_exceeded":
+		return "PDF превышает лимит в 20 страниц и не был использован как evidence."
+	case "pdf_encrypted":
+		return "Зашифрованный PDF не поддерживается и не был использован как evidence."
+	case "pdf_extraction_failed":
+		return "Не удалось безопасно извлечь ограниченный текст из PDF; источник не был принят как evidence."
 	case "invalid_tool_arguments":
 		return "Аргументы инструмента не прошли backend-валидацию."
 	case "invalid_tool_output":

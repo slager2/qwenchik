@@ -118,6 +118,24 @@ func TestFetchBoundsBodyAndBlocksPrivateRedirect(t *testing.T) {
 	}
 }
 
+func TestPDFFetchHasFiveMegabyteCeilingEvenWhenTaskBudgetIsLarger(t *testing.T) {
+	resolver := resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	})
+	fetcher := NewSafeFetcherWithResolver(20<<20, time.Second, resolver)
+	fetcher.client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode:    http.StatusOK,
+			Header:        http.Header{"Content-Type": []string{"application/pdf"}},
+			ContentLength: maxPDFFetchBytes + 1,
+			Body:          io.NopCloser(strings.NewReader("%PDF-1.7")), Request: request,
+		}, nil
+	})
+	if _, err := fetcher.Fetch(context.Background(), "https://public.example/report.pdf", FetchOptions{MaxBytes: 20 << 20}); !errors.Is(err, ErrResponseTooBig) {
+		t.Fatalf("oversized PDF fetch error = %v, want ErrResponseTooBig", err)
+	}
+}
+
 func TestFetchRequestFailureIsRetryableButDoesNotHidePolicyOrCancellation(t *testing.T) {
 	resolver := resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
 		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil

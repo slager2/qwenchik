@@ -3,8 +3,10 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -141,6 +143,95 @@ func TestTaskTransitionsAreDurableAndEventsAreAtomic(t *testing.T) {
 		if event.Seq != int64(i+1) {
 			t.Fatalf("event seq at %d = %d, want %d", i, event.Seq, i+1)
 		}
+	}
+}
+
+func TestMessageDeltaEventsAreBoundedDurableAndReplayInStreamOrder(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "message-deltas.db")
+	store, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := store.CreateTask(ctx, domain.Task{ID: "message-delta-task", Title: "Synthesis", Description: "Create a cited summary."}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.QueueTask(ctx, task.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.ClaimNext(ctx); err != nil || !ok {
+		t.Fatalf("claim task: ok=%t err=%v", ok, err)
+	}
+	running := domain.StageSynthesis
+	if _, err := store.TransitionTask(ctx, task.ID, domain.StatusRunning, &running, "", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	verifying := domain.StageVerification
+	if _, err := store.TransitionTask(ctx, task.ID, domain.StatusVerifying, &verifying, "", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.RecordMessageDelta(ctx, task.ID, "stream-a", "message-a", 0, "first ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.RecordMessageDelta(ctx, task.ID, "stream-a", "message-a", 1, "second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrected, err := store.RecordMessageDelta(ctx, task.ID, "stream-b", "message-a", 0, "corrected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Seq >= second.Seq || second.Seq >= corrected.Seq || corrected.Type != "message.delta" || corrected.Visibility != "user" {
+		t.Fatalf("message deltas were not appended as ordered user events: first=%#v second=%#v corrected=%#v", first, second, corrected)
+	}
+	if _, err := store.RecordMessageDelta(ctx, task.ID, "stream-b", "message-a", 2, "gap"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("out-of-order chunk error = %v, want conflict", err)
+	}
+	if _, err := store.RecordMessageDelta(ctx, task.ID, "stream-b", "message-a", 1, strings.Repeat("x", (4<<10)+1)); err == nil {
+		t.Fatal("oversized delta was persisted")
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	replayed, err := store.EventsAfter(ctx, task.ID, first.Seq-1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(replayed) != 3 || replayed[0].Seq != first.Seq || replayed[1].Seq != second.Seq || replayed[2].Seq != corrected.Seq {
+		t.Fatalf("persisted deltas did not replay in durable sequence order: %#v", replayed)
+	}
+	var payload struct {
+		StreamID   string `json:"stream_id"`
+		MessageID  string `json:"message_id"`
+		ChunkIndex int    `json:"chunk_index"`
+		Delta      string `json:"delta"`
+	}
+	for index, event := range replayed {
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if index < 2 && (payload.StreamID != "stream-a" || payload.ChunkIndex != index) {
+			t.Fatalf("stream-a replay payload %d = %#v", index, payload)
+		}
+		if index == 2 && (payload.StreamID != "stream-b" || payload.ChunkIndex != 0 || payload.Delta != "corrected") {
+			t.Fatalf("corrected replay payload = %#v", payload)
+		}
+		if payload.MessageID != "message-a" || event.Visibility != "user" {
+			t.Fatalf("invalid durable delta identity or visibility: event=%#v payload=%#v", event, payload)
+		}
+	}
+	if _, err := store.TransitionTask(ctx, task.ID, domain.StatusCancelled, nil, "task.cancelled", "user", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordMessageDelta(ctx, task.ID, "stream-b", "message-a", 1, "after cancel"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("post-cancellation delta error = %v, want conflict", err)
 	}
 }
 

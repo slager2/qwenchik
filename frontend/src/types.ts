@@ -76,6 +76,18 @@ export interface Message {
   created_at: string
 }
 
+export interface MessageDeltaPayload {
+  stream_id: string
+  message_id: string
+  chunk_index: number
+  delta: string
+}
+
+export interface DraftMessage extends MessageDeltaPayload {
+  content: string
+  seq: number
+}
+
 export interface AgentEvent {
   id: string
   task_id: string

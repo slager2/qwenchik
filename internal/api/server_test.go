@@ -137,6 +137,14 @@ func TestSSEReplaysOnlyUserVisibleEvents(t *testing.T) {
 	if _, err := store.RecordEvent(context.Background(), task.ID, "step.started", nil, "user", map[string]any{"step_id": "step_1"}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.RecordEvent(context.Background(), task.ID, "message.delta", nil, "user", map[string]any{
+		"stream_id": "stream-public", "message_id": "message-public", "chunk_index": 0, "delta": "draft text",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordEvent(context.Background(), task.ID, "message.delta", nil, "audit", map[string]any{"delta": "not-for-ui"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := store.RecordEvent(context.Background(), task.ID, "step.skipped", nil, "user", map[string]any{"step_id": "search_retry_1", "reason": "initial search returned results"}); err != nil {
 		t.Fatal(err)
 	}
@@ -149,10 +157,10 @@ func TestSSEReplaysOnlyUserVisibleEvents(t *testing.T) {
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, request)
 	body := response.Body.String()
-	if response.Code != http.StatusOK || !strings.Contains(body, "id: 3\nevent: step.started") || !strings.Contains(body, "id: 4\nevent: step.skipped") || !strings.Contains(body, "id: 5\nevent: task.cancelled") {
+	if response.Code != http.StatusOK || !strings.Contains(body, "id: 3\nevent: step.started") || !strings.Contains(body, "id: 4\nevent: message.delta") || !strings.Contains(body, `"stream_id":"stream-public"`) || !strings.Contains(body, "id: 6\nevent: step.skipped") || !strings.Contains(body, "id: 7\nevent: task.cancelled") {
 		t.Fatalf("missing replayed public events, status %d: %s", response.Code, body)
 	}
-	if strings.Contains(body, "secret") || strings.Contains(body, "checkpoint.saved") {
+	if strings.Contains(body, "secret") || strings.Contains(body, "checkpoint.saved") || strings.Contains(body, "not-for-ui") {
 		t.Fatalf("internal event leaked to SSE: %s", body)
 	}
 }

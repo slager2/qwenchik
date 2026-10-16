@@ -22,6 +22,7 @@ import (
 	"github.com/slager2/qwenchik/internal/llm/openai"
 	"github.com/slager2/qwenchik/internal/orchestrator"
 	"github.com/slager2/qwenchik/internal/providers/research"
+	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
 	"github.com/slager2/qwenchik/internal/runtime/sandbox"
 	"github.com/slager2/qwenchik/internal/storage/artifacts"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
@@ -551,7 +552,8 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 							"tavily":  map[string]string{"status": providerStatusFromBool(cfg.TavilyAPIKey != "")},
 						},
 					},
-					"sandbox": map[string]any{"runtime": cfg.SandboxRuntime, "image": cfg.SandboxImage},
+					"sandbox":       map[string]any{"runtime": cfg.SandboxRuntime, "image": cfg.SandboxImage},
+					"pdf_extractor": map[string]any{"status": providerStatusFromBool(cfg.PDFExtractorImage != ""), "image": cfg.PDFExtractorImage},
 				})
 			case "config":
 				printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{
@@ -560,7 +562,8 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 					"tavily_configured": cfg.TavilyAPIKey != "",
 					"workspace_root":    cfg.WorkspaceRoot, "sandbox_runtime": cfg.SandboxRuntime,
 					"sandbox_image": cfg.SandboxImage, "sandbox_network": cfg.SandboxNetwork,
-					"llm_context_length": cfg.LLMContextLength, "llm_max_output_tokens": cfg.LLMMaxOutputTokens,
+					"pdf_extractor_image": cfg.PDFExtractorImage,
+					"llm_context_length":  cfg.LLMContextLength, "llm_max_output_tokens": cfg.LLMMaxOutputTokens,
 					"llm_max_concurrency": cfg.LLMMaxConcurrency, "allowed_domains": cfg.AllowedDomains,
 				})
 			}
@@ -599,10 +602,14 @@ func serve(parent context.Context) error {
 	if err != nil {
 		return err
 	}
+	pdfExtractor, err := pdfextract.New(cfg.PDFExtractorImage, nil)
+	if err != nil {
+		return err
+	}
 	if err := tools.RegisterResearchTools(registry, tools.ResearchTools{
 		SearchProvider: searchProvider,
 		Fetcher:        research.NewSafeFetcherWithPolicy(cfg.MaxFetchBytes, 20*time.Second, nil, cfg.AllowedDomains),
-		Extractor:      research.NewHTMLExtractor(100_000), Artifacts: artifactStore,
+		Extractor:      research.NewHTMLExtractorWithPDF(100_000, pdfExtractor), Artifacts: artifactStore,
 		Repository: deps.store, MaxFetchBytes: cfg.MaxFetchBytes, AllowedDomains: cfg.AllowedDomains,
 	}); err != nil {
 		return err
@@ -758,6 +765,14 @@ func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 		checks["sandbox"] = doctorCheck{Status: "ok", Message: status.Message}
 	} else {
 		checks["sandbox"] = doctorCheck{Status: "warning", Message: status.Message}
+	}
+	pdfExtractor, pdfErr := pdfextract.New(cfg.PDFExtractorImage, nil)
+	if pdfErr != nil {
+		checks["pdf_extractor"] = doctorCheck{Status: "error", Message: "PDF extractor image reference is invalid"}
+	} else if err := pdfExtractor.Check(ctx); err != nil {
+		checks["pdf_extractor"] = doctorCheck{Status: "warning", Message: "isolated PDF extraction is unavailable; configure a local image and rootless Docker"}
+	} else {
+		checks["pdf_extractor"] = doctorCheck{Status: "ok", Message: "rootless Docker and local PDF extractor image are available"}
 	}
 	store, err := sqlite.Open(ctx, cfg.DatabasePath)
 	if err != nil {

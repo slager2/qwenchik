@@ -25,6 +25,23 @@ func TestLoadTrimsOptionalTavilyAPIKey(t *testing.T) {
 	}
 }
 
+func TestLoadAcceptsOnlyImmutablePDFExtractorImageReferences(t *testing.T) {
+	const imageID = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	t.Setenv("PDF_EXTRACTOR_IMAGE", imageID)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PDFExtractorImage != imageID {
+		t.Fatalf("PDF extractor image = %q, want configured local image ID", cfg.PDFExtractorImage)
+	}
+
+	t.Setenv("PDF_EXTRACTOR_IMAGE", "poppler:latest")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "immutable") {
+		t.Fatalf("mutable PDF extractor image validation error = %v", err)
+	}
+}
+
 func TestValidateRejectsNonLoopbackBindAndLLM(t *testing.T) {
 	cfg := Config{
 		BindAddr: "0.0.0.0:8080", DatabasePath: "./data/test.db", ArtifactsPath: "./data/artifacts", WorkspaceRoot: "./data/workspaces", SandboxRuntime: "auto", SandboxImage: "golang:1.23-alpine", SandboxNetwork: "disabled",

@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/slager2/qwenchik/internal/domain"
@@ -415,6 +416,66 @@ func (s *Store) RecordEvent(ctx context.Context, taskID, eventType string, stage
 	}
 	if len(events) != 1 {
 		return domain.Event{}, errors.New("committed event could not be read back")
+	}
+	return events[0], nil
+}
+
+func (s *Store) RecordMessageDelta(ctx context.Context, taskID, streamID, messageID string, chunkIndex int, delta string) (domain.Event, error) {
+	if strings.TrimSpace(streamID) != streamID || streamID == "" || len(streamID) > 128 ||
+		strings.TrimSpace(messageID) != messageID || messageID == "" || len(messageID) > 128 ||
+		chunkIndex < 0 || delta == "" || len(delta) > 4<<10 || !utf8.ValidString(delta) {
+		return domain.Event{}, errors.New("message delta fields are invalid or exceed their bounds")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Event{}, err
+	}
+	defer tx.Rollback()
+	task, err := getTask(ctx, tx, taskID)
+	if err != nil {
+		return domain.Event{}, err
+	}
+	if task.Status != domain.StatusVerifying {
+		return domain.Event{}, fmt.Errorf("%w: message deltas are only accepted during final synthesis", ErrConflict)
+	}
+	var previousPayload string
+	err = tx.QueryRowContext(ctx, `SELECT payload_json FROM events WHERE task_id=? AND type='message.delta' ORDER BY seq DESC LIMIT 1`, taskID).Scan(&previousPayload)
+	if err == nil {
+		var previous struct {
+			StreamID   string `json:"stream_id"`
+			MessageID  string `json:"message_id"`
+			ChunkIndex int    `json:"chunk_index"`
+		}
+		if err := json.Unmarshal([]byte(previousPayload), &previous); err != nil {
+			return domain.Event{}, fmt.Errorf("decode previous message delta: %w", err)
+		}
+		if streamID == previous.StreamID {
+			if messageID != previous.MessageID || chunkIndex != previous.ChunkIndex+1 {
+				return domain.Event{}, fmt.Errorf("%w: message delta index or message ID is not consecutive", ErrConflict)
+			}
+		} else if chunkIndex != 0 {
+			return domain.Event{}, fmt.Errorf("%w: a new message stream must start at chunk index zero", ErrConflict)
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return domain.Event{}, err
+	} else if chunkIndex != 0 {
+		return domain.Event{}, fmt.Errorf("%w: a message stream must start at chunk index zero", ErrConflict)
+	}
+	seq, err := appendEvent(ctx, tx, taskID, "message.delta", task.Stage, "user", map[string]any{
+		"stream_id": streamID, "message_id": messageID, "chunk_index": chunkIndex, "delta": delta,
+	})
+	if err != nil {
+		return domain.Event{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Event{}, err
+	}
+	events, err := s.EventsAfter(ctx, taskID, seq-1, 1)
+	if err != nil {
+		return domain.Event{}, err
+	}
+	if len(events) != 1 {
+		return domain.Event{}, errors.New("committed message delta could not be read back")
 	}
 	return events[0], nil
 }
@@ -1253,15 +1314,29 @@ func (s *Store) CompleteTask(ctx context.Context, taskID, answer string, checkpo
 	if task.Status != domain.StatusVerifying {
 		return domain.Task{}, fmt.Errorf("%w: task must be verifying before finalization", ErrConflict)
 	}
+	messageID := newID()
+	var latestDeltaPayload string
+	err = tx.QueryRowContext(ctx, `SELECT payload_json FROM events WHERE task_id=? AND type='message.delta' ORDER BY seq DESC LIMIT 1`, taskID).Scan(&latestDeltaPayload)
+	if err == nil {
+		var latestDelta struct {
+			MessageID string `json:"message_id"`
+		}
+		if err := json.Unmarshal([]byte(latestDeltaPayload), &latestDelta); err != nil || latestDelta.MessageID == "" {
+			return domain.Task{}, errors.New("latest message delta has no valid message ID")
+		}
+		messageID = latestDelta.MessageID
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return domain.Task{}, err
+	}
 	now := time.Now().UTC()
 	stage := domain.StageFinalization
 	if err := transitionStageTx(ctx, tx, taskID, task.Stage, &stage, "completed", now); err != nil {
 		return domain.Task{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO messages(id,task_id,role,content,created_at) VALUES(?,?,?,?,?)`, newID(), taskID, "assistant", answer, stamp(now)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO messages(id,task_id,role,content,created_at) VALUES(?,?,?,?,?)`, messageID, taskID, "assistant", answer, stamp(now)); err != nil {
 		return domain.Task{}, err
 	}
-	if _, err := appendEvent(ctx, tx, taskID, "message.created", &stage, "user", map[string]any{"role": "assistant"}); err != nil {
+	if _, err := appendEvent(ctx, tx, taskID, "message.created", &stage, "user", map[string]any{"message_id": messageID, "role": "assistant"}); err != nil {
 		return domain.Task{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status=?,stage=?,version=version+1,updated_at=? WHERE id=?`, domain.StatusCompleted, stage, stamp(now), taskID); err != nil {

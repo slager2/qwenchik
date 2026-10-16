@@ -66,3 +66,21 @@ func TestSearchProviderCommandsNeverExposeTavilyKey(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigCommandShowsPDFExtractorImageReference(t *testing.T) {
+	const imageID = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	t.Setenv("PDF_EXTRACTOR_IMAGE", imageID)
+	t.Setenv("APP_BIND_ADDR", "127.0.0.1:8080")
+	t.Setenv("LLM_BASE_URL", "http://127.0.0.1:8000/v1")
+	root := NewRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(&output)
+	root.SetArgs([]string{"--json", "config"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), `"pdf_extractor_image":"`+imageID+`"`) {
+		t.Fatalf("config output omitted the configured PDF image: %s", output.String())
+	}
+}

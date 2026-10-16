@@ -1,4 +1,4 @@
-.PHONY: test build run vet frontend frontend-dev
+.PHONY: test build run vet frontend frontend-dev pdf-extractor-image
 
 test:
 	go test -tags sqlite_fts5 ./...
@@ -11,6 +11,9 @@ frontend:
 
 frontend-dev:
 	npm --prefix frontend run dev
+
+pdf-extractor-image:
+	docker build --pull=false -t qagent-pdf-extractor:local -f internal/runtime/pdfextract/Dockerfile internal/runtime/pdfextract
 
 build: frontend
 	go build -tags sqlite_fts5 -o ./qagent ./cmd/qagent

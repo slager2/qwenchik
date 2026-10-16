@@ -26,6 +26,8 @@ var (
 	ErrFetchRequestFailed     = errors.New("fetch request failed")
 )
 
+const maxPDFFetchBytes int64 = 5_000_000
+
 type opaqueNetworkError struct {
 	operation string
 	cause     error
@@ -188,6 +190,12 @@ func (f *SafeFetcher) Fetch(ctx context.Context, rawURL string, options FetchOpt
 	}
 	if !allowedMIME(mediaType) {
 		return FetchedDocument{}, fmt.Errorf("%w: %s", ErrUnsupportedMIME, mediaType)
+	}
+	if mediaType == "application/pdf" && limit > maxPDFFetchBytes {
+		limit = maxPDFFetchBytes
+	}
+	if response.ContentLength > limit {
+		return FetchedDocument{}, ErrResponseTooBig
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {

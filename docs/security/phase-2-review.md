@@ -18,6 +18,7 @@
 - HTML extraction drops executable and navigation content. External results remain tainted and cannot select tools; evidence IDs are backend-generated and citation IDs are validated.
 - Memory search reads only explicitly accepted local records, filters task scope by source task, and records retrieved IDs in an internal audit event. Prompt roles treat memory text as untrusted reference data; memory content cannot grant tools or seed allowed fetch URLs.
 - Code execution calls only the Docker client with an argv array after verifying a local Unix socket, rootless mode, and a local image. `doctor` also runs a fixed isolated `true` smoke container. The task container has no network, a read-only root, one task-workspace mount, dropped capabilities, no-new-privileges, PID/CPU/memory limits, bounded output, and cleanup on client failure. No host shell fallback exists.
+- PDF extraction sends bytes only to a fixed Poppler wrapper in a digest-pinned Alpine-based image. It requires a verified local Unix Docker endpoint, rootless mode, and an already-present immutable image ID/digest; it uses `--pull=never`, no network, read-only root, dropped capabilities, no-new-privileges, UID 10001, CPU/memory/PID limits, a read-only single-file input mount, bounded stdout/stderr, and forced container cleanup on timeout/output failure. One five-second context covers the combined `pdfinfo`/`pdftotext` run. Input is limited to 5 MB, page count to 20, and text to 50,000 Unicode characters; encrypted, malformed, timed-out, or oversized documents fail before artifacts/evidence are persisted. No in-process parser or host fallback exists.
 - Tool results cannot trigger nested tools. The worker performs a fresh model call before another tool decision.
 - Host shell, browser, and direct workspace-write tools are absent. Sandbox command tools fail with `sandbox_unavailable` when rootless Docker or the image is unavailable. Search is registered only when SearXNG or Tavily is configured.
 - SQLite state transitions and public events are transactionally persisted. SSE replays by monotonic task sequence and emits only allowlisted user-visible events.
@@ -34,13 +35,14 @@
 - `internal/orchestrator`: completes mocked analysis and research tasks with citations; pauses for approval and executes a test side-effect exactly once after approval; rejects `run_command_sandbox` recovery replay without starting a host process.
 - `internal/orchestrator`: validates strict role schemas, repairs malformed action/plan output once, rejects research-only plans without search/fetch, and safely replaces incomplete persisted plans only before any tool starts.
 - `internal/orchestrator`: checks generated role schemas, one bounded JSON-schema repair, search-unavailable preflight, and repair of a persisted research plan before any tool action.
-- `internal/providers/research`: tests private IPv4/IPv6, metadata IP, restricted ports, sensitive query parameters, redirect-to-private, DNS rebinding, MIME and byte limits, SearXNG response filtering, and HTML script/nav removal.
+- `internal/providers/research`: tests private IPv4/IPv6, metadata IP, restricted ports, sensitive query parameters, redirect-to-private, DNS rebinding, MIME and byte limits, SearXNG response filtering, HTML script/nav removal, and PDF delegation/fail-closed behavior.
+- `internal/runtime/pdfextract`: fake-runner tests local/rootless Docker and immutable image requirements, fixed isolation flags, the shared deadline, byte/page/Unicode/output limits, output non-disclosure, and cleanup.
 - `internal/api`: verifies strict request decoding, SSE replay with internal event redaction, evidence/artifact metadata, task-scoped artifact download, and approval decisions.
 - `internal/api`: verifies memory creation always starts as candidate and only explicit acceptance makes it retrievable.
 
 ## Deferred gates
 
-At the time of the original review, browser isolation, real-daemon sandbox smoke/escape review, Tavily/Brave adapters, PDF parsing, and JS-only extraction remained gated on later phases. Memory retrieval currently uses bounded lexical matching; embedding-based semantic search and automatic candidate extraction remain deferred. The current sandbox tests inspect the exact Docker arguments with a fake runner; no live rootless Docker daemon was available during implementation.
+At the time of the original review, browser isolation, real-daemon sandbox smoke/escape review, Tavily/Brave adapters, and JS-only extraction remained gated on later phases. PDF parsing now has fake-runner coverage; live rootless-container behavior remains unverified in this environment. Memory retrieval currently uses bounded lexical matching; embedding-based semantic search and automatic candidate extraction remain deferred. The sandbox tests inspect exact Docker arguments with fake runners.
 
 ## Follow-up (2026-10-16)
 

@@ -18,7 +18,9 @@
 
 `seq` is monotonically increasing within a task. Events are append-only. A task state mutation and its event are committed in the same transaction. Internal/audit events are not sent to user-facing SSE without explicit redaction.
 
-Initial public event types: `task.created`, `task.status_changed`, `task.recovered`, `message.created`, `plan.created`, `step.started`, `step.completed`, `step.skipped`, `tool.started`, `tool.completed`, `evidence.created`, `artifact.created`, `approval.requested`, `approval.approved`, `approval.rejected`, `approval.expired`, `task.completed`, `task.failed`, `task.cancelled`. `step.skipped` records a conditional plan step that was intentionally not executed. `checkpoint.saved`, `policy.decision`, `approval.consumed`, and `memory.retrieved` remain internal/audit.
+Public event types include `task.created`, `task.status_changed`, `task.recovered`, `message.created`, `message.delta`, `plan.created`, `step.started`, `step.completed`, `step.skipped`, `tool.started`, `tool.completed`, `evidence.created`, `artifact.created`, `approval.requested`, `approval.approved`, `approval.rejected`, `approval.expired`, `task.completed`, `task.failed`, and `task.cancelled`. `step.skipped` records a conditional plan step that was intentionally not executed. `checkpoint.saved`, `policy.decision`, `approval.consumed`, and `memory.retrieved` remain internal/audit. This list is additive; existing event types and payloads retain their meanings.
+
+`message.delta` is emitted only for the final user-facing synthesis and only with `visibility: "user"`. Its payload is `{ "stream_id": string, "message_id": string, "chunk_index": number, "delta": string }`. Chunk indexes start at zero and increase consecutively for a stream. Each persisted delta is bounded; stream IDs are fresh for each synthesis attempt, including citation corrections. Deltas are provisional text, not a finalized assistant message or lifecycle authority. Only after citation validation succeeds does `CompleteTask` persist the canonical assistant message and its `message.created` event, using the final stream's `message_id`.
 
 ## SSE
 
@@ -29,4 +31,4 @@ Initial public event types: `task.created`, `task.status_changed`, `task.recover
 - A newly connected client can fetch events with `GET /api/tasks/{task_id}/events?after=N` before subscribing.
 - Terminal task events are persisted and delivered like all other events.
 
-No model-generated token or progress event is trusted as lifecycle state. Streamed model text, when enabled, is a message delta only and is not an event authority.
+No model-generated token or progress event is trusted as lifecycle state. Streamed model text is exposed only as provisional `message.delta` events and is not an event authority.

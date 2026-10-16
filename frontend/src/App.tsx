@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { api } from './api'
-import type { AgentEvent, Approval, Artifact, Checkpoint, Evidence, Memory, MemoryMatch, MemoryStatus, Message, Task, TaskStatus, TaskStep } from './types'
+import type { AgentEvent, Approval, Artifact, Checkpoint, DraftMessage, Evidence, Memory, MemoryMatch, MemoryStatus, Message, MessageDeltaPayload, Task, TaskStatus, TaskStep } from './types'
 
 const columns: { id: string; title: string; statuses: TaskStatus[] }[] = [
   { id: 'inbox', title: 'Входящие', statuses: ['inbox'] },
@@ -96,6 +96,7 @@ function App() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [selectedID, setSelectedID] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
+  const [draft, setDraft] = useState<DraftMessage | null>(null)
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([])
   const [steps, setSteps] = useState<TaskStep[]>([])
@@ -136,7 +137,8 @@ function App() {
       ])
       setTasks((current) => current.map((item) => item.id === task.id ? task : item))
       setMessages(nextMessages)
-      setEvents(nextEvents)
+      setDraft((current) => current && nextMessages.some((message) => message.id === current.message_id) ? null : current)
+      setEvents(nextEvents.filter((event) => event.type !== 'message.delta'))
       setCheckpoints(nextCheckpoints)
       setSteps(nextSteps)
       setArtifacts(nextArtifacts)
@@ -156,6 +158,7 @@ function App() {
   useEffect(() => {
     if (!selectedID) {
       setMessages([])
+      setDraft(null)
       setEvents([])
       setCheckpoints([])
       setSteps([])
@@ -168,18 +171,53 @@ function App() {
   }, [selectedID, refreshDetail])
 
   useEffect(() => {
+    setDraft(null)
+  }, [selectedID])
+
+  useEffect(() => {
     if (!selectedID) return
     const source = new EventSource(`/api/tasks/${encodeURIComponent(selectedID)}/events/stream`)
-    const eventTypes = Object.keys(eventLabels)
+    const eventTypes = [...Object.keys(eventLabels), 'message.delta']
     const listeners: [string, EventListener][] = eventTypes.map((type) => {
       const listener: EventListener = (rawEvent) => {
         const event = rawEvent as MessageEvent<string>
+        let parsed: AgentEvent
         try {
-          const parsed = JSON.parse(event.data) as AgentEvent
-          setEvents((current) => current.some((item) => item.seq === parsed.seq) ? current : [...current, parsed].slice(-200))
+          parsed = JSON.parse(event.data) as AgentEvent
         } catch {
           setError('Получено событие в неизвестном формате')
+          return
         }
+        if (parsed.type === 'message.delta') {
+          const payload = parsed.payload as Partial<MessageDeltaPayload>
+          if (typeof payload.stream_id !== 'string' || typeof payload.message_id !== 'string' || typeof payload.delta !== 'string' || !Number.isInteger(payload.chunk_index)) {
+            setError('Получен некорректный фрагмент ответа')
+            return
+          }
+          setDraft((current) => {
+            if (current && parsed.seq <= current.seq) return current
+            if (!current || current.stream_id !== payload.stream_id || current.message_id !== payload.message_id) {
+              return { ...payload, content: payload.delta!, seq: parsed.seq } as DraftMessage
+            }
+            if (payload.chunk_index! <= current.chunk_index) return { ...current, seq: parsed.seq }
+            return {
+              ...current,
+              delta: payload.delta!,
+              content: current.content + payload.delta!,
+              chunk_index: payload.chunk_index!,
+              seq: parsed.seq,
+            }
+          })
+          return
+        }
+        if (parsed.type === 'message.created' && typeof parsed.payload.message_id === 'string') {
+          const messageID = parsed.payload.message_id
+          setDraft((current) => current?.message_id === messageID ? null : current)
+        }
+        if (parsed.type === 'task.failed' || parsed.type === 'task.cancelled' || (parsed.type === 'task.status_changed' && ['failed', 'cancelled', 'paused'].includes(String(parsed.payload.to)))) {
+          setDraft(null)
+        }
+        setEvents((current) => current.some((item) => item.seq === parsed.seq) ? current : [...current, parsed].slice(-200))
         void refreshTasks(true)
         void refreshDetail(selectedID)
       }
@@ -434,6 +472,7 @@ function App() {
             <TaskInspector
               task={selectedTask}
               messages={messages}
+              draft={draft}
               events={events}
               checkpoints={checkpoints}
               steps={steps}
@@ -469,6 +508,7 @@ function App() {
 interface InspectorProps {
   task: Task
   messages: Message[]
+  draft: DraftMessage | null
   events: AgentEvent[]
   checkpoints: Checkpoint[]
   steps: TaskStep[]
@@ -489,7 +529,7 @@ interface InspectorProps {
 }
 
 function TaskInspector(props: InspectorProps) {
-  const { task, messages, events, checkpoints, steps, artifacts, evidence, approvals, reconnecting, busy } = props
+  const { task, messages, draft, events, checkpoints, steps, artifacts, evidence, approvals, reconnecting, busy } = props
   const canSend = ['inbox', 'queued', 'paused', 'failed'].includes(task.status)
   const canPause = ['queued', 'planning', 'running', 'verifying'].includes(task.status)
   const canCancel = !['completed', 'failed', 'cancelled'].includes(task.status)
@@ -526,10 +566,11 @@ function TaskInspector(props: InspectorProps) {
       </div>
 
       <div className="inspector-section chat-section">
-        <div className="section-title"><div><span className="section-kicker">РАЗГОВОР</span><h3>Контекст задачи</h3></div><span className="section-count">{messages.length + 1}</span></div>
+        <div className="section-title"><div><span className="section-kicker">РАЗГОВОР</span><h3>Контекст задачи</h3></div><span className="section-count">{messages.length + 1 + (draft ? 1 : 0)}</span></div>
         <div className="message-list" aria-live="polite">
           <article className="message message-user"><span className="message-role">ЗАПРОС</span><p>{task.description}</p><time>{timeLabel(task.created_at)}</time></article>
           {sortedMessages.map((message) => <article className={`message message-${message.role}`} key={message.id}><span className="message-role">{message.role === 'assistant' ? 'QWEN' : message.role === 'user' ? 'ВЫ' : 'СИСТЕМА'}</span><p>{message.content}</p><time>{timeLabel(message.created_at)}</time></article>)}
+          {draft && !sortedMessages.some((message) => message.id === draft.message_id) && <article className="message message-draft" key={`draft-${draft.message_id}`}><span className="message-role">QWEN · ЧЕРНОВИК</span><p>{draft.content}</p><time>Ответ проверяется</time></article>}
         </div>
         <form className="chat-form" onSubmit={props.onSend}>
           <label className="sr-only" htmlFor="chat-message">Добавить сообщение к задаче</label>

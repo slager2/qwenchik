@@ -11,21 +11,21 @@ The current implementation includes:
 - one local OpenAI-compatible LLM adapter with strict JSON Schema generation for planner/action/verifier, JSON mode, and SSE streaming support;
 - deterministic capability/risk evaluation, per-tool role gates, and internal policy audit events;
 - strict planner validation and typed tools; unknown tools are denied and external side effects fail closed;
-- optional SearXNG and Tavily search, DNS-rebinding/SSRF-safe public HTTP fetch, and local HTML extraction;
+- optional SearXNG and Tavily search, DNS-rebinding/SSRF-safe public HTTP fetch, local HTML extraction, and bounded isolated PDF text extraction;
 - fetched content stored as local artifacts with content hashes, provenance, excerpts, quote spans, and citation-ID validation;
 - local durable memories with candidate review, explicit acceptance, task/global scopes, and bounded FTS5 retrieval;
 - code commands are exposed only through verified rootless Docker, with a read-only container root, task-only workspace mount, disabled network, and resource/output limits;
 - SSE event replay using `Last-Event-ID`;
 - responsive Kanban, task inspector, chat, live event timeline, sources/artifacts panels, and keyboard command palette.
 
-Search is optional and disabled by default. A request that clearly requires web research fails with `search_unavailable` instead of being silently answered from model knowledge if neither SearXNG nor Tavily is configured. When both providers are configured, searches run concurrently and merge bounded, deduplicated results; one provider can still supply results if the other is unavailable. Without a search provider, the worker can still fetch a public URL included in the task; an arbitrary model-invented URL is rejected. The sandbox tool fails with `sandbox_unavailable` unless rootless Docker and the configured local image are available; it never falls back to host execution. Approval records, one-time decisions, API/CLI actions, and UI cards are implemented, but no external side-effect executor is registered by default. Memory entries are user-created candidates and are retrieved only after explicit acceptance; retrieval is local lexical matching, not semantic/embedding search. PDF extraction and JS/browser automation remain later phases. PDF input fails with `pdf_extractor_unavailable`. Host shell and cloud LLM fallback are not registered.
+Search is optional and disabled by default. A request that clearly requires web research fails with `search_unavailable` instead of being silently answered from model knowledge if neither SearXNG nor Tavily is configured. When both providers are configured, searches run concurrently and merge bounded, deduplicated results; one provider can still supply results if the other is unavailable. Without a search provider, the worker can still fetch a public URL included in the task; an arbitrary model-invented URL is rejected. The sandbox tool fails with `sandbox_unavailable` unless rootless Docker and the configured local image are available; it never falls back to host execution. PDF extraction uses the same local rootless Docker requirement and fails with `pdf_extractor_unavailable` if its immutable image is absent or Docker is not rootless/local. PDF bytes are never parsed in the Go process. Approval records, one-time decisions, API/CLI actions, and UI cards are implemented, but no external side-effect executor is registered by default. Memory entries are user-created candidates and are retrieved only after explicit acceptance; retrieval is local lexical matching, not semantic/embedding search. JS/browser automation remains deferred. Host shell and cloud LLM fallback are not registered.
 
 ## Requirements
 
 - Go 1.23+ with CGO compiler support (the SQLite driver uses CGO);
 - Node.js 20+ and npm, needed when rebuilding the embedded frontend;
 - local `llama-server` exposing the OpenAI-compatible API. The app uses `http://127.0.0.1:8000/v1` by default.
-- rootless Docker with the configured image available locally, needed for code execution. No daemon/image is assumed or pulled automatically.
+- rootless local Docker with configured images available locally, needed for code execution and optional PDF extraction. No image is pulled automatically at runtime.
 - Docker Compose is optional and used only for the bundled local SearXNG search service.
 
 SQLite memory retrieval uses the driver's bundled FTS5 module. `make test`, `make build`, `make run`, and `make vet` enable it with the `sqlite_fts5` Go build tag. Direct Go commands must include `-tags sqlite_fts5` as well (for example, `CGO_ENABLED=1 go test -tags sqlite_fts5 ./...`).
@@ -89,6 +89,16 @@ Web-research tasks without a user-provided URL require an enabled search tool, o
 
 For sandbox execution, start a rootless Docker daemon and make the configured image available locally (for example, `docker pull golang:1.23-alpine` in that rootless context). Qwenchik uses `--pull=never`, `--network=none`, a read-only container root, and only the per-task workspace mount.
 
+To enable PDF extraction, build the dedicated Alpine/Poppler image in the local Docker context and configure its immutable local image ID:
+
+```sh
+docker pull alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
+make pdf-extractor-image
+export PDF_EXTRACTOR_IMAGE="$(docker image inspect --format '{{.Id}}' qagent-pdf-extractor:local)"
+```
+
+`PDF_EXTRACTOR_IMAGE` also accepts a local digest reference (`name@sha256:...`), but rejects mutable tags. The base Alpine image is digest-pinned. Each PDF runs in a rootless-only container with no network, read-only root, no capabilities, non-root UID, and CPU/memory/PID limits. A single five-second deadline covers `pdfinfo` and `pdftotext`; PDFs over 5 MB, encrypted or malformed files, documents over 20 pages, and extracted text over 50,000 Unicode characters fail without producing evidence. Missing rootless Docker or a missing local image returns `pdf_extractor_unavailable`; there is no host parser or pull fallback. `qagent doctor` reports PDF extractor availability as an optional check.
+
 Set `LLM_CONTEXT_LENGTH` to the context configured on the model server. The example file follows the API contract default of `131072`; for the conservative `-c 8192` llama.cpp command above, export `LLM_CONTEXT_LENGTH=8192`. The worker estimates an input byte budget from the available input tokens (4 bytes per token, reserving 2,048 prompt tokens), then checks the serialized system prompt, user data, and schema against that budget. This estimate scales with the configured context rather than using a fixed 20 KB ceiling.
 
 ## CLI
@@ -132,6 +142,6 @@ npm --prefix frontend run build
 
 ## Configuration and security
 
-Copy `.env.example` as a starting point and export the values in your shell; the binary does not parse dotenv files. The defaults are local-only: SQLite under `./data`, artifacts under `./data/artifacts`, one LLM slot, and a loopback model URL. API keys are never printed by `qagent config` or `doctor`.
+Copy `.env.example` as a starting point and export the values in your shell; the binary does not parse dotenv files. The defaults are local-only: SQLite under `./data`, artifacts under `./data/artifacts`, one LLM slot, and a loopback model URL. PDF extraction is disabled until `PDF_EXTRACTOR_IMAGE` is set to a local immutable image ID or digest reference. API keys are never printed by `qagent config` or `doctor`.
 
 See `docs/architecture/adr-001-system.md`, `docs/contracts/`, and `docs/architecture/repository-audit.md` for decisions and contracts. The default UI and API are unauthenticated and therefore must remain bound to loopback.

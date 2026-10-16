@@ -46,8 +46,17 @@ func (s *scriptedLLM) Complete(_ context.Context, request llm.ChatRequest) (llm.
 	return llm.ChatResponse{Content: response}, nil
 }
 
-func (s *scriptedLLM) Stream(context.Context, llm.ChatRequest) (<-chan llm.ChatEvent, error) {
-	return nil, errors.New("stream is not used in worker test")
+func (s *scriptedLLM) Stream(ctx context.Context, request llm.ChatRequest) (<-chan llm.ChatEvent, error) {
+	response, err := s.Complete(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	events := make(chan llm.ChatEvent, 1)
+	if response.Content != "" {
+		events <- llm.ChatEvent{Text: response.Content}
+	}
+	close(events)
+	return events, nil
 }
 
 type researchSearchStub struct{}
@@ -550,6 +559,281 @@ func TestCitationValidationRejectsMissingAndInventedEvidence(t *testing.T) {
 	}
 	if err := validateCitations("Claim [ev_hallucinated]", ids); err == nil {
 		t.Fatal("invented evidence ID should be rejected")
+	}
+}
+
+type streamOnlyClient struct {
+	stream func(context.Context, llm.ChatRequest) (<-chan llm.ChatEvent, error)
+}
+
+func (c streamOnlyClient) Complete(context.Context, llm.ChatRequest) (llm.ChatResponse, error) {
+	return llm.ChatResponse{}, errors.New("unexpected non-streaming synthesis call")
+}
+
+func (c streamOnlyClient) Stream(ctx context.Context, request llm.ChatRequest) (<-chan llm.ChatEvent, error) {
+	return c.stream(ctx, request)
+}
+
+type failedDeltaRepository struct {
+	Repository
+	called chan struct{}
+}
+
+func (r failedDeltaRepository) RecordMessageDelta(context.Context, string, string, string, int, string) (domain.Event, error) {
+	close(r.called)
+	return domain.Event{}, errors.New("simulated durable event write failure")
+}
+
+func createVerifyingTask(t *testing.T, store *sqlite.Store, id string) domain.Task {
+	t.Helper()
+	ctx := context.Background()
+	task, err := store.CreateTask(ctx, domain.Task{ID: id, Title: "Synthesis", Description: "Synthesize the collected result."}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.QueueTask(ctx, task.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.ClaimNext(ctx); err != nil || !ok {
+		t.Fatalf("claim task: ok=%t err=%v", ok, err)
+	}
+	running := domain.StageSynthesis
+	if _, err := store.TransitionTask(ctx, task.ID, domain.StatusRunning, &running, "", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	verifying := domain.StageVerification
+	if _, err := store.TransitionTask(ctx, task.ID, domain.StatusVerifying, &verifying, "", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	return task
+}
+
+func TestWorkerStreamsBoundedOrderedDeltasAndCorrectsCitationsInFreshStream(t *testing.T) {
+	ctx := context.Background()
+	store, err := sqlite.Open(ctx, t.TempDir()+"/synthesis-stream.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	task := createVerifyingTask(t, store, "synthesis-stream")
+	messageID := "canonical-assistant-message"
+	firstAttempt := strings.Repeat("x", maxSynthesisDeltaBytes) + " no citation"
+	secondAttempt := "Supported by the collected source [evidence-123]."
+	var requests []llm.ChatRequest
+	call := 0
+	client := streamOnlyClient{stream: func(_ context.Context, request llm.ChatRequest) (<-chan llm.ChatEvent, error) {
+		requests = append(requests, request)
+		chunks := []string{firstAttempt}
+		if call == 1 {
+			chunks = []string{secondAttempt}
+		}
+		call++
+		events := make(chan llm.ChatEvent, len(chunks))
+		for _, chunk := range chunks {
+			events <- llm.ChatEvent{Text: chunk}
+		}
+		close(events)
+		return events, nil
+	}}
+	worker := New(store, client, tools.NewRegistry(), Options{})
+	state := checkpointState{Summary: "verified", ToolResults: map[string]any{"fetch_1": map[string]any{"evidence_id": "evidence-123"}}}
+	answer, err := worker.synthesizeValidated(ctx, task, task.Description, "[]", state, "The result was verified.", []string{"evidence-123"}, messageID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer != secondAttempt || len(requests) != 2 || !strings.Contains(requests[1].Messages[1].Content, "previous response failed citation validation") {
+		t.Fatalf("citation correction did not stream the validated answer: answer=%q requests=%d", answer, len(requests))
+	}
+	events, err := store.EventsAfter(ctx, task.ID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type deltaPayload struct {
+		StreamID   string `json:"stream_id"`
+		MessageID  string `json:"message_id"`
+		ChunkIndex int    `json:"chunk_index"`
+		Delta      string `json:"delta"`
+	}
+	var deltas []deltaPayload
+	for _, event := range events {
+		if event.Type != "message.delta" {
+			continue
+		}
+		var payload deltaPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if event.Visibility != "user" || len(payload.Delta) > maxSynthesisDeltaBytes || payload.MessageID != messageID {
+			t.Fatalf("invalid persisted synthesis delta: event=%#v payload=%#v", event, payload)
+		}
+		deltas = append(deltas, payload)
+	}
+	if len(deltas) != 3 || deltas[0].ChunkIndex != 0 || deltas[1].ChunkIndex != 1 || deltas[2].ChunkIndex != 0 {
+		t.Fatalf("unexpected ordered stream chunks: %#v", deltas)
+	}
+	if deltas[0].StreamID == "" || deltas[0].StreamID == deltas[2].StreamID || deltas[1].StreamID != deltas[0].StreamID {
+		t.Fatalf("citation correction did not use a fresh stream ID: %#v", deltas)
+	}
+	if deltas[0].Delta+deltas[1].Delta != firstAttempt || deltas[2].Delta != secondAttempt {
+		t.Fatalf("persisted deltas changed order or contents: %#v", deltas)
+	}
+	if task, err := store.GetTask(ctx, task.ID); err != nil || task.Status != domain.StatusVerifying {
+		t.Fatalf("provisional deltas finalized task before CompleteTask: task=%#v err=%v", task, err)
+	}
+	if messages, err := store.Messages(ctx, task.ID); err != nil || len(messages) != 0 {
+		t.Fatalf("provisional deltas created a canonical message: messages=%#v err=%v", messages, err)
+	}
+	if _, err := store.CompleteTask(ctx, task.ID, answer, state); err != nil {
+		t.Fatal(err)
+	}
+	messages, err := store.Messages(ctx, task.ID)
+	if err != nil || len(messages) != 1 || messages[0].ID != messageID || messages[0].Content != secondAttempt {
+		t.Fatalf("canonical message did not reconcile with the final stream: messages=%#v err=%v", messages, err)
+	}
+}
+
+func TestWorkerStopsSynthesisStreamAfterTaskCancellation(t *testing.T) {
+	store, err := sqlite.Open(context.Background(), t.TempDir()+"/synthesis-cancel.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	task := createVerifyingTask(t, store, "synthesis-cancel")
+	firstSent := make(chan struct{})
+	continueStream := make(chan struct{})
+	upstreamStopped := make(chan struct{})
+	client := streamOnlyClient{stream: func(ctx context.Context, _ llm.ChatRequest) (<-chan llm.ChatEvent, error) {
+		events := make(chan llm.ChatEvent)
+		go func() {
+			defer close(events)
+			select {
+			case events <- llm.ChatEvent{Text: strings.Repeat("a", maxSynthesisDeltaBytes)}:
+				close(firstSent)
+			case <-ctx.Done():
+				close(upstreamStopped)
+				return
+			}
+			<-continueStream
+			select {
+			case events <- llm.ChatEvent{Text: strings.Repeat("b", maxSynthesisDeltaBytes)}:
+			case <-ctx.Done():
+				close(upstreamStopped)
+				return
+			}
+			<-ctx.Done()
+			close(upstreamStopped)
+		}()
+		return events, nil
+	}}
+	worker := New(store, client, tools.NewRegistry(), Options{})
+	result := make(chan error, 1)
+	go func() {
+		_, err := worker.synthesize(context.Background(), task, task.Description, "[]", checkpointState{ToolResults: map[string]any{}}, "verified", nil, "", "cancelled-message")
+		result <- err
+	}()
+	select {
+	case <-firstSent:
+	case <-time.After(3 * time.Second):
+		t.Fatal("stream did not produce its first chunk")
+	}
+	deadline := time.After(3 * time.Second)
+	for {
+		events, err := store.EventsAfter(context.Background(), task.ID, 0, 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, event := range events {
+			found = found || event.Type == "message.delta"
+		}
+		if found {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("first synthesis delta was not persisted")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if _, err := store.TransitionTask(context.Background(), task.ID, domain.StatusCancelled, nil, "task.cancelled", "user", nil); err != nil {
+		t.Fatal(err)
+	}
+	close(continueStream)
+	select {
+	case err := <-result:
+		if !errors.Is(err, ErrInterrupted) {
+			t.Fatalf("synthesis after cancellation returned %v, want ErrInterrupted", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("synthesis did not stop after task cancellation")
+	}
+	select {
+	case <-upstreamStopped:
+	case <-time.After(3 * time.Second):
+		t.Fatal("upstream synthesis stream was not cancelled")
+	}
+	events, err := store.EventsAfter(context.Background(), task.ID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deltaCount := 0
+	for _, event := range events {
+		if event.Type == "message.delta" {
+			deltaCount++
+		}
+	}
+	if deltaCount != 1 {
+		t.Fatalf("published %d deltas after cancellation; want only the already committed chunk", deltaCount)
+	}
+}
+
+func TestWorkerCancelsUpstreamWhenDeltaPersistenceFails(t *testing.T) {
+	store, err := sqlite.Open(context.Background(), t.TempDir()+"/synthesis-persist-failure.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	task := createVerifyingTask(t, store, "synthesis-persist-failure")
+	upstreamStopped := make(chan struct{})
+	client := streamOnlyClient{stream: func(ctx context.Context, _ llm.ChatRequest) (<-chan llm.ChatEvent, error) {
+		events := make(chan llm.ChatEvent)
+		go func() {
+			defer close(events)
+			select {
+			case events <- llm.ChatEvent{Text: strings.Repeat("x", maxSynthesisDeltaBytes)}:
+			case <-ctx.Done():
+				close(upstreamStopped)
+				return
+			}
+			<-ctx.Done()
+			close(upstreamStopped)
+		}()
+		return events, nil
+	}}
+	failedRepo := failedDeltaRepository{Repository: store, called: make(chan struct{})}
+	worker := New(failedRepo, client, tools.NewRegistry(), Options{})
+	_, err = worker.synthesize(context.Background(), task, task.Description, "[]", checkpointState{ToolResults: map[string]any{}}, "verified", nil, "", "failed-message")
+	if err == nil || !strings.Contains(err.Error(), "simulated durable event write failure") {
+		t.Fatalf("synthesis persistence failure = %v", err)
+	}
+	select {
+	case <-failedRepo.called:
+	case <-time.After(3 * time.Second):
+		t.Fatal("delta persistence was not attempted")
+	}
+	select {
+	case <-upstreamStopped:
+	case <-time.After(3 * time.Second):
+		t.Fatal("upstream synthesis stream continued after persistence failure")
+	}
+	events, err := store.EventsAfter(context.Background(), task.ID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range events {
+		if event.Type == "message.delta" {
+			t.Fatalf("failed delta write was unexpectedly durable: %#v", event)
+		}
 	}
 }
 

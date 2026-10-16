@@ -303,6 +303,9 @@ input.text-field { height: 39px; padding: 0 11px; }
 .message { position: relative; min-width: 0; padding: 10px 12px 9px; border: 1px solid var(--color-rule); border-radius: var(--radius-control); background: var(--color-paper); }
 .message-user { border-left: 2px solid var(--color-accent); }
 .message-assistant { border-left: 2px solid var(--color-success); }
+.message-draft { border-style: dashed; border-left: 2px solid var(--color-accent); background: var(--color-accent-soft); }
+.message-draft .message-role { color: var(--color-accent-dark); }
+.message-draft time { color: var(--color-accent-dark); }
 .message-role { color: var(--color-muted); font: 500 8px var(--font-mono); letter-spacing: 0.08em; }
 .message p { margin-top: 6px; color: var(--color-ink-2); font-size: 11px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .message time { display: block; margin-top: 7px; color: var(--color-faint); font-size: 9px; }

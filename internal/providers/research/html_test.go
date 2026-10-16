@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
 )
 
 func TestHTMLExtractorRemovesExecutableAndNavigationContent(t *testing.T) {
@@ -28,6 +30,61 @@ func TestHTMLExtractorFailsClosedForPDFUntilSafeParserIsSelected(t *testing.T) {
 	_, err := NewHTMLExtractor(1000).Extract(context.Background(), FetchedDocument{ContentType: "application/pdf"})
 	if !errors.Is(err, ErrPDFExtractorUnavailable) {
 		t.Fatalf("PDF extraction error = %v", err)
+	}
+}
+
+type fakePDFExtractor struct {
+	result pdfextract.Result
+	err    error
+	input  []byte
+}
+
+func (f *fakePDFExtractor) Extract(_ context.Context, input []byte) (pdfextract.Result, error) {
+	f.input = append([]byte(nil), input...)
+	return f.result, f.err
+}
+
+func TestHTMLExtractorDelegatesPDFToInjectedIsolatedExtractor(t *testing.T) {
+	input := []byte("untrusted PDF bytes")
+	delegate := &fakePDFExtractor{result: pdfextract.Result{Text: "  First page.\n\nSecond page.  ", PageCount: 2}}
+	extracted, err := NewHTMLExtractorWithPDF(1000, delegate).Extract(context.Background(), FetchedDocument{
+		ContentType: "application/pdf", ContentSHA256: "pdf-hash", Body: input,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(delegate.input) != string(input) || extracted.Text != "First page.\nSecond page." || extracted.PageCount != 2 {
+		t.Fatalf("PDF extraction did not delegate/normalize correctly: input=%q result=%#v", delegate.input, extracted)
+	}
+	if extracted.Method != "isolated_poppler_pdfinfo_pdftotext" || extracted.ContentSHA256 != "pdf-hash" || extracted.Taint != TaintExternal {
+		t.Fatalf("PDF provenance/taint missing: %#v", extracted)
+	}
+}
+
+func TestHTMLExtractorMapsUnavailableAndRejectsOversizedPDFText(t *testing.T) {
+	_, err := NewHTMLExtractorWithPDF(1000, &fakePDFExtractor{err: pdfextract.ErrUnavailable}).Extract(context.Background(), FetchedDocument{ContentType: "application/pdf"})
+	if !errors.Is(err, ErrPDFExtractorUnavailable) {
+		t.Fatalf("unavailable PDF error = %v", err)
+	}
+
+	result, err := NewHTMLExtractorWithPDF(100_000, &fakePDFExtractor{
+		result: pdfextract.Result{Text: strings.Repeat("x", pdfextract.MaxTextRunes+1), PageCount: 1},
+	}).Extract(context.Background(), FetchedDocument{ContentType: "application/pdf"})
+	if !errors.Is(err, pdfextract.ErrTextTooLarge) || result.Text != "" {
+		t.Fatalf("oversized PDF result=%#v error=%v", result, err)
+	}
+
+	_, err = NewHTMLExtractorWithPDF(100_000, &fakePDFExtractor{
+		result: pdfextract.Result{Text: "text", PageCount: pdfextract.MaxPages + 1},
+	}).Extract(context.Background(), FetchedDocument{ContentType: "application/pdf"})
+	if !errors.Is(err, ErrPDFTooManyPages) || !errors.Is(err, pdfextract.ErrTooManyPages) {
+		t.Fatalf("page-limit error = %v", err)
+	}
+	_, err = NewHTMLExtractorWithPDF(100_000, &fakePDFExtractor{
+		result: pdfextract.Result{Text: " \n\t ", PageCount: 1},
+	}).Extract(context.Background(), FetchedDocument{ContentType: "application/pdf"})
+	if !errors.Is(err, ErrPDFNoText) {
+		t.Fatalf("empty PDF text error = %v, want ErrPDFNoText", err)
 	}
 }
 

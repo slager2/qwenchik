@@ -11,8 +11,8 @@
 - Generic web research starts with one focused discovery query and requires fetched evidence from at least two distinct source sites. A durable conditional query retry runs once if the first result has no hits or too few distinct candidate sites; extra independent search steps are added only when the user's criteria need them. Optional fetches are skipped once the evidence floor is met. The backend checks the user/task acceptance criteria and requires evidence before source-backed claims.
 - Search connection/HTTP failures and oversized search responses are surfaced with search-specific error codes; fetch-size failures remain distinct.
 - `fetch_url` accepts only a URL present in the task/user messages or returned by a prior search action.
-- Direct HTTP fetch supports static HTML, XHTML, plain text, and JSON. HTML is parsed locally; `script`, `style`, navigation, and form content are excluded from extracted text.
-- PDF bytes are recognized, but text extraction is explicitly unavailable pending a parser security review. JS-only pages and Playwright are not implemented.
+- Direct HTTP fetch supports static HTML, XHTML, plain text, JSON, and bounded PDF input. HTML is parsed locally; `script`, `style`, navigation, and form content are excluded from extracted text.
+- PDF parsing runs only in the reviewed isolated local Docker path: Poppler in a digest-pinned Alpine-based image, verified rootless local Docker, `--pull=never`, no network, read-only root, dropped capabilities, non-root UID, and strict CPU/memory/PID limits. A single five-second command deadline covers `pdfinfo` plus `pdftotext`; input is capped at 5 MB, page count at 20, and text at 50,000 Unicode characters. Encrypted, malformed, oversized, timed-out, or output-overflowing PDFs produce no partial evidence. The image is opt-in through immutable `PDF_EXTRACTOR_IMAGE` (local image ID or digest); missing rootless Docker/image returns `pdf_extractor_unavailable`, with no host fallback. JS-only pages and Playwright are not implemented.
 
 ## Network policy
 

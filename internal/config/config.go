@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
 )
 
 type Config struct {
@@ -18,6 +20,7 @@ type Config struct {
 	SandboxRuntime        string
 	SandboxImage          string
 	SandboxNetwork        string
+	PDFExtractorImage     string
 	LLMBaseURL            string
 	LLMAPIKey             string
 	LLMModel              string
@@ -39,18 +42,19 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		BindAddr:       env("APP_BIND_ADDR", "127.0.0.1:8080"),
-		DatabasePath:   env("DATABASE_PATH", "./data/qagent.db"),
-		ArtifactsPath:  env("ARTIFACTS_PATH", "./data/artifacts"),
-		WorkspaceRoot:  env("WORKSPACE_ROOT", "./data/workspaces"),
-		SandboxRuntime: env("SANDBOX_RUNTIME", "auto"),
-		SandboxImage:   env("SANDBOX_IMAGE", "golang:1.23-alpine"),
-		SandboxNetwork: env("SANDBOX_NETWORK", "disabled"),
-		LLMBaseURL:     env("LLM_BASE_URL", "http://127.0.0.1:8000/v1"),
-		LLMAPIKey:      env("LLM_API_KEY", "EMPTY"),
-		LLMModel:       env("LLM_MODEL", "local-qwen"),
-		SearXNGURL:     env("SEARXNG_URL", ""),
-		TavilyAPIKey:   strings.TrimSpace(env("TAVILY_API_KEY", "")),
+		BindAddr:          env("APP_BIND_ADDR", "127.0.0.1:8080"),
+		DatabasePath:      env("DATABASE_PATH", "./data/qagent.db"),
+		ArtifactsPath:     env("ARTIFACTS_PATH", "./data/artifacts"),
+		WorkspaceRoot:     env("WORKSPACE_ROOT", "./data/workspaces"),
+		SandboxRuntime:    env("SANDBOX_RUNTIME", "auto"),
+		SandboxImage:      env("SANDBOX_IMAGE", "golang:1.23-alpine"),
+		SandboxNetwork:    env("SANDBOX_NETWORK", "disabled"),
+		PDFExtractorImage: strings.TrimSpace(env("PDF_EXTRACTOR_IMAGE", "")),
+		LLMBaseURL:        env("LLM_BASE_URL", "http://127.0.0.1:8000/v1"),
+		LLMAPIKey:         env("LLM_API_KEY", "EMPTY"),
+		LLMModel:          env("LLM_MODEL", "local-qwen"),
+		SearXNGURL:        env("SEARXNG_URL", ""),
+		TavilyAPIKey:      strings.TrimSpace(env("TAVILY_API_KEY", "")),
 	}
 	var err error
 	if cfg.LLMContextLength, err = intEnv("LLM_CONTEXT_LENGTH", 131072); err != nil {
@@ -102,6 +106,9 @@ func (c Config) Validate() error {
 	}
 	if strings.TrimSpace(c.WorkspaceRoot) == "" || strings.TrimSpace(c.SandboxImage) == "" {
 		return errors.New("WORKSPACE_ROOT and SANDBOX_IMAGE must not be empty")
+	}
+	if err := pdfextract.ValidateImageReference(c.PDFExtractorImage); err != nil {
+		return err
 	}
 	if c.SandboxRuntime != "auto" && c.SandboxRuntime != "docker" {
 		return errors.New("SANDBOX_RUNTIME must be auto or docker in this build")
