@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/slager2/qwenchik/internal/runtime/sandbox"
@@ -33,6 +34,14 @@ const (
 
 const outputPrefix = "QAGENT_PDF_PAGES:"
 
+const (
+	workerModeEnv  = "QAGENT_PDFEXTRACT_WORKER"
+	workerTokenEnv = "QAGENT_PDFEXTRACT_WORKER_TOKEN"
+	workerMode     = "pure-go-v1"
+	methodPoppler  = "isolated_poppler_pdfinfo_pdftotext"
+	methodPureGo   = "pure_go_pdf_subprocess"
+)
+
 var (
 	ErrUnavailable    = errors.New("isolated PDF extraction is unavailable")
 	ErrMalformed      = errors.New("PDF is malformed or could not be extracted")
@@ -41,6 +50,7 @@ var (
 	ErrTextTooLarge   = errors.New("PDF text exceeds the 50000 character limit")
 	ErrInputTooLarge  = errors.New("PDF input exceeds the 5 MB limit")
 	ErrOutputExceeded = errors.New("PDF extractor output exceeds its limit")
+	ErrNoText         = errors.New("PDF contains no extractable text")
 
 	imageIDPattern     = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 	digestImagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:=-]{0,254}@sha256:[a-f0-9]{64}$`)
@@ -52,6 +62,7 @@ type Runner = sandbox.CommandRunner
 type Result struct {
 	Text      string
 	PageCount int
+	Method    string
 }
 
 type Extractor struct {
@@ -99,11 +110,22 @@ func (e *Extractor) Extract(ctx context.Context, document []byte) (Result, error
 		return Result{}, ErrInputTooLarge
 	}
 	if e == nil || e.image == "" {
-		return Result{}, ErrUnavailable
+		return extractPureGoSubprocess(ctx, document)
 	}
 	if err := e.checkRuntime(ctx); err != nil {
+		if errors.Is(err, ErrUnavailable) {
+			return extractPureGoSubprocess(ctx, document)
+		}
 		return Result{}, err
 	}
+	result, err := e.extractDocker(ctx, document)
+	if errors.Is(err, ErrUnavailable) {
+		return extractPureGoSubprocess(ctx, document)
+	}
+	return result, err
+}
+
+func (e *Extractor) extractDocker(ctx context.Context, document []byte) (Result, error) {
 
 	inputDir, inputPath, err := stageInput(document)
 	if err != nil {
@@ -176,6 +198,7 @@ func (e *Extractor) Extract(ctx context.Context, document []byte) (Result, error
 	if err != nil {
 		return Result{}, err
 	}
+	result.Method = methodPoppler
 	return result, nil
 }
 
@@ -196,11 +219,37 @@ func parseOutput(output []byte) (Result, error) {
 	if !utf8.Valid(textBytes) {
 		return Result{}, ErrMalformed
 	}
-	text := string(textBytes)
+	text, err := stripPDFControls(string(textBytes))
+	if err != nil {
+		return Result{}, err
+	}
 	if utf8.RuneCountInString(text) > MaxTextRunes {
 		return Result{}, ErrTextTooLarge
 	}
+	if strings.TrimSpace(text) == "" {
+		return Result{}, ErrNoText
+	}
 	return Result{Text: text, PageCount: pageCount}, nil
+}
+
+// stripPDFControls preserves line-oriented whitespace while removing control
+// characters that are not meaningful formatting. Invalid UTF-8 is malformed.
+func stripPDFControls(value string) (string, error) {
+	if !utf8.ValidString(value) {
+		return "", ErrMalformed
+	}
+	var cleaned strings.Builder
+	cleaned.Grow(len(value))
+	for _, r := range value {
+		if unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t' {
+			continue
+		}
+		if r == '\r' {
+			r = '\n'
+		}
+		cleaned.WriteRune(r)
+	}
+	return cleaned.String(), nil
 }
 
 func (e *Extractor) checkRuntime(ctx context.Context) error {

@@ -540,6 +540,10 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 				if cfg.TavilyAPIKey != "" {
 					searchStatus = "configured"
 				}
+				pdfStatus := "pure_go_fallback"
+				if cfg.PDFExtractorImage != "" {
+					pdfStatus = "isolated_image_configured"
+				}
 				printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{
 					"llm": map[string]any{"type": "local-openai-compatible", "base_url": cfg.LLMBaseURL, "model": cfg.LLMModel},
 					"search": map[string]any{
@@ -553,7 +557,7 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 						},
 					},
 					"sandbox":       map[string]any{"runtime": cfg.SandboxRuntime, "image": cfg.SandboxImage},
-					"pdf_extractor": map[string]any{"status": providerStatusFromBool(cfg.PDFExtractorImage != ""), "image": cfg.PDFExtractorImage},
+					"pdf_extractor": map[string]any{"status": pdfStatus, "image": cfg.PDFExtractorImage},
 				})
 			case "config":
 				printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{
@@ -770,7 +774,7 @@ func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 	if pdfErr != nil {
 		checks["pdf_extractor"] = doctorCheck{Status: "error", Message: "PDF extractor image reference is invalid"}
 	} else if err := pdfExtractor.Check(ctx); err != nil {
-		checks["pdf_extractor"] = doctorCheck{Status: "warning", Message: "isolated PDF extraction is unavailable; configure a local image and rootless Docker"}
+		checks["pdf_extractor"] = doctorCheck{Status: "warning", Message: "isolated Poppler is unavailable; bounded pure-Go helper fallback will be used without container isolation"}
 	} else {
 		checks["pdf_extractor"] = doctorCheck{Status: "ok", Message: "rootless Docker and local PDF extractor image are available"}
 	}

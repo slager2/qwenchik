@@ -236,22 +236,22 @@ func TestExtractRejectsPageCountAndMalformedOutput(t *testing.T) {
 	}
 }
 
-func TestExtractFailsClosedWithoutRootlessLocalDockerOrImage(t *testing.T) {
+func TestExtractFallsBackWithoutRootlessLocalDockerOrImage(t *testing.T) {
 	t.Run("no configured image", func(t *testing.T) {
 		extractor, err := New("", newFakeRunner())
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := extractor.Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrUnavailable) {
-			t.Fatalf("no image error = %v", err)
+		if _, err := extractor.Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrMalformed) {
+			t.Fatalf("no-image fallback error = %v, want malformed input", err)
 		}
 	})
 	t.Run("remote Docker host", func(t *testing.T) {
 		t.Setenv("DOCKER_CONTEXT", "")
 		t.Setenv("DOCKER_HOST", "tcp://docker.example:2376")
 		runner := newFakeRunner()
-		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrUnavailable) {
-			t.Fatalf("remote Docker error = %v", err)
+		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrMalformed) {
+			t.Fatalf("remote Docker fallback error = %v, want malformed input", err)
 		}
 		if len(runner.outputs) != 0 || len(runner.runs) != 0 {
 			t.Fatalf("remote context reached Docker: outputs=%v runs=%v", runner.outputs, runner.runs)
@@ -262,8 +262,8 @@ func TestExtractFailsClosedWithoutRootlessLocalDockerOrImage(t *testing.T) {
 		t.Setenv("DOCKER_HOST", "")
 		runner := newFakeRunner()
 		runner.contextEndpoint = "tcp://docker.example:2376"
-		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrUnavailable) {
-			t.Fatalf("remote context error = %v", err)
+		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrMalformed) {
+			t.Fatalf("remote-context fallback error = %v, want malformed input", err)
 		}
 		if len(runner.outputs) != 1 || len(runner.runs) != 0 {
 			t.Fatalf("remote context was used: outputs=%v runs=%v", runner.outputs, runner.runs)
@@ -274,8 +274,8 @@ func TestExtractFailsClosedWithoutRootlessLocalDockerOrImage(t *testing.T) {
 		t.Setenv("DOCKER_HOST", "")
 		runner := newFakeRunner()
 		runner.securityOptions = `["name=seccomp,profile=builtin"]`
-		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrUnavailable) {
-			t.Fatalf("non-rootless Docker error = %v", err)
+		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrMalformed) {
+			t.Fatalf("non-rootless fallback error = %v, want malformed input", err)
 		}
 		if len(runner.runs) != 0 {
 			t.Fatalf("non-rootless Docker ran a container: %v", runner.runs)
@@ -286,8 +286,8 @@ func TestExtractFailsClosedWithoutRootlessLocalDockerOrImage(t *testing.T) {
 		t.Setenv("DOCKER_HOST", "")
 		runner := newFakeRunner()
 		runner.imageErr = errors.New("image not found")
-		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrUnavailable) {
-			t.Fatalf("missing image error = %v", err)
+		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrMalformed) {
+			t.Fatalf("missing-image fallback error = %v, want malformed input", err)
 		}
 		if len(runner.runs) != 0 {
 			t.Fatalf("missing image ran a container: %v", runner.runs)

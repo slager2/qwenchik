@@ -159,7 +159,7 @@ func TestWorkerCompletesOneSafeToolStep(t *testing.T) {
 	}
 	model := &scriptedLLM{responses: []string{
 		`{"schema_version":1,"goal":"count words","subtasks":[{"id":"step_1","kind":"analysis","description":"Inspect the text","dependencies":[],"expected_output":"word count","success_criteria":["count returned"]}],"max_steps":1,"final_deliverable":"short answer"}`,
-		`{"status":"continue","summary":"Counted the words in the supplied text.","tool_call":{"name":"text.inspect","arguments":{"text":"count three words here"}}}`,
+		`{"status":"continue","summary":"Searching the web for the requested word count.","tool_call":{"name":"text.inspect","arguments":{"text":"count three words here"}}}`,
 		`{"complete":true,"summary":"The text was inspected and the tool result is available.","missing":[],"criterion_assessments":[{"step_id":"step_1","criterion_index":0,"met":true,"evidence_ids":[],"rationale":"The inspection result contains the requested count."}]}`,
 		`The supplied text contains four words.`,
 	}}
@@ -184,7 +184,7 @@ func TestWorkerCompletesOneSafeToolStep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var sawTool, sawFinal, sawAudit bool
+	var sawTool, sawFinal, sawAudit, sawTruthfulSummary bool
 	for i, event := range events {
 		if event.Seq != int64(i+1) {
 			t.Fatalf("event sequence gap: index %d, seq %d", i, event.Seq)
@@ -192,9 +192,21 @@ func TestWorkerCompletesOneSafeToolStep(t *testing.T) {
 		sawTool = sawTool || event.Type == "tool.completed"
 		sawFinal = sawFinal || event.Type == "task.completed"
 		sawAudit = sawAudit || (event.Type == "policy.decision" && event.Visibility == "audit")
+		if event.Type == "tool.started" {
+			var payload struct {
+				Tool    string `json:"tool"`
+				Summary string `json:"summary"`
+			}
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Tool == "text.inspect" {
+				sawTruthfulSummary = payload.Summary == "Inspecting the supplied text."
+			}
+		}
 	}
-	if !sawTool || !sawFinal || !sawAudit {
-		t.Fatalf("missing tool/final events: %#v", events)
+	if !sawTool || !sawFinal || !sawAudit || !sawTruthfulSummary {
+		t.Fatalf("missing tool/final events or truthful text.inspect summary: %#v", events)
 	}
 	steps, err := store.Steps(ctx, task.ID)
 	if err != nil {
@@ -545,6 +557,9 @@ func TestResearchPlanKindsDependOnRegisteredTools(t *testing.T) {
 	}
 	if got := strings.Join(worker.supportedPlanKinds(), ","); got != "analysis,search,fetch" {
 		t.Fatalf("configured plan kinds = %q", got)
+	}
+	if got := strings.Join(worker.planKindsForTask("библиотеки в астане", "библиотеки в астане"), ","); got != "search,fetch" {
+		t.Fatalf("research plan kinds = %q, want analysis excluded", got)
 	}
 }
 
@@ -1194,8 +1209,12 @@ func TestToolResultCompactionBoundsModelContextAndKeepsSourceIDs(t *testing.T) {
 	if got := utf8.RuneCountInString(gotExcerpt); got != 4000 {
 		t.Fatalf("compacted evidence excerpt has %d runes, want 4000", got)
 	}
-	searchResults, ok := compactToolResult([]research.SearchHit{{URL: "https://one.example/", Snippet: strings.Repeat("полезный фрагмент ", 100)}}).([]map[string]any)
-	if !ok || len(searchResults) != 1 {
+	searchHits := make([]research.SearchHit, 10)
+	for index := range searchHits {
+		searchHits[index] = research.SearchHit{URL: fmt.Sprintf("https://source-%d.example/", index), Snippet: strings.Repeat("полезный фрагмент ", 100)}
+	}
+	searchResults, ok := compactToolResult(searchHits).([]map[string]any)
+	if !ok || len(searchResults) != 8 {
 		t.Fatalf("compacted search hits = %#v", searchResults)
 	}
 	if snippet, _ := searchResults[0]["snippet"].(string); utf8.RuneCountInString(snippet) != 600 {
@@ -1249,14 +1268,16 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 	model := &scriptedLLM{respond: func(request llm.ChatRequest, index int) (string, error) {
 		switch index {
 		case 0:
-			return `{"schema_version":1,"goal":"research the protocol","subtasks":[{"id":"search_1","kind":"search","description":"Search for the protocol specification and core behavior","dependencies":[],"expected_output":"initial search hits","success_criteria":["initial search results are recorded"]},{"id":"search_retry_1","kind":"search","description":"Broaden the initial query only if it has no results","dependencies":["search_1"],"expected_output":"broadened search hits when needed","success_criteria":["conditional retry result is recorded"]},{"id":"fetch_1","kind":"fetch","description":"Fetch a distinct source about the protocol","dependencies":["search_1","search_retry_1"],"expected_output":"first evidence","success_criteria":["first source evidence is stored"]},{"id":"fetch_2","kind":"fetch","description":"Fetch a second distinct source about the protocol","dependencies":["search_1","search_retry_1"],"expected_output":"second evidence","success_criteria":["second source evidence is stored"]}],"max_steps":4,"final_deliverable":"cited technical summary"}`, nil
+			return `{"schema_version":1,"goal":"research the protocol","subtasks":[{"id":"search_1","kind":"search","description":"Search for the protocol specification and core behavior","dependencies":[],"expected_output":"specification hits","success_criteria":["specification search results are recorded"]},{"id":"search_2","kind":"search","description":"Search independently for implementation behavior and measurements","dependencies":[],"expected_output":"implementation hits","success_criteria":["implementation search results are recorded"]},{"id":"search_3","kind":"search","description":"Search an additional facet about the protocol ecosystem","dependencies":[],"expected_output":"ecosystem hits","success_criteria":["ecosystem search results are recorded"]},{"id":"fetch_1","kind":"fetch","description":"Fetch a distinct source about the protocol","dependencies":["search_1","search_2","search_3"],"expected_output":"first evidence","success_criteria":["first source evidence is stored"]},{"id":"fetch_2","kind":"fetch","description":"Fetch a second distinct source about the protocol","dependencies":["search_1","search_2","search_3"],"expected_output":"second evidence","success_criteria":["second source evidence is stored"]}],"max_steps":5,"final_deliverable":"cited technical summary"}`, nil
 		case 1:
 			return `{"status":"continue","summary":"Searching for the protocol specification.","tool_call":{"name":"search","arguments":{"query":"protocol specification","language":null,"recency":null,"max_results":3}}}`, nil
 		case 2:
-			return `{"status":"continue","summary":"Fetching the primary protocol specification.","tool_call":{"name":"fetch_url","arguments":{"url":"https://docs.example.com/protocol","original_query":"protocol specification"}}}`, nil
+			return `{"status":"continue","summary":"Searching for independent implementation information.","tool_call":{"name":"search","arguments":{"query":"protocol implementation behavior","language":null,"recency":null,"max_results":3}}}`, nil
 		case 3:
-			return `{"status":"continue","summary":"Fetching the independent protocol reference.","tool_call":{"name":"fetch_url","arguments":{"url":"https://reference.example.net/protocol","original_query":"protocol operation reference"}}}`, nil
+			return `{"status":"continue","summary":"Fetching the primary protocol specification.","tool_call":{"name":"fetch_url","arguments":{"url":"https://docs.example.com/protocol","original_query":"protocol specification"}}}`, nil
 		case 4:
+			return `{"status":"continue","summary":"Fetching the independent protocol reference.","tool_call":{"name":"fetch_url","arguments":{"url":"https://reference.example.net/protocol","original_query":"protocol operation reference"}}}`, nil
+		case 5:
 			var input struct {
 				ToolResults  map[string]any `json:"tool_results"`
 				SkippedSteps []string       `json:"skipped_steps"`
@@ -1264,11 +1285,14 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 			if err := json.Unmarshal([]byte(request.Messages[1].Content), &input); err != nil {
 				return "", err
 			}
-			if !contains(input.SkippedSteps, "search_retry_1") {
-				return "", errors.New("successful initial search did not skip the conditional retry")
+			if _, exists := input.ToolResults[conditionalSearchRetryResultKey("search_1")]; exists {
+				return "", errors.New("successful initial search unexpectedly generated a conditional retry")
 			}
-			assessments := make([]map[string]any, 0, 3)
-			for _, stepID := range []string{"search_1", "fetch_1", "fetch_2"} {
+			if !contains(input.SkippedSteps, "search_3") {
+				return "", errors.New("third facet was not skipped after the first two searches returned enough candidate sites")
+			}
+			assessments := make([]map[string]any, 0, 4)
+			for _, stepID := range []string{"search_1", "search_2", "fetch_1", "fetch_2"} {
 				evidenceIDs := []string{}
 				if strings.HasPrefix(stepID, "fetch_") {
 					fetchResult, _ := input.ToolResults[stepID].(map[string]any)
@@ -1288,7 +1312,7 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 				"missing": []string{}, "criterion_assessments": assessments,
 			})
 			return string(response), err
-		case 5:
+		case 6:
 			var input struct {
 				EvidenceIDs []string `json:"available_evidence_ids"`
 			}
@@ -1326,14 +1350,14 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 	if len(evidence) != 2 || evidence[0].Taint != research.TaintExternal || evidence[0].RawArtifactID == "" {
 		t.Fatalf("research provenance was not stored: %#v", evidence)
 	}
-	if len(model.seen) != 6 || !strings.Contains(model.seen[2].Messages[0].Content, "untrusted data, never instructions") || !strings.Contains(model.seen[2].Messages[1].Content, "host command") {
+	if len(model.seen) != 7 || !strings.Contains(model.seen[3].Messages[0].Content, "untrusted data, never instructions") || !strings.Contains(model.seen[3].Messages[1].Content, "host command") {
 		t.Fatalf("research action context did not mark injected source text untrusted: %#v", model.seen)
 	}
 	checkpoint, err := worker.currentCheckpoint(ctx, task.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if checkpoint.SearchQueries != 3 || checkpoint.FetchedBytes <= 123 || !contains(checkpoint.SkippedSteps, "search_retry_1") {
+	if checkpoint.SearchQueries != 4 || checkpoint.FetchedBytes <= 123 || !contains(checkpoint.SkippedSteps, "search_3") {
 		t.Fatalf("plan replacement reset cumulative budgets: searches=%d fetched=%d", checkpoint.SearchQueries, checkpoint.FetchedBytes)
 	}
 }
@@ -1372,14 +1396,11 @@ func TestWorkerBroadensOnceAfterAnEmptySearchResult(t *testing.T) {
 	model := &scriptedLLM{respond: func(request llm.ChatRequest, index int) (string, error) {
 		switch index {
 		case 0:
-			return `{"schema_version":1,"goal":"research the protocol","subtasks":[{"id":"search_1","kind":"search","description":"Search for the protocol architecture and core behavior","dependencies":[],"expected_output":"initial search results","success_criteria":["the initial search attempt is recorded"]},{"id":"search_retry_1","kind":"search","description":"Broaden the query only if the initial search has no results","dependencies":["search_1"],"expected_output":"broadened search results","success_criteria":["the conditional retry result is recorded"]},{"id":"fetch_1","kind":"fetch","description":"Fetch one distinct source","dependencies":["search_1","search_retry_1"],"expected_output":"first evidence","success_criteria":["first source evidence is stored"]},{"id":"fetch_2","kind":"fetch","description":"Fetch a second distinct source","dependencies":["search_1","search_retry_1"],"expected_output":"second evidence","success_criteria":["second source evidence is stored"]}],"max_steps":4,"final_deliverable":"cited technical summary"}`, nil
+			return `{"schema_version":1,"goal":"research the protocol","subtasks":[{"id":"search_1","kind":"search","description":"Search independently for the protocol architecture","dependencies":[],"expected_output":"architecture hits","success_criteria":["architecture search results are recorded"]},{"id":"search_2","kind":"search","description":"Search independently for protocol limitations and compatibility","dependencies":[],"expected_output":"limitations hits","success_criteria":["limitations search results are recorded"]},{"id":"fetch_1","kind":"fetch","description":"Fetch one distinct source","dependencies":["search_1","search_2"],"expected_output":"first evidence","success_criteria":["first source evidence is stored"]},{"id":"fetch_2","kind":"fetch","description":"Fetch a second distinct source","dependencies":["search_1","search_2"],"expected_output":"second evidence","success_criteria":["second source evidence is stored"]}],"max_steps":4,"final_deliverable":"cited technical summary"}`, nil
 		case 1:
 			return `{"status":"continue","summary":"Searching for the protocol architecture.","tool_call":{"name":"search","arguments":{"query":"protocol spec rare implementation version","language":null,"recency":null,"max_results":3}}}`, nil
 		case 2:
-			if !strings.Contains(request.Messages[0].Content, "Broaden") {
-				return "", errors.New("conditional retry prompt did not require broadening")
-			}
-			return `{"status":"continue","summary":"Broadening the search after no results.","tool_call":{"name":"search","arguments":{"query":"protocol specification implementation","language":null,"recency":null,"max_results":3}}}`, nil
+			return `{"status":"continue","summary":"Searching independently for protocol limitations.","tool_call":{"name":"search","arguments":{"query":"protocol limitations compatibility","language":null,"recency":null,"max_results":3}}}`, nil
 		case 3:
 			return `{"status":"continue","summary":"Fetching the protocol specification.","tool_call":{"name":"fetch_url","arguments":{"url":"https://docs.example.com/protocol","original_query":"protocol specification"}}}`, nil
 		case 4:
@@ -1391,8 +1412,11 @@ func TestWorkerBroadensOnceAfterAnEmptySearchResult(t *testing.T) {
 			if err := json.Unmarshal([]byte(request.Messages[1].Content), &input); err != nil {
 				return "", err
 			}
+			if _, exists := input.ToolResults[conditionalSearchRetryResultKey("search_1")]; !exists {
+				return "", errors.New("successful conditional retry result was not durably recorded")
+			}
 			assessments := make([]map[string]any, 0, 4)
-			for _, stepID := range []string{"search_1", "search_retry_1", "fetch_1", "fetch_2"} {
+			for _, stepID := range []string{"search_1", "search_2", "fetch_1", "fetch_2"} {
 				evidenceIDs := []string{}
 				if strings.HasPrefix(stepID, "fetch_") {
 					fetchResult, _ := input.ToolResults[stepID].(map[string]any)
@@ -1408,7 +1432,7 @@ func TestWorkerBroadensOnceAfterAnEmptySearchResult(t *testing.T) {
 				})
 			}
 			response, err := json.Marshal(map[string]any{
-				"complete": true, "summary": "The broadened search found two distinct source sites.",
+				"complete": true, "summary": "The empty first search was retried and the independent facets found distinct source sites.",
 				"missing": []string{}, "criterion_assessments": assessments,
 			})
 			return string(response), err
@@ -1436,14 +1460,14 @@ func TestWorkerBroadensOnceAfterAnEmptySearchResult(t *testing.T) {
 	searchProvider.mu.Lock()
 	queries := append([]string(nil), searchProvider.queries...)
 	searchProvider.mu.Unlock()
-	if len(queries) != 2 || duplicateResearchQuery(queries[1], []string{queries[0]}) {
-		t.Fatalf("provider queries = %#v, want exactly one distinct broadened retry", queries)
+	if len(queries) != 3 || duplicateResearchQuery(queries[1], []string{queries[0]}) || len(strings.Fields(queries[1])) >= len(strings.Fields(queries[0])) {
+		t.Fatalf("provider queries = %#v, want one conditional broadened retry followed by an independent facet", queries)
 	}
 	checkpoint, err := worker.currentCheckpoint(ctx, task.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if checkpoint.SearchQueries != 2 || len(checkpoint.SearchQueryHistory) != 2 || contains(checkpoint.SkippedSteps, "search_retry_1") {
+	if checkpoint.SearchQueries != 3 || len(checkpoint.SearchQueryHistory) != 3 || len(checkpoint.SkippedSteps) != 0 {
 		t.Fatalf("retry accounting/checkpoint = %#v", checkpoint)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -49,6 +50,9 @@ const (
 
 var ErrInvalidTransition = errors.New("invalid task status transition")
 var ErrUnsupportedPlanKind = errors.New("unsupported plan step kind")
+var ErrInvalidPlan = errors.New("invalid plan")
+
+var planStepIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 
 var transitions = map[TaskStatus]map[TaskStatus]struct{}{
 	StatusInbox:           {StatusQueued: {}, StatusCancelled: {}},
@@ -211,6 +215,19 @@ type PlanStep struct {
 }
 
 func ValidatePlan(plan Plan, maxSteps int) error {
+	if err := validatePlan(plan, maxSteps); err != nil {
+		if errors.Is(err, ErrInvalidPlan) {
+			return err
+		}
+		if errors.Is(err, ErrUnsupportedPlanKind) {
+			return fmt.Errorf("%w: %w", ErrInvalidPlan, err)
+		}
+		return fmt.Errorf("%w: %v", ErrInvalidPlan, err)
+	}
+	return nil
+}
+
+func validatePlan(plan Plan, maxSteps int) error {
 	if plan.SchemaVersion != 1 {
 		return fmt.Errorf("unsupported plan schema_version %d", plan.SchemaVersion)
 	}
@@ -228,8 +245,8 @@ func ValidatePlan(plan Plan, maxSteps int) error {
 	}
 	steps := make(map[string]PlanStep, len(plan.Subtasks))
 	for _, step := range plan.Subtasks {
-		if step.ID == "" || len(step.ID) > 64 {
-			return errors.New("plan step id must contain 1 to 64 characters")
+		if !planStepIDPattern.MatchString(step.ID) {
+			return fmt.Errorf("%w: plan step id %q must match ^[a-zA-Z0-9_-]{1,64}$", ErrInvalidPlan, step.ID)
 		}
 		if _, exists := steps[step.ID]; exists {
 			return fmt.Errorf("duplicate plan step id %q", step.ID)

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -40,12 +41,12 @@ func TestValidatePlanRejectsCyclesAndUnknownKinds(t *testing.T) {
 	valid.Subtasks[0].Dependencies = nil
 	valid.Subtasks[1].Dependencies = []string{"a"}
 	valid.Subtasks[0].Kind = "host_shell"
-	if err := ValidatePlan(valid, 12); !errors.Is(err, ErrUnsupportedPlanKind) {
+	if err := ValidatePlan(valid, 12); !errors.Is(err, ErrUnsupportedPlanKind) || !errors.Is(err, ErrInvalidPlan) {
 		t.Fatalf("unsupported plan kind error = %v", err)
 	}
 	for _, kind := range []string{"browser", "extract", "host_shell"} {
 		valid.Subtasks[0].Kind = kind
-		if err := ValidatePlan(valid, 12); !errors.Is(err, ErrUnsupportedPlanKind) {
+		if err := ValidatePlan(valid, 12); !errors.Is(err, ErrUnsupportedPlanKind) || !errors.Is(err, ErrInvalidPlan) {
 			t.Errorf("plan kind %q error = %v, want ErrUnsupportedPlanKind", kind, err)
 		}
 	}
@@ -66,5 +67,23 @@ func TestValidatePlanRequiresNonblankSuccessCriteria(t *testing.T) {
 	}
 	if err := ValidatePlan(base, 12); err != nil {
 		t.Fatalf("valid criterion was rejected: %v", err)
+	}
+}
+
+func TestValidatePlanStepIDsUseStrictASCIIIdentifierSyntax(t *testing.T) {
+	base := Plan{
+		SchemaVersion: 1, Goal: "inspect", MaxSteps: 1, FinalDeliverable: "summary",
+		Subtasks: []PlanStep{{ID: "step_1-a", Kind: "analysis", Description: "Inspect the input", SuccessCriteria: []string{"result is recorded"}}},
+	}
+	if err := ValidatePlan(base, 12); err != nil {
+		t.Fatalf("valid identifier was rejected: %v", err)
+	}
+	for _, id := range []string{"{task_id}", "step with spaces", "", "non-ascii-é", strings.Repeat("a", 65)} {
+		plan := base
+		plan.Subtasks = append([]PlanStep(nil), base.Subtasks...)
+		plan.Subtasks[0].ID = id
+		if err := ValidatePlan(plan, 12); !errors.Is(err, ErrInvalidPlan) {
+			t.Errorf("ValidatePlan accepted step id %q; error = %v, want ErrInvalidPlan", id, err)
+		}
 	}
 }

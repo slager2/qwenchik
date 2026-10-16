@@ -3,7 +3,9 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +22,19 @@ func TestRequiresWebResearchRecognizesRussianAndEnglishRequests(t *testing.T) {
 		"Investigate recent measurements and compare the available approaches.",
 		"Compare current information from multiple sources.",
 		"Find the latest public information about this topic.",
+		"библиотеки в астане",
+		"рестораны алматы",
+		"новости ии",
+		"новинки смартфонов 2026",
+		"новинки смартфонов 2026",
+		"python 3.13 changelog",
+		"who is X",
+		"how many libraries are in Astana",
+		"cost of living in Astana",
+		"Сколько стоит билет в Астану?",
+		"restaurants in Astana",
+		"What are the opening hours in Astana?",
+		"кафе рядом с центром",
 		"Исследуй текущую архитектуру и ограничения этой системы.",
 		"Поищи актуальные данные и сравни несколько подходов.",
 		"Где находится объект в центральной части города?",
@@ -31,13 +46,19 @@ func TestRequiresWebResearchRecognizesRussianAndEnglishRequests(t *testing.T) {
 	}
 	for _, value := range []string{
 		"Count the words in this sentence",
+		"How many words are in this sentence?",
+		"How many words are in this sentence?",
 		"Count occurrences of the word 'research' in the supplied paragraph",
 		"Сосчитай слова в строке раз два три",
 		"Найди слово в предоставленном тексте",
 		"Summarize the text provided below",
+		"посчитай слова в тексте ниже:",
+		"summarize the following text:",
+		"Count words\nOriginal task:\ncount three words here\n\nUser update:\nKeep the final answer concise.",
+		"Fetch source\nRead https://docs.example.com/qwen and summarize the official page.",
 	} {
 		if requiresWebResearch(value) {
-			t.Errorf("requiresWebResearch(%q) = true", value)
+			t.Errorf("requiresWebResearch(%q) = true (info=%t location=%t who=%t self-contained=%t)", value, informationalNounPattern.MatchString(value), locationEntityPattern.MatchString(value), whoIsEntityPattern.MatchString(value), isSelfContainedTextOperation(value))
 		}
 	}
 }
@@ -45,13 +66,13 @@ func TestRequiresWebResearchRecognizesRussianAndEnglishRequests(t *testing.T) {
 func TestGenericResearchDecomposesIntoBoundedSearchAndFetchSteps(t *testing.T) {
 	goal := "Research the architecture, operating behavior, and limitations of an unfamiliar protocol."
 	if got := minimumResearchSearches(goal); got != 2 {
-		t.Fatalf("research search-attempt count = %d, want one query plus one conditional retry", got)
+		t.Fatalf("research search-facet count = %d, want 2 independent facets", got)
 	}
 	if got := minimumResearchFetches(goal); got != 2 {
 		t.Fatalf("research source count = %d, want 2 distinct sites", got)
 	}
 	if got := requiredPlanSteps("Technical review", goal); got != 4 {
-		t.Fatalf("research plan size = %d, want one search, one conditional retry and two fetches", got)
+		t.Fatalf("research plan size = %d, want 2 independent searches and 2 fetches", got)
 	}
 	if got := requiredPlanSteps("Inspect supplied document", "Summarize https://example.org/document"); got != 1 {
 		t.Fatalf("user-URL plan size = %d, want one fetch", got)
@@ -69,6 +90,120 @@ func TestGenericResearchDecomposesIntoBoundedSearchAndFetchSteps(t *testing.T) {
 	if got := minimumResearchFetches("Count the words in this sentence"); got != 0 {
 		t.Fatalf("local analysis fetch target = %d, want 0", got)
 	}
+}
+
+func TestConditionalRetryRequiresSuccessfulZeroHitResult(t *testing.T) {
+	worker := &Worker{tools: tools.NewRegistry()}
+	state := checkpointState{ToolResults: map[string]any{
+		"one-hit":        []research.SearchHit{{URL: "https://one.example/source"}},
+		"provider-error": map[string]any{"error": "provider unavailable"},
+	}}
+	if searchResultIsSuccessfulEmpty(state.ToolResults["one-hit"]) {
+		t.Fatal("one search hit was treated as an empty result")
+	}
+	if searchResultIsSuccessfulEmpty(state.ToolResults["provider-error"]) {
+		t.Fatal("provider error object was treated as an empty result")
+	}
+	if !searchResultIsSuccessfulEmpty([]research.SearchHit{}) || !searchResultIsSuccessfulEmpty([]any{}) {
+		t.Fatal("successful empty search result was not recognized")
+	}
+	if worker.searchResultsMeetSourceFloor("source-threshold", state.ToolResults["one-hit"], checkpointState{}, 2) {
+		t.Fatal("one candidate site incorrectly met a two-site source floor")
+	}
+	state.ToolResults["search_1"] = state.ToolResults["one-hit"]
+	if err := worker.retryInitialSearchIfEmpty(context.Background(), "task", nil, domain.PlanStep{ID: "search_1", Kind: "search"}, &state); err != nil {
+		t.Fatalf("non-empty search result unexpectedly attempted retry: %v", err)
+	}
+	if _, exists := state.ToolResults[conditionalSearchRetryResultKey("search_1")]; exists {
+		t.Fatal("a non-empty result below the distinct-source floor triggered retry")
+	}
+	state.ToolResults["search_1"] = state.ToolResults["provider-error"]
+	if err := worker.retryInitialSearchIfEmpty(context.Background(), "task", nil, domain.PlanStep{ID: "search_1", Kind: "search"}, &state); err != nil {
+		t.Fatalf("provider error was treated as an empty result: %v", err)
+	}
+	if _, exists := state.ToolResults[conditionalSearchRetryResultKey("search_1")]; exists {
+		t.Fatal("provider error triggered a conditional retry")
+	}
+}
+
+func TestResearchPlanValidationBoundsIndependentSearchesAndFetches(t *testing.T) {
+	registry := registerPlanValidationResearchTools(t)
+	worker := New(nil, &scriptedLLM{}, registry, Options{MaxSteps: 12})
+	makePlan := func(searchCount, fetchCount int) domain.Plan {
+		searchIDs := make([]string, 0, searchCount)
+		steps := make([]domain.PlanStep, 0, searchCount+fetchCount)
+		for index := 1; index <= searchCount; index++ {
+			id := "search_" + strconv.Itoa(index)
+			searchIDs = append(searchIDs, id)
+			steps = append(steps, domain.PlanStep{
+				ID: id, Kind: "search", Description: "Research independent facet " + id,
+				SuccessCriteria: []string{"facet results are recorded"},
+			})
+		}
+		for index := 1; index <= fetchCount; index++ {
+			id := "fetch_" + strconv.Itoa(index)
+			steps = append(steps, domain.PlanStep{
+				ID: id, Kind: "fetch", Description: "Fetch independent source " + id,
+				Dependencies: append([]string(nil), searchIDs...), SuccessCriteria: []string{"source evidence is stored"},
+			})
+		}
+		return domain.Plan{SchemaVersion: 1, Goal: "Research the protocol", Subtasks: steps, MaxSteps: len(steps), FinalDeliverable: "cited summary"}
+	}
+	if err := worker.validateTaskPlan(makePlan(3, 4), "Protocol research", "Research the protocol."); err != nil {
+		t.Fatalf("valid three-facet, four-fetch plan rejected: %v", err)
+	}
+	for _, invalid := range []domain.Plan{makePlan(4, 2), makePlan(2, 5)} {
+		if err := worker.validateTaskPlan(invalid, "Protocol research", "Research the protocol."); !errors.Is(err, errResearchPlanIncomplete) {
+			t.Errorf("out-of-bounds research plan accepted: searches/fetches=%d/%d, err=%v", countPlanKind(invalid, "search"), countPlanKind(invalid, "fetch"), err)
+		}
+	}
+}
+
+func TestResearchAnalysisOnlyPlanIsRepairedBeforeAnyWebAction(t *testing.T) {
+	registry := registerPlanValidationResearchTools(t)
+	validPlan := `{"schema_version":1,"goal":"research the protocol","subtasks":[{"id":"search_1","kind":"search","description":"Research the protocol specification","dependencies":[],"expected_output":"specification hits","success_criteria":["search results are recorded"]},{"id":"search_2","kind":"search","description":"Research protocol implementation behavior independently","dependencies":[],"expected_output":"implementation hits","success_criteria":["independent search results are recorded"]},{"id":"fetch_1","kind":"fetch","description":"Fetch the protocol specification","dependencies":["search_1","search_2"],"expected_output":"evidence","success_criteria":["source evidence is stored"]},{"id":"fetch_2","kind":"fetch","description":"Fetch a second source","dependencies":["search_1","search_2"],"expected_output":"evidence","success_criteria":["second source evidence is stored"]}],"max_steps":4,"final_deliverable":"cited summary"}`
+	model := &scriptedLLM{responses: []string{
+		`{"schema_version":1,"goal":"research the protocol","subtasks":[{"id":"inspect","kind":"analysis","description":"Inspect the prompt only","dependencies":[],"expected_output":"analysis","success_criteria":["analysis is recorded"]}],"max_steps":1,"final_deliverable":"summary"}`,
+		validPlan,
+	}}
+	worker := New(nil, model, registry, Options{MaxSteps: 12, MaxOutputTokens: 512})
+	plan, err := worker.createPlan(context.Background(), domain.Task{ID: "research-plan", Title: "Research the protocol"}, "Research the protocol.", "")
+	if err != nil {
+		t.Fatalf("analysis-only draft was not repaired: %v", err)
+	}
+	if err := worker.validateTaskPlan(plan, "Research the protocol", "Research the protocol."); err != nil {
+		t.Fatalf("repaired plan is invalid: %v", err)
+	}
+	if model.requests != 2 {
+		t.Fatalf("planner requests = %d, want initial draft and repair before execution", model.requests)
+	}
+	if got := truthfulActionSummary("text.inspect", "Searching the web for the latest information."); got != "Inspecting the supplied text." {
+		t.Fatalf("text.inspect summary claims web search: %q", got)
+	}
+}
+
+func registerPlanValidationResearchTools(t *testing.T) *tools.Registry {
+	t.Helper()
+	registry := tools.NewRegistry()
+	for _, descriptor := range []tools.Descriptor{
+		{Name: "search", ArgumentsSchema: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}`), OutputSchema: json.RawMessage(`{"type":"array"}`), RequiredCapability: "research.search", RiskClass: "read", TimeoutSeconds: 1, MaxOutputBytes: 1024, AllowedRoles: []string{"researcher"}},
+		{Name: "fetch_url", ArgumentsSchema: json.RawMessage(`{"type":"object","properties":{"url":{"type":"string"}},"required":["url"],"additionalProperties":false}`), OutputSchema: json.RawMessage(`{"type":"object"}`), RequiredCapability: "research.fetch", RiskClass: "read", TimeoutSeconds: 1, MaxOutputBytes: 1024, AllowedRoles: []string{"researcher"}},
+	} {
+		if err := registry.Register(descriptor, func(context.Context, json.RawMessage) (any, error) { return nil, nil }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return registry
+}
+
+func countPlanKind(plan domain.Plan, kind string) int {
+	count := 0
+	for _, step := range plan.Subtasks {
+		if step.Kind == kind {
+			count++
+		}
+	}
+	return count
 }
 
 func TestResearchRequestWithUserURLKeepsURLFirstAndAddsDiscovery(t *testing.T) {
@@ -143,6 +278,10 @@ func TestAvailableFetchURLsPreferUnfetchedDistinctSites(t *testing.T) {
 		{URL: "https://beta-source.net/document-2"},
 		{URL: "https://gamma-source.org/document-3"},
 		{URL: "https://delta-source.io/document-4"},
+		{URL: "https://epsilon-source.dev/document-5"},
+		{URL: "https://zeta-source.app/document-6"},
+		{URL: "https://eta-source.info/document-7"},
+		{URL: "https://theta-source.biz/document-8"},
 	})
 	registry.RememberFetchedURLs("task-fetch", map[string]any{
 		"evidence_id": "previous", "requested_url": "https://user.example.org/source", "url": "https://user.example.org/final",
@@ -154,10 +293,22 @@ func TestAvailableFetchURLsPreferUnfetchedDistinctSites(t *testing.T) {
 			{URL: "https://beta-source.net/document-2"},
 			{URL: "https://gamma-source.org/document-3"},
 			{URL: "https://delta-source.io/document-4"},
+			{URL: "https://epsilon-source.dev/document-5"},
+			{URL: "https://zeta-source.app/document-6"},
+			{URL: "https://eta-source.info/document-7"},
+			{URL: "https://theta-source.biz/document-8"},
 		},
 	}, nil, nil, true)
-	if len(urls) != 3 || researchSourceSite(urls[0]) == researchSourceSite(urls[1]) || researchSourceSite(urls[1]) == researchSourceSite(urls[2]) || researchSourceSite(urls[0]) == researchSourceSite(urls[2]) {
-		t.Fatalf("fetch candidates are not distinct sites: %#v", urls)
+	if len(urls) != 6 {
+		t.Fatalf("fetch candidate pool has %d URLs, want 6: %#v", len(urls), urls)
+	}
+	seenSites := make(map[string]struct{}, len(urls))
+	for _, rawURL := range urls {
+		site := researchSourceSite(rawURL)
+		if _, exists := seenSites[site]; exists {
+			t.Fatalf("fetch candidate pool repeats site %q: %#v", site, urls)
+		}
+		seenSites[site] = struct{}{}
 	}
 	for _, rawURL := range urls {
 		if rawURL == "https://user.example.org/source/" || rawURL == "https://user.example.org/final/" {
@@ -238,7 +389,7 @@ func TestAvailableFetchURLsSkipsAlreadyFetchedSourceSite(t *testing.T) {
 	worker := New(nil, &scriptedLLM{}, registry, Options{})
 	urls := worker.availableFetchURLs("task-used-site", map[string]any{}, nil, nil, true)
 	if len(urls) != 2 {
-		t.Fatalf("new fetch candidates reuse an already fetched source site: %#v", urls)
+		t.Fatalf("new fetch candidates should include the two remaining available sites: %#v", urls)
 	}
 	for _, rawURL := range urls {
 		if researchSourceSite(rawURL) == "same-source.com" {
@@ -255,7 +406,7 @@ func TestResearchTaskWithoutSearchFailsClearlyBeforeCallingModel(t *testing.T) {
 	}
 	defer store.Close()
 	task, err := store.CreateTask(ctx, domain.Task{
-		ID: "research-unavailable-task", Title: "Technical research", Description: "Investigate a current protocol compatibility issue.",
+		ID: "research-unavailable-task", Title: "Библиотеки в Астане", Description: "библиотеки в астане",
 	}, "")
 	if err != nil {
 		t.Fatal(err)

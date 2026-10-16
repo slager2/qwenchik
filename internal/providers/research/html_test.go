@@ -66,6 +66,10 @@ func TestHTMLExtractorMapsUnavailableAndRejectsOversizedPDFText(t *testing.T) {
 	if !errors.Is(err, ErrPDFExtractorUnavailable) {
 		t.Fatalf("unavailable PDF error = %v", err)
 	}
+	_, err = NewHTMLExtractorWithPDF(1000, &fakePDFExtractor{err: pdfextract.ErrNoText}).Extract(context.Background(), FetchedDocument{ContentType: "application/pdf"})
+	if !errors.Is(err, ErrPDFNoText) || !errors.Is(err, pdfextract.ErrNoText) {
+		t.Fatalf("empty PDF error = %v, want ErrPDFNoText and ErrNoText", err)
+	}
 
 	result, err := NewHTMLExtractorWithPDF(100_000, &fakePDFExtractor{
 		result: pdfextract.Result{Text: strings.Repeat("x", pdfextract.MaxTextRunes+1), PageCount: 1},
@@ -85,6 +89,18 @@ func TestHTMLExtractorMapsUnavailableAndRejectsOversizedPDFText(t *testing.T) {
 	}).Extract(context.Background(), FetchedDocument{ContentType: "application/pdf"})
 	if !errors.Is(err, ErrPDFNoText) {
 		t.Fatalf("empty PDF text error = %v, want ErrPDFNoText", err)
+	}
+}
+
+func TestHTMLExtractorPreservesPureGoPDFFallbackProvenance(t *testing.T) {
+	extracted, err := NewHTMLExtractorWithPDF(1000, &fakePDFExtractor{
+		result: pdfextract.Result{Text: "fallback text", PageCount: 1, Method: "pure_go_pdf_subprocess"},
+	}).Extract(context.Background(), FetchedDocument{ContentType: "application/pdf"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if extracted.Method != "pure_go_pdf_subprocess" || extracted.Text != "fallback text" {
+		t.Fatalf("pure-Go fallback provenance was lost: %#v", extracted)
 	}
 }
 

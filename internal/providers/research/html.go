@@ -55,6 +55,8 @@ func (e *HTMLExtractor) Extract(ctx context.Context, document FetchedDocument) (
 		}
 		if err != nil {
 			switch {
+			case errors.Is(err, pdfextract.ErrNoText):
+				return ExtractedDocument{}, errors.Join(ErrPDFNoText, err)
 			case errors.Is(err, pdfextract.ErrEncrypted):
 				return ExtractedDocument{}, errors.Join(ErrPDFEncrypted, err)
 			case errors.Is(err, pdfextract.ErrTooManyPages):
@@ -82,8 +84,12 @@ func (e *HTMLExtractor) Extract(ctx context.Context, document FetchedDocument) (
 			return ExtractedDocument{}, ErrPDFNoText
 		}
 		flags := []string{}
+		method := result.Method
+		if method == "" {
+			method = "isolated_poppler_pdfinfo_pdftotext"
+		}
 		return ExtractedDocument{
-			Text: text, Method: "isolated_poppler_pdfinfo_pdftotext", ContentSHA256: document.ContentSHA256,
+			Text: text, Method: method, ContentSHA256: document.ContentSHA256,
 			Taint: TaintExternal, QualityFlags: flags, PageCount: result.PageCount,
 		}, nil
 	case "text/plain", "application/json":

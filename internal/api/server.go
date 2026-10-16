@@ -689,7 +689,7 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 		if s.tavilyConfigured {
 			checks["search"] = map[string]string{"status": "warning", "message": "Tavily is configured; external API health is checked during research"}
 		} else {
-			checks["search"] = map[string]string{"status": "warning", "message": "No search provider is configured"}
+			checks["search"] = map[string]string{"status": "warning", "message": "Web search is disabled. Tasks requiring web discovery will fail with search_unavailable."}
 		}
 	} else {
 		searchProvider, err := research.NewSearXNG(s.searchURL, nil)
@@ -743,8 +743,16 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	}
 	status := "ok"
 	for _, check := range checks {
-		if check["status"] == "error" {
+		switch check["status"] {
+		case "error":
 			status = "error"
+			break
+		case "warning":
+			if status == "ok" {
+				status = "warning"
+			}
+		}
+		if status == "error" {
 			break
 		}
 	}

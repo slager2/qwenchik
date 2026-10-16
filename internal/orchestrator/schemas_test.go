@@ -96,32 +96,21 @@ func TestActionSchemaBindsArgumentsToSelectedTool(t *testing.T) {
 	}
 }
 
-func TestResearchPlanSchemaRequiresConditionalSearchRetryAndTwoFetches(t *testing.T) {
+func TestResearchPlanSchemaSupportsIndependentFacetsAndBoundedFetches(t *testing.T) {
 	requiredKinds := []string{"search", "search", "fetch", "fetch"}
 	schema := planOutputSchemaWithRequiredKinds(12, []string{"analysis", "search", "fetch", "code_execution", "external_action"}, requiredKinds)
-	searchIDs := []string{"search_1", "search_retry_1"}
-	steps := make([]map[string]any, 0, len(requiredKinds))
+	searchIDs := []string{"search_1", "search_2", "search_3"}
+	steps := make([]map[string]any, 0, 6)
 	for index, searchID := range searchIDs {
-		dependencies := []string{}
-		description := "Search for the core topic"
-		if index == 1 {
-			dependencies = []string{"search_1"}
-			description = "Broaden the first query only if it returned no results"
-		}
 		steps = append(steps, map[string]any{
-			"id": searchID, "kind": "search", "description": description,
-			"dependencies": dependencies, "expected_output": "search hits", "success_criteria": []string{"the search step result is recorded"},
+			"id": searchID, "kind": "search", "description": fmt.Sprintf("Investigate independent research facet %d", index+1),
+			"dependencies": []string{}, "expected_output": "search hits", "success_criteria": []string{"the search step result is recorded"},
 		})
 	}
-	steps = append(steps, map[string]any{
-		"id": "search_2", "kind": "search", "description": "Search an additional user-requested research dimension",
-		"dependencies": []string{}, "expected_output": "additional search hits", "success_criteria": []string{"the additional research question is searched"},
-	})
-	searchIDs = append(searchIDs, "search_2")
 	for index := 1; index <= 2; index++ {
 		steps = append(steps, map[string]any{
 			"id": fmt.Sprintf("fetch_%d", index), "kind": "fetch", "description": fmt.Sprintf("Fetch a distinct research source %d", index),
-			"dependencies": searchIDs, "expected_output": "evidence", "success_criteria": []string{"a source with evidence is stored"},
+			"dependencies": append([]string(nil), searchIDs...), "expected_output": "evidence", "success_criteria": []string{"a source with evidence is stored"},
 		})
 	}
 	plan := map[string]any{"schema_version": 1, "goal": "research a technical topic", "subtasks": steps, "max_steps": 5, "final_deliverable": "answer"}
@@ -130,57 +119,89 @@ func TestResearchPlanSchemaRequiresConditionalSearchRetryAndTwoFetches(t *testin
 		t.Fatal(err)
 	}
 	if err := tools.ValidateJSONSchema(schema, valid); err != nil {
-		t.Fatalf("valid required research plan rejected: %v", err)
+		t.Fatalf("valid three-facet research plan rejected: %v", err)
 	}
 	invalidSteps := append([]map[string]any(nil), steps...)
-	invalidSteps[1], invalidSteps[2] = invalidSteps[2], invalidSteps[1]
+	invalidSteps[1] = map[string]any{
+		"id": "search_2", "kind": "search", "description": "A dependent retry rather than an independent facet",
+		"dependencies": []string{"search_1"}, "expected_output": "search hits", "success_criteria": []string{"the search step result is recorded"},
+	}
 	plan["subtasks"] = invalidSteps
 	invalid, err := json.Marshal(plan)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := tools.ValidateJSONSchema(schema, invalid); err == nil {
-		t.Fatal("plan with incorrect retry/fetch order passed the schema")
+		t.Fatal("dependent search facet passed the schema")
+	}
+	fourSearchSteps := append([]map[string]any(nil), steps[:3]...)
+	fourSearchSteps = append(fourSearchSteps, map[string]any{
+		"id": "search_4", "kind": "search", "description": "A fourth independent research facet",
+		"dependencies": []string{}, "expected_output": "search hits", "success_criteria": []string{"the extra search is recorded"},
+	})
+	fourSearchSteps = append(fourSearchSteps,
+		map[string]any{"id": "fetch_1", "kind": "fetch", "description": "Fetch source one", "dependencies": []string{"search_1", "search_2", "search_3", "search_4"}, "expected_output": "evidence", "success_criteria": []string{"source evidence is stored"}},
+		map[string]any{"id": "fetch_2", "kind": "fetch", "description": "Fetch source two", "dependencies": []string{"search_1", "search_2", "search_3", "search_4"}, "expected_output": "evidence", "success_criteria": []string{"source evidence is stored"}},
+	)
+	plan["subtasks"] = fourSearchSteps
+	plan["max_steps"] = 6
+	tooManySearches, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tools.ValidateJSONSchema(schema, tooManySearches); err == nil {
+		t.Fatal("fourth research search facet passed the schema")
+	}
+	fiveFetchSteps := append([]map[string]any(nil), steps[:2]...)
+	for index := 1; index <= 5; index++ {
+		fiveFetchSteps = append(fiveFetchSteps, map[string]any{
+			"id": fmt.Sprintf("fetch_%d", index), "kind": "fetch", "description": fmt.Sprintf("Fetch source %d", index),
+			"dependencies": []string{"search_1", "search_2"}, "expected_output": "evidence", "success_criteria": []string{"source evidence is stored"},
+		})
+	}
+	plan["subtasks"] = fiveFetchSteps
+	plan["max_steps"] = 7
+	tooManyFetches, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tools.ValidateJSONSchema(schema, tooManyFetches); err == nil {
+		t.Fatal("fifth research fetch passed the schema")
 	}
 	steps = append(steps, map[string]any{
 		"id": "code_1", "kind": "code_execution", "description": "Run a bounded task-specific calculation",
 		"dependencies": []string{"fetch_1"}, "expected_output": "calculation result", "success_criteria": []string{"calculation result is recorded"},
 	})
 	plan["subtasks"] = steps
-	plan["max_steps"] = 7
+	plan["max_steps"] = 6
 	validWithAdditionalAction, err := json.Marshal(plan)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := tools.ValidateJSONSchema(schema, validWithAdditionalAction); err != nil {
-		t.Fatalf("required research plan rejected an additional supported action: %v", err)
+		t.Fatalf("research plan rejected an additional supported action: %v", err)
 	}
 }
 
 func TestResearchPlanSchemaCanFetchSuppliedURLBeforeDiscovery(t *testing.T) {
 	requiredKinds := []string{"fetch", "search", "search", "fetch"}
 	schema := planOutputSchemaWithRequiredKinds(8, []string{"analysis", "search", "fetch", "code_execution", "external_action"}, requiredKinds)
-	searchIDs := []string{"search_1", "search_retry_1"}
+	searchIDs := []string{"search_1", "search_2"}
 	steps := []map[string]any{{
 		"id": "fetch_1", "kind": "fetch", "description": "Fetch the user-provided URL first",
 		"dependencies": []string{}, "expected_output": "user source evidence", "success_criteria": []string{"user source evidence is stored"},
 	}}
 	for index, searchID := range searchIDs {
 		dependencies := []string{"fetch_1"}
-		description := fmt.Sprintf("Investigate a distinct question %d", index+1)
-		if index == 1 {
-			dependencies = []string{"fetch_1", "search_1"}
-			description = "Broaden the discovery query only if the first search has no results"
-		}
 		steps = append(steps, map[string]any{
-			"id": searchID, "kind": "search", "description": description,
+			"id": searchID, "kind": "search", "description": fmt.Sprintf("Investigate an independent question %d", index+1),
 			"dependencies": dependencies, "expected_output": "discovery hits", "success_criteria": []string{"discovery results are recorded"},
 		})
 	}
 	for index := 2; index <= 2; index++ {
 		steps = append(steps, map[string]any{
 			"id": fmt.Sprintf("fetch_%d", index), "kind": "fetch", "description": fmt.Sprintf("Fetch a discovered source %d", index-1),
-			"dependencies": searchIDs, "expected_output": "source evidence", "success_criteria": []string{"source evidence is stored"},
+			"dependencies": append([]string(nil), searchIDs...), "expected_output": "source evidence", "success_criteria": []string{"source evidence is stored"},
 		})
 	}
 	plan := map[string]any{"schema_version": 1, "goal": "compare supplied and discovered sources", "subtasks": steps, "max_steps": 4, "final_deliverable": "cited comparison"}
@@ -190,6 +211,14 @@ func TestResearchPlanSchemaCanFetchSuppliedURLBeforeDiscovery(t *testing.T) {
 	}
 	if err := tools.ValidateJSONSchema(schema, encoded); err != nil {
 		t.Fatalf("URL-first research plan rejected: %v", err)
+	}
+}
+
+func TestPlanSchemaConstrainsIdentifierPattern(t *testing.T) {
+	schema := string(planOutputSchema(4, []string{"analysis", "search", "fetch"}))
+	want := `"pattern":"^[a-zA-Z0-9_-]{1,64}$"`
+	if count := strings.Count(schema, want); count < 2 {
+		t.Fatalf("plan schema contains %d strict identifier patterns, want step ID and dependency ID constraints", count)
 	}
 }
 

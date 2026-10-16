@@ -22,10 +22,11 @@ func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, requiredKinds
 			kindSchema["enum"] = kinds
 		}
 		idSchema := boundedStringSchema(1, 64)
+		idSchema["pattern"] = "^[a-zA-Z0-9_-]{1,64}$"
 		if len(ids) != 0 {
 			idSchema["enum"] = ids
 		}
-		dependencyItems := map[string]any{"type": "string", "maxLength": 64}
+		dependencyItems := map[string]any{"type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_-]{1,64}$"}
 		if len(dependencyIDs) != 0 {
 			dependencyItems["enum"] = dependencyIDs
 		}
@@ -47,51 +48,52 @@ func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, requiredKinds
 	subtasksSchema := boundedArraySchema(step, 1, maxSteps)
 	maxStepsSchema := map[string]any{"type": "integer", "minimum": 1, "maximum": maxSteps}
 	if len(requiredKinds) != 0 {
-		prefixLength := len(requiredKinds)
-		if requiredKinds[0] == "search" && len(requiredKinds) >= 2 && requiredKinds[1] == "search" {
-			prefixLength = 2
-		} else if requiredKinds[0] == "fetch" && len(requiredKinds) >= 3 && requiredKinds[1] == "search" && requiredKinds[2] == "search" {
-			prefixLength = 3
-		}
-		prefix := make([]any, 0, prefixLength)
-		searchIDs := make([]string, 0)
-		priorFetchIDs := make([]string, 0)
-		searchIndex := 0
-		fetchIndex := 0
-		for _, kind := range requiredKinds[:prefixLength] {
-			var id string
-			var dependencies []string
-			var minDependencies, maxDependencies int
+		minimumSearches, minimumFetches := 0, 0
+		for _, kind := range requiredKinds {
 			switch kind {
 			case "search":
-				searchIndex++
-				dependencies = append(dependencies, priorFetchIDs...)
-				if searchIndex == 1 {
-					id = "search_1"
-				} else if searchIndex == 2 {
-					id = "search_retry_1"
-					dependencies = append(dependencies, searchIDs...)
-				} else {
-					id = fmt.Sprintf("search_%d", searchIndex)
-					dependencies = append(dependencies, searchIDs...)
-				}
+				minimumSearches++
 			case "fetch":
-				fetchIndex++
-				id = fmt.Sprintf("fetch_%d", fetchIndex)
-				dependencies = append(dependencies, searchIDs...)
-			default:
-				id = fmt.Sprintf("%s_%d", kind, len(prefix)+1)
-			}
-			minDependencies, maxDependencies = len(dependencies), len(dependencies)
-			prefix = append(prefix, stepSchema([]string{kind}, []string{id}, dependencies, minDependencies, maxDependencies))
-			if kind == "search" {
-				searchIDs = append(searchIDs, id)
-			}
-			if kind == "fetch" {
-				priorFetchIDs = append(priorFetchIDs, id)
+				minimumFetches++
 			}
 		}
-		subtasksSchema = map[string]any{"type": "array", "minItems": len(requiredKinds), "maxItems": maxSteps, "prefixItems": prefix, "items": step}
+		urlFirst := requiredKinds[0] == "fetch" && minimumSearches > 0
+		if minimumSearches > 0 {
+			alternatives := make([]any, 0, 6)
+			nonResearchKinds := make([]string, 0, len(allowedKinds))
+			for _, kind := range allowedKinds {
+				if kind != "search" && kind != "fetch" {
+					nonResearchKinds = append(nonResearchKinds, kind)
+				}
+			}
+			nonResearchStep := stepSchema(nonResearchKinds, nil, nil, 0, maxSteps)
+			if len(nonResearchKinds) == 0 {
+				nonResearchStep = stepSchema([]string{"__no_additional_research_action__"}, nil, nil, 0, maxSteps)
+			}
+			maximumSearches := min(3, maxSteps-minimumFetches)
+			maximumFetches := min(4, maxSteps-minimumSearches)
+			for searchCount := minimumSearches; searchCount <= maximumSearches; searchCount++ {
+				for fetchCount := minimumFetches; fetchCount <= maximumFetches; fetchCount++ {
+					prefix := researchPlanPrefix(searchCount, fetchCount, urlFirst, stepSchema)
+					mandatorySteps := len(prefix)
+					if mandatorySteps > maxSteps {
+						continue
+					}
+					alternatives = append(alternatives, map[string]any{
+						"type": "array", "minItems": mandatorySteps, "maxItems": maxSteps,
+						"prefixItems": prefix, "items": nonResearchStep,
+					})
+				}
+			}
+			subtasksSchema = map[string]any{"anyOf": alternatives}
+		} else {
+			prefix := make([]any, 0, len(requiredKinds))
+			for index, kind := range requiredKinds {
+				id := fmt.Sprintf("%s_%d", kind, index+1)
+				prefix = append(prefix, stepSchema([]string{kind}, []string{id}, nil, 0, 0))
+			}
+			subtasksSchema = map[string]any{"type": "array", "minItems": len(requiredKinds), "maxItems": maxSteps, "prefixItems": prefix, "items": step}
+		}
 		maxStepsSchema = map[string]any{"type": "integer", "minimum": len(requiredKinds), "maximum": maxSteps}
 	}
 	schema := map[string]any{
@@ -107,6 +109,32 @@ func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, requiredKinds
 		"additionalProperties": false,
 	}
 	return encodeSchema(schema)
+}
+
+func researchPlanPrefix(searchCount, fetchCount int, urlFirst bool, stepSchema func([]string, []string, []string, int, int) map[string]any) []any {
+	prefix := make([]any, 0, searchCount+fetchCount)
+	priorFetchIDs := make([]string, 0, 1)
+	searchIDs := make([]string, 0, searchCount)
+	fetchIndex := 0
+	if urlFirst {
+		fetchIndex++
+		id := fmt.Sprintf("fetch_%d", fetchIndex)
+		prefix = append(prefix, stepSchema([]string{"fetch"}, []string{id}, nil, 0, 0))
+		priorFetchIDs = append(priorFetchIDs, id)
+	}
+	for index := 1; index <= searchCount; index++ {
+		id := fmt.Sprintf("search_%d", index)
+		dependencies := append([]string(nil), priorFetchIDs...)
+		prefix = append(prefix, stepSchema([]string{"search"}, []string{id}, dependencies, len(dependencies), len(dependencies)))
+		searchIDs = append(searchIDs, id)
+	}
+	for fetchIndex < fetchCount {
+		fetchIndex++
+		id := fmt.Sprintf("fetch_%d", fetchIndex)
+		dependencies := append([]string(nil), searchIDs...)
+		prefix = append(prefix, stepSchema([]string{"fetch"}, []string{id}, dependencies, len(dependencies), len(dependencies)))
+	}
+	return prefix
 }
 
 func actionOutputSchema(descriptors []tools.Descriptor, fetchURLs []string) json.RawMessage {

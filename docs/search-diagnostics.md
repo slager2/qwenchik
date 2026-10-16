@@ -229,3 +229,11 @@ make build
 - Tavily: экспортировать `TAVILY_API_KEY` из локального secret store. В отчёт и shell transcript сам key не копировать.
 
 До пользовательского тестирования стоит добавить regression case для «библиотеки в Астане»/«рестораны в Астане» без слова «где», backend-правило, запрещающее `analysis`-only plan при location-bound/current-info запросе, и автоматизированное UI-покрытие видимости `task.failed` с verification `missing`. Иначе строки вида «использовать поиск» в `description` сами по себе не заставят backend вызвать search tool.
+
+## Addendum: fixes after the captured run
+
+The previous sections record the deployed state and events observed before this mission's code changes. The follow-up changes add intent regressions for the reported Russian location/entity queries and informational lookups, ban analysis steps in recognized research plans, strictly validate ASCII step IDs, allow 2–3 independent search facets and 2–4 fetches, retry only a successful zero-hit initial query, and expand the candidate pools to eight model-visible hits and six fetch URLs. The API doctor now reports disabled search as a warning and propagates warnings to the overall status.
+
+PDF extraction now prefers the isolated Poppler image and falls back to the Go `dslipak/pdf` parser in a re-executed helper process when the image or rootless Docker is unavailable. This is deliberately a child process rather than an in-process parser so a five-second timeout can terminate it; it still is not an OS-level sandbox, and the Go memory limit is a runtime guard rather than a hard cgroup limit. Both paths enforce the 5 MB input, 20-page, and 50,000-rune output limits.
+
+After these fixes, the race suite, `make test`, `make vet`, and `make build` pass with the `sqlite_fts5` tag. The current running app still has no SearXNG or Tavily provider configured, so web-research requests will correctly stop with `search_unavailable` until a provider is enabled and `qagent serve` is restarted. Automated tests still do not substitute for a live provider test.

@@ -357,14 +357,43 @@ func TestFailedTaskAcceptsClarificationAndCanBeRetried(t *testing.T) {
 	}
 }
 
-func TestDoctorRequiresStrictStructuredModelSmoke(t *testing.T) {
+func TestDoctorAggregatesWarningsAndRequiresStrictStructuredModelSmoke(t *testing.T) {
 	for _, test := range []struct {
-		name       string
-		modelReply string
-		wantStatus string
+		name              string
+		modelReply        string
+		wantStatus        string
+		wantLLMStatus     string
+		wantSearchStatus  string
+		wantSearchMessage string
+		tavilyConfigured  bool
+		searxngConfigured bool
 	}{
-		{name: "valid structured output", modelReply: `{"ok":true}`, wantStatus: "ok"},
-		{name: "invalid structured output", modelReply: `{"ok":false}`, wantStatus: "error"},
+		{
+			name:       "search disabled",
+			modelReply: `{"ok":true}`, wantStatus: "warning", wantLLMStatus: "ok",
+			wantSearchStatus:  "warning",
+			wantSearchMessage: "Web search is disabled. Tasks requiring web discovery will fail with search_unavailable.",
+		},
+		{
+			name:       "invalid structured output with search disabled",
+			modelReply: `{"ok":false}`, wantStatus: "error", wantLLMStatus: "error",
+			wantSearchStatus:  "warning",
+			wantSearchMessage: "Web search is disabled. Tasks requiring web discovery will fail with search_unavailable.",
+		},
+		{
+			name:       "Tavily configured",
+			modelReply: `{"ok":true}`, wantStatus: "warning", wantLLMStatus: "ok",
+			wantSearchStatus:  "warning",
+			wantSearchMessage: "Tavily is configured; external API health is checked during research",
+			tavilyConfigured:  true,
+		},
+		{
+			name:       "healthy SearXNG configured",
+			modelReply: `{"ok":true}`, wantStatus: "ok", wantLLMStatus: "ok",
+			wantSearchStatus:  "ok",
+			wantSearchMessage: "SearXNG search endpoint returned valid JSON",
+			searxngConfigured: true,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			llmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -381,13 +410,24 @@ func TestDoctorRequiresStrictStructuredModelSmoke(t *testing.T) {
 				_, _ = w.Write(response)
 			}))
 			defer llmServer.Close()
+			searchURL := ""
+			if test.searxngConfigured {
+				searchServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"results":[]}`))
+				}))
+				defer searchServer.Close()
+				searchURL = searchServer.URL
+			}
 			store, err := sqlite.Open(context.Background(), t.TempDir()+"/doctor.db")
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer store.Close()
-			server := New(app.New(store), testWorker{}, store.Ping, llmServer.URL+"/v1", "EMPTY", "", nil)
+			server := New(app.New(store), testWorker{}, store.Ping, llmServer.URL+"/v1", "EMPTY", searchURL, nil)
 			server.SetLLMModel("doctor-test")
+			server.SetTavilyConfigured(test.tavilyConfigured)
+			server.SetSandboxStatus(true, "rootless sandbox is available")
 			request := httptest.NewRequest(http.MethodGet, "/api/doctor", nil)
 			request.Host = "127.0.0.1:8080"
 			response := httptest.NewRecorder()
@@ -399,8 +439,15 @@ func TestDoctorRequiresStrictStructuredModelSmoke(t *testing.T) {
 			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 				t.Fatal(err)
 			}
-			if body.Status != test.wantStatus || body.Checks["llm"]["status"] != test.wantStatus {
+			wantHTTPStatus := http.StatusOK
+			if test.wantStatus == "error" {
+				wantHTTPStatus = http.StatusServiceUnavailable
+			}
+			if response.Code != wantHTTPStatus || body.Status != test.wantStatus || body.Checks["llm"]["status"] != test.wantLLMStatus {
 				t.Fatalf("doctor status=%q llm=%#v body=%s", body.Status, body.Checks["llm"], response.Body.String())
+			}
+			if body.Checks["search"]["status"] != test.wantSearchStatus || body.Checks["search"]["message"] != test.wantSearchMessage {
+				t.Fatalf("doctor search check=%#v body=%s", body.Checks["search"], response.Body.String())
 			}
 		})
 	}
