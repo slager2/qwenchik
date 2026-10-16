@@ -3,6 +3,7 @@ package research
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -26,11 +27,43 @@ func TestHTMLExtractorRemovesExecutableAndNavigationContent(t *testing.T) {
 	}
 }
 
-func TestHTMLExtractorFailsClosedForPDFUntilSafeParserIsSelected(t *testing.T) {
-	_, err := NewHTMLExtractor(1000).Extract(context.Background(), FetchedDocument{ContentType: "application/pdf"})
-	if !errors.Is(err, ErrPDFExtractorUnavailable) {
-		t.Fatalf("PDF extraction error = %v", err)
+func TestHTMLExtractorUsesPureGoFallbackWithoutDockerImage(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "tcp://unavailable.example:2376")
+	extracted, err := NewHTMLExtractor(1000).Extract(context.Background(), FetchedDocument{
+		ContentType: "application/pdf", ContentSHA256: "fixture-hash", Body: minimalPDFDocument("Pure Go fallback PDF text"),
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
+	if extracted.Method != "pure_go_pdf_subprocess" || extracted.PageCount != 1 || !strings.Contains(extracted.Text, "Pure Go fallback PDF text") {
+		t.Fatalf("pure-Go PDF fallback result = %#v", extracted)
+	}
+}
+
+func minimalPDFDocument(text string) []byte {
+	content := "BT /F1 12 Tf 72 720 Td (" + text + ") Tj ET"
+	objects := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+	}
+	var document strings.Builder
+	document.WriteString("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+	offsets := make([]int, len(objects)+1)
+	for index, object := range objects {
+		objectNumber := index + 1
+		offsets[objectNumber] = document.Len()
+		fmt.Fprintf(&document, "%d 0 obj\n%s\nendobj\n", objectNumber, object)
+	}
+	xrefOffset := document.Len()
+	fmt.Fprintf(&document, "xref\n0 %d\n0000000000 65535 f \n", len(objects)+1)
+	for objectNumber := 1; objectNumber <= len(objects); objectNumber++ {
+		fmt.Fprintf(&document, "%010d 00000 n \n", offsets[objectNumber])
+	}
+	fmt.Fprintf(&document, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objects)+1, xrefOffset)
+	return []byte(document.String())
 }
 
 type fakePDFExtractor struct {

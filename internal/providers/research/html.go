@@ -30,7 +30,8 @@ type IsolatedPDFExtractor interface {
 }
 
 func NewHTMLExtractor(maxChars int) *HTMLExtractor {
-	return NewHTMLExtractorWithPDF(maxChars, nil)
+	pdfExtractor, _ := pdfextract.New("", nil)
+	return NewHTMLExtractorWithPDF(maxChars, pdfExtractor)
 }
 
 func NewHTMLExtractorWithPDF(maxChars int, pdfExtractor IsolatedPDFExtractor) *HTMLExtractor {
