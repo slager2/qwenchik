@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/url"
 	"regexp"
 	"sort"
@@ -44,6 +45,7 @@ func (e verificationIncompleteError) Unwrap() error { return errVerificationInco
 
 var citationPattern = regexp.MustCompile(`\[([^\]]+)\]`)
 var userURLPattern = regexp.MustCompile(`https?://[^\s<>"']+`)
+var fetchHTTPStatusPattern = regexp.MustCompile(`(?i)\bHTTP\s+(\d{3})\b`)
 
 const maxToolCallArgumentsBytes = 64 << 10
 
@@ -112,6 +114,7 @@ type checkpointState struct {
 	PendingTarget         string            `json:"pending_target,omitempty"`
 	PendingRisk           string            `json:"pending_risk,omitempty"`
 	FailedFetchURLs       []string          `json:"failed_fetch_urls,omitempty"`
+	RejectedFetchURLs     []string          `json:"rejected_fetch_urls,omitempty"`
 	CurrentStep           string            `json:"current_step,omitempty"`
 	CompletedSteps        []string          `json:"completed_steps"`
 	SkippedSteps          []string          `json:"skipped_steps,omitempty"`
@@ -493,6 +496,7 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 	requiredResearchSources := minimumResearchFetches(task.Title + "\n" + goal)
 	requiredResearchFacets := minimumResearchSearches(task.Title + "\n" + goal)
 	initialSearchStepID := firstSearchStepID(plan)
+	attemptedFetchURLs := make(map[string]struct{})
 	for _, step := range plan.Subtasks {
 		if step.ID == initialSearchStepID && contains(state.CompletedSteps, step.ID) && !contains(state.SkippedSteps, step.ID) {
 			if err := w.retryInitialSearchIfEmpty(ctx, task.ID, &stage, step, &state); err != nil {
@@ -547,11 +551,22 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 		var fetchURLs []string
 		if step.Kind == "fetch" {
 			fetchURLs = w.availableFetchURLs(task.ID, state.ToolResults, state.FailedFetchURLs, userProvidedURLs(goal), minimumResearchFetches(task.Title+"\n"+goal) > 1)
+			fetchURLs = filterFetchURLs(fetchURLs, attemptedFetchURLs, state.RejectedFetchURLs)
 			if len(fetchURLs) == 0 {
 				if incomplete := insufficientResearchEvidence(task.Title, goal, state); incomplete != nil {
 					return incomplete
 				}
-				return tools.ErrUnknownTarget
+				if distinctResearchSourceCount(state.ToolResults) == 0 {
+					return insufficientFetchEvidenceError()
+				}
+				state.CurrentStep = ""
+				if _, err := w.repo.SaveCheckpoint(ctx, task.ID, 1, state); err != nil {
+					return err
+				}
+				if err := w.skipPlanStep(ctx, task.ID, &stage, step, "no unused approved source URL remained and the collected evidence already meets the source threshold", &state); err != nil {
+					return err
+				}
+				continue
 			}
 		}
 		if state.PendingApproval && state.CurrentStep == step.ID {
@@ -618,128 +633,115 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 			state.SearchQueryByStep[step.ID] = query
 		}
 		var descriptor tools.Descriptor
-		var policyDecision policy.Decision
-		var authorizeErr error
-		if expectedTool != "" && decision.ToolCall.Name != expectedTool {
-			descriptor, policyDecision = w.tools.Decide(role, decision.ToolCall.Name)
-			policyDecision = policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "tool does not match the active plan step"}
-			if w.tools.Has(decision.ToolCall.Name) {
-				authorizeErr = tools.ErrToolDenied
-			} else {
-				authorizeErr = tools.ErrUnknownTool
-			}
-		} else {
-			descriptor, policyDecision, authorizeErr = w.tools.Authorize(ctx, role, decision.ToolCall.Name, decision.ToolCall.Arguments)
-			if expectedRisk != "" && descriptor.RiskClass != expectedRisk {
-				policyDecision = policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "tool risk class does not match the active plan step"}
-				authorizeErr = tools.ErrToolDenied
-			}
-			if authorizeErr == nil && policyDecision.Action == policy.ApprovalRequired && approvalGrant != "" {
-				policyDecision.Action = policy.Allow
-				policyDecision.Reason = "matching single-use approval was consumed"
-			}
-		}
-		if _, err := w.repo.RecordEvent(ctx, task.ID, "policy.decision", &stage, "audit", map[string]any{
-			"tool": decision.ToolCall.Name, "action": policyDecision.Action,
-			"capability": descriptor.RequiredCapability, "risk_class": descriptor.RiskClass,
-			"reason": policyDecision.Reason,
-		}); err != nil {
-			return err
-		}
-		if authorizeErr != nil {
-			return authorizeErr
-		}
-		if policyDecision.Action == policy.ApprovalRequired {
-			state.PendingTool = decision.ToolCall.Name
-			state.PendingToolIdempotent = descriptor.Idempotent
-			state.PendingApproval = true
-			state.PendingArguments = append(json.RawMessage(nil), decision.ToolCall.Arguments...)
-			state.PendingSummary = decision.Summary
-			state.PendingTarget = approvalTarget(decision.ToolCall.Arguments)
-			state.PendingRisk = policyDecision.Reason
-			_, err := w.repo.CreateApproval(ctx, domain.Approval{
-				TaskID: task.ID, ToolName: state.PendingTool, Arguments: state.PendingArguments,
-				Target: state.PendingTarget, RiskExplanation: state.PendingRisk,
-				ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
-			}, state)
+		var result any
+		if step.Kind == "fetch" {
+			var exhausted bool
+			result, descriptor, exhausted, err = w.executeFetchCandidates(
+				ctx, task.ID, &stage, step, role, expectedRisk, fetchURLs, &decision, &state, attemptedFetchURLs, approvalGrant,
+			)
 			if err != nil {
 				return err
 			}
-			return ErrAwaitingApproval
-		}
-		if policyDecision.Action != policy.Allow {
-			return tools.DecisionError(decision.ToolCall.Name, policyDecision)
-		}
-		state.PendingTool = decision.ToolCall.Name
-		state.PendingToolIdempotent = descriptor.Idempotent
-		state.PendingApproval = false
-		state.PendingArguments = append(json.RawMessage(nil), decision.ToolCall.Arguments...)
-		state.PendingSummary = decision.Summary
-		state.PendingTarget = ""
-		state.PendingRisk = ""
-		if _, err := w.repo.SaveCheckpoint(ctx, task.ID, 1, state); err != nil {
-			return err
-		}
-		toolStartedPayload := map[string]any{"step_id": step.ID, "tool": decision.ToolCall.Name, "summary": decision.Summary}
-		if decision.ToolCall.Name == "fetch_url" {
-			var arguments struct {
-				URL string `json:"url"`
+			if exhausted {
+				if incomplete := insufficientResearchEvidence(task.Title, goal, state); incomplete != nil {
+					return incomplete
+				}
+				if distinctResearchSourceCount(state.ToolResults) == 0 {
+					return insufficientFetchEvidenceError()
+				}
+				state.CurrentStep = ""
+				if _, err := w.repo.SaveCheckpoint(ctx, task.ID, 1, state); err != nil {
+					return err
+				}
+				if err := w.skipPlanStep(ctx, task.ID, &stage, step, "all approved source URLs were unavailable and the collected evidence already meets the source threshold", &state); err != nil {
+					return err
+				}
+				continue
 			}
-			if json.Unmarshal(decision.ToolCall.Arguments, &arguments) == nil {
-				toolStartedPayload["target_url"] = arguments.URL
-			}
-		}
-		if _, err := w.repo.RecordEvent(ctx, task.ID, "tool.started", &stage, "user", toolStartedPayload); err != nil {
-			return err
-		}
-		if err := w.ensureActive(ctx, task.ID); err != nil {
-			return err
-		}
-		toolContext := ctx
-		if step.Kind == "fetch" {
-			toolContext = tools.WithFetchByteLimit(ctx, w.options.MaxFetchBytes-state.FetchedBytes)
-		}
-		var result any
-		if approvalGrant != "" {
-			result, err = w.tools.ExecuteApproved(toolContext, role, decision.ToolCall.Name, decision.ToolCall.Arguments, approvalGrant)
 		} else {
-			result, err = w.tools.Execute(toolContext, role, decision.ToolCall.Name, decision.ToolCall.Arguments)
-		}
-		if err != nil {
-			if step.Kind == "fetch" && isSourceUnavailableFetchError(ctx, err) {
-				var arguments struct {
-					URL string `json:"url"`
+			var policyDecision policy.Decision
+			var authorizeErr error
+			if expectedTool != "" && decision.ToolCall.Name != expectedTool {
+				descriptor, policyDecision = w.tools.Decide(role, decision.ToolCall.Name)
+				policyDecision = policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "tool does not match the active plan step"}
+				if w.tools.Has(decision.ToolCall.Name) {
+					authorizeErr = tools.ErrToolDenied
+				} else {
+					authorizeErr = tools.ErrUnknownTool
 				}
-				if json.Unmarshal(decision.ToolCall.Arguments, &arguments) == nil {
-					if canonical, canonicalErr := provenance.CanonicalURL(arguments.URL); canonicalErr == nil {
-						if !contains(state.FailedFetchURLs, canonical) {
-							state.FailedFetchURLs = append(state.FailedFetchURLs, canonical)
-						}
-					}
+			} else {
+				descriptor, policyDecision, authorizeErr = w.tools.Authorize(ctx, role, decision.ToolCall.Name, decision.ToolCall.Arguments)
+				if expectedRisk != "" && descriptor.RiskClass != expectedRisk {
+					policyDecision = policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "tool risk class does not match the active plan step"}
+					authorizeErr = tools.ErrToolDenied
 				}
-				state.PendingTool = ""
-				state.PendingToolIdempotent = false
-				state.PendingArguments = nil
-				state.PendingSummary = ""
-				state.PendingTarget = ""
-				state.PendingRisk = ""
-				if _, checkpointErr := w.repo.SaveCheckpoint(ctx, task.ID, 1, state); checkpointErr != nil {
-					return checkpointErr
-				}
-				if _, eventErr := w.repo.RecordEvent(ctx, task.ID, "tool.failed", &stage, "audit", map[string]any{
-					"step_id": step.ID, "tool": decision.ToolCall.Name, "target_url": arguments.URL, "failure": "source_unavailable",
-				}); eventErr != nil {
-					return eventErr
+				if authorizeErr == nil && policyDecision.Action == policy.ApprovalRequired && approvalGrant != "" {
+					policyDecision.Action = policy.Allow
+					policyDecision.Reason = "matching single-use approval was consumed"
 				}
 			}
-			if errors.Is(err, tools.ErrInvalidArguments) {
-				_, _ = w.repo.RecordEvent(ctx, task.ID, "policy.decision", &stage, "audit", map[string]any{
-					"tool": decision.ToolCall.Name, "action": policy.Deny,
-					"capability": descriptor.RequiredCapability, "risk_class": descriptor.RiskClass,
-					"reason": "arguments failed execution-time revalidation",
-				})
+			if _, err := w.repo.RecordEvent(ctx, task.ID, "policy.decision", &stage, "audit", map[string]any{
+				"tool": decision.ToolCall.Name, "action": policyDecision.Action,
+				"capability": descriptor.RequiredCapability, "risk_class": descriptor.RiskClass,
+				"reason": policyDecision.Reason,
+			}); err != nil {
+				return err
 			}
-			return err
+			if authorizeErr != nil {
+				return authorizeErr
+			}
+			if policyDecision.Action == policy.ApprovalRequired {
+				state.PendingTool = decision.ToolCall.Name
+				state.PendingToolIdempotent = descriptor.Idempotent
+				state.PendingApproval = true
+				state.PendingArguments = append(json.RawMessage(nil), decision.ToolCall.Arguments...)
+				state.PendingSummary = decision.Summary
+				state.PendingTarget = approvalTarget(decision.ToolCall.Arguments)
+				state.PendingRisk = policyDecision.Reason
+				_, err := w.repo.CreateApproval(ctx, domain.Approval{
+					TaskID: task.ID, ToolName: state.PendingTool, Arguments: state.PendingArguments,
+					Target: state.PendingTarget, RiskExplanation: state.PendingRisk,
+					ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
+				}, state)
+				if err != nil {
+					return err
+				}
+				return ErrAwaitingApproval
+			}
+			if policyDecision.Action != policy.Allow {
+				return tools.DecisionError(decision.ToolCall.Name, policyDecision)
+			}
+			state.PendingTool = decision.ToolCall.Name
+			state.PendingToolIdempotent = descriptor.Idempotent
+			state.PendingApproval = false
+			state.PendingArguments = append(json.RawMessage(nil), decision.ToolCall.Arguments...)
+			state.PendingSummary = decision.Summary
+			state.PendingTarget = ""
+			state.PendingRisk = ""
+			if _, err := w.repo.SaveCheckpoint(ctx, task.ID, 1, state); err != nil {
+				return err
+			}
+			if _, err := w.repo.RecordEvent(ctx, task.ID, "tool.started", &stage, "user", map[string]any{"step_id": step.ID, "tool": decision.ToolCall.Name, "summary": decision.Summary}); err != nil {
+				return err
+			}
+			if err := w.ensureActive(ctx, task.ID); err != nil {
+				return err
+			}
+			if approvalGrant != "" {
+				result, err = w.tools.ExecuteApproved(ctx, role, decision.ToolCall.Name, decision.ToolCall.Arguments, approvalGrant)
+			} else {
+				result, err = w.tools.Execute(ctx, role, decision.ToolCall.Name, decision.ToolCall.Arguments)
+			}
+			if err != nil {
+				if errors.Is(err, tools.ErrInvalidArguments) {
+					_, _ = w.repo.RecordEvent(ctx, task.ID, "policy.decision", &stage, "audit", map[string]any{
+						"tool": decision.ToolCall.Name, "action": policy.Deny,
+						"capability": descriptor.RequiredCapability, "risk_class": descriptor.RiskClass,
+						"reason": "arguments failed execution-time revalidation",
+					})
+				}
+				return err
+			}
 		}
 		w.tools.RememberURLs(task.ID, result)
 		if step.Kind == "fetch" {
@@ -830,11 +832,283 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 	return err
 }
 
-func isSourceUnavailableFetchError(ctx context.Context, err error) bool {
-	if ctx.Err() != nil || errors.Is(err, research.ErrUnsafeURL) {
+func (w *Worker) executeFetchCandidates(
+	ctx context.Context,
+	taskID string,
+	stage *domain.Stage,
+	step domain.PlanStep,
+	role, expectedRisk string,
+	availableURLs []string,
+	decision *actionDecision,
+	state *checkpointState,
+	attemptedURLs map[string]struct{},
+	approvalGrant string,
+) (any, tools.Descriptor, bool, error) {
+	if decision == nil || decision.ToolCall == nil || decision.ToolCall.Name != "fetch_url" {
+		return nil, tools.Descriptor{}, false, fmt.Errorf("%w: fetch step did not select fetch_url", errInvalidModelOutput)
+	}
+	descriptor, ok := w.tools.Descriptor("fetch_url")
+	if !ok {
+		return nil, tools.Descriptor{}, false, tools.ErrUnknownTool
+	}
+	var selected struct {
+		URL           string `json:"url"`
+		OriginalQuery string `json:"original_query"`
+	}
+	if err := json.Unmarshal(decision.ToolCall.Arguments, &selected); err != nil {
+		return nil, tools.Descriptor{}, false, fmt.Errorf("%w: fetch URL arguments could not be decoded", errInvalidModelOutput)
+	}
+	selectedURL, err := provenance.CanonicalURL(selected.URL)
+	if err != nil || !contains(availableURLs, selectedURL) {
+		return nil, tools.Descriptor{}, false, tools.ErrUnknownTarget
+	}
+
+	candidates := make([]string, 0, min(len(availableURLs), 6))
+	seen := make(map[string]struct{}, len(availableURLs))
+	for _, candidate := range append([]string{selectedURL}, availableURLs...) {
+		canonical, canonicalErr := provenance.CanonicalURL(candidate)
+		if canonicalErr != nil {
+			continue
+		}
+		if _, duplicate := seen[canonical]; duplicate {
+			continue
+		}
+		if _, alreadyAttempted := attemptedURLs[canonical]; alreadyAttempted {
+			continue
+		}
+		seen[canonical] = struct{}{}
+		candidates = append(candidates, canonical)
+		if len(candidates) == 6 {
+			break
+		}
+	}
+	if len(candidates) == 0 || candidates[0] != selectedURL {
+		return nil, tools.Descriptor{}, false, tools.ErrUnknownTarget
+	}
+	// A consumed approval applies only to the exact arguments the user approved.
+	if approvalGrant != "" {
+		candidates = candidates[:1]
+	}
+
+	for index, candidate := range candidates {
+		if err := w.ensureActive(ctx, taskID); err != nil {
+			return nil, tools.Descriptor{}, false, err
+		}
+		attemptedURLs[candidate] = struct{}{}
+		arguments := map[string]any{"url": candidate}
+		if selected.OriginalQuery != "" {
+			arguments["original_query"] = selected.OriginalQuery
+		}
+		encodedArguments, err := json.Marshal(arguments)
+		if err != nil {
+			return nil, tools.Descriptor{}, false, err
+		}
+		normalizedArguments, err := normalizeToolArguments(encodedArguments, descriptor)
+		if err != nil {
+			return nil, tools.Descriptor{}, false, fmt.Errorf("%w: fallback fetch arguments failed local schema normalization: %v", errInvalidModelOutput, err)
+		}
+		attemptDecision := *decision
+		if index > 0 {
+			attemptDecision.Summary = "Fetching another approved source after the previous source was unavailable."
+		}
+		attemptDecision.ToolCall = &struct {
+			Name      string          `json:"name"`
+			Arguments json.RawMessage `json:"arguments"`
+		}{Name: "fetch_url", Arguments: normalizedArguments}
+
+		descriptor, policyDecision, authorizeErr := w.tools.Authorize(ctx, role, "fetch_url", normalizedArguments)
+		if expectedRisk != "" && descriptor.RiskClass != expectedRisk {
+			policyDecision = policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "tool risk class does not match the active plan step"}
+			authorizeErr = tools.ErrToolDenied
+		}
+		if authorizeErr == nil && policyDecision.Action == policy.ApprovalRequired && approvalGrant != "" {
+			policyDecision.Action = policy.Allow
+			policyDecision.Reason = "matching single-use approval was consumed"
+		}
+		if _, err := w.repo.RecordEvent(ctx, taskID, "policy.decision", stage, "audit", map[string]any{
+			"tool": "fetch_url", "target_url": candidate, "action": policyDecision.Action,
+			"capability": descriptor.RequiredCapability, "risk_class": descriptor.RiskClass,
+			"reason": policyDecision.Reason,
+		}); err != nil {
+			return nil, tools.Descriptor{}, false, err
+		}
+		if errors.Is(authorizeErr, research.ErrUnsafeURL) {
+			if err := w.recordFetchCandidateFailure(ctx, taskID, stage, step.ID, candidate, "unsafe_url", true, state); err != nil {
+				return nil, tools.Descriptor{}, false, err
+			}
+			continue
+		}
+		if authorizeErr != nil {
+			return nil, tools.Descriptor{}, false, authorizeErr
+		}
+		if policyDecision.Action == policy.ApprovalRequired {
+			state.PendingTool = "fetch_url"
+			state.PendingToolIdempotent = descriptor.Idempotent
+			state.PendingApproval = true
+			state.PendingArguments = append(json.RawMessage(nil), normalizedArguments...)
+			state.PendingSummary = attemptDecision.Summary
+			state.PendingTarget = approvalTarget(normalizedArguments)
+			state.PendingRisk = policyDecision.Reason
+			_, err := w.repo.CreateApproval(ctx, domain.Approval{
+				TaskID: taskID, ToolName: state.PendingTool, Arguments: state.PendingArguments,
+				Target: state.PendingTarget, RiskExplanation: state.PendingRisk,
+				ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
+			}, state)
+			if err != nil {
+				return nil, tools.Descriptor{}, false, err
+			}
+			return nil, tools.Descriptor{}, false, ErrAwaitingApproval
+		}
+		if policyDecision.Action != policy.Allow {
+			return nil, tools.Descriptor{}, false, tools.DecisionError("fetch_url", policyDecision)
+		}
+
+		attemptSummary := attemptDecision.Summary
+		decision.Summary = attemptSummary
+		state.PendingTool = "fetch_url"
+		state.PendingToolIdempotent = descriptor.Idempotent
+		state.PendingApproval = false
+		state.PendingArguments = append(json.RawMessage(nil), normalizedArguments...)
+		state.PendingSummary = attemptSummary
+		state.PendingTarget = ""
+		state.PendingRisk = ""
+		if _, err := w.repo.SaveCheckpoint(ctx, taskID, 1, state); err != nil {
+			return nil, tools.Descriptor{}, false, err
+		}
+		if _, err := w.repo.RecordEvent(ctx, taskID, "tool.started", stage, "user", map[string]any{
+			"step_id": step.ID, "tool": "fetch_url", "summary": attemptSummary, "target_url": candidate,
+		}); err != nil {
+			return nil, tools.Descriptor{}, false, err
+		}
+		if err := w.ensureActive(ctx, taskID); err != nil {
+			return nil, tools.Descriptor{}, false, err
+		}
+		remainingBytes := w.options.MaxFetchBytes - state.FetchedBytes
+		if remainingBytes < 1 {
+			return nil, tools.Descriptor{}, false, errFetchBudgetExceeded
+		}
+		toolContext := tools.WithFetchByteLimit(ctx, remainingBytes)
+		var result any
+		if approvalGrant != "" {
+			result, err = w.tools.ExecuteApproved(toolContext, role, "fetch_url", normalizedArguments, approvalGrant)
+		} else {
+			result, err = w.tools.Execute(toolContext, role, "fetch_url", normalizedArguments)
+		}
+		if err == nil {
+			return result, descriptor, false, nil
+		}
+		if errors.Is(err, research.ErrUnsafeURL) {
+			_, _ = w.repo.RecordEvent(ctx, taskID, "policy.decision", stage, "audit", map[string]any{
+				"tool": "fetch_url", "target_url": candidate, "action": policy.Deny,
+				"capability": descriptor.RequiredCapability, "risk_class": descriptor.RiskClass,
+				"reason": "arguments failed execution-time URL safety revalidation",
+			})
+			if err := w.recordFetchCandidateFailure(ctx, taskID, stage, step.ID, candidate, "unsafe_url", true, state); err != nil {
+				return nil, tools.Descriptor{}, false, err
+			}
+			continue
+		}
+		if isRetryableFetchError(ctx, err) {
+			if err := w.recordFetchCandidateFailure(ctx, taskID, stage, step.ID, candidate, "source_unavailable", false, state); err != nil {
+				return nil, tools.Descriptor{}, false, err
+			}
+			continue
+		}
+		if errors.Is(err, tools.ErrInvalidArguments) {
+			_, _ = w.repo.RecordEvent(ctx, taskID, "policy.decision", stage, "audit", map[string]any{
+				"tool": "fetch_url", "target_url": candidate, "action": policy.Deny,
+				"capability": descriptor.RequiredCapability, "risk_class": descriptor.RiskClass,
+				"reason": "arguments failed execution-time revalidation",
+			})
+		}
+		return nil, descriptor, false, err
+	}
+	return nil, tools.Descriptor{}, true, nil
+}
+
+func (w *Worker) recordFetchCandidateFailure(ctx context.Context, taskID string, stage *domain.Stage, stepID, rawURL, failure string, rejected bool, state *checkpointState) error {
+	canonical, err := provenance.CanonicalURL(rawURL)
+	if err == nil {
+		if !contains(state.FailedFetchURLs, canonical) {
+			state.FailedFetchURLs = append(state.FailedFetchURLs, canonical)
+		}
+		if rejected && !contains(state.RejectedFetchURLs, canonical) {
+			state.RejectedFetchURLs = append(state.RejectedFetchURLs, canonical)
+		}
+	}
+	state.PendingTool = ""
+	state.PendingToolIdempotent = false
+	state.PendingApproval = false
+	state.PendingArguments = nil
+	state.PendingSummary = ""
+	state.PendingTarget = ""
+	state.PendingRisk = ""
+	if _, err := w.repo.SaveCheckpoint(ctx, taskID, 1, state); err != nil {
+		return err
+	}
+	_, err = w.repo.RecordEvent(ctx, taskID, "tool.failed", stage, "audit", map[string]any{
+		"step_id": stepID, "tool": "fetch_url", "target_url": rawURL, "failure": failure,
+	})
+	return err
+}
+
+func filterFetchURLs(urls []string, attempted map[string]struct{}, rejectedURLs []string) []string {
+	rejected := make(map[string]struct{}, len(rejectedURLs))
+	for _, rawURL := range rejectedURLs {
+		if canonical, err := provenance.CanonicalURL(rawURL); err == nil {
+			rejected[canonical] = struct{}{}
+		}
+	}
+	filtered := make([]string, 0, len(urls))
+	seen := make(map[string]struct{}, len(urls))
+	for _, rawURL := range urls {
+		canonical, err := provenance.CanonicalURL(rawURL)
+		if err != nil {
+			continue
+		}
+		if _, duplicate := seen[canonical]; duplicate {
+			continue
+		}
+		if _, wasAttempted := attempted[canonical]; wasAttempted {
+			continue
+		}
+		if _, wasRejected := rejected[canonical]; wasRejected {
+			continue
+		}
+		seen[canonical] = struct{}{}
+		filtered = append(filtered, canonical)
+	}
+	return filtered
+}
+
+func isRetryableFetchError(ctx context.Context, err error) bool {
+	if err == nil || ctx.Err() != nil || errors.Is(err, research.ErrUnsafeURL) {
 		return false
 	}
-	return errors.Is(err, research.ErrFetchSourceUnavailable) || errors.Is(err, research.ErrFetchRequestFailed)
+	if errors.Is(err, research.ErrFetchSourceUnavailable) {
+		if match := fetchHTTPStatusPattern.FindStringSubmatch(err.Error()); len(match) == 2 {
+			var status int
+			if _, scanErr := fmt.Sscanf(match[1], "%d", &status); scanErr == nil {
+				return status == 403 || status >= 500
+			}
+		}
+		return true
+	}
+	if errors.Is(err, research.ErrFetchRequestFailed) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var networkErr net.Error
+	return errors.As(err, &networkErr)
+}
+
+func insufficientFetchEvidenceError() error {
+	return verificationIncompleteError{
+		Summary: "No source could be fetched successfully, so there is no evidence to support a research answer.",
+		Missing: []string{"At least one source must be fetched successfully before a source-backed answer can be produced."},
+	}
 }
 
 func (w *Worker) validatePlan(plan domain.Plan, goal string) error {
@@ -859,7 +1133,6 @@ func (w *Worker) validateTaskPlan(plan domain.Plan, taskTitle, goal string) erro
 	searchCount := 0
 	fetchCount := 0
 	searchStepIDs := make([]string, 0)
-	fetchSteps := make([]domain.PlanStep, 0)
 	seenDiscoveryFetch := false
 	for index, step := range plan.Subtasks {
 		if _, _, _, ok := w.toolForStep(step.Kind); !ok {
@@ -879,7 +1152,6 @@ func (w *Worker) validateTaskPlan(plan domain.Plan, taskTitle, goal string) erro
 				seenDiscoveryFetch = true
 			}
 			fetchCount++
-			fetchSteps = append(fetchSteps, step)
 		}
 	}
 	if hasSearch && !hasFetch {
@@ -920,16 +1192,6 @@ func (w *Worker) validateTaskPlan(plan domain.Plan, taskTitle, goal string) erro
 			for _, dependency := range searchStep.Dependencies {
 				if contains(searchStepIDs, dependency) {
 					return fmt.Errorf("%w: discovery searches must be independent facets, not retries of one another", errResearchPlanIncomplete)
-				}
-			}
-		}
-		for _, fetchStep := range fetchSteps {
-			if userURLProvided && fetchStep.ID == plan.Subtasks[0].ID {
-				continue
-			}
-			for _, searchStepID := range searchStepIDs {
-				if !contains(fetchStep.Dependencies, searchStepID) {
-					return fmt.Errorf("%w: each source fetch must wait for all distinct search steps", errResearchPlanIncomplete)
 				}
 			}
 		}

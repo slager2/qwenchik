@@ -99,6 +99,9 @@ func TestActionSchemaBindsArgumentsToSelectedTool(t *testing.T) {
 func TestResearchPlanSchemaSupportsIndependentFacetsAndBoundedFetches(t *testing.T) {
 	requiredKinds := []string{"search", "search", "fetch", "fetch"}
 	schema := planOutputSchemaWithRequiredKinds(12, []string{"analysis", "search", "fetch", "code_execution", "external_action"}, requiredKinds)
+	if !strings.Contains(string(schema), `"dependencies":{"items":{"maxLength":64,"pattern":"^[a-zA-Z0-9_-]{1,64}$","type":"string"},"maxItems":4,"minItems":0,"type":"array"}`) {
+		t.Fatal("research fetch dependency schema must allow zero to four patterned step IDs")
+	}
 	searchIDs := []string{"search_1", "search_2", "search_3"}
 	steps := make([]map[string]any, 0, 6)
 	for index, searchID := range searchIDs {
@@ -108,9 +111,13 @@ func TestResearchPlanSchemaSupportsIndependentFacetsAndBoundedFetches(t *testing
 		})
 	}
 	for index := 1; index <= 2; index++ {
+		dependencies := []string{"search_1"}
+		if index == 2 {
+			dependencies = []string{}
+		}
 		steps = append(steps, map[string]any{
 			"id": fmt.Sprintf("fetch_%d", index), "kind": "fetch", "description": fmt.Sprintf("Fetch a distinct research source %d", index),
-			"dependencies": append([]string(nil), searchIDs...), "expected_output": "evidence", "success_criteria": []string{"a source with evidence is stored"},
+			"dependencies": dependencies, "expected_output": "evidence", "success_criteria": []string{"a source with evidence is stored"},
 		})
 	}
 	plan := map[string]any{"schema_version": 1, "goal": "research a technical topic", "subtasks": steps, "max_steps": 5, "final_deliverable": "answer"}
@@ -119,7 +126,31 @@ func TestResearchPlanSchemaSupportsIndependentFacetsAndBoundedFetches(t *testing
 		t.Fatal(err)
 	}
 	if err := tools.ValidateJSONSchema(schema, valid); err != nil {
-		t.Fatalf("valid three-facet research plan rejected: %v", err)
+		t.Fatalf("valid research plan with partial fetch dependencies rejected: %v", err)
+	}
+	unknownDependencySteps := append([]map[string]any(nil), steps...)
+	unknownDependencySteps[3] = map[string]any{
+		"id": "fetch_1", "kind": "fetch", "description": "Fetch a distinct research source 1",
+		"dependencies": []string{"unknown_step"}, "expected_output": "evidence", "success_criteria": []string{"a source with evidence is stored"},
+	}
+	unknownDependencyPlan, err := json.Marshal(map[string]any{"schema_version": 1, "goal": "research a technical topic", "subtasks": unknownDependencySteps, "max_steps": 5, "final_deliverable": "answer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tools.ValidateJSONSchema(schema, unknownDependencyPlan); err != nil {
+		t.Fatalf("schema should leave known-dependency checks to backend validation: %v", err)
+	}
+	tooManyFetchDependencies := append([]map[string]any(nil), steps...)
+	tooManyFetchDependencies[3] = map[string]any{
+		"id": "fetch_1", "kind": "fetch", "description": "Fetch a distinct research source 1",
+		"dependencies": []string{"search_1", "search_2", "search_3", "search_4", "search_5"}, "expected_output": "evidence", "success_criteria": []string{"a source with evidence is stored"},
+	}
+	tooManyDependenciesPlan, err := json.Marshal(map[string]any{"schema_version": 1, "goal": "research a technical topic", "subtasks": tooManyFetchDependencies, "max_steps": 5, "final_deliverable": "answer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tools.ValidateJSONSchema(schema, tooManyDependenciesPlan); err == nil {
+		t.Fatal("fetch step with more than four dependencies passed the schema")
 	}
 	invalidSteps := append([]map[string]any(nil), steps...)
 	invalidSteps[1] = map[string]any{
@@ -127,12 +158,12 @@ func TestResearchPlanSchemaSupportsIndependentFacetsAndBoundedFetches(t *testing
 		"dependencies": []string{"search_1"}, "expected_output": "search hits", "success_criteria": []string{"the search step result is recorded"},
 	}
 	plan["subtasks"] = invalidSteps
-	invalid, err := json.Marshal(plan)
+	partialSearchDependency, err := json.Marshal(plan)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tools.ValidateJSONSchema(schema, invalid); err == nil {
-		t.Fatal("dependent search facet passed the schema")
+	if err := tools.ValidateJSONSchema(schema, partialSearchDependency); err != nil {
+		t.Fatalf("schema rejected a model-selected subset of dependencies: %v", err)
 	}
 	fourSearchSteps := append([]map[string]any(nil), steps[:3]...)
 	fourSearchSteps = append(fourSearchSteps, map[string]any{

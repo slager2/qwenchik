@@ -57,13 +57,32 @@ func TestSearchProviderCommandsNeverExposeTavilyKey(t *testing.T) {
 			if strings.Contains(got, testKey) || strings.Contains(got, "api_key") {
 				t.Fatalf("%s output exposed Tavily credential: %s", command, got)
 			}
-			if command == "providers" && (!strings.Contains(got, `"type":"searxng"`) || !strings.Contains(got, `"mode":"tavily"`)) {
+			if command == "providers" && (!strings.Contains(got, `"type":"composite"`) || !strings.Contains(got, `"mode":"composite"`) || !strings.Contains(got, `"duckduckgo"`) || !strings.Contains(got, `"health":"not_checked"`)) {
 				t.Fatalf("providers output omitted configured Tavily: %s", got)
 			}
 			if command == "config" && !strings.Contains(got, `"tavily_configured":true`) {
 				t.Fatalf("config output omitted Tavily configured status: %s", got)
 			}
 		})
+	}
+}
+
+func TestProvidersCommandReportsBuiltInDuckDuckGoFallback(t *testing.T) {
+	t.Setenv("TAVILY_API_KEY", "")
+	t.Setenv("SEARXNG_URL", "")
+	t.Setenv("APP_BIND_ADDR", "127.0.0.1:8080")
+	t.Setenv("LLM_BASE_URL", "http://127.0.0.1:8000/v1")
+	root := NewRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(&output)
+	root.SetArgs([]string{"--json", "providers"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	got := output.String()
+	if !strings.Contains(got, `"type":"duckduckgo"`) || !strings.Contains(got, `"mode":"duckduckgo"`) || !strings.Contains(got, `"status":"enabled"`) || !strings.Contains(got, `"health":"not_checked"`) {
+		t.Fatalf("providers output did not report built-in DuckDuckGo fallback: %s", got)
 	}
 }
 

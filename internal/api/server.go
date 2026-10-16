@@ -687,28 +687,32 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.searchURL == "" {
 		if s.tavilyConfigured {
-			checks["search"] = map[string]string{"status": "warning", "message": "Tavily is configured; external API health is checked during research"}
+			checks["search"] = map[string]string{"status": "warning", "message": "Tavily and built-in DuckDuckGo fallback are enabled; external search health is not checked during doctor"}
 		} else {
-			checks["search"] = map[string]string{"status": "warning", "message": "Web search is disabled. Tasks requiring web discovery will fail with search_unavailable."}
+			checks["search"] = map[string]string{"status": "warning", "message": "Built-in DuckDuckGo search fallback is enabled; live external health is not checked during doctor"}
 		}
 	} else {
 		searchProvider, err := research.NewSearXNG(s.searchURL, nil)
 		if err != nil {
-			checks["search"] = map[string]string{"status": "warning", "message": "Configured SearXNG endpoint is invalid"}
+			message := "Configured SearXNG endpoint is invalid; built-in DuckDuckGo fallback is enabled but its live health is not checked"
+			if s.tavilyConfigured {
+				message += "; Tavily fallback is configured but not health-checked"
+			}
+			checks["search"] = map[string]string{"status": "warning", "message": message}
 		} else {
 			_, searchErr := searchProvider.Search(r.Context(), research.SearchOptions{Query: "qagent-doctor", MaxResults: 1, SafeSearch: true})
 			if searchErr != nil {
+				message := "Configured SearXNG endpoint is unavailable; built-in DuckDuckGo fallback is enabled but its live health is not checked"
 				if s.tavilyConfigured {
-					checks["search"] = map[string]string{"status": "warning", "message": "SearXNG is unavailable; Tavily fallback is configured but not health-checked"}
-				} else {
-					checks["search"] = map[string]string{"status": "warning", "message": "Configured SearXNG endpoint is unavailable"}
+					message += "; Tavily fallback is configured but not health-checked"
 				}
+				checks["search"] = map[string]string{"status": "warning", "message": message}
 			} else {
-				message := "SearXNG search endpoint returned valid JSON"
+				message := "SearXNG search endpoint returned valid JSON; built-in DuckDuckGo fallback is enabled but its live health is not checked"
 				if s.tavilyConfigured {
-					message += "; Tavily fallback is configured"
+					message += "; Tavily fallback is configured but not health-checked"
 				}
-				checks["search"] = map[string]string{"status": "ok", "message": message}
+				checks["search"] = map[string]string{"status": "warning", "message": message}
 			}
 		}
 	}
@@ -778,22 +782,13 @@ func (s *Server) probeStructuredLLM(ctx context.Context) error {
 }
 
 func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
-	searchStatus := "disabled"
-	if s.searchURL != "" {
+	searchStatus := "enabled"
+	searchMode := "duckduckgo"
+	searchType := "duckduckgo"
+	if s.searchURL != "" || s.tavilyConfigured {
 		searchStatus = "configured"
-	}
-	if s.tavilyConfigured {
-		searchStatus = "configured"
-	}
-	searchMode := "none"
-	if s.searchURL != "" {
-		searchMode = "searxng"
-	}
-	if s.tavilyConfigured {
-		searchMode = "tavily"
-		if s.searchURL != "" {
-			searchMode = "composite"
-		}
+		searchMode = "composite"
+		searchType = "composite"
 	}
 	sandboxStatus := "unavailable"
 	if s.sandboxAvailable {
@@ -802,10 +797,11 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"llm": map[string]any{"type": "local-openai-compatible", "status": "configured", "base_url": s.llmURL},
 		"search": map[string]any{
-			"type": "searxng", "mode": searchMode, "status": searchStatus, "base_url": s.searchURL,
+			"type": searchType, "mode": searchMode, "status": searchStatus, "base_url": s.searchURL,
 			"providers": map[string]any{
-				"searxng": map[string]any{"status": providerState(s.searchURL != ""), "base_url": s.searchURL},
-				"tavily":  map[string]string{"status": providerState(s.tavilyConfigured)},
+				"searxng":    map[string]any{"status": providerState(s.searchURL != ""), "base_url": s.searchURL},
+				"tavily":     map[string]string{"status": providerState(s.tavilyConfigured)},
+				"duckduckgo": map[string]any{"status": "enabled", "fallback": true, "health": "not_checked", "endpoint": "https://html.duckduckgo.com/html/"},
 			},
 		},
 		"browser": map[string]string{"status": "disabled"},

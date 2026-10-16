@@ -6,8 +6,10 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
 )
@@ -41,6 +43,10 @@ type Config struct {
 }
 
 func Load() (Config, error) {
+	if err := loadDotEnv(); err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
 		BindAddr:          env("APP_BIND_ADDR", "127.0.0.1:8080"),
 		DatabasePath:      env("DATABASE_PATH", "./data/qagent.db"),
@@ -95,6 +101,141 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+func loadDotEnv() error {
+	var dirs []string
+	if cwd, err := os.Getwd(); err == nil {
+		dirs = append(dirs, cwd)
+	}
+	if executable, err := os.Executable(); err == nil {
+		dirs = append(dirs, filepath.Dir(executable))
+	}
+	return loadDotEnvFromDirs(dirs...)
+}
+
+func loadDotEnvFromDirs(dirs ...string) error {
+	seen := make(map[string]struct{}, len(dirs))
+	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+		absDir, err := filepath.Abs(dir)
+		if err != nil {
+			absDir = filepath.Clean(dir)
+		}
+		if _, ok := seen[absDir]; ok {
+			continue
+		}
+		seen[absDir] = struct{}{}
+
+		contents, err := os.ReadFile(filepath.Join(absDir, ".env"))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("read .env: %w", err)
+		}
+
+		for _, line := range strings.Split(string(contents), "\n") {
+			key, value, ok := parseDotEnvLine(line)
+			if !ok || strings.ContainsRune(value, '\x00') {
+				continue
+			}
+			if current, ok := os.LookupEnv(key); ok && current != "" {
+				continue
+			}
+			if err := os.Setenv(key, value); err != nil {
+				return fmt.Errorf("set environment variable from .env: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+func parseDotEnvLine(line string) (string, string, bool) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return "", "", false
+	}
+
+	keyText, valueText, ok := strings.Cut(line, "=")
+	if !ok {
+		return "", "", false
+	}
+	key := strings.TrimSpace(keyText)
+	if !validDotEnvKey(key) {
+		return "", "", false
+	}
+
+	valueText = strings.TrimSpace(valueText)
+	if valueText == "" {
+		return key, "", true
+	}
+	if quote := valueText[0]; quote == '\'' || quote == '"' {
+		end := dotEnvQuoteEnd(valueText, quote)
+		if end < 0 {
+			return "", "", false
+		}
+		remainder := strings.TrimSpace(valueText[end+1:])
+		if remainder != "" && remainder[0] != '#' {
+			return "", "", false
+		}
+		return key, valueText[1:end], true
+	}
+
+	if comment := dotEnvCommentStart(valueText); comment >= 0 {
+		valueText = valueText[:comment]
+	}
+	return key, strings.TrimSpace(valueText), true
+}
+
+func validDotEnvKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	if !isASCIIAlpha(key[0]) && key[0] != '_' {
+		return false
+	}
+	for i := 1; i < len(key); i++ {
+		if !isASCIIAlpha(key[i]) && (key[i] < '0' || key[i] > '9') && key[i] != '_' {
+			return false
+		}
+	}
+	return true
+}
+
+func isASCIIAlpha(c byte) bool {
+	return c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z'
+}
+
+func dotEnvQuoteEnd(value string, quote byte) int {
+	escaped := false
+	for i := 1; i < len(value); i++ {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if value[i] == '\\' {
+			escaped = true
+			continue
+		}
+		if value[i] == quote {
+			return i
+		}
+	}
+	return -1
+}
+
+func dotEnvCommentStart(value string) int {
+	previousWasSpace := true
+	for i, r := range value {
+		if r == '#' && previousWasSpace {
+			return i
+		}
+		previousWasSpace = unicode.IsSpace(r)
+	}
+	return -1
 }
 
 func (c Config) Validate() error {

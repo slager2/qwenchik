@@ -99,7 +99,7 @@ func TestEmbeddedUIAndSecurityHeaders(t *testing.T) {
 	providersRequest.Host = "127.0.0.1:8080"
 	providersResponse := httptest.NewRecorder()
 	server.Handler().ServeHTTP(providersResponse, providersRequest)
-	if providersResponse.Code != http.StatusOK || !strings.Contains(providersResponse.Body.String(), `"status":"disabled"`) {
+	if providersResponse.Code != http.StatusOK || !strings.Contains(providersResponse.Body.String(), `"mode":"duckduckgo"`) || !strings.Contains(providersResponse.Body.String(), `"health":"not_checked"`) {
 		t.Fatalf("provider status=%d body=%s", providersResponse.Code, providersResponse.Body.String())
 	}
 }
@@ -115,7 +115,7 @@ func TestProvidersReportsTavilyConfiguredWithoutKey(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("provider status=%d body=%s", response.Code, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), `"type":"searxng"`) || !strings.Contains(response.Body.String(), `"mode":"tavily"`) || !strings.Contains(response.Body.String(), `"status":"configured"`) {
+	if !strings.Contains(response.Body.String(), `"type":"composite"`) || !strings.Contains(response.Body.String(), `"mode":"composite"`) || !strings.Contains(response.Body.String(), `"status":"configured"`) || !strings.Contains(response.Body.String(), `"duckduckgo"`) {
 		t.Fatalf("Tavily configuration was not reported: %s", response.Body.String())
 	}
 	if strings.Contains(response.Body.String(), "api_key") || strings.Contains(response.Body.String(), "secret") {
@@ -369,29 +369,29 @@ func TestDoctorAggregatesWarningsAndRequiresStrictStructuredModelSmoke(t *testin
 		searxngConfigured bool
 	}{
 		{
-			name:       "search disabled",
+			name:       "built-in DuckDuckGo fallback",
 			modelReply: `{"ok":true}`, wantStatus: "warning", wantLLMStatus: "ok",
 			wantSearchStatus:  "warning",
-			wantSearchMessage: "Web search is disabled. Tasks requiring web discovery will fail with search_unavailable.",
+			wantSearchMessage: "Built-in DuckDuckGo search fallback is enabled; live external health is not checked during doctor",
 		},
 		{
-			name:       "invalid structured output with search disabled",
+			name:       "invalid structured output with DuckDuckGo fallback",
 			modelReply: `{"ok":false}`, wantStatus: "error", wantLLMStatus: "error",
 			wantSearchStatus:  "warning",
-			wantSearchMessage: "Web search is disabled. Tasks requiring web discovery will fail with search_unavailable.",
+			wantSearchMessage: "Built-in DuckDuckGo search fallback is enabled; live external health is not checked during doctor",
 		},
 		{
 			name:       "Tavily configured",
 			modelReply: `{"ok":true}`, wantStatus: "warning", wantLLMStatus: "ok",
 			wantSearchStatus:  "warning",
-			wantSearchMessage: "Tavily is configured; external API health is checked during research",
+			wantSearchMessage: "Tavily and built-in DuckDuckGo fallback are enabled; external search health is not checked during doctor",
 			tavilyConfigured:  true,
 		},
 		{
-			name:       "healthy SearXNG configured",
-			modelReply: `{"ok":true}`, wantStatus: "ok", wantLLMStatus: "ok",
-			wantSearchStatus:  "ok",
-			wantSearchMessage: "SearXNG search endpoint returned valid JSON",
+			name:       "healthy SearXNG with unchecked DuckDuckGo fallback",
+			modelReply: `{"ok":true}`, wantStatus: "warning", wantLLMStatus: "ok",
+			wantSearchStatus:  "warning",
+			wantSearchMessage: "SearXNG search endpoint returned valid JSON; built-in DuckDuckGo fallback is enabled but its live health is not checked",
 			searxngConfigured: true,
 		},
 	} {

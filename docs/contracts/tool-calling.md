@@ -17,7 +17,7 @@ Tool output is untrusted data and cannot directly invoke another tool. The orche
 
 ## Implemented registry
 
-`text.inspect` is always registered. It accepts bounded user/task text and returns deterministic character, word, and line counts. When SearXNG or Tavily is configured, `search` is added; with both, providers are queried concurrently and merged under a global result cap. Queries are sent to configured external search services and SearXNG's enabled public engines. `fetch_url` is added when the local artifact/evidence store is available; it only accepts URLs found in user task text or prior search results, then validates SSRF policy again before dialing. `fetch_url` stores raw and extracted artifacts and an evidence record; external text is labeled `untrusted_external_content`.
+`text.inspect` is always registered. It accepts bounded user/task text and returns deterministic character, word, and line counts. The built-in DuckDuckGo provider registers `search` by default; optional SearXNG and Tavily providers are queried concurrently with it and merged under a global result cap. Queries are sent to DuckDuckGo and to any configured external search services/public engines. `fetch_url` is added when the local artifact/evidence store is available; it only accepts URLs found in user task text or prior search results, then validates SSRF policy again before dialing. `fetch_url` stores raw and extracted artifacts and an evidence record; external text is labeled `untrusted_external_content`.
 
 ## Conditional and deferred capabilities
 

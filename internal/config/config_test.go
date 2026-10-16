@@ -1,9 +1,137 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestLoadReadsDotEnvFromWorkingDirectory(t *testing.T) {
+	clearConfigEnv(t)
+	workingDir := t.TempDir()
+	chdirForTest(t, workingDir)
+	writeDotEnv(t, workingDir, `
+# comment
+malformed line
+=missing-key
+APP_BIND_ADDR = 127.0.0.1:8188 # unquoted inline comment
+DATABASE_PATH="./data/db # backup.sqlite" # quoted inline comment
+LLM_MODEL='local # model' # single-quoted value
+SEARXNG_URL="http://127.0.0.1:8081" # configured search URL
+`)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.BindAddr != "127.0.0.1:8188" {
+		t.Fatal("unquoted value or inline comment was parsed incorrectly")
+	}
+	if cfg.DatabasePath != "./data/db # backup.sqlite" {
+		t.Fatal("double-quoted value or inline comment was parsed incorrectly")
+	}
+	if cfg.LLMModel != "local # model" {
+		t.Fatal("single-quoted value or inline comment was parsed incorrectly")
+	}
+	if cfg.SearXNGURL != "http://127.0.0.1:8081" {
+		t.Fatal("SEARXNG_URL was not loaded from .env")
+	}
+}
+
+func TestLoadDotEnvFallsBackToExecutableDirectory(t *testing.T) {
+	clearConfigEnv(t)
+	workingDir := t.TempDir()
+	executableDir := t.TempDir()
+	chdirForTest(t, workingDir)
+	writeDotEnv(t, workingDir, "APP_BIND_ADDR=127.0.0.1:8188\n")
+	writeDotEnv(t, executableDir, "APP_BIND_ADDR=127.0.0.1:8189\nSEARXNG_URL=http://127.0.0.1:8081\n")
+
+	if err := loadDotEnvFromDirs(workingDir, executableDir); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.BindAddr != "127.0.0.1:8188" {
+		t.Fatal("working-directory .env did not take precedence")
+	}
+	if cfg.SearXNGURL != "http://127.0.0.1:8081" {
+		t.Fatal("executable-directory .env fallback was not loaded")
+	}
+}
+
+func TestLoadDoesNotOverrideNonEmptyEnvironmentValue(t *testing.T) {
+	clearConfigEnv(t)
+	workingDir := t.TempDir()
+	chdirForTest(t, workingDir)
+	writeDotEnv(t, workingDir, "SEARXNG_URL=http://127.0.0.1:8081\n")
+	if err := os.Setenv("SEARXNG_URL", "http://127.0.0.1:8082"); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SearXNGURL != "http://127.0.0.1:8082" {
+		t.Fatal("non-empty environment value was overwritten by .env")
+	}
+}
+
+func clearConfigEnv(t *testing.T) {
+	t.Helper()
+	for _, name := range []string{
+		"APP_BIND_ADDR", "DATABASE_PATH", "ARTIFACTS_PATH", "WORKSPACE_ROOT",
+		"SANDBOX_RUNTIME", "SANDBOX_IMAGE", "SANDBOX_NETWORK", "PDF_EXTRACTOR_IMAGE",
+		"LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL", "LLM_CONTEXT_LENGTH",
+		"LLM_MAX_OUTPUT_TOKENS", "LLM_TEMPERATURE", "LLM_TOP_P", "LLM_ENABLE_THINKING",
+		"LLM_REQUEST_TIMEOUT_SECONDS", "LLM_MAX_CONCURRENCY", "SEARXNG_URL",
+		"TAVILY_API_KEY", "MAX_STEPS", "TASK_TIMEOUT_SECONDS", "MAX_SEARCH_QUERIES",
+		"MAX_FETCH_BYTES", "ALLOWED_DOMAINS",
+	} {
+		name := name
+		value, wasSet := os.LookupEnv(name)
+		if err := os.Unsetenv(name); err != nil {
+			t.Fatalf("clear environment variable: %v", err)
+		}
+		t.Cleanup(func() {
+			var err error
+			if wasSet {
+				err = os.Setenv(name, value)
+			} else {
+				err = os.Unsetenv(name)
+			}
+			if err != nil {
+				t.Errorf("restore environment variable: %v", err)
+			}
+		})
+	}
+}
+
+func chdirForTest(t *testing.T, dir string) {
+	t.Helper()
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previous); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
+}
+
+func writeDotEnv(t *testing.T, dir, contents string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestLoadTrimsOptionalTavilyAPIKey(t *testing.T) {
 	t.Setenv("TAVILY_API_KEY", "  test-key  ")

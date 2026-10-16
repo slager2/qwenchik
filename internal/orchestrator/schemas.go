@@ -44,7 +44,7 @@ func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, requiredKinds
 			"additionalProperties": false,
 		}
 	}
-	step := stepSchema(nil, nil, nil, 0, maxSteps)
+	step := stepSchema(nil, nil, nil, 0, min(4, maxSteps))
 	subtasksSchema := boundedArraySchema(step, 1, maxSteps)
 	maxStepsSchema := map[string]any{"type": "integer", "minimum": 1, "maximum": maxSteps}
 	if len(requiredKinds) != 0 {
@@ -66,9 +66,9 @@ func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, requiredKinds
 					nonResearchKinds = append(nonResearchKinds, kind)
 				}
 			}
-			nonResearchStep := stepSchema(nonResearchKinds, nil, nil, 0, maxSteps)
+			nonResearchStep := stepSchema(nonResearchKinds, nil, nil, 0, min(4, maxSteps))
 			if len(nonResearchKinds) == 0 {
-				nonResearchStep = stepSchema([]string{"__no_additional_research_action__"}, nil, nil, 0, maxSteps)
+				nonResearchStep = stepSchema([]string{"__no_additional_research_action__"}, nil, nil, 0, min(4, maxSteps))
 			}
 			maximumSearches := min(3, maxSteps-minimumFetches)
 			maximumFetches := min(4, maxSteps-minimumSearches)
@@ -90,7 +90,11 @@ func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, requiredKinds
 			prefix := make([]any, 0, len(requiredKinds))
 			for index, kind := range requiredKinds {
 				id := fmt.Sprintf("%s_%d", kind, index+1)
-				prefix = append(prefix, stepSchema([]string{kind}, []string{id}, nil, 0, 0))
+				maxDependencies := 0
+				if kind == "fetch" {
+					maxDependencies = 4
+				}
+				prefix = append(prefix, stepSchema([]string{kind}, []string{id}, nil, 0, maxDependencies))
 			}
 			subtasksSchema = map[string]any{"type": "array", "minItems": len(requiredKinds), "maxItems": maxSteps, "prefixItems": prefix, "items": step}
 		}
@@ -113,26 +117,20 @@ func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, requiredKinds
 
 func researchPlanPrefix(searchCount, fetchCount int, urlFirst bool, stepSchema func([]string, []string, []string, int, int) map[string]any) []any {
 	prefix := make([]any, 0, searchCount+fetchCount)
-	priorFetchIDs := make([]string, 0, 1)
-	searchIDs := make([]string, 0, searchCount)
 	fetchIndex := 0
 	if urlFirst {
 		fetchIndex++
 		id := fmt.Sprintf("fetch_%d", fetchIndex)
-		prefix = append(prefix, stepSchema([]string{"fetch"}, []string{id}, nil, 0, 0))
-		priorFetchIDs = append(priorFetchIDs, id)
+		prefix = append(prefix, stepSchema([]string{"fetch"}, []string{id}, nil, 0, 4))
 	}
 	for index := 1; index <= searchCount; index++ {
 		id := fmt.Sprintf("search_%d", index)
-		dependencies := append([]string(nil), priorFetchIDs...)
-		prefix = append(prefix, stepSchema([]string{"search"}, []string{id}, dependencies, len(dependencies), len(dependencies)))
-		searchIDs = append(searchIDs, id)
+		prefix = append(prefix, stepSchema([]string{"search"}, []string{id}, nil, 0, 4))
 	}
 	for fetchIndex < fetchCount {
 		fetchIndex++
 		id := fmt.Sprintf("fetch_%d", fetchIndex)
-		dependencies := append([]string(nil), searchIDs...)
-		prefix = append(prefix, stepSchema([]string{"fetch"}, []string{id}, dependencies, len(dependencies), len(dependencies)))
+		prefix = append(prefix, stepSchema([]string{"fetch"}, []string{id}, nil, 0, 4))
 	}
 	return prefix
 }

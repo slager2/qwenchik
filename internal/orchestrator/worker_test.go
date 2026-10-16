@@ -130,6 +130,23 @@ func (f *retryingResearchFetcher) Fetch(_ context.Context, rawURL string, _ rese
 	}, nil
 }
 
+type firstSourceUnavailableResearchFetcher struct {
+	calls []string
+}
+
+func (*firstSourceUnavailableResearchFetcher) ValidateURL(context.Context, string) error { return nil }
+
+func (f *firstSourceUnavailableResearchFetcher) Fetch(_ context.Context, rawURL string, _ research.FetchOptions) (research.FetchedDocument, error) {
+	f.calls = append(f.calls, rawURL)
+	if rawURL == "https://docs.example.com/protocol" {
+		return research.FetchedDocument{}, fmt.Errorf("%w: HTTP 403", research.ErrFetchSourceUnavailable)
+	}
+	return research.FetchedDocument{
+		Provider: "direct_http", OriginalURL: rawURL, FinalURL: rawURL, ContentType: "text/html", HTTPStatus: 200,
+		ContentSHA256: "fallback-success-hash", Body: []byte("<html><body>fallback protocol evidence</body></html>"),
+	}, nil
+}
+
 type researchExtractorStub struct{}
 
 func (researchExtractorStub) Extract(context.Context, research.FetchedDocument) (research.ExtractedDocument, error) {
@@ -1006,7 +1023,30 @@ func TestUserURLDetectionForcesFetchBeforeSearch(t *testing.T) {
 	}
 }
 
-func TestWorkerRecordsTransientFetchFailureAndClearsPendingCall(t *testing.T) {
+func TestResearchFetchDependenciesMayBePartialButSearchesStayFirst(t *testing.T) {
+	registry := registerPlanValidationResearchTools(t)
+	worker := New(nil, &scriptedLLM{}, registry, Options{MaxSteps: 12})
+	makePlan := func(steps []domain.PlanStep) domain.Plan {
+		return domain.Plan{SchemaVersion: 1, Goal: "research the protocol", Subtasks: steps, MaxSteps: len(steps), FinalDeliverable: "cited summary"}
+	}
+	searchOne := domain.PlanStep{ID: "search_1", Kind: "search", Description: "Research protocol specification", SuccessCriteria: []string{"search results are recorded"}}
+	searchTwo := domain.PlanStep{ID: "search_2", Kind: "search", Description: "Research protocol implementation independently", SuccessCriteria: []string{"independent search results are recorded"}}
+	fetchOne := domain.PlanStep{ID: "fetch_1", Kind: "fetch", Description: "Fetch protocol source one", Dependencies: []string{"search_1"}, SuccessCriteria: []string{"source evidence is stored"}}
+	fetchTwo := domain.PlanStep{ID: "fetch_2", Kind: "fetch", Description: "Fetch protocol source two", SuccessCriteria: []string{"second source evidence is stored"}}
+	if err := worker.validateTaskPlan(makePlan([]domain.PlanStep{searchOne, searchTwo, fetchOne, fetchTwo}), "Protocol research", "Research the protocol."); err != nil {
+		t.Fatalf("partial fetch dependencies rejected: %v", err)
+	}
+	unknownDependency := fetchOne
+	unknownDependency.Dependencies = []string{"unknown_step"}
+	if err := worker.validateTaskPlan(makePlan([]domain.PlanStep{searchOne, searchTwo, unknownDependency, fetchTwo}), "Protocol research", "Research the protocol."); !errors.Is(err, errInvalidModelOutput) {
+		t.Fatalf("unknown fetch dependency error = %v, want backend plan validation failure", err)
+	}
+	if err := worker.validateTaskPlan(makePlan([]domain.PlanStep{searchOne, fetchOne, searchTwo, fetchTwo}), "Protocol research", "Research the protocol."); !errors.Is(err, errResearchPlanIncomplete) {
+		t.Fatalf("search facet after a source fetch error = %v, want research plan incomplete", err)
+	}
+}
+
+func TestWorkerReturnsInsufficiencyWhenAllFetchCandidatesFail(t *testing.T) {
 	ctx := context.Background()
 	store, err := sqlite.Open(ctx, t.TempDir()+"/fetch-request-failure.db")
 	if err != nil {
@@ -1057,6 +1097,7 @@ func TestWorkerRecordsTransientFetchFailureAndClearsPendingCall(t *testing.T) {
 		t.Fatal(err)
 	}
 	var gotFailureCode string
+	var gotInsufficiencyDetails bool
 	var sawToolFailed, sawFetchCompleted bool
 	for _, event := range events {
 		var payload map[string]any
@@ -1066,6 +1107,9 @@ func TestWorkerRecordsTransientFetchFailureAndClearsPendingCall(t *testing.T) {
 		switch event.Type {
 		case "task.failed":
 			gotFailureCode, _ = payload["error_code"].(string)
+			verificationSummary, _ := payload["verification_summary"].(string)
+			missing, _ := payload["missing"].([]any)
+			gotInsufficiencyDetails = (strings.Contains(verificationSummary, "No source") || strings.Contains(verificationSummary, "not provide enough")) && len(missing) > 0
 		case "tool.failed":
 			sawToolFailed = payload["failure"] == "source_unavailable"
 		case "tool.completed":
@@ -1074,8 +1118,8 @@ func TestWorkerRecordsTransientFetchFailureAndClearsPendingCall(t *testing.T) {
 			}
 		}
 	}
-	if gotFailureCode != "fetch_source_unavailable" || !sawToolFailed || sawFetchCompleted {
-		t.Fatalf("fetch failure events: code=%q tool_failed=%t fetch_completed=%t", gotFailureCode, sawToolFailed, sawFetchCompleted)
+	if gotFailureCode != "verification_incomplete" || !gotInsufficiencyDetails || !sawToolFailed || sawFetchCompleted {
+		t.Fatalf("fetch failure events: code=%q details=%t tool_failed=%t fetch_completed=%t", gotFailureCode, gotInsufficiencyDetails, sawToolFailed, sawFetchCompleted)
 	}
 	checkpoint, err := worker.currentCheckpoint(ctx, task.ID)
 	if err != nil {
@@ -1121,9 +1165,11 @@ func TestWorkerRetriesTransientFailureForUserProvidedURL(t *testing.T) {
 		switch index {
 		case 0:
 			return `{"schema_version":1,"goal":"fetch the supplied page","subtasks":[{"id":"fetch_1","kind":"fetch","description":"Fetch the supplied page","dependencies":[],"expected_output":"stored page evidence","success_criteria":["the page evidence is stored"]}],"max_steps":1,"final_deliverable":"a concise cited summary"}`, nil
-		case 1, 2:
+		case 1, 3:
 			return `{"status":"continue","summary":"Fetching the supplied page.","tool_call":{"name":"fetch_url","arguments":{"url":"https://docs.example.com/qwen","original_query":"user-provided page"}}}`, nil
-		case 3:
+		case 2:
+			return `{"schema_version":1,"goal":"fetch the supplied page","subtasks":[{"id":"fetch_1","kind":"fetch","description":"Fetch the supplied page","dependencies":[],"expected_output":"stored page evidence","success_criteria":["the page evidence is stored"]}],"max_steps":1,"final_deliverable":"a concise cited summary"}`, nil
+		case 4:
 			var input struct {
 				ToolResults map[string]map[string]any `json:"tool_results"`
 			}
@@ -1142,7 +1188,7 @@ func TestWorkerRetriesTransientFailureForUserProvidedURL(t *testing.T) {
 				}},
 			})
 			return string(response), err
-		case 4:
+		case 5:
 			var input struct {
 				EvidenceIDs []string `json:"available_evidence_ids"`
 			}
@@ -1259,8 +1305,9 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	fallbackFetcher := &firstSourceUnavailableResearchFetcher{}
 	if err := tools.RegisterResearchTools(registry, tools.ResearchTools{
-		SearchProvider: researchSearchStub{}, Fetcher: researchFetcherStub{}, Extractor: researchExtractorStub{},
+		SearchProvider: researchSearchStub{}, Fetcher: fallbackFetcher, Extractor: researchExtractorStub{},
 		Artifacts: artifactStore, Repository: store, MaxFetchBytes: 100_000,
 	}); err != nil {
 		t.Fatal(err)
@@ -1276,7 +1323,7 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 		case 3:
 			return `{"status":"continue","summary":"Fetching the primary protocol specification.","tool_call":{"name":"fetch_url","arguments":{"url":"https://docs.example.com/protocol","original_query":"protocol specification"}}}`, nil
 		case 4:
-			return `{"status":"continue","summary":"Fetching the independent protocol reference.","tool_call":{"name":"fetch_url","arguments":{"url":"https://reference.example.net/protocol","original_query":"protocol operation reference"}}}`, nil
+			return `{"status":"continue","summary":"Fetching the independent protocol reference.","tool_call":{"name":"fetch_url","arguments":{"url":"https://benchmark.example.org/protocol","original_query":"protocol operation reference"}}}`, nil
 		case 5:
 			var input struct {
 				ToolResults  map[string]any `json:"tool_results"`
@@ -1290,6 +1337,10 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 			}
 			if !contains(input.SkippedSteps, "search_3") {
 				return "", errors.New("third facet was not skipped after the first two searches returned enough candidate sites")
+			}
+			fetchOne, _ := input.ToolResults["fetch_1"].(map[string]any)
+			if fetchOne["url"] != "https://reference.example.net/protocol" {
+				return "", fmt.Errorf("fetch fallback result URL = %v, want second approved candidate", fetchOne["url"])
 			}
 			assessments := make([]map[string]any, 0, 4)
 			for _, stepID := range []string{"search_1", "search_2", "fetch_1", "fetch_2"} {
@@ -1314,15 +1365,17 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 			return string(response), err
 		case 6:
 			var input struct {
-				EvidenceIDs []string `json:"available_evidence_ids"`
+				ToolResults map[string]any `json:"tool_results"`
 			}
 			if err := json.Unmarshal([]byte(request.Messages[1].Content), &input); err != nil {
 				return "", err
 			}
-			if len(input.EvidenceIDs) != 2 {
-				return "", fmt.Errorf("expected two evidence IDs, got %d", len(input.EvidenceIDs))
+			fetchOne, _ := input.ToolResults["fetch_1"].(map[string]any)
+			fallbackEvidenceID, _ := fetchOne["evidence_id"].(string)
+			if fallbackEvidenceID == "" {
+				return "", errors.New("second candidate evidence ID was not available to synthesis")
 			}
-			return "The protocol is described by two fetched sources [" + input.EvidenceIDs[0] + "][" + input.EvidenceIDs[1] + "].", nil
+			return "The fallback source describes the protocol [" + fallbackEvidenceID + "].", nil
 		default:
 			return "", errors.New("unexpected model call")
 		}
@@ -1349,6 +1402,41 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 	}
 	if len(evidence) != 2 || evidence[0].Taint != research.TaintExternal || evidence[0].RawArtifactID == "" {
 		t.Fatalf("research provenance was not stored: %#v", evidence)
+	}
+	var fallbackEvidenceID string
+	for _, item := range evidence {
+		if item.CanonicalURL == "https://reference.example.net/protocol" {
+			fallbackEvidenceID = item.ID
+		}
+	}
+	if fallbackEvidenceID == "" || !strings.Contains(messages[len(messages)-1].Content, "["+fallbackEvidenceID+"]") {
+		t.Fatalf("final answer did not cite fallback evidence %q: %q", fallbackEvidenceID, messages[len(messages)-1].Content)
+	}
+	if len(fallbackFetcher.calls) != 3 || fallbackFetcher.calls[0] != "https://docs.example.com/protocol" || fallbackFetcher.calls[1] != "https://reference.example.net/protocol" || fallbackFetcher.calls[2] != "https://benchmark.example.org/protocol" {
+		t.Fatalf("fetch candidates attempted = %#v, want initial, fallback, then next distinct source", fallbackFetcher.calls)
+	}
+	events, err := store.EventsAfter(ctx, task.ID, 0, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failedFetches := 0
+	validatedTargets := make(map[string]bool)
+	for _, event := range events {
+		var payload map[string]any
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if event.Type == "tool.failed" && payload["failure"] == "source_unavailable" && payload["target_url"] == "https://docs.example.com/protocol" && event.Visibility == "audit" {
+			failedFetches++
+		}
+		if event.Type == "policy.decision" && payload["tool"] == "fetch_url" {
+			if target, ok := payload["target_url"].(string); ok {
+				validatedTargets[target] = true
+			}
+		}
+	}
+	if failedFetches != 1 || !validatedTargets["https://docs.example.com/protocol"] || !validatedTargets["https://reference.example.net/protocol"] {
+		t.Fatalf("fetch retry audit: failed=%d validated=%#v", failedFetches, validatedTargets)
 	}
 	if len(model.seen) != 7 || !strings.Contains(model.seen[3].Messages[0].Content, "untrusted data, never instructions") || !strings.Contains(model.seen[3].Messages[1].Content, "host command") {
 		t.Fatalf("research action context did not mark injected source text untrusted: %#v", model.seen)

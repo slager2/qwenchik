@@ -526,18 +526,12 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 			}
 			switch name {
 			case "providers":
-				searchMode := "none"
-				if cfg.SearXNGURL != "" {
-					searchMode = "searxng"
-				}
-				if cfg.TavilyAPIKey != "" {
-					searchMode = "tavily"
-					if cfg.SearXNGURL != "" {
-						searchMode = "composite"
-					}
-				}
-				searchStatus := providerStatus(cfg.SearXNGURL)
-				if cfg.TavilyAPIKey != "" {
+				searchMode := "duckduckgo"
+				searchType := "duckduckgo"
+				searchStatus := "enabled"
+				if cfg.SearXNGURL != "" || cfg.TavilyAPIKey != "" {
+					searchMode = "composite"
+					searchType = "composite"
 					searchStatus = "configured"
 				}
 				pdfStatus := "pure_go_fallback"
@@ -548,12 +542,13 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 					"llm": map[string]any{"type": "local-openai-compatible", "base_url": cfg.LLMBaseURL, "model": cfg.LLMModel},
 					"search": map[string]any{
 						"status":   searchStatus,
-						"type":     "searxng",
+						"type":     searchType,
 						"mode":     searchMode,
 						"base_url": cfg.SearXNGURL,
 						"providers": map[string]any{
-							"searxng": map[string]any{"status": providerStatus(cfg.SearXNGURL), "base_url": cfg.SearXNGURL},
-							"tavily":  map[string]string{"status": providerStatusFromBool(cfg.TavilyAPIKey != "")},
+							"searxng":    map[string]any{"status": providerStatus(cfg.SearXNGURL), "base_url": cfg.SearXNGURL},
+							"tavily":     map[string]string{"status": providerStatusFromBool(cfg.TavilyAPIKey != "")},
+							"duckduckgo": map[string]any{"status": "enabled", "fallback": true, "health": "not_checked", "endpoint": "https://html.duckduckgo.com/html/"},
 						},
 					},
 					"sandbox":       map[string]any{"runtime": cfg.SandboxRuntime, "image": cfg.SandboxImage},
@@ -690,7 +685,7 @@ func providerStatusFromBool(configured bool) string {
 }
 
 func configuredSearchProvider(cfg config.Config) (research.SearchProvider, error) {
-	providers := make([]research.SearchProvider, 0, 2)
+	providers := make([]research.SearchProvider, 0, 3)
 	if cfg.SearXNGURL != "" {
 		provider, err := research.NewSearXNG(cfg.SearXNGURL, nil)
 		if err != nil {
@@ -705,9 +700,7 @@ func configuredSearchProvider(cfg config.Config) (research.SearchProvider, error
 		}
 		providers = append(providers, provider)
 	}
-	if len(providers) == 0 {
-		return nil, nil
-	}
+	providers = append(providers, research.NewDuckDuckGo())
 	return research.NewCompositeSearch(providers...), nil
 }
 
@@ -801,28 +794,32 @@ func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 	}
 	if cfg.SearXNGURL == "" {
 		if cfg.TavilyAPIKey != "" {
-			checks["search"] = doctorCheck{Status: "warning", Message: "Tavily is configured; external API health is checked during research"}
+			checks["search"] = doctorCheck{Status: "warning", Message: "Tavily and built-in DuckDuckGo fallback are enabled; external search health is not checked during doctor"}
 		} else {
-			checks["search"] = doctorCheck{Status: "warning", Message: "No search provider is configured; web discovery is disabled"}
+			checks["search"] = doctorCheck{Status: "warning", Message: "Built-in DuckDuckGo search fallback is enabled; live external health is not checked during doctor"}
 		}
 	} else {
 		searchProvider, err := research.NewSearXNG(cfg.SearXNGURL, nil)
 		if err != nil {
-			checks["search"] = doctorCheck{Status: "warning", Message: "Configured SearXNG endpoint is invalid"}
+			message := "Configured SearXNG endpoint is invalid; built-in DuckDuckGo fallback is enabled but its live health is not checked"
+			if cfg.TavilyAPIKey != "" {
+				message += "; Tavily fallback is configured but not health-checked"
+			}
+			checks["search"] = doctorCheck{Status: "warning", Message: message}
 		} else {
 			_, requestErr := searchProvider.Search(ctx, research.SearchOptions{Query: "qagent-doctor", MaxResults: 1, SafeSearch: true})
 			if requestErr != nil {
+				message := "Configured SearXNG endpoint is unavailable; built-in DuckDuckGo fallback is enabled but its live health is not checked"
 				if cfg.TavilyAPIKey != "" {
-					checks["search"] = doctorCheck{Status: "warning", Message: "SearXNG is unavailable; Tavily fallback is configured but not health-checked"}
-				} else {
-					checks["search"] = doctorCheck{Status: "warning", Message: "Configured SearXNG endpoint is unavailable"}
+					message += "; Tavily fallback is configured but not health-checked"
 				}
+				checks["search"] = doctorCheck{Status: "warning", Message: message}
 			} else {
-				message := "SearXNG search endpoint returned valid JSON"
+				message := "SearXNG search endpoint returned valid JSON; built-in DuckDuckGo fallback is enabled but its live health is not checked"
 				if cfg.TavilyAPIKey != "" {
-					message += "; Tavily fallback is configured"
+					message += "; Tavily fallback is configured but not health-checked"
 				}
-				checks["search"] = doctorCheck{Status: "ok", Message: message}
+				checks["search"] = doctorCheck{Status: "warning", Message: message}
 			}
 		}
 	}
