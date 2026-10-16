@@ -209,12 +209,20 @@ func (s *Store) SearchMemories(ctx context.Context, query, taskID string, limit 
 	if limit < 1 || limit > 20 {
 		limit = 5
 	}
-	rows, err := s.db.QueryContext(ctx, memorySelect+` WHERE status='accepted' AND (scope='global' OR (scope='task' AND source_task_id=?)) ORDER BY updated_at DESC LIMIT 2000`, taskID)
+	ftsQuery := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		ftsQuery = append(ftsQuery, quoteMemoryFTSToken(token))
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT m.id,m.kind,m.status,m.text,m.metadata_json,m.scope,m.confidence,m.source_evidence_id,m.source_task_id,m.user_editable,m.retention_policy,m.created_at,m.updated_at
+		FROM memory_fts
+		JOIN memories AS m ON m.id=memory_fts.memory_id
+		WHERE memory_fts MATCH ? AND m.status='accepted' AND (m.scope='global' OR (m.scope='task' AND m.source_task_id=?))
+		ORDER BY bm25(memory_fts),m.updated_at DESC,m.id ASC LIMIT 2000`, strings.Join(ftsQuery, " OR "), taskID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var matches []domain.MemoryMatch
+	matches := make([]domain.MemoryMatch, 0)
 	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
 	for rows.Next() {
 		memory, err := scanMemory(rows)
@@ -242,8 +250,11 @@ func (s *Store) SearchMemories(ctx context.Context, query, taskID string, limit 
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	sort.SliceStable(matches, func(i, j int) bool {
+	sort.Slice(matches, func(i, j int) bool {
 		if matches[i].Relevance == matches[j].Relevance {
+			if matches[i].Memory.UpdatedAt.Equal(matches[j].Memory.UpdatedAt) {
+				return matches[i].Memory.ID < matches[j].Memory.ID
+			}
 			return matches[i].Memory.UpdatedAt.After(matches[j].Memory.UpdatedAt)
 		}
 		return matches[i].Relevance > matches[j].Relevance
@@ -258,6 +269,10 @@ func (s *Store) SearchMemories(ctx context.Context, query, taskID string, limit 
 }
 
 const memorySelect = `SELECT id,kind,status,text,metadata_json,scope,confidence,source_evidence_id,source_task_id,user_editable,retention_policy,created_at,updated_at FROM memories`
+
+func quoteMemoryFTSToken(token string) string {
+	return `"` + strings.ReplaceAll(token, `"`, `""`) + `"`
+}
 
 type memoryScanner interface {
 	Scan(...any) error

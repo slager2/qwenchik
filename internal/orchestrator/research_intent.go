@@ -29,12 +29,12 @@ func minimumResearchFetches(value string) int {
 	value = strings.ToLower(quotedResearchTermPattern.ReplaceAllString(value, " "))
 	if hasUserURL(value) {
 		if requiresWebResearch(value) {
-			return 3
+			return 2
 		}
 		return 1
 	}
 	if requiresWebResearch(value) {
-		return 3
+		return 2
 	}
 	return 0
 }
@@ -44,7 +44,7 @@ func minimumResearchSearches(value string) int {
 	if !requiresWebResearch(value) {
 		return 0
 	}
-	return 3
+	return 2
 }
 
 func isLocationBoundQuestion(value string) bool {
@@ -81,14 +81,14 @@ func requiredResearchKinds(taskTitle, goal string) []string {
 	request := taskTitle + "\n" + goal
 	if hasUserURL(goal) {
 		if requiresWebResearch(request) {
-			return []string{"fetch", "search", "search", "search", "fetch", "fetch"}
+			return []string{"fetch", "search", "search", "fetch"}
 		}
 		return []string{"fetch"}
 	}
 	if !requiresWebResearch(request) {
 		return nil
 	}
-	return []string{"search", "search", "search", "fetch", "fetch", "fetch"}
+	return []string{"search", "search", "fetch", "fetch"}
 }
 
 func containsAny(value string, markers ...string) bool {

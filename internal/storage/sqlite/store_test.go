@@ -2,12 +2,86 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/slager2/qwenchik/internal/domain"
 )
+
+func TestSkippedStepStatusMigrationPreservesExistingSteps(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "legacy-steps.db")
+	legacyDB, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacyDB.ExecContext(ctx, `CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := migrationFiles.ReadDir("migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".sql" || entry.Name() == "007_step_skipped_status.sql" {
+			continue
+		}
+		migration, err := migrationFiles.ReadFile(filepath.Join("migrations", entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		tx, err := legacyDB.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.ExecContext(ctx, string(migration)); err != nil {
+			_ = tx.Rollback()
+			t.Fatalf("apply legacy migration %s: %v", entry.Name(), err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(name,applied_at) VALUES(?,?)`, entry.Name(), stamp(time.Now().UTC())); err != nil {
+			_ = tx.Rollback()
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	created := stamp(time.Now().UTC())
+	if _, err := legacyDB.ExecContext(ctx, `INSERT INTO tasks(id,title,description,status,priority,version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`,
+		"legacy-step-task", "Legacy task", "Preserve the existing step", "inbox", 0, 1, created, created); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacyDB.ExecContext(ctx, `INSERT INTO task_steps(id,task_id,step_id,position,kind,description,dependencies_json,expected_output,success_criteria_json,status,attempts,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"legacy-step-id", "legacy-step-task", "step_1", 0, "analysis", "Existing completed step", "[]", "result", `["result exists"]`, "completed", 1, created, created); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacyDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	steps, err := store.Steps(ctx, "legacy-step-task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 1 || steps[0].Status != "completed" || steps[0].StepID != "step_1" {
+		t.Fatalf("existing task step was not preserved through migration: %#v", steps)
+	}
+	if err := store.SetStepStatus(ctx, "legacy-step-task", "step_1", "skipped"); err != nil {
+		t.Fatal(err)
+	}
+	steps, err = store.Steps(ctx, "legacy-step-task")
+	if err != nil || len(steps) != 1 || steps[0].Status != "skipped" {
+		t.Fatalf("skipped step status was not persisted: steps=%#v err=%v", steps, err)
+	}
+}
 
 func TestTaskTransitionsAreDurableAndEventsAreAtomic(t *testing.T) {
 	ctx := context.Background()

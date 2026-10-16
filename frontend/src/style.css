@@ -296,6 +296,7 @@ input.text-field { height: 39px; padding: 0 11px; }
 .step-running { border-color: var(--color-accent-rule); color: var(--color-accent-dark); background: var(--color-accent-soft); }
 .step-completed { border-color: var(--color-success-rule); color: var(--color-success); background: var(--color-success-soft); }
 .step-failed { border-color: var(--color-danger-rule); color: var(--color-danger); background: var(--color-danger-soft); }
+.step-skipped { border-color: var(--color-rule); color: var(--color-muted); background: var(--color-surface); }
 .plan-kind { color: var(--color-faint); font: 9px var(--font-mono); }
 .inline-empty { padding: 11px 0 3px; color: var(--color-faint); font-size: 10px; }
 .message-list { display: grid; max-height: 270px; gap: 8px; overflow-y: auto; padding: 1px 2px 3px 0; }

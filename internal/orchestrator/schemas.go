@@ -47,20 +47,34 @@ func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, requiredKinds
 	subtasksSchema := boundedArraySchema(step, 1, maxSteps)
 	maxStepsSchema := map[string]any{"type": "integer", "minimum": 1, "maximum": maxSteps}
 	if len(requiredKinds) != 0 {
-		prefix := make([]any, 0, len(requiredKinds))
+		prefixLength := len(requiredKinds)
+		if requiredKinds[0] == "search" && len(requiredKinds) >= 2 && requiredKinds[1] == "search" {
+			prefixLength = 2
+		} else if requiredKinds[0] == "fetch" && len(requiredKinds) >= 3 && requiredKinds[1] == "search" && requiredKinds[2] == "search" {
+			prefixLength = 3
+		}
+		prefix := make([]any, 0, prefixLength)
 		searchIDs := make([]string, 0)
 		priorFetchIDs := make([]string, 0)
 		searchIndex := 0
 		fetchIndex := 0
-		for _, kind := range requiredKinds {
+		for _, kind := range requiredKinds[:prefixLength] {
 			var id string
 			var dependencies []string
 			var minDependencies, maxDependencies int
 			switch kind {
 			case "search":
 				searchIndex++
-				id = fmt.Sprintf("search_%d", searchIndex)
 				dependencies = append(dependencies, priorFetchIDs...)
+				if searchIndex == 1 {
+					id = "search_1"
+				} else if searchIndex == 2 {
+					id = "search_retry_1"
+					dependencies = append(dependencies, searchIDs...)
+				} else {
+					id = fmt.Sprintf("search_%d", searchIndex)
+					dependencies = append(dependencies, searchIDs...)
+				}
 			case "fetch":
 				fetchIndex++
 				id = fmt.Sprintf("fetch_%d", fetchIndex)

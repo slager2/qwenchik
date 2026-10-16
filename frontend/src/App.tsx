@@ -46,6 +46,7 @@ const eventLabels: Record<string, string> = {
   'plan.created': 'План сохранён',
   'step.started': 'Шаг начат',
   'step.completed': 'Шаг завершён',
+  'step.skipped': 'Шаг пропущен по условию',
   'tool.started': 'Запущен инструмент',
   'tool.completed': 'Инструмент завершён',
   'approval.requested': 'Требуется подтверждение',
@@ -520,7 +521,7 @@ function TaskInspector(props: InspectorProps) {
       <div className="inspector-section">
         <div className="section-title"><div><span className="section-kicker">ПЛАН</span><h3>Шаги выполнения</h3></div><span className="section-count">{steps.length}</span></div>
         {steps.length ? (
-          <ol className="plan-list">{steps.map((step) => <li key={step.step_id}><span className={`step-state step-${step.status}`} aria-label={step.status}>{step.status === 'completed' ? '✓' : step.status === 'running' ? '·' : step.status === 'failed' ? '!' : step.position.toString().padStart(2, '0')}</span><span>{step.description}</span><span className="plan-kind">{step.status === 'running' ? 'выполняется' : step.status === 'completed' ? 'готово' : step.status === 'failed' ? 'ошибка' : step.kind}</span></li>)}</ol>
+          <ol className="plan-list">{steps.map((step) => <li key={step.step_id}><span className={`step-state step-${step.status}`} aria-label={step.status}>{step.status === 'completed' ? '✓' : step.status === 'running' ? '·' : step.status === 'failed' ? '!' : step.status === 'skipped' ? '–' : step.position.toString().padStart(2, '0')}</span><span>{step.description}</span><span className="plan-kind">{step.status === 'running' ? 'выполняется' : step.status === 'completed' ? 'готово' : step.status === 'failed' ? 'ошибка' : step.status === 'skipped' ? 'пропущено' : step.kind}</span></li>)}</ol>
         ) : <div className="inline-empty">План появится после запуска.</div>}
       </div>
 

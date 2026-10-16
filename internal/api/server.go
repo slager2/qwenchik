@@ -883,7 +883,7 @@ func publicEvent(event domain.Event) bool {
 		return false
 	}
 	switch event.Type {
-	case "task.created", "task.status_changed", "task.recovered", "message.created", "plan.created", "step.started", "step.completed", "tool.started", "tool.completed", "approval.requested", "approval.approved", "approval.rejected", "approval.expired", "artifact.created", "evidence.created", "task.completed", "task.failed", "task.cancelled":
+	case "task.created", "task.status_changed", "task.recovered", "message.created", "plan.created", "step.started", "step.completed", "step.skipped", "tool.started", "tool.completed", "approval.requested", "approval.approved", "approval.rejected", "approval.expired", "artifact.created", "evidence.created", "task.completed", "task.failed", "task.cancelled":
 		return true
 	default:
 		return false

@@ -96,24 +96,35 @@ func TestActionSchemaBindsArgumentsToSelectedTool(t *testing.T) {
 	}
 }
 
-func TestResearchPlanSchemaRequiresThreeSearchQuestionsAndFetches(t *testing.T) {
-	requiredKinds := []string{"search", "search", "search", "fetch", "fetch", "fetch"}
+func TestResearchPlanSchemaRequiresConditionalSearchRetryAndTwoFetches(t *testing.T) {
+	requiredKinds := []string{"search", "search", "fetch", "fetch"}
 	schema := planOutputSchemaWithRequiredKinds(12, []string{"analysis", "search", "fetch", "code_execution", "external_action"}, requiredKinds)
-	searchIDs := []string{"search_1", "search_2", "search_3"}
+	searchIDs := []string{"search_1", "search_retry_1"}
 	steps := make([]map[string]any, 0, len(requiredKinds))
 	for index, searchID := range searchIDs {
+		dependencies := []string{}
+		description := "Search for the core topic"
+		if index == 1 {
+			dependencies = []string{"search_1"}
+			description = "Broaden the first query only if it returned no results"
+		}
 		steps = append(steps, map[string]any{
-			"id": searchID, "kind": "search", "description": "Explore a distinct research question " + fmt.Sprint(index+1),
-			"dependencies": []string{}, "expected_output": "search hits", "success_criteria": []string{"the distinct question has recorded results"},
+			"id": searchID, "kind": "search", "description": description,
+			"dependencies": dependencies, "expected_output": "search hits", "success_criteria": []string{"the search step result is recorded"},
 		})
 	}
-	for index := 1; index <= 3; index++ {
+	steps = append(steps, map[string]any{
+		"id": "search_2", "kind": "search", "description": "Search an additional user-requested research dimension",
+		"dependencies": []string{}, "expected_output": "additional search hits", "success_criteria": []string{"the additional research question is searched"},
+	})
+	searchIDs = append(searchIDs, "search_2")
+	for index := 1; index <= 2; index++ {
 		steps = append(steps, map[string]any{
-			"id": fmt.Sprintf("fetch_%d", index), "kind": "fetch", "description": fmt.Sprintf("Fetch a source for question %d", index),
+			"id": fmt.Sprintf("fetch_%d", index), "kind": "fetch", "description": fmt.Sprintf("Fetch a distinct research source %d", index),
 			"dependencies": searchIDs, "expected_output": "evidence", "success_criteria": []string{"a source with evidence is stored"},
 		})
 	}
-	plan := map[string]any{"schema_version": 1, "goal": "research a technical topic", "subtasks": steps, "max_steps": 6, "final_deliverable": "answer"}
+	plan := map[string]any{"schema_version": 1, "goal": "research a technical topic", "subtasks": steps, "max_steps": 5, "final_deliverable": "answer"}
 	valid, err := json.Marshal(plan)
 	if err != nil {
 		t.Fatal(err)
@@ -122,14 +133,14 @@ func TestResearchPlanSchemaRequiresThreeSearchQuestionsAndFetches(t *testing.T) 
 		t.Fatalf("valid required research plan rejected: %v", err)
 	}
 	invalidSteps := append([]map[string]any(nil), steps...)
-	invalidSteps[2], invalidSteps[3] = invalidSteps[3], invalidSteps[2]
+	invalidSteps[1], invalidSteps[2] = invalidSteps[2], invalidSteps[1]
 	plan["subtasks"] = invalidSteps
 	invalid, err := json.Marshal(plan)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := tools.ValidateJSONSchema(schema, invalid); err == nil {
-		t.Fatal("plan with incorrect search/fetch order passed the schema")
+		t.Fatal("plan with incorrect retry/fetch order passed the schema")
 	}
 	steps = append(steps, map[string]any{
 		"id": "code_1", "kind": "code_execution", "description": "Run a bounded task-specific calculation",
@@ -147,26 +158,32 @@ func TestResearchPlanSchemaRequiresThreeSearchQuestionsAndFetches(t *testing.T) 
 }
 
 func TestResearchPlanSchemaCanFetchSuppliedURLBeforeDiscovery(t *testing.T) {
-	requiredKinds := []string{"fetch", "search", "search", "search", "fetch", "fetch"}
+	requiredKinds := []string{"fetch", "search", "search", "fetch"}
 	schema := planOutputSchemaWithRequiredKinds(8, []string{"analysis", "search", "fetch", "code_execution", "external_action"}, requiredKinds)
-	searchIDs := []string{"search_1", "search_2", "search_3"}
+	searchIDs := []string{"search_1", "search_retry_1"}
 	steps := []map[string]any{{
 		"id": "fetch_1", "kind": "fetch", "description": "Fetch the user-provided URL first",
 		"dependencies": []string{}, "expected_output": "user source evidence", "success_criteria": []string{"user source evidence is stored"},
 	}}
 	for index, searchID := range searchIDs {
+		dependencies := []string{"fetch_1"}
+		description := fmt.Sprintf("Investigate a distinct question %d", index+1)
+		if index == 1 {
+			dependencies = []string{"fetch_1", "search_1"}
+			description = "Broaden the discovery query only if the first search has no results"
+		}
 		steps = append(steps, map[string]any{
-			"id": searchID, "kind": "search", "description": fmt.Sprintf("Investigate a distinct question %d", index+1),
-			"dependencies": []string{"fetch_1"}, "expected_output": "discovery hits", "success_criteria": []string{"discovery results are recorded"},
+			"id": searchID, "kind": "search", "description": description,
+			"dependencies": dependencies, "expected_output": "discovery hits", "success_criteria": []string{"discovery results are recorded"},
 		})
 	}
-	for index := 2; index <= 3; index++ {
+	for index := 2; index <= 2; index++ {
 		steps = append(steps, map[string]any{
 			"id": fmt.Sprintf("fetch_%d", index), "kind": "fetch", "description": fmt.Sprintf("Fetch a discovered source %d", index-1),
 			"dependencies": searchIDs, "expected_output": "source evidence", "success_criteria": []string{"source evidence is stored"},
 		})
 	}
-	plan := map[string]any{"schema_version": 1, "goal": "compare supplied and discovered sources", "subtasks": steps, "max_steps": 6, "final_deliverable": "cited comparison"}
+	plan := map[string]any{"schema_version": 1, "goal": "compare supplied and discovered sources", "subtasks": steps, "max_steps": 4, "final_deliverable": "cited comparison"}
 	encoded, err := json.Marshal(plan)
 	if err != nil {
 		t.Fatal(err)

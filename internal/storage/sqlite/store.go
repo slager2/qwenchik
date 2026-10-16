@@ -41,7 +41,9 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, errors.New("database path is required")
 	}
-	if path != ":memory:" {
+	if path == ":memory:" {
+		path = "file:sqlite-memory-" + newID() + "?mode=memory&cache=shared"
+	} else {
 		abs, err := filepath.Abs(path)
 		if err != nil {
 			return nil, fmt.Errorf("resolve database path: %w", err)
@@ -51,13 +53,17 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		}
 		path = (&url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}).String()
 	}
-	dsn := path + "?_busy_timeout=5000&_foreign_keys=on&_journal_mode=WAL&_synchronous=NORMAL&_txlock=immediate"
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+	dsn := path + separator + "_busy_timeout=10000&_foreign_keys=on&_journal_mode=WAL&_synchronous=NORMAL&_txlock=immediate"
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open SQLite database: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("connect SQLite database: %w", err)
@@ -472,7 +478,7 @@ func (s *Store) SavePlan(ctx context.Context, taskID string, plan domain.Plan, c
 }
 
 func (s *Store) SetStepStatus(ctx context.Context, taskID, stepID, status string) error {
-	if status != "pending" && status != "running" && status != "completed" && status != "failed" {
+	if status != "pending" && status != "running" && status != "completed" && status != "failed" && status != "skipped" {
 		return fmt.Errorf("invalid step status %q", status)
 	}
 	result, err := s.db.ExecContext(ctx, `UPDATE task_steps SET status=?,attempts=attempts+CASE WHEN ?='running' THEN 1 ELSE 0 END,updated_at=? WHERE task_id=? AND step_id=?`, status, status, stamp(time.Now().UTC()), taskID, stepID)

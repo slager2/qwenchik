@@ -13,7 +13,7 @@ The current implementation includes:
 - strict planner validation and typed tools; unknown tools are denied and external side effects fail closed;
 - optional SearXNG and Tavily search, DNS-rebinding/SSRF-safe public HTTP fetch, and local HTML extraction;
 - fetched content stored as local artifacts with content hashes, provenance, excerpts, quote spans, and citation-ID validation;
-- local durable memories with candidate review, explicit acceptance, task/global scopes, and bounded lexical retrieval;
+- local durable memories with candidate review, explicit acceptance, task/global scopes, and bounded FTS5 retrieval;
 - code commands are exposed only through verified rootless Docker, with a read-only container root, task-only workspace mount, disabled network, and resource/output limits;
 - SSE event replay using `Last-Event-ID`;
 - responsive Kanban, task inspector, chat, live event timeline, sources/artifacts panels, and keyboard command palette.
@@ -27,6 +27,8 @@ Search is optional and disabled by default. A request that clearly requires web 
 - local `llama-server` exposing the OpenAI-compatible API. The app uses `http://127.0.0.1:8000/v1` by default.
 - rootless Docker with the configured image available locally, needed for code execution. No daemon/image is assumed or pulled automatically.
 - Docker Compose is optional and used only for the bundled local SearXNG search service.
+
+SQLite memory retrieval uses the driver's bundled FTS5 module. `make test`, `make build`, `make run`, and `make vet` enable it with the `sqlite_fts5` Go build tag. Direct Go commands must include `-tags sqlite_fts5` as well (for example, `CGO_ENABLED=1 go test -tags sqlite_fts5 ./...`).
 
 `qagent doctor` runs a bounded strict-JSON-schema smoke request against the configured model, in addition to checking the endpoint. A server that only answers `/v1/models` but cannot produce the required structured output is reported as unavailable for agent work.
 
@@ -83,7 +85,7 @@ export SEARXNG_URL=http://127.0.0.1:8081
 
 Start or restart `qagent serve` in that environment; the app reads configuration at startup. Check `/api/providers` for each enabled provider. `/api/doctor` checks SearXNG locally but does not make a billable Tavily request; Tavily is reported as configured and is exercised by a research task. SearXNG runs locally but forwards queries to its enabled public search engines.
 
-Web-research tasks without a user-provided URL require an enabled search tool and a plan with three distinct search questions followed by fetches from discovered sources. Query text is generated from each task's questions; no topic or region-specific query templates are injected. If all search providers are unavailable, the task fails with `search_unavailable` instead of silently attempting analysis-only research. Verification checks the user's acceptance criteria and reports unmet evidence rather than treating a requested gap list as proof of completion. An incomplete persisted plan can be replaced on retry only when previously started actions were idempotent and no approval was consumed; search/fetch budgets and prior observations are preserved.
+Web-research tasks without a user-provided URL require an enabled search tool, one focused discovery query, and evidence from at least two distinct source sites. A single conditional broadened-query retry runs when discovery returns no results or too few distinct candidate sites; additional questions are planned only when needed for the request. Once the evidence threshold is met, remaining optional fetches are recorded as skipped. Query text is generated from each task's questions; no topic or region-specific query templates are injected. If all search providers are unavailable, the task fails with `search_unavailable` instead of silently attempting analysis-only research. Verification checks the user's acceptance criteria and reports unmet evidence rather than treating a requested gap list as proof of completion. An incomplete persisted plan can be replaced on retry only when previously started actions were idempotent and no approval was consumed; search/fetch budgets and prior observations are preserved.
 
 For sandbox execution, start a rootless Docker daemon and make the configured image available locally (for example, `docker pull golang:1.23-alpine` in that rootless context). Qwenchik uses `--pull=never`, `--network=none`, a read-only container root, and only the per-task workspace mount.
 

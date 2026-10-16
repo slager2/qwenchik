@@ -44,20 +44,20 @@ func TestRequiresWebResearchRecognizesRussianAndEnglishRequests(t *testing.T) {
 
 func TestGenericResearchDecomposesIntoBoundedSearchAndFetchSteps(t *testing.T) {
 	goal := "Research the architecture, operating behavior, and limitations of an unfamiliar protocol."
-	if got := minimumResearchSearches(goal); got != 3 {
-		t.Fatalf("research search-question count = %d, want 3", got)
+	if got := minimumResearchSearches(goal); got != 2 {
+		t.Fatalf("research search-attempt count = %d, want one query plus one conditional retry", got)
 	}
-	if got := minimumResearchFetches(goal); got != 3 {
-		t.Fatalf("research source count = %d, want 3", got)
+	if got := minimumResearchFetches(goal); got != 2 {
+		t.Fatalf("research source count = %d, want 2 distinct sites", got)
 	}
-	if got := requiredPlanSteps("Technical review", goal); got != 6 {
-		t.Fatalf("research plan size = %d, want 3 discovery steps plus 3 fetches", got)
+	if got := requiredPlanSteps("Technical review", goal); got != 4 {
+		t.Fatalf("research plan size = %d, want one search, one conditional retry and two fetches", got)
 	}
 	if got := requiredPlanSteps("Inspect supplied document", "Summarize https://example.org/document"); got != 1 {
 		t.Fatalf("user-URL plan size = %d, want one fetch", got)
 	}
 	gotKinds := requiredResearchKinds("Technical review", goal)
-	wantKinds := []string{"search", "search", "search", "fetch", "fetch", "fetch"}
+	wantKinds := []string{"search", "search", "fetch", "fetch"}
 	if len(gotKinds) != len(wantKinds) {
 		t.Fatalf("generic research plan kinds = %#v", gotKinds)
 	}
@@ -74,13 +74,13 @@ func TestGenericResearchDecomposesIntoBoundedSearchAndFetchSteps(t *testing.T) {
 func TestResearchRequestWithUserURLKeepsURLFirstAndAddsDiscovery(t *testing.T) {
 	title := "Compare two sources"
 	goal := "Compare https://docs.example.org/current with other current information."
-	if got := minimumResearchSearches(title + "\n" + goal); got != 3 {
-		t.Fatalf("URL-plus-research search count = %d, want 3", got)
+	if got := minimumResearchSearches(title + "\n" + goal); got != 2 {
+		t.Fatalf("URL-plus-research search count = %d, want one query plus one conditional retry", got)
 	}
-	if got := minimumResearchFetches(title + "\n" + goal); got != 3 {
-		t.Fatalf("URL-plus-research source count = %d, want supplied URL plus two discovered sources", got)
+	if got := minimumResearchFetches(title + "\n" + goal); got != 2 {
+		t.Fatalf("URL-plus-research source count = %d, want supplied URL plus one discovered source", got)
 	}
-	want := []string{"fetch", "search", "search", "search", "fetch", "fetch"}
+	want := []string{"fetch", "search", "search", "fetch"}
 	got := requiredResearchKinds(title, goal)
 	if len(got) != len(want) {
 		t.Fatalf("URL-plus-research required kinds = %#v, want %#v", got, want)
@@ -90,8 +90,8 @@ func TestResearchRequestWithUserURLKeepsURLFirstAndAddsDiscovery(t *testing.T) {
 			t.Fatalf("URL-plus-research required kinds = %#v, want %#v", got, want)
 		}
 	}
-	if got := requiredPlanSteps(title, goal); got != 6 {
-		t.Fatalf("URL-plus-research baseline plan steps = %d, want 6", got)
+	if got := requiredPlanSteps(title, goal); got != 4 {
+		t.Fatalf("URL-plus-research baseline plan steps = %d, want 4", got)
 	}
 }
 
@@ -109,6 +109,15 @@ func TestResearchQuestionsAndQueriesRejectDuplicatesGenerically(t *testing.T) {
 	}
 	if duplicateResearchQuery("new protocol benchmark", []string{"system architecture components"}) {
 		t.Fatal("a distinct research query was incorrectly marked duplicate")
+	}
+}
+
+func TestBroadeningDuplicateRetryQueryDropsRestrictiveTerms(t *testing.T) {
+	for _, query := range []string{"protocol specification rare version filter", "protocol overview"} {
+		broadened := broadenResearchQuery(query)
+		if broadened == "" || duplicateResearchQuery(broadened, []string{query}) {
+			t.Errorf("broadenResearchQuery(%q) = %q, want a distinct non-empty query", query, broadened)
+		}
 	}
 }
 
@@ -185,6 +194,29 @@ func TestAvailableFetchURLsRetryFailedUserURLButExcludeFailedDiscoveryURL(t *tes
 	urls = worker.availableFetchURLs(taskID, map[string]any{}, failedURLs, userProvidedURLs(goal), false)
 	if contains(urls, "https://docs.example.com/qwen") {
 		t.Fatalf("successfully fetched user URL was offered again: %#v", urls)
+	}
+}
+
+func TestSearchRetryDecisionCountsDistinctFetchableSites(t *testing.T) {
+	registry := tools.NewRegistry()
+	registry.RememberFetchedURLs("task-search-floor", map[string]any{
+		"evidence_id": "user-source", "url": "https://docs.example.com/protocol/",
+	})
+	worker := &Worker{tools: registry}
+	state := checkpointState{}
+	if worker.searchResultsMeetSourceFloor("task-search-floor", []research.SearchHit{{URL: "https://www.docs.example.com/another-page"}}, state, 2) {
+		t.Fatal("same-site search hits incorrectly satisfied the two-site floor")
+	}
+	if !worker.searchResultsMeetSourceFloor("task-search-floor", []research.SearchHit{
+		{URL: "https://www.docs.example.com/another-page"}, {URL: "https://reference.example.net/protocol"},
+	}, state, 2) {
+		t.Fatal("a supplied source plus one distinct candidate site did not satisfy the source floor")
+	}
+	state.FailedFetchURLs = []string{"https://reference.example.net/protocol"}
+	if worker.searchResultsMeetSourceFloor("task-search-floor", []research.SearchHit{
+		{URL: "https://reference.example.net/protocol"}, {URL: "https://benchmark.example.org/protocol"},
+	}, state, 2) {
+		t.Fatal("failed candidate URL was counted toward source sufficiency")
 	}
 }
 

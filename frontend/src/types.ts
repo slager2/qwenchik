@@ -62,7 +62,7 @@ export interface TaskStep {
   dependencies: string[]
   expected_output: string
   success_criteria: string[]
-  status: 'pending' | 'running' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
   attempts: number
   created_at: string
   updated_at: string

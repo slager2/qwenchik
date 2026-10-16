@@ -1,7 +1,7 @@
 .PHONY: test build run vet frontend frontend-dev
 
 test:
-	go test ./...
+	go test -tags sqlite_fts5 ./...
 	npm --prefix frontend ci
 	npm --prefix frontend run typecheck
 
@@ -13,10 +13,10 @@ frontend-dev:
 	npm --prefix frontend run dev
 
 build: frontend
-	go build -o ./qagent ./cmd/qagent
+	go build -tags sqlite_fts5 -o ./qagent ./cmd/qagent
 
 run:
-	go run ./cmd/qagent serve
+	go run -tags sqlite_fts5 ./cmd/qagent serve
 
 vet:
-	go vet ./...
+	go vet -tags sqlite_fts5 ./...
