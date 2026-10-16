@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/slager2/qwenchik/internal/providers/research"
 )
@@ -24,7 +25,7 @@ func TestBuildEvidenceSelectsContiguousQueryRelevantExcerpt(t *testing.T) {
 		"NVMe over Fabrics exposes storage through queues over a network fabric.",
 		"Queue pairs allow hosts and controllers to exchange commands; measured throughput reached 12 GB/s in a PCIe 4.0 configuration.",
 		"Limitations include discovery setup, transport-specific recovery, and congestion under load.",
-		strings.Repeat("Additional general protocol information without performance details. ", 40),
+		strings.Repeat("Additional general protocol information without performance details. ", 120),
 	}, "\n")
 	evidence, err := BuildEvidence("task", "NVMe over Fabrics queue pairs throughput limitations", research.FetchedDocument{
 		OriginalURL: "https://example.org/protocol", FinalURL: "https://example.org/protocol", ContentSHA256: "content-hash",
@@ -37,6 +38,23 @@ func TestBuildEvidenceSelectsContiguousQueryRelevantExcerpt(t *testing.T) {
 	}
 	if len(evidence.QuoteSpans) != 1 || evidence.QuoteSpans[0].Text != evidence.Excerpt || evidence.QuoteSpans[0].End != len([]rune(evidence.Excerpt)) {
 		t.Fatalf("quote span does not match the selected source excerpt: %#v", evidence.QuoteSpans)
+	}
+}
+
+func TestBuildEvidenceRetainsLargeMultilingualExcerptWithRuneOffsets(t *testing.T) {
+	text := strings.Repeat("Проверяемые данные подтверждают архитектурное решение и фактический результат. ", 120)
+	evidence, err := BuildEvidence("task", "архитектурное решение фактический результат", research.FetchedDocument{
+		OriginalURL: "https://example.org/report", FinalURL: "https://example.org/report", ContentSHA256: "large-content-hash",
+	}, research.ExtractedDocument{Title: "Технический отчёт", Text: text, Method: "local_html_parser"}, "raw", "text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runeCount := utf8.RuneCountInString(evidence.Excerpt)
+	if runeCount <= 2500 || runeCount > 4000 {
+		t.Fatalf("large evidence excerpt has %d runes, want 2501..4000", runeCount)
+	}
+	if len(evidence.QuoteSpans) != 1 || evidence.QuoteSpans[0].End != runeCount || evidence.QuoteSpans[0].Text != evidence.Excerpt {
+		t.Fatalf("large excerpt quote offsets do not use Unicode rune indices: %#v", evidence.QuoteSpans)
 	}
 }
 

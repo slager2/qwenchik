@@ -701,14 +701,19 @@ func configuredSearchProvider(cfg config.Config) (research.SearchProvider, error
 }
 
 func maxInputBytes(cfg config.Config) int {
-	budget := (cfg.LLMContextLength - cfg.LLMMaxOutputTokens - 2048) * 2
-	if budget > 20000 {
-		return 20000
-	}
-	if budget < 1 {
+	const (
+		reservedPromptTokens   = int64(2048)
+		estimatedBytesPerToken = int64(4)
+	)
+	availableTokens := int64(cfg.LLMContextLength) - int64(cfg.LLMMaxOutputTokens) - reservedPromptTokens
+	if availableTokens < 1 {
 		return 1
 	}
-	return budget
+	maxInt := int64(^uint(0) >> 1)
+	if availableTokens > maxInt/estimatedBytesPerToken {
+		return int(maxInt)
+	}
+	return int(availableTokens * estimatedBytesPerToken)
 }
 
 func openDependencies(ctx context.Context) (*dependencies, error) {

@@ -92,7 +92,7 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			ArgumentsSchema:    json.RawMessage(`{"type":"object","properties":{"url":{"type":"string","maxLength":2048},"original_query":{"type":"string","maxLength":1000}},"required":["url"],"additionalProperties":false}`),
 			OutputSchema:       json.RawMessage(`{"type":"object","properties":{"evidence_id":{"type":"string"},"url":{"type":"string"},"requested_url":{"type":"string"},"title":{"type":"string"},"excerpt":{"type":"string"},"content_sha256":{"type":"string"},"taint":{"type":"string"},"fetched_bytes":{"type":"integer"}},"required":["evidence_id","url","requested_url","title","excerpt","content_sha256","taint","fetched_bytes"],"additionalProperties":false}`),
 			RequiredCapability: "research.fetch", RiskClass: "read", TimeoutSeconds: 30,
-			Idempotent: true, MaxOutputBytes: 8192, AllowedRoles: []string{"researcher"},
+			Idempotent: true, MaxOutputBytes: 32 << 10, AllowedRoles: []string{"researcher"},
 		}, func(ctx context.Context, raw json.RawMessage) error {
 			var args fetchArgs
 			if err := decodeToolArgs(raw, &args); err != nil {
@@ -168,7 +168,7 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			registry.urlLedger.MarkFetched(taskID, evidence.CanonicalURL)
 			return map[string]any{
 				"evidence_id": evidence.ID, "url": evidence.CanonicalURL, "requested_url": args.URL, "title": evidence.Title,
-				"excerpt": truncateUTF8(evidence.Excerpt, 1200), "content_sha256": evidence.ContentSHA256,
+				"excerpt": truncateUTF8(evidence.Excerpt, 4000), "content_sha256": evidence.ContentSHA256,
 				"taint": research.TaintExternal, "fetched_bytes": int64(len(fetched.Body)),
 			}, nil
 		}); err != nil {

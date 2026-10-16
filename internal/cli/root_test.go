@@ -4,7 +4,37 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/slager2/qwenchik/internal/config"
 )
+
+func TestMaxInputBytesScalesWithConfiguredContext(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		context int
+		output  int
+		want    int
+	}{
+		{name: "16k context", context: 16_384, output: 4_096, want: 40_960},
+		{name: "32k context", context: 32_768, output: 4_096, want: 106_496},
+		{name: "default 128k context", context: 131_072, output: 4_096, want: 499_712},
+		{name: "less than reserve", context: 4_000, output: 3_000, want: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := maxInputBytes(config.Config{LLMContextLength: test.context, LLMMaxOutputTokens: test.output})
+			if got != test.want {
+				t.Fatalf("maxInputBytes() = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
+func TestMaxInputBytesSaturatesInsteadOfOverflowing(t *testing.T) {
+	got := maxInputBytes(config.Config{LLMContextLength: int(^uint(0) >> 1), LLMMaxOutputTokens: 1})
+	if got != int(^uint(0)>>1) {
+		t.Fatalf("overflowing context budget = %d, want max int", got)
+	}
+}
 
 func TestSearchProviderCommandsNeverExposeTavilyKey(t *testing.T) {
 	const testKey = "test-tavily-secret-value"

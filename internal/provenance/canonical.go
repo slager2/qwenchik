@@ -35,7 +35,7 @@ func BuildEvidence(taskID, query string, fetched research.FetchedDocument, extra
 	if retrievedAt.IsZero() {
 		retrievedAt = time.Now().UTC()
 	}
-	excerpt := selectEvidenceExcerpt(extracted.Text, query, 1200)
+	excerpt := selectEvidenceExcerpt(extracted.Text, query, 4000)
 	quotes := []domain.QuoteSpan{}
 	if excerpt != "" {
 		quotes = append(quotes, domain.QuoteSpan{Start: 0, End: utf8.RuneCountInString(excerpt), Text: excerpt})
@@ -135,15 +135,13 @@ func selectEvidenceExcerpt(text, query string, maxRunes int) string {
 		return string(runes[:maxRunes])
 	}
 
-	start := max(0, bestStart-maxRunes/4)
-	for start < bestStart && runes[start] != '\n' {
-		start++
-	}
-	if start < bestStart {
-		start++
-	}
-	if start > bestStart {
-		start = bestStart
+	maxStart := max(0, len(runes)-maxRunes)
+	start := min(maxStart, max(0, bestStart-maxRunes/4))
+	for position := start; position < bestStart; position++ {
+		if runes[position] == '\n' && position+1 <= maxStart {
+			start = position + 1
+			break
+		}
 	}
 	end := min(len(runes), start+maxRunes)
 	if bestEnd > end {

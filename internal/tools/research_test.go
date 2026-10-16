@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/providers/research"
@@ -48,6 +49,15 @@ type extractorStub struct{}
 
 func (extractorStub) Extract(context.Context, research.FetchedDocument) (research.ExtractedDocument, error) {
 	return research.ExtractedDocument{Title: "Fetched source", Text: "Verified excerpt from the public page.", Method: "test_html", Taint: research.TaintExternal}, nil
+}
+
+type largeExtractorStub struct{}
+
+func (largeExtractorStub) Extract(context.Context, research.FetchedDocument) (research.ExtractedDocument, error) {
+	return research.ExtractedDocument{
+		Title: "Large source", Text: strings.Repeat("Проверяемые результаты содержат фактические данные. ", 180),
+		Method: "test_html", Taint: research.TaintExternal,
+	}, nil
 }
 
 func TestResearchToolsRequireKnownURLAndPersistEvidence(t *testing.T) {
@@ -114,5 +124,41 @@ func TestResearchToolsRequireKnownURLAndPersistEvidence(t *testing.T) {
 	}
 	if fetcher.calls != 2 {
 		t.Fatalf("unsearched URL reached fetcher, calls=%d", fetcher.calls)
+	}
+}
+
+func TestFetchToolReturnsFourThousandRuneEvidenceExcerpt(t *testing.T) {
+	ctx := context.Background()
+	store, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "large-research.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if _, err := store.CreateTask(ctx, domain.Task{ID: "large-research-task", Title: "Research"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	artifactStore, err := artifacts.New(filepath.Join(t.TempDir(), "large-artifacts"), 100_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := NewRegistry()
+	if err := RegisterResearchTools(registry, ResearchTools{
+		Fetcher: &fetchStub{}, Extractor: largeExtractorStub{}, Artifacts: artifactStore, Repository: store, MaxFetchBytes: 100_000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	registry.RememberURLs("large-research-task", []research.SearchHit{{URL: "https://docs.example.com/report"}})
+	result, err := registry.Execute(WithTaskID(ctx, "large-research-task"), "researcher", "fetch_url", json.RawMessage(`{"url":"https://docs.example.com/report","original_query":"verified results factual data"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata := result.(map[string]any)
+	excerpt, _ := metadata["excerpt"].(string)
+	if got := utf8.RuneCountInString(excerpt); got != 4000 {
+		t.Fatalf("fetch output excerpt has %d runes, want 4000", got)
+	}
+	evidence, err := store.Evidence(ctx, "large-research-task")
+	if err != nil || len(evidence) != 1 || utf8.RuneCountInString(evidence[0].Excerpt) != 4000 {
+		t.Fatalf("persisted large evidence excerpt = %#v err=%v", evidence, err)
 	}
 }

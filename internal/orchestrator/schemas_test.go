@@ -51,6 +51,25 @@ func TestStructuredOutputSchemasConstrainRoleEnvelopes(t *testing.T) {
 	}
 }
 
+func TestWorkerPreservesLargeInputBudgetAndCountsPromptOverhead(t *testing.T) {
+	model := &scriptedLLM{responses: []string{`{"ok":true}`}}
+	worker := New(nil, model, tools.NewRegistry(), Options{MaxInputBytes: 100_000, MaxOutputTokens: 128})
+	if worker.options.MaxInputBytes != 100_000 {
+		t.Fatalf("worker input budget = %d, want configured 100000 bytes", worker.options.MaxInputBytes)
+	}
+	if !worker.requestFits("system", "user", json.RawMessage(`{"type":"object"}`)) {
+		t.Fatal("small prompt unexpectedly exceeds configured budget")
+	}
+	worker.options.MaxInputBytes = 700
+	_, err := worker.complete(context.Background(), strings.Repeat("s", 200), strings.Repeat("u", 200), json.RawMessage(strings.Repeat("x", 100)))
+	if !errors.Is(err, errInputBudgetExceeded) {
+		t.Fatalf("oversized system/user/schema input error = %v, want context budget error", err)
+	}
+	if model.requests != 0 {
+		t.Fatalf("oversized request reached the model: %d requests", model.requests)
+	}
+}
+
 func TestActionSchemaBindsArgumentsToSelectedTool(t *testing.T) {
 	fetchDescriptor := tools.Descriptor{
 		Name: "fetch_url", ArgumentsSchema: json.RawMessage(`{"type":"object","properties":{"url":{"type":"string"},"original_query":{"type":"string"}},"required":["url"],"additionalProperties":false}`),

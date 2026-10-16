@@ -87,7 +87,7 @@ Web-research tasks without a user-provided URL require an enabled search tool an
 
 For sandbox execution, start a rootless Docker daemon and make the configured image available locally (for example, `docker pull golang:1.23-alpine` in that rootless context). Qwenchik uses `--pull=never`, `--network=none`, a read-only container root, and only the per-task workspace mount.
 
-Set `LLM_CONTEXT_LENGTH` to the context configured on the model server. The example file follows the API contract default of `131072`; for the conservative `-c 8192` llama.cpp command above, export `LLM_CONTEXT_LENGTH=8192`. The worker derives a bounded task-input budget from that value and the output-token reserve.
+Set `LLM_CONTEXT_LENGTH` to the context configured on the model server. The example file follows the API contract default of `131072`; for the conservative `-c 8192` llama.cpp command above, export `LLM_CONTEXT_LENGTH=8192`. The worker estimates an input byte budget from the available input tokens (4 bytes per token, reserving 2,048 prompt tokens), then checks the serialized system prompt, user data, and schema against that budget. This estimate scales with the configured context rather than using a fixed 20 KB ceiling.
 
 ## CLI
 

@@ -12,6 +12,8 @@ import (
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
 )
 
+const maxTaskTextBytes = 512 << 10
+
 type Repository interface {
 	CreateTask(context.Context, domain.Task, string) (domain.Task, error)
 	GetTask(context.Context, string) (domain.Task, error)
@@ -55,8 +57,8 @@ func New(repo Repository) *Service { return &Service{repo: repo} }
 
 func (s *Service) CreateTask(ctx context.Context, title, description, idempotencyKey string) (domain.Task, error) {
 	description = strings.TrimSpace(description)
-	if description == "" || len(description) > 20000 {
-		return domain.Task{}, errors.New("description must contain 1 to 20000 characters")
+	if description == "" || len(description) > maxTaskTextBytes {
+		return domain.Task{}, errors.New("description must contain 1 to 524288 bytes")
 	}
 	title = strings.TrimSpace(title)
 	if title == "" {
@@ -85,8 +87,8 @@ func (s *Service) QueueTask(ctx context.Context, id, idempotencyKey string) (dom
 
 func (s *Service) AddUserMessage(ctx context.Context, taskID, content, idempotencyKey string) (domain.Message, error) {
 	content = strings.TrimSpace(content)
-	if content == "" || len(content) > 20000 {
-		return domain.Message{}, errors.New("message must contain 1 to 20000 characters")
+	if content == "" || len(content) > maxTaskTextBytes {
+		return domain.Message{}, errors.New("message must contain 1 to 524288 bytes")
 	}
 	if _, err := s.repo.GetTask(ctx, taskID); err != nil {
 		return domain.Message{}, err

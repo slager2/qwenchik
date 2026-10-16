@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/llm"
@@ -871,16 +872,32 @@ func TestToolResultCompactionBoundsModelContextAndKeepsSourceIDs(t *testing.T) {
 		"search_1": []research.SearchHit{{URL: "https://one.example/", Title: strings.Repeat("title", 100), Snippet: strings.Repeat("snippet", 300), Taint: research.TaintExternal}},
 		"fetch_1":  map[string]any{"evidence_id": "evidence-123", "excerpt": strings.Repeat("evidence", 500), "url": "https://one.example/", "taint": research.TaintExternal},
 	}
-	compacted := compactToolResults(results, 1500)
+	compacted := compactToolResults(results, 10_000)
 	encoded, err := json.Marshal(compacted)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(encoded) > 1500 {
-		t.Fatalf("compacted results are %d bytes, limit is 1500", len(encoded))
+	if len(encoded) > 10_000 {
+		t.Fatalf("compacted results are %d bytes, limit is 10000", len(encoded))
 	}
 	if !strings.Contains(string(encoded), "evidence-123") {
 		t.Fatalf("compaction lost the evidence ID: %s", encoded)
+	}
+	longExcerpt := strings.Repeat("фактические результаты и проверяемые данные; ", 150)
+	compactedEvidence, ok := compactToolResult(map[string]any{"evidence_id": "large-evidence", "excerpt": longExcerpt}).(map[string]any)
+	if !ok {
+		t.Fatalf("compacted evidence has type %T", compactToolResult(map[string]any{"evidence_id": "large-evidence", "excerpt": longExcerpt}))
+	}
+	gotExcerpt, _ := compactedEvidence["excerpt"].(string)
+	if got := utf8.RuneCountInString(gotExcerpt); got != 4000 {
+		t.Fatalf("compacted evidence excerpt has %d runes, want 4000", got)
+	}
+	searchResults, ok := compactToolResult([]research.SearchHit{{URL: "https://one.example/", Snippet: strings.Repeat("полезный фрагмент ", 100)}}).([]map[string]any)
+	if !ok || len(searchResults) != 1 {
+		t.Fatalf("compacted search hits = %#v", searchResults)
+	}
+	if snippet, _ := searchResults[0]["snippet"].(string); utf8.RuneCountInString(snippet) != 600 {
+		t.Fatalf("compacted snippet length = %d runes, want 600", utf8.RuneCountInString(snippet))
 	}
 }
 
