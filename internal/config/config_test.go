@@ -80,6 +80,19 @@ func TestLoadDoesNotOverrideNonEmptyEnvironmentValue(t *testing.T) {
 	}
 }
 
+func TestDDGFallbackCanBeExplicitlyDisabled(t *testing.T) {
+	clearConfigEnv(t)
+	chdirForTest(t, t.TempDir())
+	t.Setenv("SEARCH_ENABLE_DDG", "false")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SearchEnableDDG {
+		t.Fatal("explicit privacy setting was ignored")
+	}
+}
+
 func clearConfigEnv(t *testing.T) {
 	t.Helper()
 	for _, name := range []string{
@@ -89,7 +102,7 @@ func clearConfigEnv(t *testing.T) {
 		"LLM_MAX_OUTPUT_TOKENS", "LLM_TEMPERATURE", "LLM_TOP_P", "LLM_ENABLE_THINKING",
 		"LLM_REQUEST_TIMEOUT_SECONDS", "LLM_MAX_CONCURRENCY", "SEARXNG_URL",
 		"TAVILY_API_KEY", "MAX_STEPS", "TASK_TIMEOUT_SECONDS", "MAX_SEARCH_QUERIES",
-		"MAX_FETCH_BYTES", "ALLOWED_DOMAINS",
+		"MAX_FETCH_BYTES", "ALLOWED_DOMAINS", "SEARCH_ENABLE_DDG",
 	} {
 		name := name
 		value, wasSet := os.LookupEnv(name)

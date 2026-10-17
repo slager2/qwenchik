@@ -68,6 +68,7 @@ func TestSearchProviderCommandsNeverExposeTavilyKey(t *testing.T) {
 }
 
 func TestProvidersCommandReportsBuiltInDuckDuckGoFallback(t *testing.T) {
+	t.Setenv("SEARCH_ENABLE_DDG", "true")
 	t.Setenv("TAVILY_API_KEY", "")
 	t.Setenv("SEARXNG_URL", "")
 	t.Setenv("APP_BIND_ADDR", "127.0.0.1:8080")
@@ -81,8 +82,19 @@ func TestProvidersCommandReportsBuiltInDuckDuckGoFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := output.String()
-	if !strings.Contains(got, `"type":"duckduckgo"`) || !strings.Contains(got, `"mode":"duckduckgo"`) || !strings.Contains(got, `"status":"enabled"`) || !strings.Contains(got, `"health":"not_checked"`) {
+	if !strings.Contains(got, `"type":"duckduckgo"`) || !strings.Contains(got, `"mode":"duckduckgo"`) || !strings.Contains(got, `"enabled":true`) || !strings.Contains(got, `"status":"configured"`) || !strings.Contains(got, `"health":"not_checked"`) {
 		t.Fatalf("providers output did not report built-in DuckDuckGo fallback: %s", got)
+	}
+}
+
+func TestConfiguredSearchProviderRespectsDisabledDDG(t *testing.T) {
+	provider, err := configuredSearchProvider(config.Config{SearchEnableDDG: false})
+	if err != nil || provider != nil {
+		t.Fatalf("disabled providers = %T err=%v", provider, err)
+	}
+	provider, err = configuredSearchProvider(config.Config{SearchEnableDDG: true})
+	if err != nil || provider == nil {
+		t.Fatalf("enabled fallback = %T err=%v", provider, err)
 	}
 }
 

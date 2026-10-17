@@ -73,6 +73,9 @@ func (s TaskStatus) Valid() bool {
 }
 
 func CanTransition(from, to TaskStatus) bool {
+	if from == to && (from == StatusRunning || from == StatusVerifying) {
+		return true
+	}
 	allowed, ok := transitions[from]
 	if !ok {
 		return false

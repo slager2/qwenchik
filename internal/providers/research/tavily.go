@@ -85,6 +85,9 @@ func NewTavily(apiKey string, client *http.Client) (*Tavily, error) {
 }
 
 func (t *Tavily) Search(ctx context.Context, options SearchOptions) ([]SearchHit, error) {
+	if t == nil || t.client == nil || t.apiKey == "" {
+		return nil, classified("provider_misconfigured", "misconfigured", 0, false)
+	}
 	query := strings.TrimSpace(options.Query)
 	if query == "" || !utf8.ValidString(query) || utf8.RuneCountInString(query) > tavilyMaxQueryRunes {
 		return nil, errors.New("Tavily query must contain 1 to 400 characters")
@@ -140,13 +143,15 @@ func (t *Tavily) Search(ctx context.Context, options SearchOptions) ([]SearchHit
 		return nil, tavilyUnavailable("request failed")
 	}
 	defer response.Body.Close()
+	recordResponseMetadata(ctx, response)
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, tavilyUnavailable("returned a non-success HTTP status")
+		return nil, classifyHTTP(response.StatusCode, true)
 	}
 	if response.ContentLength > maxTavilyResponse {
 		return nil, errTavilyResponseTooBig
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxTavilyResponse+1))
+	recordResponseBodySize(ctx, len(body))
 	if err != nil {
 		return nil, tavilyUnavailable("response could not be read")
 	}
@@ -155,16 +160,21 @@ func (t *Tavily) Search(ctx context.Context, options SearchOptions) ([]SearchHit
 	}
 	var result tavilySearchResponse
 	if err := json.Unmarshal(body, &result); err != nil || result.Results == nil {
-		return nil, tavilyUnavailable("returned a malformed response")
+		return nil, classified("provider_malformed", "malformed", response.StatusCode, false)
 	}
 
 	hits := make([]SearchHit, 0, options.MaxResults)
+	validResults := 0
 	for _, item := range result.Results {
 		if len(hits) >= options.MaxResults {
 			break
 		}
 		parsedURL, err := parseTavilyResultURL(item.URL)
-		if err != nil || !matchesDomainAllowlist(parsedURL.Hostname(), options.Domains) {
+		if err != nil {
+			continue
+		}
+		validResults++
+		if !matchesDomainAllowlist(parsedURL.Hostname(), options.Domains) {
 			continue
 		}
 		score := item.Score
@@ -181,6 +191,12 @@ func (t *Tavily) Search(ctx context.Context, options SearchOptions) ([]SearchHit
 			PublishedAt: parseTavilyDate(item.PublishedDate),
 			Taint:       TaintExternal,
 		})
+	}
+	if len(hits) == 0 && validResults > 0 {
+		return hits, classified("search_filtered_by_policy", "degraded", response.StatusCode, false)
+	}
+	if len(hits) == 0 && len(result.Results) > 0 {
+		return hits, classified("provider_malformed", "malformed", response.StatusCode, false)
 	}
 	return hits, nil
 }

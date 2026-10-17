@@ -29,6 +29,16 @@ type scriptedLLM struct {
 	respond   func(llm.ChatRequest, int) (string, error)
 }
 
+func fixtureVerdicts(assessments []map[string]any) map[string]any {
+	verdicts := make(map[string]any, len(assessments))
+	for index, assessment := range assessments {
+		verdicts[fmt.Sprintf("c%d", index)] = map[string]any{
+			"met": assessment["met"], "evidence_ids": assessment["evidence_ids"], "rationale": assessment["rationale"],
+		}
+	}
+	return verdicts
+}
+
 func (s *scriptedLLM) Complete(_ context.Context, request llm.ChatRequest) (llm.ChatResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -53,7 +63,8 @@ func (s *scriptedLLM) Stream(ctx context.Context, request llm.ChatRequest) (<-ch
 	}
 	events := make(chan llm.ChatEvent, 1)
 	if response.Content != "" {
-		events <- llm.ChatEvent{Text: response.Content}
+		encoded, _ := json.Marshal(map[string]string{"answer": response.Content})
+		events <- llm.ChatEvent{Text: string(encoded)}
 	}
 	close(events)
 	return events, nil
@@ -177,7 +188,7 @@ func TestWorkerCompletesOneSafeToolStep(t *testing.T) {
 	model := &scriptedLLM{responses: []string{
 		`{"schema_version":1,"goal":"count words","subtasks":[{"id":"step_1","kind":"analysis","description":"Inspect the text","dependencies":[],"expected_output":"word count","success_criteria":["count returned"]}],"max_steps":1,"final_deliverable":"short answer"}`,
 		`{"status":"continue","summary":"Searching the web for the requested word count.","tool_call":{"name":"text.inspect","arguments":{"text":"count three words here"}}}`,
-		`{"complete":true,"summary":"The text was inspected and the tool result is available.","missing":[],"criterion_assessments":[{"step_id":"step_1","criterion_index":0,"met":true,"evidence_ids":[],"rationale":"The inspection result contains the requested count."}]}`,
+		`{"ready_to_answer":true,"summary":"The text was inspected and the tool result is available.","missing":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The inspection result contains the requested count."}}}`,
 		`The supplied text contains four words.`,
 	}}
 	worker := New(store, model, tools.NewRegistry(), Options{MaxSteps: 12, TaskTimeout: time.Minute, MaxOutputTokens: 512})
@@ -243,8 +254,8 @@ func TestWorkerCompletesOneSafeToolStep(t *testing.T) {
 			t.Fatalf("scripted structured response %d does not satisfy its request schema: %v", index, err)
 		}
 	}
-	if len(model.seen[3].JSONSchema) != 0 {
-		t.Fatalf("final synthesis unexpectedly used a JSON Schema: %#v", model.seen[3])
+	if len(model.seen[3].JSONSchema) == 0 {
+		t.Fatalf("final synthesis did not use the answer-envelope schema: %#v", model.seen[3])
 	}
 }
 
@@ -255,7 +266,7 @@ func TestWorkerAddsOnlyAcceptedMemoriesAsUntrustedContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	task, err := store.CreateTask(ctx, domain.Task{ID: "worker-memory-task", Title: "Short answer", Description: "Write a concise summary of the supplied text."}, "")
+	task, err := store.CreateTask(ctx, domain.Task{ID: "worker-memory-task", Title: "Short answer", Description: "Summarize the supplied text in a concise way."}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +287,7 @@ func TestWorkerAddsOnlyAcceptedMemoriesAsUntrustedContext(t *testing.T) {
 	model := &scriptedLLM{responses: []string{
 		`{"schema_version":1,"goal":"summarize supplied text","subtasks":[{"id":"step_1","kind":"analysis","description":"Summarize the text","dependencies":[],"expected_output":"short summary","success_criteria":["summary returned"]}],"max_steps":1,"final_deliverable":"short summary"}`,
 		`{"status":"continue","summary":"Summarized the supplied text.","tool_call":{"name":"text.inspect","arguments":{"text":"three supplied words"}}}`,
-		`{"complete":true,"summary":"The text was summarized.","missing":[],"criterion_assessments":[{"step_id":"step_1","criterion_index":0,"met":true,"evidence_ids":[],"rationale":"The inspection result contains the summary."}]}`,
+		`{"ready_to_answer":true,"summary":"The text was summarized.","missing":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The inspection result contains the summary."}}}`,
 		`The text contains three words.`,
 	}}
 	worker := New(store, model, tools.NewRegistry(), Options{MaxSteps: 12, TaskTimeout: time.Minute, MaxOutputTokens: 512})
@@ -310,7 +321,7 @@ func TestWorkerReportsVerifierIncompletenessSeparately(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	task, err := store.CreateTask(ctx, domain.Task{ID: "worker-verification-task", Title: "Short summary", Description: "Summarize the supplied source."}, "")
+	task, err := store.CreateTask(ctx, domain.Task{ID: "worker-verification-task", Title: "Short summary", Description: "Summarize the supplied text."}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +335,7 @@ func TestWorkerReportsVerifierIncompletenessSeparately(t *testing.T) {
 	model := &scriptedLLM{responses: []string{
 		`{"schema_version":1,"goal":"summarize supplied sources","subtasks":[{"id":"step_1","kind":"analysis","description":"Inspect supplied material","dependencies":[],"expected_output":"summary","success_criteria":["summary supported"]}],"max_steps":1,"final_deliverable":"concise summary"}`,
 		`{"status":"continue","summary":"Inspected the supplied material.","tool_call":{"name":"text.inspect","arguments":{"text":"one supplied source"}}}`,
-		`{"complete":false,"summary":"The available material is insufficient.","missing":["Three distinct sources are required."],"criterion_assessments":[{"step_id":"step_1","criterion_index":0,"met":false,"evidence_ids":[],"rationale":"The available material does not support the requested summary."}]}`,
+		`{"ready_to_answer":false,"summary":"The available material is insufficient.","missing":["Three distinct sources are required."],"criterion_assessments":{"c0":{"met":false,"evidence_ids":[],"rationale":"The available material does not support the requested summary."}}}`,
 	}}
 	worker := New(store, model, tools.NewRegistry(), Options{MaxSteps: 12, TaskTimeout: time.Minute, MaxOutputTokens: 512})
 	worker.runTask(ctx, claimed)
@@ -360,7 +371,7 @@ func TestWorkerReportsVerifierIncompletenessSeparately(t *testing.T) {
 }
 
 func TestVerifierIncompleteWithoutDetailsGetsActionableMissingItem(t *testing.T) {
-	model := &scriptedLLM{responses: []string{`{"complete":false,"summary":"The provided source does not answer the request.","missing":[],"criterion_assessments":[{"step_id":"step_1","criterion_index":0,"met":false,"evidence_ids":[],"rationale":"The result does not support the requested answer."}]}`}}
+	model := &scriptedLLM{responses: []string{`{"ready_to_answer":false,"summary":"The provided source does not answer the request.","missing":[],"criterion_assessments":{"c0":{"met":false,"evidence_ids":[],"rationale":"The result does not support the requested answer."}}}`}}
 	worker := New(nil, model, tools.NewRegistry(), Options{MaxSteps: 12, MaxInputBytes: 4096, TaskTimeout: time.Minute, MaxOutputTokens: 128})
 	verification, err := worker.verify(context.Background(), domain.Task{ID: "verify-task", Title: "Research"}, "Research the provided source", "[]", domain.Plan{
 		SchemaVersion: 1, Goal: "Research the provided source", MaxSteps: 1, FinalDeliverable: "summary",
@@ -375,7 +386,7 @@ func TestVerifierIncompleteWithoutDetailsGetsActionableMissingItem(t *testing.T)
 }
 
 func TestVerifierCannotCompleteWithoutAssessingEveryPlanCriterion(t *testing.T) {
-	model := &scriptedLLM{responses: []string{`{"complete":true,"summary":"The result is usable.","missing":[],"criterion_assessments":[]}`}}
+	model := &scriptedLLM{responses: []string{`{"ready_to_answer":true,"summary":"The result is usable.","missing":[],"criterion_assessments":{}}`, `{"ready_to_answer":true,"summary":"The result is usable.","missing":[],"criterion_assessments":{}}`}}
 	worker := New(nil, model, tools.NewRegistry(), Options{MaxSteps: 12, MaxInputBytes: 4096, TaskTimeout: time.Minute, MaxOutputTokens: 128})
 	plan := domain.Plan{
 		SchemaVersion: 1, Goal: "Inspect supplied material", MaxSteps: 1, FinalDeliverable: "summary",
@@ -384,11 +395,8 @@ func TestVerifierCannotCompleteWithoutAssessingEveryPlanCriterion(t *testing.T) 
 	result, err := worker.verify(context.Background(), domain.Task{ID: "verify-coverage", Title: "Research"}, "Inspect supplied material", "[]", plan, checkpointState{
 		CompletedSteps: []string{"step_1"}, ToolResults: map[string]any{"step_1": map[string]any{"text": "inspected material"}},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Complete || len(result.Missing) != 1 || !strings.Contains(result.Missing[0], "was not assessed") {
-		t.Fatalf("unassessed plan criterion was accepted: %#v", result)
+	if !errors.Is(err, errInvalidModelOutput) || result.Complete {
+		t.Fatalf("unassessed plan criterion was accepted: %#v err=%v", result, err)
 	}
 	if !strings.Contains(model.seen[0].Messages[1].Content, "final_deliverable") || !strings.Contains(model.seen[0].Messages[1].Content, "Inspect supplied material") {
 		t.Fatalf("verification input omitted the plan goal or final deliverable: %s", model.seen[0].Messages[1].Content)
@@ -464,7 +472,7 @@ func TestWorkerSchemaRejectsUnknownToolWithoutHostExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	task, err := store.CreateTask(ctx, domain.Task{ID: "denied-task", Title: "No shell", Description: "do not run shell"}, "")
+	task, err := store.CreateTask(ctx, domain.Task{ID: "denied-task", Title: "No shell", Description: "Count words in this text without running shell: one two three"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -522,7 +530,7 @@ func TestWorkerRejectsInputThatExceedsContextBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	task, err := store.CreateTask(ctx, domain.Task{ID: "budget-task", Title: "Too long", Description: "This request is longer than the configured context allowance."}, "")
+	task, err := store.CreateTask(ctx, domain.Task{ID: "budget-task", Title: "Too long", Description: "Summarize this text: This request is longer than the configured context allowance."}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -603,7 +611,37 @@ func (c streamOnlyClient) Complete(context.Context, llm.ChatRequest) (llm.ChatRe
 }
 
 func (c streamOnlyClient) Stream(ctx context.Context, request llm.ChatRequest) (<-chan llm.ChatEvent, error) {
-	return c.stream(ctx, request)
+	source, err := c.stream(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	events := make(chan llm.ChatEvent)
+	go func() {
+		defer close(events)
+		send := func(event llm.ChatEvent) bool {
+			select {
+			case events <- event:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+		if !send(llm.ChatEvent{Text: `{"answer":"`}) {
+			return
+		}
+		for event := range source {
+			if event.Err != nil {
+				send(event)
+				return
+			}
+			encoded, _ := json.Marshal(event.Text)
+			if !send(llm.ChatEvent{Text: string(encoded[1 : len(encoded)-1])}) {
+				return
+			}
+		}
+		send(llm.ChatEvent{Text: `"}`})
+	}()
+	return events, nil
 }
 
 type failedDeltaRepository struct {
@@ -649,7 +687,7 @@ func TestWorkerStreamsBoundedOrderedDeltasAndCorrectsCitationsInFreshStream(t *t
 	defer store.Close()
 	task := createVerifyingTask(t, store, "synthesis-stream")
 	messageID := "canonical-assistant-message"
-	firstAttempt := strings.Repeat("x", maxSynthesisDeltaBytes) + " no citation"
+	firstAttempt := strings.Repeat("x", maxSynthesisDeltaBytes) + " [invented-citation]"
 	secondAttempt := "Supported by the collected source [evidence-123]."
 	var requests []llm.ChatRequest
 	call := 0
@@ -819,6 +857,51 @@ func TestWorkerStopsSynthesisStreamAfterTaskCancellation(t *testing.T) {
 	}
 }
 
+func TestFinalizerAddsOnlyStoredSourceReferencesWhenModelOmitsMarkers(t *testing.T) {
+	ctx := context.Background()
+	store, err := sqlite.Open(ctx, t.TempDir()+"/source-references.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	task := createVerifyingTask(t, store, "source-references")
+	client := streamOnlyClient{stream: func(context.Context, llm.ChatRequest) (<-chan llm.ChatEvent, error) {
+		events := make(chan llm.ChatEvent, 1)
+		events <- llm.ChatEvent{Text: "Supported summary without inline markers."}
+		close(events)
+		return events, nil
+	}}
+	worker := New(store, client, tools.NewRegistry(), Options{})
+	state := checkpointState{ToolResults: map[string]any{"fetch_1": map[string]any{"evidence_id": "stored-source", "excerpt": "Supporting source content."}}}
+	answer, err := worker.synthesizeValidated(ctx, task, task.Description, "[]", state, "Supported", []string{"stored-source"}, "source-message")
+	if err != nil || !strings.Contains(answer, "[stored-source]") || !strings.Contains(answer, "Источники, использованные") {
+		t.Fatalf("source references=%q err=%v", answer, err)
+	}
+	if err := validateCitations(answer, []string{"stored-source"}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := store.EventsAfter(ctx, task.ID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var draft strings.Builder
+	for _, event := range events {
+		if event.Type != "message.delta" {
+			continue
+		}
+		var payload struct {
+			Delta string `json:"delta"`
+		}
+		if json.Unmarshal(event.Payload, &payload) != nil {
+			t.Fatal("invalid delta")
+		}
+		draft.WriteString(payload.Delta)
+	}
+	if draft.String() != answer {
+		t.Fatalf("durable draft and final text differ: %q != %q", draft.String(), answer)
+	}
+}
+
 func TestWorkerCancelsUpstreamWhenDeltaPersistenceFails(t *testing.T) {
 	store, err := sqlite.Open(context.Background(), t.TempDir()+"/synthesis-persist-failure.db")
 	if err != nil {
@@ -876,7 +959,7 @@ func TestRecoveryDoesNotReplayUnknownNonIdempotentSandboxAction(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	task, err := store.CreateTask(ctx, domain.Task{ID: "sandbox-recovery", Title: "Run isolated check", Description: "Run a command in a sandbox"}, "")
+	task, err := store.CreateTask(ctx, domain.Task{ID: "sandbox-recovery", Title: "Run isolated check", Description: "Count words in this supplied text using the sandbox: one two three"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -949,7 +1032,7 @@ func TestExternalActionPausesForApprovalAndConsumesGrantOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	task, err := store.CreateTask(ctx, domain.Task{ID: "approval-worker", Title: "External action", Description: "Submit the prepared request"}, "")
+	task, err := store.CreateTask(ctx, domain.Task{ID: "approval-worker", Title: "External action", Description: "Summarize the supplied text and submit the prepared summary"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -979,7 +1062,7 @@ func TestExternalActionPausesForApprovalAndConsumesGrantOnce(t *testing.T) {
 	model := &scriptedLLM{responses: []string{
 		`{"schema_version":1,"goal":"submit request","subtasks":[{"id":"step_1","kind":"external_action","description":"Submit the prepared request","dependencies":[],"expected_output":"submission result","success_criteria":["request submitted"]}],"max_steps":1,"final_deliverable":"confirm result"}`,
 		`{"status":"continue","summary":"The request is ready to submit.","tool_call":{"name":"external.submit","arguments":{"payload":"prepared"}}}`,
-		`{"complete":true,"summary":"The approved action completed.","missing":[],"criterion_assessments":[{"step_id":"step_1","criterion_index":0,"met":true,"evidence_ids":[],"rationale":"The action result confirms submission."}]}`,
+		`{"ready_to_answer":true,"summary":"The approved action completed.","missing":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The action result confirms submission."}}}`,
 		`The prepared request was submitted successfully.`,
 	}}
 	worker := New(store, model, registry, Options{MaxSteps: 12, TaskTimeout: time.Minute, MaxOutputTokens: 512})
@@ -1111,7 +1194,7 @@ func TestWorkerReturnsInsufficiencyWhenAllFetchCandidatesFail(t *testing.T) {
 			missing, _ := payload["missing"].([]any)
 			gotInsufficiencyDetails = (strings.Contains(verificationSummary, "No source") || strings.Contains(verificationSummary, "not provide enough")) && len(missing) > 0
 		case "tool.failed":
-			sawToolFailed = payload["failure"] == "source_unavailable"
+			sawToolFailed = sawToolFailed || payload["failure"] == "source_unavailable"
 		case "tool.completed":
 			if payload["tool"] == "fetch_url" {
 				sawFetchCompleted = true
@@ -1181,9 +1264,9 @@ func TestWorkerRetriesTransientFailureForUserProvidedURL(t *testing.T) {
 				return "", errors.New("successful retry has no evidence ID")
 			}
 			response, err := json.Marshal(map[string]any{
-				"complete": true, "summary": "The supplied page was fetched and stored.", "missing": []string{},
-				"criterion_assessments": []map[string]any{{
-					"step_id": "fetch_1", "criterion_index": 0, "met": true,
+				"ready_to_answer": true, "summary": "The supplied page was fetched and stored.", "missing": []string{},
+				"criterion_assessments": map[string]any{"c0": map[string]any{
+					"met":          true,
 					"evidence_ids": []string{evidenceID}, "rationale": "The fetch result contains task-owned page evidence.",
 				}},
 			})
@@ -1260,7 +1343,7 @@ func TestToolResultCompactionBoundsModelContextAndKeepsSourceIDs(t *testing.T) {
 		searchHits[index] = research.SearchHit{URL: fmt.Sprintf("https://source-%d.example/", index), Snippet: strings.Repeat("полезный фрагмент ", 100)}
 	}
 	searchResults, ok := compactToolResult(searchHits).([]map[string]any)
-	if !ok || len(searchResults) != 8 {
+	if !ok || len(searchResults) != len(searchHits) {
 		t.Fatalf("compacted search hits = %#v", searchResults)
 	}
 	if snippet, _ := searchResults[0]["snippet"].(string); utf8.RuneCountInString(snippet) != 600 {
@@ -1359,8 +1442,8 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 				})
 			}
 			response, err := json.Marshal(map[string]any{
-				"complete": true, "summary": "Two distinct sources were fetched for the protocol question.",
-				"missing": []string{}, "criterion_assessments": assessments,
+				"ready_to_answer": true, "summary": "Two distinct sources were fetched for the protocol question.",
+				"missing": []string{}, "criterion_assessments": fixtureVerdicts(assessments),
 			})
 			return string(response), err
 		case 6:
@@ -1420,8 +1503,12 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	failedFetches := 0
+	seenStages := make(map[domain.Stage]bool)
 	validatedTargets := make(map[string]bool)
 	for _, event := range events {
+		if event.Stage != nil {
+			seenStages[*event.Stage] = true
+		}
 		var payload map[string]any
 		if err := json.Unmarshal(event.Payload, &payload); err != nil {
 			t.Fatal(err)
@@ -1433,6 +1520,11 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 			if target, ok := payload["target_url"].(string); ok {
 				validatedTargets[target] = true
 			}
+		}
+	}
+	for _, stage := range []domain.Stage{domain.StageSearch, domain.StageFetch, domain.StageVerification, domain.StageFinalization} {
+		if !seenStages[stage] {
+			t.Errorf("missing actual execution stage %s", stage)
 		}
 	}
 	if failedFetches != 1 || !validatedTargets["https://docs.example.com/protocol"] || !validatedTargets["https://reference.example.net/protocol"] {
@@ -1520,8 +1612,8 @@ func TestWorkerBroadensOnceAfterAnEmptySearchResult(t *testing.T) {
 				})
 			}
 			response, err := json.Marshal(map[string]any{
-				"complete": true, "summary": "The empty first search was retried and the independent facets found distinct source sites.",
-				"missing": []string{}, "criterion_assessments": assessments,
+				"ready_to_answer": true, "summary": "The empty first search was retried and the independent facets found distinct source sites.",
+				"missing": []string{}, "criterion_assessments": fixtureVerdicts(assessments),
 			})
 			return string(response), err
 		case 6:

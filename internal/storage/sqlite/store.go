@@ -203,10 +203,10 @@ func (s *Store) TransitionTask(ctx context.Context, id string, to domain.TaskSta
 	if err != nil {
 		return domain.Task{}, err
 	}
-	if task.Status == to {
+	if task.Status == to && (stage == nil || task.Stage != nil && *task.Stage == *stage) {
 		return task, nil
 	}
-	if !domain.CanTransition(task.Status, to) {
+	if task.Status != to && !domain.CanTransition(task.Status, to) || task.Status == to && task.Status.Terminal() {
 		return domain.Task{}, fmt.Errorf("%w: %s -> %s", domain.ErrInvalidTransition, task.Status, to)
 	}
 	if !to.Valid() {

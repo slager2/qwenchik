@@ -1,4 +1,4 @@
-import type { AgentEvent, Approval, Artifact, Checkpoint, Evidence, Memory, MemoryMatch, MemoryStatus, Message, Task, TaskStep } from './types'
+import type { AgentEvent, Approval, Artifact, Checkpoint, Evidence, Memory, MemoryMatch, MemoryStatus, Message, ProvidersResponse, Task, TaskStep } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -20,7 +20,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       const body = await response.json()
       message = body.error?.message ?? message
     } catch {
-      // Keep the status-based message when the response has no JSON body.
     }
     throw new ApiError(message, response.status)
   }
@@ -29,6 +28,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  providers: () => request<ProvidersResponse>('/api/providers'),
   tasks: () => request<Task[]>('/api/tasks'),
   task: (id: string) => request<Task>(`/api/tasks/${encodeURIComponent(id)}`),
   messages: (id: string) => request<Message[]>(`/api/tasks/${encodeURIComponent(id)}/messages`),

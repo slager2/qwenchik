@@ -146,6 +146,44 @@ func TestTaskTransitionsAreDurableAndEventsAreAtomic(t *testing.T) {
 	}
 }
 
+func TestRunningStageChangesPersistWithoutLifecycleChange(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "stage-change.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	task, err := store.CreateTask(ctx, domain.Task{ID: "stage-change-task", Title: "Stage changes"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.QueueTask(ctx, task.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.ClaimNext(ctx); !ok || err != nil {
+		t.Fatalf("claim=%t err=%v", ok, err)
+	}
+	searchStage, fetchStage := domain.StageSearch, domain.StageFetch
+	if _, err := store.TransitionTask(ctx, task.ID, domain.StatusRunning, &searchStage, "task.status_changed", "user", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.TransitionTask(ctx, task.ID, domain.StatusRunning, &fetchStage, "task.status_changed", "user", nil); err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.GetTask(ctx, task.ID)
+	if err != nil || current.Status != domain.StatusRunning || current.Stage == nil || *current.Stage != fetchStage {
+		t.Fatalf("stage was not persisted: %#v err=%v", current, err)
+	}
+	events, err := store.EventsAfter(ctx, task.ID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := events[len(events)-1]
+	if last.Type != "task.status_changed" || last.Stage == nil || *last.Stage != fetchStage {
+		t.Fatalf("missing durable stage event: %#v", last)
+	}
+}
+
 func TestMessageDeltaEventsAreBoundedDurableAndReplayInStreamOrder(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "message-deltas.db")

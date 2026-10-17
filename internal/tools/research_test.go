@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -30,6 +31,76 @@ func (s searchStub) Search(_ context.Context, options research.SearchOptions) ([
 }
 
 type fetchStub struct{ calls int }
+
+type validationSearchHits []research.SearchHit
+
+func (hits validationSearchHits) Search(context.Context, research.SearchOptions) ([]research.SearchHit, error) {
+	return hits, nil
+}
+
+type validationFetchStub struct {
+	fetchStub
+	validate func(context.Context, string) error
+}
+
+func (f *validationFetchStub) ValidateURL(ctx context.Context, rawURL string) error {
+	return f.validate(ctx, rawURL)
+}
+
+func TestSearchURLValidationPropagatesCancellation(t *testing.T) {
+	for _, fixture := range []struct {
+		name       string
+		cancelAt   int
+		deadline   bool
+		validation error
+		want       error
+	}{
+		{"canceled validation error", 1, false, research.ErrUnsafeURL, context.Canceled},
+		{"canceled successful validation", 2, false, nil, context.Canceled},
+		{"deadline during validation", 2, true, research.ErrUnsafeURL, context.DeadlineExceeded},
+		{"wrapped cancellation", 0, false, fmt.Errorf("validation: %w", context.Canceled), context.Canceled},
+		{"wrapped deadline", 0, false, fmt.Errorf("validation: %w", context.DeadlineExceeded), context.DeadlineExceeded},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			if fixture.deadline {
+				cancel()
+				ctx, cancel = context.WithTimeout(context.Background(), 50*time.Millisecond)
+			}
+			defer cancel()
+			calls := 0
+			fetcher := &validationFetchStub{validate: func(validationCtx context.Context, _ string) error {
+				calls++
+				if calls == fixture.cancelAt {
+					if fixture.deadline {
+						<-validationCtx.Done()
+					} else {
+						cancel()
+					}
+					return fixture.validation
+				}
+				if fixture.cancelAt == 0 {
+					return fixture.validation
+				}
+				return nil
+			}}
+			registry := NewRegistry()
+			hits := validationSearchHits{{Provider: "searxng", URL: "https://example.com/first"}, {Provider: "searxng", URL: "https://example.com/second"}}
+			if err := RegisterResearchTools(registry, ResearchTools{SearchProvider: hits, Fetcher: fetcher}); err != nil {
+				t.Fatal(err)
+			}
+			observed := 0
+			ctx = WithSearchOutcomeObserver(WithTaskID(ctx, "canceled-search"), func(research.ProviderOutcome) { observed++ })
+			result, err := registry.Execute(ctx, "researcher", "search", json.RawMessage(`{"query":"official evidence","max_results":2}`))
+			if !errors.Is(err, fixture.want) || errors.Is(err, research.ErrSearchFilteredByPolicy) || result != nil {
+				t.Fatalf("result=%#v err=%v", result, err)
+			}
+			if observed != 0 || len(registry.urlLedger.URLs("canceled-search")) != 0 {
+				t.Fatalf("canceled search emitted %d outcomes or updated URL ledger", observed)
+			}
+		})
+	}
+}
 
 func (*fetchStub) ValidateURL(_ context.Context, rawURL string) error {
 	if strings.HasPrefix(rawURL, "https://") {
@@ -219,6 +290,10 @@ func TestFailedPDFExtractionPersistsNoArtifactOrEvidence(t *testing.T) {
 	_, err = registry.Execute(WithTaskID(ctx, taskID), "researcher", "fetch_url", json.RawMessage(`{"url":"https://docs.example.com/long-report.pdf","original_query":"official PDF report"}`))
 	if !errors.Is(err, research.ErrPDFTooManyPages) {
 		t.Fatalf("over-page-limit extraction error = %v", err)
+	}
+	var failedFetch *research.FetchFailure
+	if !errors.As(err, &failedFetch) || failedFetch.FetchedBytes != int64(len("%PDF-1.7 untrusted input")) {
+		t.Fatalf("failed extraction did not preserve consumed fetch budget: %v", err)
 	}
 	artifacts, err := store.Artifacts(ctx, taskID)
 	if err != nil {

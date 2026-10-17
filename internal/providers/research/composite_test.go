@@ -60,7 +60,7 @@ func TestCompositeSearchMovesPreferredDomainsForwardWithoutDroppingOtherHits(t *
 	}
 }
 
-func TestCompositeSearchKeepsPartialResultsAndEmptySuccess(t *testing.T) {
+func TestCompositeSearchKeepsPartialResultsAndRejectsMixedEmptyFailure(t *testing.T) {
 	t.Run("other provider has hits", func(t *testing.T) {
 		provider := NewCompositeSearch(
 			compositeSearchStub{err: errors.New("provider unavailable")},
@@ -78,8 +78,8 @@ func TestCompositeSearchKeepsPartialResultsAndEmptySuccess(t *testing.T) {
 			compositeSearchStub{hits: []SearchHit{}},
 		)
 		hits, err := provider.Search(context.Background(), SearchOptions{Query: "query", MaxResults: 2})
-		if err != nil || len(hits) != 0 {
-			t.Fatalf("Search() hits=%#v err=%v, want successful empty results", hits, err)
+		if !errors.Is(err, ErrSearchUnavailable) || len(hits) != 0 {
+			t.Fatalf("Search() hits=%#v err=%v, want unavailable with empty results", hits, err)
 		}
 	})
 }

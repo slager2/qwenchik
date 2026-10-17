@@ -483,3 +483,13 @@ input.text-field { height: 39px; padding: 0 11px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
+.provider-panel { margin: 20px 0; }
+.provider-panel > p { color: var(--color-muted); }
+.provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.provider-card { border: 1px solid var(--color-faint); border-radius: 8px; padding: 16px; overflow-wrap: anywhere; }
+.provider-card h3 { margin: 0 0 8px; }
+.provider-card p { font-size: 13px; line-height: 1.6; }
+.provider-card small { color: var(--color-muted); }
+.health-blocked, .health-unavailable { border-left: 3px solid var(--color-danger); }
+.health-no_results, .health-filtered, .health-degraded { border-left: 3px solid var(--color-warning); }
+.task-failure { display: block; margin: 16px; }

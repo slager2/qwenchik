@@ -35,6 +35,7 @@ type Config struct {
 	LLMMaxConcurrency     int
 	SearXNGURL            string
 	TavilyAPIKey          string
+	SearchEnableDDG       bool
 	MaxSteps              int
 	TaskTimeoutSeconds    int
 	MaxSearchQueries      int
@@ -63,6 +64,9 @@ func Load() (Config, error) {
 		TavilyAPIKey:      strings.TrimSpace(env("TAVILY_API_KEY", "")),
 	}
 	var err error
+	if cfg.SearchEnableDDG, err = boolEnv("SEARCH_ENABLE_DDG", true); err != nil {
+		return Config{}, err
+	}
 	if cfg.LLMContextLength, err = intEnv("LLM_CONTEXT_LENGTH", 131072); err != nil {
 		return Config{}, err
 	}

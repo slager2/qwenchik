@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -43,6 +42,9 @@ func NewSearXNG(baseURL string, client *http.Client) (*SearXNG, error) {
 }
 
 func (s *SearXNG) Search(ctx context.Context, options SearchOptions) ([]SearchHit, error) {
+	if s == nil || s.client == nil || s.baseURL == "" {
+		return nil, classified("provider_misconfigured", "misconfigured", 0, false)
+	}
 	query := strings.TrimSpace(options.Query)
 	if query == "" || len(query) > 1000 {
 		return nil, errors.New("search query must contain 1 to 1000 characters")
@@ -83,33 +85,40 @@ func (s *SearXNG) Search(ctx context.Context, options SearchOptions) ([]SearchHi
 	request.Header.Set("User-Agent", "QwenchikLocalResearch/1.0")
 	response, err := s.client.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrSearchUnavailable, opaqueNetworkError{operation: "SearXNG search", cause: err})
+		return nil, &ClassifiedError{Code: "search_unavailable", State: "unavailable", Retryable: true, Cause: ctx.Err()}
 	}
 	defer response.Body.Close()
+	recordResponseMetadata(ctx, response)
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("%w: SearXNG returned HTTP %d", ErrSearchUnavailable, response.StatusCode)
+		return nil, classifyHTTP(response.StatusCode, false)
 	}
 	if response.ContentLength > maxSearXNGResponse {
-		return nil, ErrSearchResponseTooBig
+		return nil, classified("search_response_too_big", "malformed", response.StatusCode, false)
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxSearXNGResponse+1))
+	recordResponseBodySize(ctx, len(body))
 	if err != nil {
-		return nil, fmt.Errorf("%w: read SearXNG response: %v", ErrSearchUnavailable, err)
+		return nil, classified("search_unavailable", "unavailable", response.StatusCode, true)
 	}
 	if len(body) > maxSearXNGResponse {
-		return nil, ErrSearchResponseTooBig
+		return nil, classified("search_response_too_big", "malformed", response.StatusCode, false)
+	}
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(response.Header.Get("Content-Type"), ";")[0]))
+	if mediaType != "application/json" && !strings.HasSuffix(mediaType, "+json") {
+		return nil, classified("provider_malformed", "malformed", response.StatusCode, false)
 	}
 	var envelope struct {
 		Results json.RawMessage `json:"results"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
-		return nil, fmt.Errorf("%w: decode SearXNG response: %v", ErrSearchUnavailable, err)
+		return nil, classified("provider_malformed", "malformed", response.StatusCode, false)
 	}
 	if len(envelope.Results) == 0 || strings.EqualFold(strings.TrimSpace(string(envelope.Results)), "null") {
-		return nil, fmt.Errorf("%w: SearXNG response omitted its results array", ErrSearchUnavailable)
+		return nil, classified("provider_malformed", "malformed", response.StatusCode, false)
 	}
 	var result struct {
-		Results []struct {
+		UnresponsiveEngines []json.RawMessage `json:"unresponsive_engines"`
+		Results             []struct {
 			URL           string  `json:"url"`
 			Title         string  `json:"title"`
 			Content       string  `json:"content"`
@@ -119,12 +128,16 @@ func (s *SearXNG) Search(ctx context.Context, options SearchOptions) ([]SearchHi
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("%w: decode SearXNG response: %v", ErrSearchUnavailable, err)
+		return nil, classified("provider_malformed", "malformed", response.StatusCode, false)
 	}
 	if result.Results == nil {
-		return nil, fmt.Errorf("%w: SearXNG response did not contain a valid results array", ErrSearchUnavailable)
+		return nil, classified("provider_malformed", "malformed", response.StatusCode, false)
+	}
+	if len(result.Results) == 0 && len(result.UnresponsiveEngines) > 0 {
+		return nil, classified("search_unavailable", "degraded", response.StatusCode, true)
 	}
 	hits := make([]SearchHit, 0, maxResults)
+	validResults := 0
 	for _, item := range result.Results {
 		if len(hits) >= maxResults {
 			break
@@ -133,6 +146,7 @@ func (s *SearXNG) Search(ctx context.Context, options SearchOptions) ([]SearchHi
 		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
 			continue
 		}
+		validResults++
 		if !matchesDomainAllowlist(parsed.Hostname(), options.Domains) {
 			continue
 		}
@@ -142,6 +156,15 @@ func (s *SearXNG) Search(ctx context.Context, options SearchOptions) ([]SearchHi
 			snippet = snippet[:1000]
 		}
 		hits = append(hits, SearchHit{Provider: "searxng", Query: query, URL: item.URL, Title: item.Title, Snippet: snippet, Score: item.Score, PublishedAt: published, Taint: TaintExternal})
+	}
+	if len(hits) == 0 && validResults > 0 {
+		return hits, classified("search_filtered_by_policy", "degraded", response.StatusCode, false)
+	}
+	if len(hits) == 0 && len(result.Results) > 0 {
+		return hits, classified("provider_malformed", "malformed", response.StatusCode, false)
+	}
+	if len(hits) > 0 && len(result.UnresponsiveEngines) > 0 {
+		recordResponseDegraded(ctx)
 	}
 	return hits, nil
 }

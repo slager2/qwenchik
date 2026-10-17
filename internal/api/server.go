@@ -14,6 +14,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,22 +74,24 @@ type ArtifactReader interface {
 }
 
 type Server struct {
-	service          TaskService
-	worker           WorkerControl
-	dbPing           func(context.Context) error
-	llmURL           string
-	llmKey           string
-	llmModel         string
-	searchURL        string
-	tavilyConfigured bool
-	artifactReader   ArtifactReader
-	sandboxAvailable bool
-	sandboxMessage   string
-	logger           *slog.Logger
-	client           *http.Client
-	llmProbeMu       sync.Mutex
-	llmProbeAt       time.Time
-	llmProbeError    error
+	service           TaskService
+	worker            WorkerControl
+	dbPing            func(context.Context) error
+	llmURL            string
+	llmKey            string
+	llmModel          string
+	searchURL         string
+	tavilyConfigured  bool
+	ddgDisabled       bool
+	searchDiagnostics func() []research.ProviderOutcome
+	artifactReader    ArtifactReader
+	sandboxAvailable  bool
+	sandboxMessage    string
+	logger            *slog.Logger
+	client            *http.Client
+	llmProbeMu        sync.Mutex
+	llmProbeAt        time.Time
+	llmProbeError     error
 }
 
 func New(service TaskService, worker WorkerControl, dbPing func(context.Context) error, llmURL, llmKey, searchURL string, logger *slog.Logger) *Server {
@@ -177,6 +180,14 @@ func (s *Server) SetLLMModel(model string) {
 
 func (s *Server) SetTavilyConfigured(configured bool) {
 	s.tavilyConfigured = configured
+}
+
+func (s *Server) SetSearchDiagnostics(snapshot func() []research.ProviderOutcome) {
+	s.searchDiagnostics = snapshot
+}
+
+func (s *Server) SetDDGEnabled(enabled bool) {
+	s.ddgDisabled = !enabled
 }
 
 func (s *Server) SetSandboxStatus(available bool, message string) {
@@ -337,7 +348,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	result := make([]domain.Event, 0, len(events))
 	for _, event := range events {
 		if publicEvent(event) {
-			result = append(result, event)
+			result = append(result, safePublicEvent(event))
 		}
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -383,7 +394,7 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 			if !publicEvent(event) {
 				continue
 			}
-			encoded, err := json.Marshal(event)
+			encoded, err := json.Marshal(safePublicEvent(event))
 			if err != nil {
 				continue
 			}
@@ -666,53 +677,76 @@ func (s *Server) decideMemory(w http.ResponseWriter, r *http.Request, status dom
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
-	if err := s.dbPing(r.Context()); err != nil {
+	if s.dbPing == nil || s.dbPing(r.Context()) != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "error", "database": "unavailable"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "database": "ok"})
+	workerState := "attached"
+	if s.worker == nil {
+		workerState = "absent"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "database": "ok", "worker": workerState})
 }
 
 func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	checks := map[string]map[string]string{}
+	checks["app"] = map[string]string{"status": "ok", "message": "API application is ready"}
+	if s.service == nil {
+		checks["app"] = map[string]string{"status": "error", "message": "Task service is absent"}
+	}
+	checks["worker"] = map[string]string{"status": "ok", "message": "Worker is attached"}
+	workerBusy := false
+	if worker, ok := s.worker.(interface{ Busy() bool }); ok {
+		workerBusy = worker.Busy()
+		if workerBusy {
+			checks["worker"]["message"] = "Worker is executing a task"
+		}
+	}
+	if s.worker == nil {
+		checks["worker"] = map[string]string{"status": "error", "message": "Worker is absent; tasks cannot execute"}
+	}
+	checks["artifacts"] = map[string]string{"status": "ok", "message": "Artifact reader is attached"}
+	if s.artifactReader == nil {
+		checks["artifacts"] = map[string]string{"status": "warning", "message": "Artifact reader is absent"}
+	}
 	if FrontendAvailable() {
 		checks["frontend"] = map[string]string{"status": "ok", "message": "embedded frontend assets are available"}
 	} else {
 		checks["frontend"] = map[string]string{"status": "error", "message": "embedded frontend assets are missing"}
 	}
-	if err := s.dbPing(r.Context()); err != nil {
+	if s.dbPing == nil || s.dbPing(r.Context()) != nil {
 		checks["database"] = map[string]string{"status": "error", "message": "SQLite connection failed"}
 	} else {
-		checks["database"] = map[string]string{"status": "ok", "message": "SQLite is writable"}
+		checks["database"] = map[string]string{"status": "ok", "message": "SQLite connection is available"}
 	}
-	if s.searchURL == "" {
-		if s.tavilyConfigured {
-			checks["search"] = map[string]string{"status": "warning", "message": "Tavily and built-in DuckDuckGo fallback are enabled; external search health is not checked during doctor"}
-		} else {
-			checks["search"] = map[string]string{"status": "warning", "message": "Built-in DuckDuckGo search fallback is enabled; live external health is not checked during doctor"}
+	providerHealth := s.searchProviderStatus()
+	checks["search"] = map[string]string{"status": "warning", "message": "Search configuration is not a health check; Tavily and DuckDuckGo are not probed"}
+	for name, item := range providerHealth {
+		state, _ := item["health"].(string)
+		checks["search_"+name] = map[string]string{"status": "warning", "message": "Last observed state: " + state}
+		if state == "ok" || state == "healthy" {
+			checks["search_"+name]["status"] = "ok"
 		}
-	} else {
-		searchProvider, err := research.NewSearXNG(s.searchURL, nil)
-		if err != nil {
-			message := "Configured SearXNG endpoint is invalid; built-in DuckDuckGo fallback is enabled but its live health is not checked"
-			if s.tavilyConfigured {
-				message += "; Tavily fallback is configured but not health-checked"
-			}
-			checks["search"] = map[string]string{"status": "warning", "message": message}
-		} else {
-			_, searchErr := searchProvider.Search(r.Context(), research.SearchOptions{Query: "qagent-doctor", MaxResults: 1, SafeSearch: true})
-			if searchErr != nil {
-				message := "Configured SearXNG endpoint is unavailable; built-in DuckDuckGo fallback is enabled but its live health is not checked"
-				if s.tavilyConfigured {
-					message += "; Tavily fallback is configured but not health-checked"
-				}
-				checks["search"] = map[string]string{"status": "warning", "message": message}
-			} else {
-				message := "SearXNG search endpoint returned valid JSON; built-in DuckDuckGo fallback is enabled but its live health is not checked"
-				if s.tavilyConfigured {
-					message += "; Tavily fallback is configured but not health-checked"
-				}
-				checks["search"] = map[string]string{"status": "warning", "message": message}
+	}
+	if endpoint, err := url.Parse(s.searchURL); err == nil && endpoint != nil && loopbackHostHeader(endpoint.Host) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		provider, err := research.NewSearXNG(s.searchURL, s.client)
+		var report research.SearchReport
+		if err == nil {
+			report, err = provider.SearchWithDiagnostics(ctx, research.SearchOptions{Query: "qagent-doctor", MaxResults: 1, SafeSearch: true})
+		}
+		checks["search_probe"] = map[string]string{"status": "warning", "message": "Local SearXNG probe is unavailable"}
+		if err == nil && len(report.Hits) > 0 {
+			checks["search_probe"] = map[string]string{"status": "ok", "message": "Local SearXNG returned usable search hits; this probe does not replace last task outcomes"}
+		} else if err == nil {
+			checks["search_probe"] = map[string]string{"status": "warning", "message": "Local SearXNG returned a valid zero-result response"}
+		}
+		if len(report.Outcomes) > 0 {
+			encoded, _ := json.Marshal(report.Outcomes[0])
+			var outcome map[string]any
+			if json.Unmarshal(encoded, &outcome) == nil {
+				providerHealth["searxng"]["probe_outcome"] = safeDiagnostic(outcome)
 			}
 		}
 	}
@@ -736,7 +770,9 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_ = response.Body.Close()
 		if response.StatusCode >= 200 && response.StatusCode < 300 {
-			if err := s.probeStructuredLLM(r.Context()); err != nil {
+			if workerBusy {
+				checks["llm"] = map[string]string{"status": "ok", "message": "Local model endpoint is available; inference smoke is deferred while the single worker is busy"}
+			} else if err := s.probeStructuredLLM(r.Context()); err != nil {
 				checks["llm"] = map[string]string{"status": "error", "message": "local model failed the strict JSON Schema smoke request"}
 			} else {
 				checks["llm"] = map[string]string{"status": "ok", "message": "local model passed the strict JSON Schema smoke request"}
@@ -764,7 +800,7 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	if status == "error" {
 		code = http.StatusServiceUnavailable
 	}
-	writeJSON(w, code, map[string]any{"status": status, "checks": checks})
+	writeJSON(w, code, map[string]any{"status": status, "checks": checks, "providers": providerHealth})
 }
 
 func (s *Server) probeStructuredLLM(ctx context.Context) error {
@@ -790,19 +826,18 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 		searchMode = "composite"
 		searchType = "composite"
 	}
+	if s.searchURL == "" && !s.tavilyConfigured && s.ddgDisabled {
+		searchStatus, searchMode, searchType = "disabled", "disabled", "disabled"
+	}
 	sandboxStatus := "unavailable"
 	if s.sandboxAvailable {
 		sandboxStatus = "available"
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"llm": map[string]any{"type": "local-openai-compatible", "status": "configured", "base_url": s.llmURL},
+		"llm": map[string]any{"type": "local-openai-compatible", "status": "configured", "base_url": safeEndpoint(s.llmURL)},
 		"search": map[string]any{
-			"type": searchType, "mode": searchMode, "status": searchStatus, "base_url": s.searchURL,
-			"providers": map[string]any{
-				"searxng":    map[string]any{"status": providerState(s.searchURL != ""), "base_url": s.searchURL},
-				"tavily":     map[string]string{"status": providerState(s.tavilyConfigured)},
-				"duckduckgo": map[string]any{"status": "enabled", "fallback": true, "health": "not_checked", "endpoint": "https://html.duckduckgo.com/html/"},
-			},
+			"type": searchType, "mode": searchMode, "status": searchStatus, "base_url": safeEndpoint(s.searchURL),
+			"providers": s.searchProviderStatus(),
 		},
 		"browser": map[string]string{"status": "disabled"},
 		"sandbox": map[string]string{"status": sandboxStatus, "message": s.sandboxMessage},
@@ -814,6 +849,142 @@ func providerState(configured bool) string {
 		return "configured"
 	}
 	return "disabled"
+}
+
+func safeEndpoint(raw string) string {
+	endpoint, err := url.Parse(raw)
+	if err != nil || endpoint.Hostname() == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") {
+		return ""
+	}
+	return endpoint.Scheme + "://" + endpoint.Host
+}
+
+func safeDiagnostic(input map[string]any) map[string]any {
+	result := map[string]any{}
+	for _, key := range []string{"provider", "state", "code", "error_code", "tool", "step_id"} {
+		if value, ok := input[key].(string); ok && len(value) <= 80 && !strings.ContainsAny(value, ":/?@&= \\·\n\r\t") {
+			result[key] = value
+		}
+	}
+	for _, key := range []string{"retryable", "http_status", "latency_ms", "result_count", "distinct_domains", "body_size"} {
+		switch value := input[key].(type) {
+		case bool, float64:
+			result[key] = value
+		}
+	}
+	if value, ok := input["content_type"].(string); ok {
+		switch value {
+		case "text/html", "application/xhtml+xml", "application/json", "text/plain":
+			result["content_type"] = value
+		}
+	}
+	if value, ok := input["parser_version"].(string); ok && len(value) < 64 && !strings.ContainsAny(value, ":/?@&= \n\r\t") {
+		result["parser_version"] = value
+	}
+	if value, ok := input["checked_at"].(string); ok {
+		if _, err := time.Parse(time.RFC3339Nano, value); err == nil {
+			result["checked_at"] = value
+		}
+	}
+	for _, key := range []string{"started_at", "finished_at"} {
+		if value, ok := input[key].(string); ok {
+			if _, err := time.Parse(time.RFC3339Nano, value); err == nil {
+				result[key] = value
+			}
+		}
+	}
+	if value, ok := input["query_hash"].(string); ok && len(value) == 64 {
+		if _, err := hex.DecodeString(value); err == nil {
+			result["query_hash"] = value
+		}
+	}
+	state, _ := result["state"].(string)
+	message := "Provider attempt recorded"
+	switch state {
+	case "ok", "healthy":
+		message = "Provider returned results"
+	case "blocked":
+		message = "Provider blocked the request"
+	case "no_results":
+		message = "Provider returned no results"
+	case "filtered":
+		message = "Provider results were filtered"
+	case "unavailable":
+		message = "Provider is unavailable"
+	}
+	result["message"] = message
+	if result["code"] == "search_no_results" {
+		result["message"] = "Provider returned no results"
+	}
+	if result["code"] == "search_filtered_by_policy" {
+		result["message"] = "Provider results were filtered"
+	}
+	return result
+}
+
+func (s *Server) searchProviderStatus() map[string]map[string]any {
+	result := map[string]map[string]any{}
+	for name, enabled := range map[string]bool{"searxng": s.searchURL != "", "tavily": s.tavilyConfigured, "duckduckgo": !s.ddgDisabled} {
+		result[name] = map[string]any{"configured": enabled, "enabled": enabled, "status": providerState(enabled), "health": "not_checked", "last_checked": nil, "last_outcome": nil}
+	}
+	result["searxng"]["endpoint"] = safeEndpoint(s.searchURL)
+	result["searxng"]["base_url"] = safeEndpoint(s.searchURL)
+	result["tavily"]["endpoint"] = "https://api.tavily.com"
+	result["duckduckgo"]["endpoint"] = "https://html.duckduckgo.com/html/"
+	result["duckduckgo"]["fallback"] = true
+	if !s.ddgDisabled {
+		result["duckduckgo"]["status"] = "enabled"
+	}
+	if s.searchDiagnostics != nil {
+		for _, outcome := range s.searchDiagnostics() {
+			if outcome.CheckedAt.IsZero() || outcome.Code == "provider_not_checked" {
+				continue
+			}
+			encoded, err := json.Marshal(outcome)
+			if err != nil {
+				continue
+			}
+			var item map[string]any
+			if json.Unmarshal(encoded, &item) != nil {
+				continue
+			}
+			name, _ := item["provider"].(string)
+			if entry, ok := result[name]; ok {
+				diagnostic := safeDiagnostic(item)
+				entry["last_outcome"] = diagnostic
+				entry["health"] = diagnostic["state"]
+				entry["last_checked"] = diagnostic["checked_at"]
+				entry["latency_ms"] = diagnostic["latency_ms"]
+				entry["retryable"] = diagnostic["retryable"]
+			}
+		}
+	}
+	return result
+}
+
+func safePublicEvent(event domain.Event) domain.Event {
+	if event.Type != "search.provider" && event.Type != "tool.failed" {
+		return event
+	}
+	var payload map[string]any
+	_ = json.Unmarshal(event.Payload, &payload)
+	result := safeDiagnostic(payload)
+	if event.Type == "tool.failed" {
+		result["message"] = "Tool execution failed"
+	}
+	for _, key := range []string{"outcomes", "providers"} {
+		if items, ok := payload[key].([]any); ok {
+			outcomes := []any{}
+			for _, item := range items {
+				if diagnostic, ok := item.(map[string]any); ok {
+					outcomes = append(outcomes, safeDiagnostic(diagnostic))
+				}
+			}
+			result[key] = outcomes
+		}
+	}
+	event.Payload, _ = json.Marshal(result)
+	return event
 }
 
 func (s *Server) writeServiceError(w http.ResponseWriter, err error) {
@@ -887,7 +1058,7 @@ func publicEvent(event domain.Event) bool {
 		return false
 	}
 	switch event.Type {
-	case "task.created", "task.status_changed", "task.recovered", "message.created", "message.delta", "plan.created", "step.started", "step.completed", "step.skipped", "tool.started", "tool.completed", "approval.requested", "approval.approved", "approval.rejected", "approval.expired", "artifact.created", "evidence.created", "task.completed", "task.failed", "task.cancelled":
+	case "search.provider", "tool.failed", "task.created", "task.status_changed", "task.recovered", "message.created", "message.delta", "plan.created", "step.started", "step.completed", "step.skipped", "tool.started", "tool.completed", "approval.requested", "approval.approved", "approval.rejected", "approval.expired", "artifact.created", "evidence.created", "task.completed", "task.failed", "task.cancelled":
 		return true
 	default:
 		return false

@@ -108,37 +108,7 @@ func (e *HTMLExtractor) Extract(ctx context.Context, document FetchedDocument) (
 	if err != nil {
 		return ExtractedDocument{}, fmt.Errorf("parse HTML: %w", err)
 	}
-	var title string
-	var text strings.Builder
-	var visit func(*html.Node, bool)
-	visit = func(node *html.Node, insideTitle bool) {
-		if node.Type == html.ElementNode {
-			tag := strings.ToLower(node.Data)
-			if isDiscardedTag(tag) {
-				return
-			}
-			insideTitle = insideTitle || tag == "title"
-			if isBlockTag(tag) {
-				text.WriteByte('\n')
-			}
-		}
-		if node.Type == html.TextNode {
-			if insideTitle {
-				title += node.Data
-			} else {
-				text.WriteString(node.Data)
-				text.WriteByte(' ')
-			}
-		}
-		for child := node.FirstChild; child != nil; child = child.NextSibling {
-			visit(child, insideTitle)
-		}
-		if node.Type == html.ElementNode && isBlockTag(strings.ToLower(node.Data)) {
-			text.WriteByte('\n')
-		}
-	}
-	visit(root, false)
-	cleanText := normalizeExtractedText(text.String(), e.maxChars)
+	title, cleanText := extractSmartHTML(root, e.maxChars)
 	flags := []string{}
 	if cleanText == "" {
 		flags = append(flags, "empty_after_extraction")
@@ -155,7 +125,7 @@ func (e *HTMLExtractor) Extract(ctx context.Context, document FetchedDocument) (
 
 func isDiscardedTag(tag string) bool {
 	switch tag {
-	case "script", "style", "noscript", "svg", "canvas", "iframe", "form", "nav", "footer":
+	case "script", "style", "noscript", "svg", "canvas", "iframe", "form", "nav", "header", "footer", "aside", "template", "head":
 		return true
 	default:
 		return false

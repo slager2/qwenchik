@@ -1,9 +1,10 @@
-.PHONY: test build run vet frontend frontend-dev pdf-extractor-image
+.PHONY: test build run vet frontend frontend-dev pdf-extractor-image doctor search-smoke
 
 test:
 	go test -tags sqlite_fts5 ./...
 	npm --prefix frontend ci
 	npm --prefix frontend run typecheck
+	npm --prefix frontend test
 
 frontend:
 	npm --prefix frontend ci
@@ -23,3 +24,9 @@ run:
 
 vet:
 	go vet -tags sqlite_fts5 ./...
+
+doctor:
+	go run -tags sqlite_fts5 ./cmd/qagent doctor --json
+
+search-smoke:
+	go run -tags sqlite_fts5 ./cmd/qagent search-smoke --json

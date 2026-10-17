@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,10 +14,15 @@ import (
 
 	"github.com/slager2/qwenchik/internal/app"
 	"github.com/slager2/qwenchik/internal/domain"
+	"github.com/slager2/qwenchik/internal/providers/research"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
 )
 
 type testWorker struct{}
+
+type busyTestWorker struct{ testWorker }
+
+func (busyTestWorker) Busy() bool { return true }
 
 func (testWorker) Wake()            {}
 func (testWorker) Interrupt(string) {}
@@ -364,34 +370,29 @@ func TestDoctorAggregatesWarningsAndRequiresStrictStructuredModelSmoke(t *testin
 		wantStatus        string
 		wantLLMStatus     string
 		wantSearchStatus  string
-		wantSearchMessage string
 		tavilyConfigured  bool
 		searxngConfigured bool
 	}{
 		{
 			name:       "built-in DuckDuckGo fallback",
 			modelReply: `{"ok":true}`, wantStatus: "warning", wantLLMStatus: "ok",
-			wantSearchStatus:  "warning",
-			wantSearchMessage: "Built-in DuckDuckGo search fallback is enabled; live external health is not checked during doctor",
+			wantSearchStatus: "warning",
 		},
 		{
 			name:       "invalid structured output with DuckDuckGo fallback",
 			modelReply: `{"ok":false}`, wantStatus: "error", wantLLMStatus: "error",
-			wantSearchStatus:  "warning",
-			wantSearchMessage: "Built-in DuckDuckGo search fallback is enabled; live external health is not checked during doctor",
+			wantSearchStatus: "warning",
 		},
 		{
 			name:       "Tavily configured",
 			modelReply: `{"ok":true}`, wantStatus: "warning", wantLLMStatus: "ok",
-			wantSearchStatus:  "warning",
-			wantSearchMessage: "Tavily and built-in DuckDuckGo fallback are enabled; external search health is not checked during doctor",
-			tavilyConfigured:  true,
+			wantSearchStatus: "warning",
+			tavilyConfigured: true,
 		},
 		{
-			name:       "healthy SearXNG with unchecked DuckDuckGo fallback",
+			name:       "valid-empty SearXNG with unchecked DuckDuckGo fallback",
 			modelReply: `{"ok":true}`, wantStatus: "warning", wantLLMStatus: "ok",
 			wantSearchStatus:  "warning",
-			wantSearchMessage: "SearXNG search endpoint returned valid JSON; built-in DuckDuckGo fallback is enabled but its live health is not checked",
 			searxngConfigured: true,
 		},
 	} {
@@ -446,7 +447,7 @@ func TestDoctorAggregatesWarningsAndRequiresStrictStructuredModelSmoke(t *testin
 			if response.Code != wantHTTPStatus || body.Status != test.wantStatus || body.Checks["llm"]["status"] != test.wantLLMStatus {
 				t.Fatalf("doctor status=%q llm=%#v body=%s", body.Status, body.Checks["llm"], response.Body.String())
 			}
-			if body.Checks["search"]["status"] != test.wantSearchStatus || body.Checks["search"]["message"] != test.wantSearchMessage {
+			if body.Checks["search"]["status"] != test.wantSearchStatus || !strings.Contains(body.Checks["search"]["message"], "not probed") {
 				t.Fatalf("doctor search check=%#v body=%s", body.Checks["search"], response.Body.String())
 			}
 		})
@@ -475,7 +476,146 @@ func TestDoctorDoesNotReportMalformedSearXNGResponseAsHealthy(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Checks["search"]["status"] != "warning" || !strings.Contains(body.Checks["search"]["message"], "unavailable") {
+	if body.Checks["search_probe"]["status"] != "warning" || !strings.Contains(body.Checks["search_probe"]["message"], "unavailable") {
 		t.Fatalf("doctor treated malformed SearXNG JSON as healthy: %#v", body.Checks["search"])
+	}
+}
+
+func TestDoctorDoesNotCompeteForInferenceWhileWorkerIsBusy(t *testing.T) {
+	server, store := newTestServer(t)
+	defer store.Close()
+	server.worker = busyTestWorker{}
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			t.Errorf("doctor submitted inference while worker was busy: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"data":[{"id":"local-qwen"}]}`)
+	}))
+	defer model.Close()
+	server.llmURL = model.URL + "/v1"
+	request := httptest.NewRequest(http.MethodGet, "/api/doctor", nil)
+	request.Host = "127.0.0.1:8080"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "deferred while the single worker is busy") {
+		t.Fatalf("busy-worker diagnostics = %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestProvidersUsesLastOutcomesWithoutProbesOrSecrets(t *testing.T) {
+	server, store := newTestServer(t)
+	defer store.Close()
+	server.searchURL = "http://user:password@127.0.0.1:8888/private-token?api_key=secret#secret"
+	server.llmURL = "http://user:password@127.0.0.1:8000/private-token?api_key=secret"
+	server.SetTavilyConfigured(true)
+	checked := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
+	server.SetSearchDiagnostics(func() []research.ProviderOutcome {
+		return []research.ProviderOutcome{
+			{Provider: "searxng", State: "unavailable", Code: "search_unavailable", Message: "secret response body", Retryable: true, CheckedAt: checked, LatencyMS: 17, HTTPStatus: 503},
+			{Provider: "tavily", State: "degraded", Code: "provider_not_checked"},
+			{Provider: "duckduckgo", State: "blocked", Code: "provider_blocked", CheckedAt: checked, HTTPStatus: 403},
+		}
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/providers", nil)
+	request.Host = "localhost"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	var body struct {
+		Search struct {
+			Providers map[string]map[string]any `json:"providers"`
+		} `json:"search"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	searx := body.Search.Providers["searxng"]
+	if searx["configured"] != true || searx["health"] != "unavailable" || searx["latency_ms"] != float64(17) || searx["retryable"] != true || searx["last_checked"] != checked.Format(time.RFC3339) {
+		t.Fatalf("incorrect observed health: %#v", searx)
+	}
+	if body.Search.Providers["tavily"]["health"] != "not_checked" || body.Search.Providers["tavily"]["last_checked"] != nil {
+		t.Fatalf("unchecked provider became checked: %s", response.Body.String())
+	}
+	if body.Search.Providers["duckduckgo"]["health"] != "blocked" {
+		t.Fatal(response.Body.String())
+	}
+	for _, secret := range []string{"password", "secret", "private-token", "api_key", "user:"} {
+		if strings.Contains(response.Body.String(), secret) {
+			t.Fatalf("leaked %q: %s", secret, response.Body.String())
+		}
+	}
+	server.SetDDGEnabled(false)
+	if server.searchProviderStatus()["duckduckgo"]["enabled"] != false {
+		t.Fatal("DDG privacy setting ignored")
+	}
+}
+
+func TestDiagnosticEventsPublicOnlyAndRedactedOnRESTAndSSE(t *testing.T) {
+	server, store := newTestServer(t)
+	defer store.Close()
+	ctx := context.Background()
+	service := app.New(store)
+	task, err := service.CreateTask(ctx, "Diagnostics", "Inspect attempts", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, visibility := range []string{"user", "internal", "audit"} {
+		for _, eventType := range []string{"search.provider", "tool.failed"} {
+			_, err := store.RecordEvent(ctx, task.ID, eventType, nil, visibility, map[string]any{
+				"provider": "duckduckgo", "state": "blocked", "code": "provider_blocked", "retryable": false, "http_status": 403,
+				"message": "secret raw error https://user:password@example.com/?key=secret", "api_key": "secret", "raw_body": "secret",
+				"outcomes": []any{map[string]any{"provider": "searxng", "state": "unavailable", "code": "search_unavailable", "message": "secret", "retryable": true}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if _, err := service.CancelTask(ctx, task.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, suffix := range []string{"events", "events/stream"} {
+		request := httptest.NewRequest(http.MethodGet, "/api/tasks/"+task.ID+"/"+suffix, nil)
+		request.Host = "localhost"
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		body := response.Body.String()
+		if response.Code != http.StatusOK || !strings.Contains(body, "search.provider") || !strings.Contains(body, "tool.failed") || !strings.Contains(body, "provider_blocked") || !strings.Contains(body, "search_unavailable") {
+			t.Fatalf("missing diagnostics: %s", body)
+		}
+		for _, forbidden := range []string{"secret", "password", "api_key", "raw_body", `"visibility":"audit"`, `"visibility":"internal"`} {
+			if strings.Contains(body, forbidden) {
+				t.Fatalf("leaked %q: %s", forbidden, body)
+			}
+		}
+	}
+}
+
+func TestDoctorReportsAbsentWorkerAndActualHealthWithoutExternalProbes(t *testing.T) {
+	server, store := newTestServer(t)
+	defer store.Close()
+	server.worker = nil
+	server.llmURL = ":invalid"
+	server.SetDDGEnabled(false)
+	server.SetTavilyConfigured(true)
+	server.SetSearchDiagnostics(func() []research.ProviderOutcome {
+		return []research.ProviderOutcome{{Provider: "tavily", State: "blocked", Code: "provider_blocked", CheckedAt: time.Now().UTC(), HTTPStatus: 403}}
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/doctor", nil)
+	request.Host = "localhost"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	var body struct {
+		Checks    map[string]map[string]string `json:"checks"`
+		Providers map[string]map[string]any    `json:"providers"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusServiceUnavailable || body.Checks["worker"]["status"] != "error" || !strings.Contains(body.Checks["worker"]["message"], "absent") {
+		t.Fatal(response.Body.String())
+	}
+	if body.Checks["database"]["status"] != "ok" || body.Checks["artifacts"]["status"] != "warning" || body.Providers["tavily"]["health"] != "blocked" || body.Providers["duckduckgo"]["enabled"] != false {
+		t.Fatal(response.Body.String())
 	}
 }

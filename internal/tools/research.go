@@ -64,21 +64,51 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			if err != nil {
 				return nil, err
 			}
-			hits, err := runtime.SearchProvider.Search(ctx, research.SearchOptions{
+			options := research.SearchOptions{
 				Query: strings.TrimSpace(args.Query), Language: args.Language, Domains: domains,
 				Recency: args.Recency, MaxResults: count, SafeSearch: true,
-			})
+			}
+			var hits []research.SearchHit
+			if diagnostic, ok := runtime.SearchProvider.(research.DiagnosticSearchProvider); ok {
+				report, searchErr := diagnostic.SearchWithDiagnostics(ctx, options)
+				for _, outcome := range report.Outcomes {
+					observeSearchOutcome(ctx, outcome)
+				}
+				hits, err = report.Hits, searchErr
+			} else {
+				hits, err = runtime.SearchProvider.Search(ctx, options)
+			}
 			if err != nil {
 				return nil, err
 			}
 			safeHits := make([]research.SearchHit, 0, len(hits))
 			for _, hit := range hits {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+				if runtime.Fetcher == nil {
+					return nil, errors.New("search URL policy requires a fetcher")
+				}
 				if err := runtime.Fetcher.ValidateURL(ctx, hit.URL); err != nil {
+					if ctx.Err() != nil {
+						return nil, ctx.Err()
+					}
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						return nil, err
+					}
 					continue
 				}
 				hit.Snippet = truncateUTF8(hit.Snippet, 400)
 				hit.Taint = research.TaintExternal
 				safeHits = append(safeHits, hit)
+			}
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			if len(hits) > 0 && len(safeHits) == 0 {
+				outcome := research.ProviderOutcome{Provider: "search", State: "degraded", Code: "search_filtered_by_policy", Message: "All search URLs were excluded by outbound policy."}
+				observeSearchOutcome(ctx, outcome)
+				return nil, &research.SearchFailure{Code: "search_filtered_by_policy", Outcomes: []research.ProviderOutcome{outcome}}
 			}
 			registry.urlLedger.Remember(taskIDFromContext(ctx), safeHits)
 			return safeHits, nil
@@ -135,9 +165,14 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			if int64(len(fetched.Body)) > fetchLimit {
 				return nil, research.ErrResponseTooBig
 			}
+			if observer, ok := ctx.Value(extractionObserverKey{}).(func() error); ok && observer != nil {
+				if err := observer(); err != nil {
+					return nil, &research.FetchFailure{Err: err, FetchedBytes: int64(len(fetched.Body))}
+				}
+			}
 			extracted, err := runtime.Extractor.Extract(ctx, fetched)
 			if err != nil {
-				return nil, err
+				return nil, &research.FetchFailure{Err: err, FetchedBytes: int64(len(fetched.Body))}
 			}
 			rawArtifact, rawRef, err := runtime.Artifacts.Put(ctx, taskID, artifactFileName("source", fetched.ContentSHA256, ".raw"), fetched.ContentType, fetched.Body)
 			if err != nil {
@@ -180,6 +215,24 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 		}
 	}
 	return nil
+}
+
+type searchOutcomeObserverKey struct{}
+
+type extractionObserverKey struct{}
+
+func WithExtractionObserver(ctx context.Context, observer func() error) context.Context {
+	return context.WithValue(ctx, extractionObserverKey{}, observer)
+}
+
+func WithSearchOutcomeObserver(ctx context.Context, observer func(research.ProviderOutcome)) context.Context {
+	return context.WithValue(ctx, searchOutcomeObserverKey{}, observer)
+}
+
+func observeSearchOutcome(ctx context.Context, outcome research.ProviderOutcome) {
+	if observer, ok := ctx.Value(searchOutcomeObserverKey{}).(func(research.ProviderOutcome)); ok && observer != nil {
+		observer(outcome)
+	}
 }
 
 func validateSearchArguments(configuredDomains []string) ArgumentsValidator {

@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { api } from './api'
+import { createTaskDetailTracker } from './task-detail.mjs'
+import { diagnosticSummary, failureSummary, streamLabel } from './observability.mjs'
+import { ProviderCard, TaskFailureCard, SourceList } from './diagnostic-ui.mjs'
+import type { ProvidersResponse } from './types'
 import type { AgentEvent, Approval, Artifact, Checkpoint, DraftMessage, Evidence, Memory, MemoryMatch, MemoryStatus, Message, MessageDeltaPayload, Task, TaskStatus, TaskStep } from './types'
 
 const columns: { id: string; title: string; statuses: TaskStatus[] }[] = [
@@ -49,6 +53,8 @@ const eventLabels: Record<string, string> = {
   'step.skipped': 'Шаг пропущен по условию',
   'tool.started': 'Запущен инструмент',
   'tool.completed': 'Инструмент завершён',
+  'tool.failed': 'Ошибка инструмента',
+  'search.provider': 'Попытка поискового провайдера',
   'approval.requested': 'Требуется подтверждение',
   'approval.approved': 'Действие подтверждено',
   'approval.rejected': 'Действие отклонено',
@@ -75,6 +81,8 @@ function shortID(value: string) {
 
 function eventSummary(event: AgentEvent) {
   const payload = event.payload
+  if (event.type === 'search.provider') return diagnosticSummary(payload)
+  if (event.type === 'task.failed' || event.type === 'tool.failed') return failureSummary(payload)
   if (typeof payload.summary === 'string') return payload.summary
   if (typeof payload.description === 'string') return payload.description
   if (typeof payload.message === 'string') {
@@ -95,6 +103,7 @@ function eventSummary(event: AgentEvent) {
 function App() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [selectedID, setSelectedID] = useState('')
+  const [detailTracker] = useState(createTaskDetailTracker)
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState<DraftMessage | null>(null)
   const [events, setEvents] = useState<AgentEvent[]>([])
@@ -110,7 +119,9 @@ function App() {
   const [chatText, setChatText] = useState('')
   const [busy, setBusy] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [reconnecting, setReconnecting] = useState(false)
+  const [connection, setConnection] = useState('idle')
+  const [providers, setProviders] = useState<ProvidersResponse | null>(null)
+  const [providersError, setProvidersError] = useState('')
   const [error, setError] = useState('')
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [memoryOpen, setMemoryOpen] = useState(false)
@@ -131,10 +142,12 @@ function App() {
   }, [])
 
   const refreshDetail = useCallback(async (id: string) => {
+    const isCurrent = detailTracker.beginRequest(id)
     try {
       const [task, nextMessages, nextEvents, nextCheckpoints, nextSteps, nextArtifacts, nextEvidence, nextApprovals] = await Promise.all([
         api.task(id), api.messages(id), api.events(id), api.checkpoints(id), api.steps(id), api.artifacts(id), api.evidence(id), api.approvals(id),
       ])
+      if (!isCurrent()) return
       setTasks((current) => current.map((item) => item.id === task.id ? task : item))
       setMessages(nextMessages)
       setDraft((current) => current && nextMessages.some((message) => message.id === current.message_id) ? null : current)
@@ -145,9 +158,10 @@ function App() {
       setEvidence(nextEvidence)
       setApprovals(nextApprovals)
     } catch (caught) {
+      if (!isCurrent()) return
       setError(caught instanceof Error ? caught.message : 'Не удалось загрузить задачу')
     }
-  }, [])
+  }, [detailTracker])
 
   useEffect(() => {
     void refreshTasks()
@@ -155,8 +169,14 @@ function App() {
     return () => window.clearInterval(timer)
   }, [refreshTasks])
 
+  useLayoutEffect(() => {
+    detailTracker.select(selectedID)
+    return () => detailTracker.select('')
+  }, [selectedID, detailTracker])
+
   useEffect(() => {
     if (!selectedID) {
+      detailTracker.observe('', undefined)
       setMessages([])
       setDraft(null)
       setEvents([])
@@ -167,15 +187,35 @@ function App() {
       setApprovals([])
       return
     }
-    void refreshDetail(selectedID)
-  }, [selectedID, refreshDetail])
+    if (detailTracker.observe(selectedID, selectedTask?.status)) void refreshDetail(selectedID)
+  }, [selectedID, selectedTask?.status, refreshDetail, detailTracker])
 
   useEffect(() => {
     setDraft(null)
   }, [selectedID])
 
   useEffect(() => {
+    let active = true
+    const refresh = async () => {
+      try {
+        const result = await api.providers()
+        if (active) { setProviders(result); setProvidersError('') }
+      } catch {
+        if (active) setProvidersError('Состояние провайдеров недоступно; показанные данные могут быть устаревшими.')
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(() => void refresh(), 4000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [])
+
+  useEffect(() => {
     if (!selectedID) return
+    if (selectedTask && ['completed', 'failed', 'cancelled'].includes(selectedTask.status)) {
+      setConnection('idle')
+      return
+    }
+    setConnection('connecting')
     const source = new EventSource(`/api/tasks/${encodeURIComponent(selectedID)}/events/stream`)
     const eventTypes = [...Object.keys(eventLabels), 'message.delta']
     const listeners: [string, EventListener][] = eventTypes.map((type) => {
@@ -218,19 +258,23 @@ function App() {
           setDraft(null)
         }
         setEvents((current) => current.some((item) => item.seq === parsed.seq) ? current : [...current, parsed].slice(-200))
+        if (['task.completed', 'task.failed', 'task.cancelled'].includes(parsed.type)) {
+          source.close()
+          setConnection('idle')
+        }
         void refreshTasks(true)
         void refreshDetail(selectedID)
       }
       source.addEventListener(type, listener)
       return [type, listener]
     })
-    source.onopen = () => setReconnecting(false)
-    source.onerror = () => setReconnecting(true)
+    source.onopen = () => setConnection('live')
+    source.onerror = () => setConnection('reconnecting')
     return () => {
       for (const [type, listener] of listeners) source.removeEventListener(type, listener)
       source.close()
     }
-  }, [selectedID, refreshDetail, refreshTasks])
+  }, [selectedID, selectedTask?.status, refreshDetail, refreshTasks])
 
   useEffect(() => {
     let active = true
@@ -363,7 +407,7 @@ function App() {
   }
 
   const modelCheck = doctor?.checks.llm
-  const apiCheck = doctor?.checks.database
+  const apiReady = doctor && ['app', 'worker', 'database'].every((name) => doctor.checks[name]?.status === 'ok')
 
   return (
     <div className="app-shell">
@@ -393,9 +437,9 @@ function App() {
         <header className="topbar">
           <div className="breadcrumb"><span>Рабочее пространство</span><span className="crumb-sep">/</span><strong>Задачи</strong></div>
           <div className="top-actions">
-            <span className={`service-pill ${apiCheck?.status === 'ok' ? 'is-online' : ''}`}>
+            <span className={`service-pill ${apiReady ? 'is-online' : ''}`}>
               <span className="health-dot" />
-              {apiCheck?.status === 'ok' ? 'Локально подключено' : 'Проверка сервиса'}
+              {apiReady ? 'Приложение и worker готовы' : 'Сервис не готов / не проверен'}
             </span>
             <button className="button button-quiet palette-trigger" type="button" onClick={() => setPaletteOpen(true)} aria-label="Открыть командную палитру">
               <span>Команды</span><kbd>⌘ K</kbd>
@@ -422,6 +466,15 @@ function App() {
         </section>
 
         {error && <div className="notice notice-error" role="alert"><span className="notice-marker">!</span><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Закрыть сообщение">×</button></div>}
+
+        <section className="provider-panel" aria-label="Поисковые провайдеры">
+          <h2>Поисковые провайдеры</h2>
+          <p>Конфигурация и последнее реальное обращение. До первого запроса здоровье неизвестно.</p>
+          <p>Поисковые запросы передаются включённым внешним сервисам. DuckDuckGo можно отключить через SEARCH_ENABLE_DDG=false; локальный SearXNG также обращается к публичным поисковикам.</p>
+          {providersError && <p role="status">{providersError}</p>}
+          {!providers && !providersError && <p>Загрузка состояния…</p>}
+          <div className="provider-grid">{Object.entries(providers?.search.providers ?? {}).map(([name, provider]) => <ProviderCard key={name} name={name} provider={provider} checkedLabel={provider.last_checked ? timeLabel(provider.last_checked) : ''} />)}</div>
+        </section>
 
         {createOpen && (
           <form className="create-panel" onSubmit={createTask}>
@@ -479,7 +532,7 @@ function App() {
               artifacts={artifacts}
               evidence={evidence}
               approvals={approvals}
-              reconnecting={reconnecting}
+              connection={connection}
               busy={busy}
               chatText={chatText}
               setChatText={setChatText}
@@ -515,7 +568,7 @@ interface InspectorProps {
   artifacts: Artifact[]
   evidence: Evidence[]
   approvals: Approval[]
-  reconnecting: boolean
+  connection: string
   busy: boolean
   chatText: string
   setChatText: (value: string) => void
@@ -529,12 +582,13 @@ interface InspectorProps {
 }
 
 function TaskInspector(props: InspectorProps) {
-  const { task, messages, draft, events, checkpoints, steps, artifacts, evidence, approvals, reconnecting, busy } = props
+  const { task, messages, draft, events, checkpoints, steps, artifacts, evidence, approvals, connection, busy } = props
   const canSend = ['inbox', 'queued', 'paused', 'failed'].includes(task.status)
   const canPause = ['queued', 'planning', 'running', 'verifying'].includes(task.status)
   const canCancel = !['completed', 'failed', 'cancelled'].includes(task.status)
   const timeline = [...events].sort((a, b) => b.seq - a.seq).slice(0, 30)
   const sortedMessages = [...messages].sort((a, b) => a.created_at.localeCompare(b.created_at))
+  const failure = [...events].reverse().find((event) => event.type === 'task.failed')
 
   return (
     <section className="inspector" aria-label="Инспектор задачи">
@@ -549,6 +603,8 @@ function TaskInspector(props: InspectorProps) {
         {canCancel && <button className="button button-danger-quiet" type="button" onClick={props.onCancel} disabled={busy}>Отменить</button>}
         {busy && <span className="action-feedback" role="status">Сохраняем…</span>}
       </div>
+
+      {task.status === 'failed' && <TaskFailureCard payload={failure?.payload} evidenceCount={evidence.length} />}
 
       {task.status === 'waiting_approval' && approvals.filter((approval) => approval.status === 'pending').map((approval) => <ApprovalCard key={approval.id} approval={approval} busy={busy} onApprove={() => props.onApprove(approval.id)} onReject={() => props.onReject(approval.id)} />)}
 
@@ -581,7 +637,7 @@ function TaskInspector(props: InspectorProps) {
       </div>
 
       <div className="inspector-section" id="timeline">
-        <div className="section-title"><div><span className="section-kicker">ИСТОРИЯ</span><h3>События выполнения</h3></div><span className={`stream-status ${reconnecting ? 'is-reconnecting' : ''}`}><span className="health-dot" />{reconnecting ? 'Переподключение' : 'SSE live'}</span></div>
+        <div className="section-title"><div><span className="section-kicker">ИСТОРИЯ</span><h3>События выполнения</h3></div><span className={`stream-status ${connection !== 'live' || ['completed', 'failed', 'cancelled'].includes(task.status) ? 'is-reconnecting' : ''}`} role="status"><span className="health-dot" />{streamLabel(task.status, connection)}</span></div>
         {timeline.length ? <ol className="event-list">{timeline.map((event) => <li className="event-row" key={event.id}><span className="event-seq">{event.seq.toString().padStart(3, '0')}</span><div className="event-copy"><strong>{eventLabels[event.type] ?? event.type}</strong>{eventSummary(event) && <p>{eventSummary(event)}</p>}<time>{timeLabel(event.created_at)}</time></div></li>)}</ol> : <div className="inline-empty">Событий пока нет.</div>}
       </div>
 
@@ -589,7 +645,7 @@ function TaskInspector(props: InspectorProps) {
         <div className="section-title"><div><span className="section-kicker">ВОССТАНОВЛЕНИЕ</span><h3>Checkpoint-ы</h3></div><span className="section-count">{checkpoints.length}</span></div>
         {checkpoints.length ? <ul className="checkpoint-list">{checkpoints.slice(-4).reverse().map((checkpoint) => <li key={checkpoint.id}><span className="checkpoint-dot" /><span>Последнее событие <b className="mono">#{checkpoint.last_event_seq}</b></span><time>{timeLabel(checkpoint.created_at)}</time></li>)}</ul> : <div className="inline-empty">Checkpoint появится после планирования.</div>}
         <div className="resource-pair">
-          <div><div className="resource-heading"><span className="section-kicker">ИСТОЧНИКИ</span><span className="section-count">{evidence.length}</span></div>{evidence.length ? <ul className="source-list">{evidence.map((source) => <li key={source.id}><a href={source.canonical_url} target="_blank" rel="noreferrer">{source.title || source.canonical_url}</a><p>{source.excerpt}</p><span className="source-meta">{source.provider} · {timeLabel(source.retrieved_at)} · <span className="mono">{source.content_sha256.slice(0, 10)}</span></span></li>)}</ul> : <p>Источники появятся после research-поиска.</p>}</div>
+          <div><div className="resource-heading"><span className="section-kicker">ИСТОЧНИКИ</span><span className="section-count">{evidence.length}</span></div><SourceList sources={evidence} formatTime={timeLabel} /></div>
           <div><div className="resource-heading"><span className="section-kicker">АРТЕФАКТЫ</span><span className="section-count">{artifacts.length}</span></div>{artifacts.length ? <ul className="artifact-list">{artifacts.map((artifact) => <li key={artifact.id}><span className="artifact-glyph">↳</span><span><a href={`/api/tasks/${encodeURIComponent(task.id)}/artifacts/${encodeURIComponent(artifact.id)}`}>{artifact.name}</a><small>{artifact.mime_type} · {artifact.size_bytes.toLocaleString('ru-RU')} байт</small></span></li>)}</ul> : <p>Сохранённых файлов пока нет.</p>}</div>
         </div>
       </div>

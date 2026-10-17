@@ -107,3 +107,40 @@ func TestSearXNGClassifiesOversizedResponse(t *testing.T) {
 		t.Fatalf("search error = %v, want ErrSearchResponseTooBig", err)
 	}
 }
+
+func TestSearXNGUpstreamFailureDiagnostics(t *testing.T) {
+	for _, fixture := range []struct {
+		name string
+		body string
+		code string
+		hits int
+		fail bool
+	}{
+		{"empty without failures", `{"results":[],"unresponsive_engines":[]}`, "search_no_results", 0, false},
+		{"empty with failures", `{"results":[],"unresponsive_engines":[["engine","secret-query test-api-key timeout"]]}`, "search_unavailable", 0, true},
+		{"partial with failures", `{"results":[{"url":"https://example.com/evidence","title":"Evidence"}],"unresponsive_engines":[["engine","secret-query test-api-key timeout"]]}`, "search_unavailable", 1, false},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			for _, composite := range []bool{false, true} {
+				provider := fixtureDiagnosticProvider(t, "searxng", roundTripFunc(func(request *http.Request) (*http.Response, error) {
+					return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(fixture.body)), Request: request}, nil
+				}))
+				if composite {
+					provider = NewCompositeSearch(provider.(SearchProvider))
+				}
+				report, err := provider.SearchWithDiagnostics(context.Background(), SearchOptions{Query: "query", MaxResults: 3})
+				if fixture.fail && !errors.Is(err, ErrSearchUnavailable) || !fixture.fail && err != nil || len(report.Hits) != fixture.hits || len(report.Outcomes) != 1 {
+					t.Fatalf("composite=%v report=%#v err=%v", composite, report, err)
+				}
+				outcome := report.Outcomes[0]
+				if outcome.State != "degraded" || outcome.Code != fixture.code || outcome.HTTPStatus != 200 || outcome.ResultCount != fixture.hits || outcome.Retryable != (fixture.code == "search_unavailable") {
+					t.Fatalf("composite=%v outcome=%#v", composite, outcome)
+				}
+				encoded, marshalErr := json.Marshal(report.Outcomes)
+				if marshalErr != nil || strings.Contains(string(encoded), "secret-query") || strings.Contains(string(encoded), "test-api-key") {
+					t.Fatalf("unsafe outcomes=%s err=%v", encoded, marshalErr)
+				}
+			}
+		})
+	}
+}

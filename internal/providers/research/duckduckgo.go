@@ -82,7 +82,7 @@ func (d *DuckDuckGo) Search(ctx context.Context, options SearchOptions) ([]Searc
 		maxResults = duckDuckGoMaxHits
 	}
 	if d == nil || d.fetcher == nil || d.fetcher.client == nil {
-		return nil, fmt.Errorf("%w: DuckDuckGo is not initialized", ErrSearchUnavailable)
+		return nil, classified("provider_misconfigured", "misconfigured", 0, false)
 	}
 
 	requestURL, _ := url.Parse(duckDuckGoEndpoint)
@@ -124,13 +124,15 @@ func (d *DuckDuckGo) Search(ctx context.Context, options SearchOptions) ([]Searc
 		return nil, fmt.Errorf("%w: DuckDuckGo request failed", ErrSearchUnavailable)
 	}
 	defer response.Body.Close()
+	recordResponseMetadata(ctx, response)
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("%w: DuckDuckGo returned HTTP %d", ErrSearchUnavailable, response.StatusCode)
+		return nil, classifyHTTP(response.StatusCode, false)
 	}
 	if response.ContentLength > duckDuckGoMaxBody {
 		return nil, ErrSearchResponseTooBig
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, duckDuckGoMaxBody+1))
+	recordResponseBodySize(ctx, len(body))
 	if err != nil {
 		return nil, fmt.Errorf("%w: DuckDuckGo response could not be read", ErrSearchUnavailable)
 	}
@@ -139,9 +141,47 @@ func (d *DuckDuckGo) Search(ctx context.Context, options SearchOptions) ([]Searc
 	}
 	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(response.Header.Get("Content-Type"), ";")[0]))
 	if mediaType != "text/html" && mediaType != "application/xhtml+xml" {
-		return nil, fmt.Errorf("%w: DuckDuckGo returned a non-HTML response", ErrSearchUnavailable)
+		return nil, classified("provider_malformed", "malformed", response.StatusCode, false)
 	}
-	return parseDuckDuckGoResults(body, query, options.Domains, maxResults), nil
+	root, _ := html.Parse(strings.NewReader(string(body)))
+	blocked, noResults := false, false
+	var visit func(*html.Node)
+	visit = func(node *html.Node) {
+		if node.Type == html.ElementNode {
+			if hasHTMLClass(node, "no-results") || hasHTMLClass(node, "no-results__message") || hasHTMLClass(node, "result--no-result") {
+				noResults = true
+			}
+			for _, key := range []string{"id", "class", "action", "src"} {
+				value := strings.ToLower(htmlAttribute(node, key))
+				for _, marker := range []string{"anomaly.js", "anomaly-modal", "captcha", "challenge-form", "consent-form", "consent.duckduckgo.com"} {
+					if strings.Contains(value, marker) {
+						blocked = true
+					}
+				}
+			}
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			visit(child)
+		}
+	}
+	if root != nil {
+		visit(root)
+	}
+	if blocked {
+		return nil, classified("provider_blocked", "blocked", response.StatusCode, false)
+	}
+	allHits := parseDuckDuckGoResults(body, query, nil, maxResults)
+	hits := parseDuckDuckGoResults(body, query, options.Domains, maxResults)
+	if len(hits) > 0 {
+		return hits, nil
+	}
+	if len(allHits) > 0 {
+		return hits, classified("search_filtered_by_policy", "degraded", response.StatusCode, false)
+	}
+	if noResults {
+		return hits, nil
+	}
+	return hits, classified("provider_malformed", "malformed", response.StatusCode, false)
 }
 
 func duckDuckGoRecency(value string) (string, error) {

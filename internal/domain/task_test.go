@@ -13,6 +13,9 @@ func TestTaskStatusTransitions(t *testing.T) {
 	}{
 		{StatusInbox, StatusQueued, true},
 		{StatusRunning, StatusWaitingApproval, true},
+		{StatusRunning, StatusRunning, true},
+		{StatusVerifying, StatusVerifying, true},
+		{StatusCompleted, StatusCompleted, false},
 		{StatusPaused, StatusRunning, true},
 		{StatusCompleted, StatusRunning, false},
 		{StatusInbox, StatusCompleted, false},

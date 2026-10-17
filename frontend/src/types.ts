@@ -10,6 +10,32 @@ export type TaskStatus =
   | 'failed'
   | 'cancelled'
 
+export interface ProviderOutcome {
+  provider: string
+  state: string
+  code: string
+  message: string
+  retryable: boolean
+  http_status: number
+  latency_ms: number
+  checked_at: string
+  result_count: number
+  distinct_domains: number
+}
+
+export interface ProviderStatus {
+  configured: boolean
+  enabled: boolean
+  health: string
+  endpoint: string
+  last_checked: string | null
+  last_outcome: ProviderOutcome | null
+}
+
+export interface ProvidersResponse {
+  search: { providers: Record<string, ProviderStatus> }
+}
+
 export type TaskStage =
   | 'intake'
   | 'planning'

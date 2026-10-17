@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"sort"
 
@@ -16,88 +15,26 @@ func planOutputSchema(maxSteps int, allowedKinds []string) json.RawMessage {
 }
 
 func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, requiredKinds []string) json.RawMessage {
-	stepSchema := func(kinds, ids, dependencyIDs []string, minDependencies, maxDependencies int) map[string]any {
-		kindSchema := map[string]any{"type": "string", "enum": allowedKinds}
-		if len(kinds) != 0 {
-			kindSchema["enum"] = kinds
-		}
-		idSchema := boundedStringSchema(1, 64)
-		idSchema["pattern"] = "^[a-zA-Z0-9_-]{1,64}$"
-		if len(ids) != 0 {
-			idSchema["enum"] = ids
-		}
-		dependencyItems := map[string]any{"type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_-]{1,64}$"}
-		if len(dependencyIDs) != 0 {
-			dependencyItems["enum"] = dependencyIDs
-		}
-		return map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"id":               idSchema,
-				"kind":             kindSchema,
-				"description":      boundedStringSchema(1, 1000),
-				"dependencies":     boundedArraySchema(dependencyItems, minDependencies, maxDependencies),
-				"expected_output":  boundedStringSchema(0, 500),
-				"success_criteria": boundedArraySchema(boundedStringSchema(1, 500), 1, 10),
-			},
-			"required":             []string{"id", "kind", "description", "dependencies", "expected_output", "success_criteria"},
-			"additionalProperties": false,
-		}
+	idSchema := boundedStringSchema(1, 64)
+	idSchema["pattern"] = "^[a-zA-Z0-9_-]{1,64}$"
+	dependencyItems := map[string]any{"type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_-]{1,64}$"}
+	step := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"id":               idSchema,
+			"kind":             map[string]any{"type": "string", "enum": allowedKinds},
+			"description":      boundedStringSchema(1, 1000),
+			"dependencies":     boundedArraySchema(dependencyItems, 0, min(4, maxSteps)),
+			"expected_output":  boundedStringSchema(0, 500),
+			"success_criteria": boundedArraySchema(boundedStringSchema(1, 500), 1, 10),
+		},
+		"required":             []string{"id", "kind", "description", "dependencies", "expected_output", "success_criteria"},
+		"additionalProperties": false,
 	}
-	step := stepSchema(nil, nil, nil, 0, min(4, maxSteps))
 	subtasksSchema := boundedArraySchema(step, 1, maxSteps)
 	maxStepsSchema := map[string]any{"type": "integer", "minimum": 1, "maximum": maxSteps}
 	if len(requiredKinds) != 0 {
-		minimumSearches, minimumFetches := 0, 0
-		for _, kind := range requiredKinds {
-			switch kind {
-			case "search":
-				minimumSearches++
-			case "fetch":
-				minimumFetches++
-			}
-		}
-		urlFirst := requiredKinds[0] == "fetch" && minimumSearches > 0
-		if minimumSearches > 0 {
-			alternatives := make([]any, 0, 6)
-			nonResearchKinds := make([]string, 0, len(allowedKinds))
-			for _, kind := range allowedKinds {
-				if kind != "search" && kind != "fetch" {
-					nonResearchKinds = append(nonResearchKinds, kind)
-				}
-			}
-			nonResearchStep := stepSchema(nonResearchKinds, nil, nil, 0, min(4, maxSteps))
-			if len(nonResearchKinds) == 0 {
-				nonResearchStep = stepSchema([]string{"__no_additional_research_action__"}, nil, nil, 0, min(4, maxSteps))
-			}
-			maximumSearches := min(3, maxSteps-minimumFetches)
-			maximumFetches := min(4, maxSteps-minimumSearches)
-			for searchCount := minimumSearches; searchCount <= maximumSearches; searchCount++ {
-				for fetchCount := minimumFetches; fetchCount <= maximumFetches; fetchCount++ {
-					prefix := researchPlanPrefix(searchCount, fetchCount, urlFirst, stepSchema)
-					mandatorySteps := len(prefix)
-					if mandatorySteps > maxSteps {
-						continue
-					}
-					alternatives = append(alternatives, map[string]any{
-						"type": "array", "minItems": mandatorySteps, "maxItems": maxSteps,
-						"prefixItems": prefix, "items": nonResearchStep,
-					})
-				}
-			}
-			subtasksSchema = map[string]any{"anyOf": alternatives}
-		} else {
-			prefix := make([]any, 0, len(requiredKinds))
-			for index, kind := range requiredKinds {
-				id := fmt.Sprintf("%s_%d", kind, index+1)
-				maxDependencies := 0
-				if kind == "fetch" {
-					maxDependencies = 4
-				}
-				prefix = append(prefix, stepSchema([]string{kind}, []string{id}, nil, 0, maxDependencies))
-			}
-			subtasksSchema = map[string]any{"type": "array", "minItems": len(requiredKinds), "maxItems": maxSteps, "prefixItems": prefix, "items": step}
-		}
+		subtasksSchema = boundedArraySchema(step, len(requiredKinds), maxSteps)
 		maxStepsSchema = map[string]any{"type": "integer", "minimum": len(requiredKinds), "maximum": maxSteps}
 	}
 	schema := map[string]any{
@@ -113,26 +50,6 @@ func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, requiredKinds
 		"additionalProperties": false,
 	}
 	return encodeSchema(schema)
-}
-
-func researchPlanPrefix(searchCount, fetchCount int, urlFirst bool, stepSchema func([]string, []string, []string, int, int) map[string]any) []any {
-	prefix := make([]any, 0, searchCount+fetchCount)
-	fetchIndex := 0
-	if urlFirst {
-		fetchIndex++
-		id := fmt.Sprintf("fetch_%d", fetchIndex)
-		prefix = append(prefix, stepSchema([]string{"fetch"}, []string{id}, nil, 0, 4))
-	}
-	for index := 1; index <= searchCount; index++ {
-		id := fmt.Sprintf("search_%d", index)
-		prefix = append(prefix, stepSchema([]string{"search"}, []string{id}, nil, 0, 4))
-	}
-	for fetchIndex < fetchCount {
-		fetchIndex++
-		id := fmt.Sprintf("fetch_%d", fetchIndex)
-		prefix = append(prefix, stepSchema([]string{"fetch"}, []string{id}, nil, 0, 4))
-	}
-	return prefix
 }
 
 func actionOutputSchema(descriptors []tools.Descriptor, fetchURLs []string) json.RawMessage {
@@ -294,28 +211,38 @@ func stripOptionalNulls(value any, schema map[string]any) {
 	}
 }
 
-func verificationOutputSchema() json.RawMessage {
-	assessment := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"step_id":         boundedStringSchema(1, 64),
-			"criterion_index": map[string]any{"type": "integer", "minimum": 0, "maximum": 9},
-			"met":             map[string]any{"type": "boolean"},
-			"evidence_ids":    boundedArraySchema(boundedStringSchema(1, 128), 0, 30),
-			"rationale":       boundedStringSchema(1, 500),
-		},
-		"required":             []string{"step_id", "criterion_index", "met", "evidence_ids", "rationale"},
-		"additionalProperties": false,
+func verificationOutputSchema(catalog []verificationCriterion) json.RawMessage {
+	assessmentSchema := func(criterion verificationCriterion) map[string]any {
+		evidenceItem := boundedStringSchema(1, 128)
+		if len(criterion.EvidenceIDs) > 0 {
+			evidenceItem["enum"] = criterion.EvidenceIDs
+		}
+		return map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"met":          map[string]any{"type": "boolean"},
+				"evidence_ids": boundedArraySchema(evidenceItem, 0, len(criterion.EvidenceIDs)),
+				"rationale":    boundedStringSchema(1, 500),
+			},
+			"required":             []string{"met", "evidence_ids", "rationale"},
+			"additionalProperties": false,
+		}
+	}
+	properties := make(map[string]any, len(catalog))
+	required := make([]string, 0, len(catalog))
+	for _, criterion := range catalog {
+		properties[criterion.ID] = assessmentSchema(criterion)
+		required = append(required, criterion.ID)
 	}
 	return encodeSchema(map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"complete":              map[string]any{"type": "boolean"},
+			"ready_to_answer":       map[string]any{"type": "boolean"},
 			"summary":               boundedStringSchema(1, 1000),
 			"missing":               boundedArraySchema(boundedStringSchema(1, 500), 0, 20),
-			"criterion_assessments": boundedArraySchema(assessment, 0, 120),
+			"criterion_assessments": map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false},
 		},
-		"required":             []string{"complete", "summary", "missing", "criterion_assessments"},
+		"required":             []string{"ready_to_answer", "summary", "missing", "criterion_assessments"},
 		"additionalProperties": false,
 	})
 }

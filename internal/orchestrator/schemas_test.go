@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/tools"
 )
 
@@ -34,9 +35,9 @@ func TestStructuredOutputSchemasConstrainRoleEnvelopes(t *testing.T) {
 		},
 		{
 			name:    "verifier",
-			schema:  verificationOutputSchema(),
-			valid:   `{"complete":true,"summary":"The result is usable.","missing":[],"criterion_assessments":[{"step_id":"step_1","criterion_index":0,"met":true,"evidence_ids":[],"rationale":"The step result supports the criterion."}]}`,
-			invalid: `{"complete":true,"summary":"The result is usable.","missing":[]}`,
+			schema:  verificationOutputSchema([]verificationCriterion{{ID: "c0", StepID: "step_1", Index: 0}}),
+			valid:   `{"ready_to_answer":true,"summary":"The result is usable.","missing":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The step result supports the criterion."}}}`,
+			invalid: `{"ready_to_answer":true,"summary":"The result is usable.","missing":[]}`,
 		},
 	}
 	for _, test := range tests {
@@ -180,8 +181,16 @@ func TestResearchPlanSchemaSupportsIndependentFacetsAndBoundedFetches(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tools.ValidateJSONSchema(schema, tooManySearches); err == nil {
-		t.Fatal("fourth research search facet passed the schema")
+	if err := tools.ValidateJSONSchema(schema, tooManySearches); err != nil {
+		t.Fatalf("ordinary schema must leave facet count checks to the backend: %v", err)
+	}
+	worker := New(nil, nil, registerPlanValidationResearchTools(t), Options{})
+	var decoded domain.Plan
+	if err := json.Unmarshal(tooManySearches, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if err := worker.validateTaskPlan(decoded, "Research", "Review protocol behavior"); !errors.Is(err, errResearchPlanIncomplete) {
+		t.Fatalf("four search facets backend validation = %v", err)
 	}
 	fiveFetchSteps := append([]map[string]any(nil), steps[:2]...)
 	for index := 1; index <= 5; index++ {
@@ -196,8 +205,14 @@ func TestResearchPlanSchemaSupportsIndependentFacetsAndBoundedFetches(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tools.ValidateJSONSchema(schema, tooManyFetches); err == nil {
-		t.Fatal("fifth research fetch passed the schema")
+	if err := tools.ValidateJSONSchema(schema, tooManyFetches); err != nil {
+		t.Fatalf("ordinary schema must leave source count checks to the backend: %v", err)
+	}
+	if err := json.Unmarshal(tooManyFetches, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if err := worker.validateTaskPlan(decoded, "Research", "Review protocol behavior"); !errors.Is(err, errResearchPlanIncomplete) {
+		t.Fatalf("five fetches backend validation = %v", err)
 	}
 	steps = append(steps, map[string]any{
 		"id": "code_1", "kind": "code_execution", "description": "Run a bounded task-specific calculation",

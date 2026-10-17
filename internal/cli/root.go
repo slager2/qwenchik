@@ -55,6 +55,7 @@ func NewRoot() *cobra.Command {
 	root.PersistentFlags().BoolVar(&jsonMode, "json", false, "write machine-readable JSON")
 	root.AddCommand(newServeCommand())
 	root.AddCommand(newDoctorCommand(&jsonMode))
+	root.AddCommand(newSearchSmokeCommand(&jsonMode))
 	root.AddCommand(newTaskCommand(&jsonMode))
 	root.AddCommand(newRunCommand(&jsonMode))
 	root.AddCommand(newEventsCommand(&jsonMode))
@@ -324,6 +325,8 @@ func newDoctorCommand(jsonMode *bool) *cobra.Command {
 			for _, check := range checks {
 				if check.Status == "error" {
 					status = "error"
+				} else if check.Status == "warning" && status == "ok" {
+					status = "warning"
 				}
 			}
 			printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{"status": status, "checks": checks})
@@ -516,7 +519,7 @@ func newEventsCommand(jsonMode *bool) *cobra.Command {
 }
 
 func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
-	return &cobra.Command{
+	command := &cobra.Command{
 		Use:   name,
 		Short: short,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -526,9 +529,35 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 			}
 			switch name {
 			case "providers":
-				searchMode := "duckduckgo"
-				searchType := "duckduckgo"
-				searchStatus := "enabled"
+				live, _ := cmd.Flags().GetBool("live")
+				if live {
+					request, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, "http://"+cfg.BindAddr+"/api/providers", nil)
+					if err != nil {
+						return errors.New("local provider diagnostics request could not be created")
+					}
+					client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+					response, err := client.Do(request)
+					if err != nil {
+						return errors.New("qagent serve is unavailable; cannot read observed provider health")
+					}
+					defer response.Body.Close()
+					if response.StatusCode != http.StatusOK {
+						return errors.New("local provider diagnostics returned a non-success response")
+					}
+					var payload map[string]any
+					if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&payload); err != nil {
+						return errors.New("local provider diagnostics returned malformed JSON")
+					}
+					printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, payload)
+					return nil
+				}
+				searchMode := "none"
+				searchType := "none"
+				searchStatus := "disabled"
+				ddgStatus := "disabled"
+				if cfg.SearchEnableDDG {
+					searchMode, searchType, searchStatus, ddgStatus = "duckduckgo", "duckduckgo", "configured", "configured"
+				}
 				if cfg.SearXNGURL != "" || cfg.TavilyAPIKey != "" {
 					searchMode = "composite"
 					searchType = "composite"
@@ -548,7 +577,7 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 						"providers": map[string]any{
 							"searxng":    map[string]any{"status": providerStatus(cfg.SearXNGURL), "base_url": cfg.SearXNGURL},
 							"tavily":     map[string]string{"status": providerStatusFromBool(cfg.TavilyAPIKey != "")},
-							"duckduckgo": map[string]any{"status": "enabled", "fallback": true, "health": "not_checked", "endpoint": "https://html.duckduckgo.com/html/"},
+							"duckduckgo": map[string]any{"status": ddgStatus, "enabled": cfg.SearchEnableDDG, "fallback": true, "health": "not_checked", "endpoint": "https://html.duckduckgo.com/html/"},
 						},
 					},
 					"sandbox":       map[string]any{"runtime": cfg.SandboxRuntime, "image": cfg.SandboxImage},
@@ -559,6 +588,7 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 					"app_bind_addr": cfg.BindAddr, "database_path": cfg.DatabasePath, "artifacts_path": cfg.ArtifactsPath,
 					"llm_base_url": cfg.LLMBaseURL, "llm_model": cfg.LLMModel, "searxng_url": cfg.SearXNGURL,
 					"tavily_configured": cfg.TavilyAPIKey != "",
+					"search_enable_ddg": cfg.SearchEnableDDG,
 					"workspace_root":    cfg.WorkspaceRoot, "sandbox_runtime": cfg.SandboxRuntime,
 					"sandbox_image": cfg.SandboxImage, "sandbox_network": cfg.SandboxNetwork,
 					"pdf_extractor_image": cfg.PDFExtractorImage,
@@ -569,6 +599,10 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 			return nil
 		},
 	}
+	if name == "providers" {
+		command.Flags().Bool("live", false, "read last observed provider outcomes from the running local API")
+	}
+	return command
 }
 
 func serve(parent context.Context) error {
@@ -587,6 +621,14 @@ func serve(parent context.Context) error {
 	}
 	defer lock.Close()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	configuredContext := cfg.LLMContextLength
+	cfg.LLMContextLength = effectiveModelContext(parent, cfg)
+	if cfg.LLMContextLength != configuredContext {
+		logger.Warn("LLM context capped to server-reported runtime capacity", "configured_context", configuredContext, "effective_context", cfg.LLMContextLength)
+	}
+	if cfg.LLMContextLength-cfg.LLMMaxOutputTokens < 2304 {
+		return errors.New("server-reported model context is too small for output and prompt reserves; lower LLM_MAX_OUTPUT_TOKENS")
+	}
 	model := openai.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, time.Duration(cfg.LLMRequestTimeoutSecs)*time.Second, cfg.LLMMaxOutputTokens, cfg.LLMTemperature, cfg.LLMTopP, cfg.LLMEnableThinking)
 	registry := tools.NewRegistry()
 	searchProvider, err := configuredSearchProvider(cfg)
@@ -625,6 +667,12 @@ func serve(parent context.Context) error {
 	apiServer := api.New(deps.app, deps.worker, deps.store.Ping, cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.SearXNGURL, logger)
 	apiServer.SetLLMModel(cfg.LLMModel)
 	apiServer.SetTavilyConfigured(cfg.TavilyAPIKey != "")
+	apiServer.SetDDGEnabled(cfg.SearchEnableDDG)
+	if diagnostic, ok := searchProvider.(interface {
+		HealthSnapshot() []research.ProviderOutcome
+	}); ok {
+		apiServer.SetSearchDiagnostics(diagnostic.HealthSnapshot)
+	}
 	apiServer.SetArtifactReader(artifactStore)
 	sandboxStatus := sandboxRuntime.Doctor(parent)
 	apiServer.SetSandboxStatus(sandboxStatus.Available, sandboxStatus.Message)
@@ -700,7 +748,12 @@ func configuredSearchProvider(cfg config.Config) (research.SearchProvider, error
 		}
 		providers = append(providers, provider)
 	}
-	providers = append(providers, research.NewDuckDuckGo())
+	if cfg.SearchEnableDDG {
+		providers = append(providers, research.NewDuckDuckGo())
+	}
+	if len(providers) == 0 {
+		return nil, nil
+	}
 	return research.NewCompositeSearch(providers...), nil
 }
 
@@ -741,8 +794,9 @@ func openDependenciesWithConfig(ctx context.Context, cfg config.Config) (*depend
 }
 
 type doctorCheck struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
+	Status   string                     `json:"status"`
+	Message  string                     `json:"message"`
+	Outcomes []research.ProviderOutcome `json:"outcomes,omitempty"`
 }
 
 func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
@@ -750,6 +804,34 @@ func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 		"go":   {Status: "ok", Message: "qagent binary is running on Go"},
 		"bind": {Status: "ok", Message: "application bind address is loopback-only"},
 	}
+	appCtx, appCancel := context.WithTimeout(ctx, 2*time.Second)
+	appRequest, appErr := http.NewRequestWithContext(appCtx, http.MethodGet, "http://"+cfg.BindAddr+"/api/health", nil)
+	if appErr == nil {
+		response, requestErr := (&http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{Proxy: nil}}).Do(appRequest)
+		if requestErr == nil {
+			var health struct {
+				Worker string `json:"worker"`
+			}
+			_ = json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&health)
+			_ = response.Body.Close()
+			if response.StatusCode == http.StatusOK {
+				checks["app"] = doctorCheck{Status: "ok", Message: "qagent HTTP API is responding"}
+				checks["worker"] = doctorCheck{Status: "warning", Message: "Worker state is not reported by the running server"}
+				if health.Worker == "attached" {
+					checks["worker"] = doctorCheck{Status: "ok", Message: "Server worker is attached"}
+				}
+				if health.Worker == "absent" {
+					checks["worker"] = doctorCheck{Status: "error", Message: "Server has no worker; queued tasks cannot execute"}
+				}
+			} else {
+				checks["app"] = doctorCheck{Status: "warning", Message: "qagent API returned a non-success health response"}
+			}
+		} else {
+			checks["app"] = doctorCheck{Status: "warning", Message: "qagent serve is not responding; queued tasks need a running server worker"}
+			checks["worker"] = doctorCheck{Status: "warning", Message: "Worker readiness is unknown because qagent serve is not responding"}
+		}
+	}
+	appCancel()
 	if api.FrontendAvailable() {
 		checks["frontend"] = doctorCheck{Status: "ok", Message: "embedded frontend assets are available"}
 	} else {
@@ -792,35 +874,22 @@ func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 		_ = os.Remove(name)
 		checks["artifacts"] = doctorCheck{Status: "ok", Message: "artifact directory is writable"}
 	}
-	if cfg.SearXNGURL == "" {
-		if cfg.TavilyAPIKey != "" {
-			checks["search"] = doctorCheck{Status: "warning", Message: "Tavily and built-in DuckDuckGo fallback are enabled; external search health is not checked during doctor"}
+	checks["search"] = doctorCheck{Status: "warning", Message: "External search health is not checked; Tavily checks are opt-in and may be billable"}
+	if cfg.SearXNGURL == "" && cfg.TavilyAPIKey == "" && !cfg.SearchEnableDDG {
+		checks["search"] = doctorCheck{Status: "warning", Message: "Web search is disabled; configure SearXNG/Tavily or explicitly enable SEARCH_ENABLE_DDG"}
+	} else if cfg.SearXNGURL != "" {
+		provider, providerErr := research.NewSearXNG(cfg.SearXNGURL, nil)
+		if providerErr != nil {
+			checks["search"] = doctorCheck{Status: "warning", Message: "SearXNG configuration is invalid"}
 		} else {
-			checks["search"] = doctorCheck{Status: "warning", Message: "Built-in DuckDuckGo search fallback is enabled; live external health is not checked during doctor"}
-		}
-	} else {
-		searchProvider, err := research.NewSearXNG(cfg.SearXNGURL, nil)
-		if err != nil {
-			message := "Configured SearXNG endpoint is invalid; built-in DuckDuckGo fallback is enabled but its live health is not checked"
-			if cfg.TavilyAPIKey != "" {
-				message += "; Tavily fallback is configured but not health-checked"
+			probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			report, probeErr := provider.SearchWithDiagnostics(probeCtx, research.SearchOptions{Query: "qagent-doctor", MaxResults: 1, SafeSearch: true})
+			cancel()
+			check := doctorCheck{Status: "warning", Message: "SearXNG is degraded or unavailable; inspect provider outcomes", Outcomes: report.Outcomes}
+			if probeErr == nil && len(report.Hits) > 0 {
+				check.Status, check.Message = "ok", "SearXNG returned usable search results"
 			}
-			checks["search"] = doctorCheck{Status: "warning", Message: message}
-		} else {
-			_, requestErr := searchProvider.Search(ctx, research.SearchOptions{Query: "qagent-doctor", MaxResults: 1, SafeSearch: true})
-			if requestErr != nil {
-				message := "Configured SearXNG endpoint is unavailable; built-in DuckDuckGo fallback is enabled but its live health is not checked"
-				if cfg.TavilyAPIKey != "" {
-					message += "; Tavily fallback is configured but not health-checked"
-				}
-				checks["search"] = doctorCheck{Status: "warning", Message: message}
-			} else {
-				message := "SearXNG search endpoint returned valid JSON; built-in DuckDuckGo fallback is enabled but its live health is not checked"
-				if cfg.TavilyAPIKey != "" {
-					message += "; Tavily fallback is configured but not health-checked"
-				}
-				checks["search"] = doctorCheck{Status: "warning", Message: message}
-			}
+			checks["search"] = check
 		}
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(cfg.LLMBaseURL, "/")+"/models", nil)
