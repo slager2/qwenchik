@@ -202,6 +202,8 @@ make build
 
 Удобные команды: `make doctor`, `make search-smoke`. Последняя не включает billable/external adapters без явного флага. `.env` не нужно выводить в терминал или отчёт.
 
+Итоговый runtime запущен как transient user services `qwenchik-model.service` и `qwenchik-app.service` с `Restart=on-failure`, рабочим каталогом репозитория и одинаковым context 32768. Приложение читает Tavily/SearXNG из `.env`; `SEARCH_ENABLE_DDG=false` задан для текущего сервиса. Это отделяет процессы от shell-сессии, но не устанавливает permanent boot units. Проверено `systemctl --user is-active qwenchik-model.service qwenchik-app.service docker-desktop.service`: три `active`. `/` отвечает HTTP 200, `/api/health` сообщает `worker: attached`. После рестарта in-memory provider snapshots честно показывают `not_checked`, пока не выполнен новый task request; прежние task outcomes остаются в durable events. Последний local doctor probe вернул usable SearXNG hit с degraded upstream diagnostics.
+
 ## 10. Remaining blockers и ограничения
 
 - Docker Desktop в этой среде не rootless. Sandbox и isolated Poppler требуют настоящего rootless daemon и локальных images; соответствующая проверка остаётся warning. Для PDF доступен ранее реализованный process-bounded pure-Go fallback; это не OS sandbox.
