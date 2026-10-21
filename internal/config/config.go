@@ -42,6 +42,7 @@ type Config struct {
 	SearXNGURL                string
 	TavilyAPIKey              string
 	SearchEnableDDG           bool
+	SearchProviderPolicy      string
 	MaxSteps                  int
 	TaskTimeoutSeconds        int
 	MaxSearchQueries          int
@@ -265,6 +266,9 @@ func dotEnvCommentStart(value string) int {
 }
 
 func (c Config) Validate() error {
+	if c.SearchProviderPolicy != "" && c.SearchProviderPolicy != "local_primary" && c.SearchProviderPolicy != "parallel" {
+		return errors.New("SEARCH_PROVIDER_POLICY must be local_primary or parallel")
+	}
 	if err := c.validateResourcePolicy(); err != nil {
 		return err
 	}

@@ -582,9 +582,10 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 				printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{
 					"app_bind_addr": cfg.BindAddr, "database_path": cfg.DatabasePath, "artifacts_path": cfg.ArtifactsPath,
 					"llm_base_url": cfg.LLMBaseURL, "llm_model": cfg.LLMModel, "searxng_url": cfg.SearXNGURL,
-					"tavily_configured": cfg.TavilyAPIKey != "",
-					"search_enable_ddg": cfg.SearchEnableDDG,
-					"workspace_root":    cfg.WorkspaceRoot, "sandbox_runtime": cfg.SandboxRuntime,
+					"tavily_configured":      cfg.TavilyAPIKey != "",
+					"search_enable_ddg":      cfg.SearchEnableDDG,
+					"search_provider_policy": cfg.SearchProviderPolicy,
+					"workspace_root":         cfg.WorkspaceRoot, "sandbox_runtime": cfg.SandboxRuntime,
 					"sandbox_image": cfg.SandboxImage, "sandbox_network": cfg.SandboxNetwork,
 					"pdf_extractor_image": cfg.PDFExtractorImage,
 					"llm_context_length":  cfg.LLMContextLength, "llm_max_output_tokens": cfg.LLMMaxOutputTokens,
@@ -774,12 +775,14 @@ func providerStatusFromBool(configured bool) string {
 
 func configuredSearchProvider(cfg config.Config) (research.SearchProvider, error) {
 	providers := make([]research.SearchProvider, 0, 3)
+	var searxng, tavily, ddg research.SearchProvider
 	if cfg.SearXNGURL != "" {
 		provider, err := research.NewSearXNG(cfg.SearXNGURL, nil)
 		if err != nil {
 			return nil, err
 		}
 		providers = append(providers, provider)
+		searxng = provider
 	}
 	if cfg.TavilyAPIKey != "" {
 		provider, err := research.NewTavily(cfg.TavilyAPIKey, nil)
@@ -787,14 +790,23 @@ func configuredSearchProvider(cfg config.Config) (research.SearchProvider, error
 			return nil, err
 		}
 		providers = append(providers, provider)
+		tavily = provider
 	}
 	if cfg.SearchEnableDDG {
-		providers = append(providers, research.NewDuckDuckGo())
+		ddg = research.NewDuckDuckGo()
+		providers = append(providers, ddg)
 	}
 	if len(providers) == 0 {
 		return nil, nil
 	}
-	return research.NewCompositeSearch(providers...), nil
+	switch cfg.SearchProviderPolicy {
+	case "", "local_primary":
+		return research.NewLocalPrimarySearch(searxng, tavily, ddg), nil
+	case "parallel":
+		return research.NewCompositeSearch(providers...), nil
+	default:
+		return nil, errors.New("SEARCH_PROVIDER_POLICY must be local_primary or parallel")
+	}
 }
 
 func maxInputBytes(cfg config.Config) int {

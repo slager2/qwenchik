@@ -13,6 +13,10 @@ import (
 )
 
 func loadResearchPolicy(c *Config) error {
+	c.SearchProviderPolicy = env("SEARCH_PROVIDER_POLICY", "local_primary")
+	if c.SearchProviderPolicy != "local_primary" && c.SearchProviderPolicy != "parallel" {
+		return errors.New("SEARCH_PROVIDER_POLICY must be local_primary or parallel")
+	}
 	c.ResearchDefaultProfile = env("RESEARCH_DEFAULT_PROFILE", domain.ResearchProfileStandard)
 	if !knownResearchProfile(c.ResearchDefaultProfile) {
 		return errors.New("RESEARCH_DEFAULT_PROFILE must be quick, standard, deep_laptop, long_laptop, or overnight_laptop")
