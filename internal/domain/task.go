@@ -89,16 +89,22 @@ func (s TaskStatus) Terminal() bool {
 }
 
 type Task struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Description string     `json:"description"`
-	Status      TaskStatus `json:"status"`
-	Stage       *Stage     `json:"stage,omitempty"`
-	Priority    int        `json:"priority"`
-	Plan        *Plan      `json:"plan,omitempty"`
-	Version     int64      `json:"version"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	Lease                 *ExecutionLease `json:"lease,omitempty"`
+	PauseReason           string          `json:"pause_reason,omitempty"`
+	ResourceReason        string          `json:"resource_reason,omitempty"`
+	ResumeAfter           *time.Time      `json:"resume_after,omitempty"`
+	ResourceProbeAttempts int             `json:"resource_probe_attempts"`
+	TerminalOutcome       string          `json:"terminal_outcome,omitempty"`
+	ID                    string          `json:"id"`
+	Title                 string          `json:"title"`
+	Description           string          `json:"description"`
+	Status                TaskStatus      `json:"status"`
+	Stage                 *Stage          `json:"stage,omitempty"`
+	Priority              int             `json:"priority"`
+	Plan                  *Plan           `json:"plan,omitempty"`
+	Version               int64           `json:"version"`
+	CreatedAt             time.Time       `json:"created_at"`
+	UpdatedAt             time.Time       `json:"updated_at"`
 }
 
 type Message struct {
@@ -192,12 +198,16 @@ type Event struct {
 }
 
 type Checkpoint struct {
-	ID           string    `json:"id"`
-	TaskID       string    `json:"task_id"`
-	PlanVersion  int       `json:"plan_version"`
-	State        any       `json:"state"`
-	LastEventSeq int64     `json:"last_event_seq"`
-	CreatedAt    time.Time `json:"created_at"`
+	ParentID            string    `json:"parent_id,omitempty"`
+	StateSchemaVersion  int       `json:"state_schema_version"`
+	StateHash           string    `json:"state_hash,omitempty"`
+	ContextSnapshotHash string    `json:"context_snapshot_hash,omitempty"`
+	ID                  string    `json:"id"`
+	TaskID              string    `json:"task_id"`
+	PlanVersion         int       `json:"plan_version"`
+	State               any       `json:"state"`
+	LastEventSeq        int64     `json:"last_event_seq"`
+	CreatedAt           time.Time `json:"created_at"`
 }
 
 type Plan struct {

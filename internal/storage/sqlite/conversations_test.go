@@ -39,9 +39,15 @@ func conversationFixture(t *testing.T, mode string) (*Store, domain.SubmitRespon
 func verifyConversationRun(t *testing.T, s *Store, id string) {
 	t.Helper()
 	ctx := context.Background()
-	claimed, ok, e := s.ClaimNext(ctx)
-	if e != nil || !ok || claimed.ID != id {
-		t.Fatalf("claim: %#v %t %v", claimed, ok, e)
+	task, e := s.GetTask(ctx, id)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if task.Status == domain.StatusQueued {
+		claimed, ok, err := s.ClaimNext(ctx)
+		if err != nil || !ok || claimed.ID != id {
+			t.Fatalf("claim: %#v %t %v", claimed, ok, err)
+		}
 	}
 	for _, status := range []domain.TaskStatus{domain.StatusRunning, domain.StatusVerifying} {
 		if _, e = s.TransitionTask(ctx, id, status, nil, "", "user", nil); e != nil {
@@ -620,6 +626,7 @@ func TestResearchSessionSnapshotsAreImmutableAcrossRetryContinueAndSend(t *testi
 func TestResearchReservationsSurviveReopenAndDenyBeforeCall(t *testing.T) {
 	ctx := context.Background()
 	s, turn, path := researchConversationFixture(t, func(session *domain.ResearchSession) { session.Budget.MaxLLMCalls = 2 })
+	claimResearchFixture(t, s)
 	other, err := Open(ctx, path)
 	if err != nil {
 		t.Fatal(err)
@@ -689,6 +696,7 @@ func TestResearchOperationReservationsAreAtomicAndIdempotent(t *testing.T) {
 	s, turn, path := researchConversationFixture(t, func(session *domain.ResearchSession) {
 		session.Budget.MaxSearchQueries, session.Budget.MaxFetches = 1, 1
 	})
+	claimResearchFixture(t, s)
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
@@ -886,6 +894,7 @@ func TestResearchCheckpointReconciliationPreservesFrontierAndRowAuthority(t *tes
 func TestResearchEvidenceCapDeduplicationAndRollback(t *testing.T) {
 	ctx := context.Background()
 	s, turn, _ := researchConversationFixture(t, func(session *domain.ResearchSession) { session.Budget.MaxEvidence = 1 })
+	claimResearchFixture(t, s)
 	artifact, err := s.SaveArtifact(ctx, domain.Artifact{ID: "source-raw", TaskID: turn.Run.ID, Name: "source.raw", MIMEType: "text/html", SHA256: "source-hash", SizeBytes: 16}, turn.Run.ID+"/source-raw")
 	if err != nil {
 		t.Fatal(err)
@@ -966,6 +975,7 @@ func TestResearchEvidenceCapDeduplicationAndRollback(t *testing.T) {
 func TestResearchCheckpointBytesAndQueriesRemainMonotonicAcrossAttempts(t *testing.T) {
 	ctx := context.Background()
 	s, turn, _ := researchConversationFixture(t, func(session *domain.ResearchSession) { session.Budget.MaxSearchQueries = 2 })
+	claimResearchFixture(t, s)
 	if _, err := s.ReserveResearchOperation(ctx, turn.Run.ID, "search", "search-1"); err != nil {
 		t.Fatal(err)
 	}
@@ -1082,6 +1092,7 @@ func TestResearchReservationsRejectCancelledTerminalAndExpiredRuns(t *testing.T)
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			s, turn, _ := researchConversationFixture(t, nil)
+			claimResearchFixture(t, s)
 			if _, err := s.ReserveResearchLLMCall(ctx, turn.Run.ID); err != nil {
 				t.Fatal(err)
 			}

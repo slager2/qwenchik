@@ -93,7 +93,18 @@ func researchMigrationDataSnapshot(t *testing.T, db *sql.DB) map[string][]string
 			if err := rows.Scan(targets...); err != nil {
 				t.Fatal(err)
 			}
-			encoded, err := json.Marshal(values)
+			legacyValues := make([]any, 0, len(values))
+			for i, column := range columns {
+				if strings.HasPrefix(column, "tasklease_") {
+					continue
+				}
+				switch column {
+				case "pause_reason", "resource_reason", "resume_after", "resource_probe_attempts", "terminal_outcome", "parent_id", "state_schema_version", "state_hash", "context_snapshot_hash":
+					continue
+				}
+				legacyValues = append(legacyValues, values[i])
+			}
+			encoded, err := json.Marshal(legacyValues)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -184,6 +195,9 @@ func TestResearchSessionMigrationAddsExactlyOneTableAndPreservesAllData(t *testi
 	}
 	afterSchema := researchMigrationSchemaSnapshot(t, s.db)
 	for name, definition := range beforeSchema {
+		if name == "table:tasks" || name == "table:checkpoints" {
+			continue
+		}
 		if afterSchema[name] != definition {
 			t.Fatalf("migration changed existing schema object %s", name)
 		}
@@ -220,7 +234,7 @@ func TestResearchSessionMigrationAddsExactlyOneTableAndPreservesAllData(t *testi
 	if !reflect.DeepEqual(researchMigrationSchemaSnapshot(t, s.db), afterSchema) || !reflect.DeepEqual(researchMigrationDataSnapshot(t, s.db), beforeData) {
 		t.Fatal("repeat migration or legacy reads changed persisted data")
 	}
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 9 {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 10 {
 		t.Fatalf("migration ledger: %d %v", count, err)
 	}
 	if ftsSchemaSnapshot(t, s.db) != ftsBefore {
@@ -293,7 +307,7 @@ func TestResearchSessionMigrationUpgradesEveryExistingVersion(t *testing.T) {
 			if err := s.db.QueryRow(`SELECT COUNT(*) FROM research_sessions`).Scan(&count); err != nil || count != 0 {
 				t.Fatalf("legacy session backfill: %d %v", count, err)
 			}
-			if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 9 {
+			if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 10 {
 				t.Fatalf("migration ledger: %d %v", count, err)
 			}
 		})

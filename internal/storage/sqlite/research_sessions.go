@@ -445,6 +445,9 @@ func (s *Store) reserveResearchOperation(ctx context.Context, taskID, kind, oper
 }
 
 func researchReservationAllowed(ctx context.Context, tx *sql.Tx, session domain.ResearchSession) error {
+	if err := fenceExecution(ctx, tx, session.TaskID); err != nil {
+		return err
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -458,6 +461,9 @@ func researchReservationAllowed(ctx context.Context, tx *sql.Tx, session domain.
 	}
 	if cancelled || status.Terminal() || domain.TaskStatus(session.Status).Terminal() {
 		return fmt.Errorf("%w: research run is cancelled or terminal", ErrConflict)
+	}
+	if status != domain.StatusPlanning && status != domain.StatusRunning && status != domain.StatusVerifying {
+		return fmt.Errorf("%w: research run is not executing", ErrConflict)
 	}
 	if !time.Now().Before(session.DeadlineAt) {
 		return context.DeadlineExceeded
@@ -492,6 +498,9 @@ func (s *Store) SyncResearchCheckpoint(ctx context.Context, taskID string, state
 		return err
 	}
 	defer tx.Rollback()
+	if err := fenceExecution(ctx, tx, taskID); err != nil {
+		return err
+	}
 	session, err := researchSession(ctx, tx, taskID)
 	if err != nil {
 		return err
@@ -910,6 +919,9 @@ func (s *Store) SetResearchPhase(ctx context.Context, taskID, phase, stop string
 		return err
 	}
 	defer tx.Rollback()
+	if err := fenceExecution(ctx, tx, taskID); err != nil {
+		return err
+	}
 	session, err := researchSession(ctx, tx, taskID)
 	if err != nil {
 		return err

@@ -1,0 +1,12 @@
+ALTER TABLE tasks ADD COLUMN tasklease_owner TEXT NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN tasklease_epoch INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE tasks ADD COLUMN tasklease_expires_at TEXT;
+ALTER TABLE tasks ADD COLUMN pause_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN resource_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN resume_after TEXT;
+ALTER TABLE tasks ADD COLUMN resource_probe_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE tasks ADD COLUMN terminal_outcome TEXT NOT NULL DEFAULT '';
+ALTER TABLE checkpoints ADD COLUMN parent_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE checkpoints ADD COLUMN state_schema_version INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE checkpoints ADD COLUMN state_hash TEXT NOT NULL DEFAULT '';
+ALTER TABLE checkpoints ADD COLUMN context_snapshot_hash TEXT NOT NULL DEFAULT '';

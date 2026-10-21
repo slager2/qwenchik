@@ -236,6 +236,9 @@ func (s *Store) TouchRun(ctx context.Context, id string) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err := s.renewLeaseTx(ctx, tx, id); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	result, err := tx.ExecContext(ctx, `UPDATE tasks SET heartbeat_at=? WHERE id=? AND conversation_id IS NOT NULL AND status IN ('planning','running','verifying')`, stamp(now), id)
 	if err != nil {
@@ -540,6 +543,9 @@ func (s *Store) SubmitTurn(ctx context.Context, in domain.SubmitTurn, key string
 		if err := insertInitialChatModelSnapshot(ctx, tx, id, seq, now, *chatSnapshot); err != nil {
 			return domain.SubmitResponse{}, err
 		}
+		if err := sealInitialCheckpoint(ctx, tx, id); err != nil {
+			return domain.SubmitResponse{}, err
+		}
 	}
 	result, err := submitResult(ctx, tx, id)
 	if err != nil {
@@ -624,6 +630,9 @@ func (s *Store) DeleteConversation(ctx context.Context, id string) ([]string, er
 	ids := []string{}
 	if c.ActiveRunID != "" {
 		id := c.ActiveRunID
+		if err := clearLease(ctx, tx, id); err != nil {
+			return nil, err
+		}
 		t, e := getTask(ctx, tx, id)
 		if e != nil {
 			return nil, e
