@@ -14,9 +14,13 @@ import (
 
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
+	"github.com/slager2/qwenchik/internal/runtime/resources"
 )
 
 type Config struct {
+	ResourcePolicy            resources.Policy
+	KeepAwake                 bool
+	WorkerLeaseSeconds        int
 	BindAddr                  string
 	DatabasePath              string
 	ArtifactsPath             string
@@ -113,6 +117,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if err := loadResearchPolicy(&cfg); err != nil {
+		return Config{}, err
+	}
+	if err := loadResourcePolicy(&cfg); err != nil {
 		return Config{}, err
 	}
 	cfg.AllowedDomains = splitList(os.Getenv("ALLOWED_DOMAINS"))
@@ -258,6 +265,9 @@ func dotEnvCommentStart(value string) int {
 }
 
 func (c Config) Validate() error {
+	if err := c.validateResourcePolicy(); err != nil {
+		return err
+	}
 	if strings.TrimSpace(c.DatabasePath) == "" {
 		return errors.New("DATABASE_PATH must not be empty")
 	}

@@ -24,6 +24,8 @@ import (
 	"github.com/slager2/qwenchik/internal/policy"
 	"github.com/slager2/qwenchik/internal/provenance"
 	"github.com/slager2/qwenchik/internal/providers/research"
+	"github.com/slager2/qwenchik/internal/runtime/keepawake"
+	"github.com/slager2/qwenchik/internal/runtime/resources"
 	"github.com/slager2/qwenchik/internal/runtime/sandbox"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
 	"github.com/slager2/qwenchik/internal/tools"
@@ -91,17 +93,25 @@ type Options struct {
 	Logger                *slog.Logger
 	RuntimeResearchPolicy *domain.ResearchPolicy
 	RuntimeModelContext   int
+	ResourceMonitor       resources.Monitor
+	ResourcePolicy        resources.Policy
+	KeepAwake             bool
+	SleepProvider         keepawake.Provider
+	UseWorkerLeases       bool
 }
 
 type Worker struct {
-	repo      Repository
-	client    llm.Client
-	tools     *tools.Registry
-	options   Options
-	wake      chan struct{}
-	activeMu  sync.Mutex
-	active    map[string]context.CancelFunc
-	heartbeat time.Time
+	repo        Repository
+	client      llm.Client
+	tools       *tools.Registry
+	options     Options
+	wake        chan struct{}
+	activeMu    sync.Mutex
+	active      map[string]context.CancelFunc
+	heartbeat   time.Time
+	runtimeMu   sync.RWMutex
+	sleepStatus keepawake.Status
+	sleepWanted bool
 }
 
 type checkpointState struct {
@@ -285,7 +295,11 @@ func (w *Worker) expireApprovalLoop(ctx context.Context) {
 			return
 		case <-ticker.C:
 			w.touchHeartbeat()
-			workCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			workCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			if w.options.UseWorkerLeases {
+				_, _ = w.repo.RecoverInterrupted(workCtx)
+			}
+			w.probeResourcePauses(workCtx)
 			expired, err := w.repo.ExpireApprovals(workCtx)
 			cancel()
 			if err != nil {
@@ -300,7 +314,12 @@ func (w *Worker) expireApprovalLoop(ctx context.Context) {
 func (w *Worker) runTask(parent context.Context, task domain.Task) {
 	deadline, researchDeadline := w.runDeadline(parent, task.ID)
 	ctx, cancel := context.WithDeadline(parent, deadline)
+	if task.Lease != nil {
+		ctx = domain.WithExecutionLease(ctx, *task.Lease)
+	}
 	ctx = tools.WithTaskID(ctx, task.ID)
+	ctx, guard, stopGuard := w.guardRun(ctx, task)
+	defer stopGuard()
 	w.activeMu.Lock()
 	w.active[task.ID] = cancel
 	w.activeMu.Unlock()
@@ -317,8 +336,26 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 	}()
 
 	w.options.Logger.Info("task execution started", "task_id", task.ID, "stage", domain.StagePlanning)
-	err := w.executeRun(ctx, task)
+	var err error
+	if err = checkRunResources(ctx); err == nil {
+		releaseSleep := w.acquireSleep(ctx, task)
+		err = w.executeRun(ctx, task)
+		releaseSleep()
+	}
 	if err == nil || parent.Err() != nil {
+		return
+	}
+	if errors.Is(context.Cause(ctx), sqlite.ErrLeaseLost) || errors.Is(err, sqlite.ErrLeaseLost) {
+		return
+	}
+	reason := guard.pauseReason()
+	if reason == "" && w.options.ResourcePolicy.Enabled {
+		reason = modelResourceReason(err)
+	}
+	if reason != "" {
+		if pauseErr := w.persistResourcePause(ctx, task, reason, err); pauseErr != nil && !errors.Is(pauseErr, sqlite.ErrLeaseLost) && !errors.Is(pauseErr, sqlite.ErrConflict) {
+			w.options.Logger.Error("resource pause persistence failed", "task_id", task.ID, "error", pauseErr)
+		}
 		return
 	}
 	current, getErr := w.repo.GetTask(context.Background(), task.ID)
@@ -339,6 +376,8 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 	if !timedOut {
 		if errors.Is(err, sqlite.ErrResearchBudgetExceeded) {
 			code = "research_budget_exceeded"
+		} else if errors.Is(err, ErrRecoveryRequired) {
+			code = "failed_recovery_required"
 		} else if errors.Is(err, errResearchRuntimeChanged) {
 			code = "research_runtime_changed"
 		} else if errors.Is(err, errRunDeadline) {
@@ -426,10 +465,10 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 		code = searchCode
 	}
 	if checkpoint, checkpointErr := w.currentCheckpoint(context.Background(), task.ID); checkpointErr == nil && checkpoint.CurrentStep != "" && !isConditionalSearchRetryStepID(checkpoint.CurrentStep) {
-		_ = w.repo.SetStepStatus(context.Background(), task.ID, checkpoint.CurrentStep, "failed")
+		_ = w.repo.SetStepStatus(context.WithoutCancel(ctx), task.ID, checkpoint.CurrentStep, "failed")
 	}
 	w.options.Logger.Error("task execution failed", "task_id", task.ID, "error_code", code, "error", err)
-	failCtx, failCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	failCtx, failCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer failCancel()
 	failurePayload := map[string]any{"error_code": code, "message": publicError(code)}
 	if searchCode != "" {
@@ -884,9 +923,6 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 		if step.Kind == "fetch" {
 			w.tools.RememberFetchedURLs(task.ID, result)
 		}
-		if _, err := w.repo.RecordEvent(ctx, task.ID, "tool.completed", &stage, "user", map[string]any{"step_id": step.ID, "tool": decision.ToolCall.Name, "result": result}); err != nil {
-			return err
-		}
 		state.CompletedSteps = append(state.CompletedSteps, step.ID)
 		state.ToolResults[step.ID] = result
 		if step.Kind == "search" {
@@ -908,14 +944,25 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 		state.PendingSummary = ""
 		state.PendingTarget = ""
 		state.PendingRisk = ""
-		if err := w.repo.SetStepStatus(ctx, task.ID, step.ID, "completed"); err != nil {
-			return err
-		}
-		if _, err := w.repo.SaveCheckpoint(ctx, task.ID, 1, state); err != nil {
-			return err
-		}
-		if _, err := w.repo.RecordEvent(ctx, task.ID, "step.completed", &stage, "user", map[string]any{"step_id": step.ID, "summary": decision.Summary}); err != nil {
-			return err
+		if committer, ok := w.repo.(interface {
+			CommitStepResult(context.Context, string, string, string, string, any, any) (domain.Checkpoint, error)
+		}); ok {
+			if _, err := committer.CommitStepResult(ctx, task.ID, step.ID, decision.ToolCall.Name, decision.Summary, result, state); err != nil {
+				return err
+			}
+		} else {
+			if _, err := w.repo.RecordEvent(ctx, task.ID, "tool.completed", &stage, "user", map[string]any{"step_id": step.ID, "tool": decision.ToolCall.Name, "result": result}); err != nil {
+				return err
+			}
+			if err := w.repo.SetStepStatus(ctx, task.ID, step.ID, "completed"); err != nil {
+				return err
+			}
+			if _, err := w.repo.SaveCheckpoint(ctx, task.ID, 1, state); err != nil {
+				return err
+			}
+			if _, err := w.repo.RecordEvent(ctx, task.ID, "step.completed", &stage, "user", map[string]any{"step_id": step.ID, "summary": decision.Summary}); err != nil {
+				return err
+			}
 		}
 		if step.ID == initialSearchStepID {
 			if err := w.retryInitialSearchIfEmpty(ctx, task.ID, &stage, step, &state); err != nil {
@@ -1424,6 +1471,7 @@ func (w *Worker) canReplacePlan(ctx context.Context, taskID string) (checkpointS
 	if err != nil {
 		return checkpointState{}, false, err
 	}
+	events = invocationRecoveryEvents(events, state.AttemptStartSeq)
 	startedIdempotentTool := false
 	unresolvedFetches := make(map[string]int)
 	for _, event := range events {
@@ -2557,6 +2605,9 @@ func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryC
 	}
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	if err := checkRunResources(streamCtx); err != nil {
+		return "", err
+	}
 	stream, err := w.client.Stream(streamCtx, llm.ChatRequest{
 		Messages:  []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: string(input)}},
 		MaxTokens: w.options.MaxOutputTokens, Temperature: w.options.Temperature, TopP: w.options.TopP,
@@ -3043,6 +3094,9 @@ func (w *Worker) complete(ctx context.Context, system, user string, schema json.
 	if !w.requestFits(system, user, schema) {
 		return llm.ChatResponse{}, errInputBudgetExceeded
 	}
+	if err := checkRunResources(ctx); err != nil {
+		return llm.ChatResponse{}, err
+	}
 	response, err := w.client.Complete(ctx, llm.ChatRequest{
 		Messages:  []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: user}},
 		MaxTokens: w.options.MaxOutputTokens, Temperature: w.options.Temperature, TopP: w.options.TopP, JSONSchema: schema,
@@ -3107,6 +3161,7 @@ func (w *Worker) reconcileResearchState(ctx context.Context, taskID string, stat
 	if err != nil {
 		return checkpointState{}, false, err
 	}
+	events = invocationRecoveryEvents(events, state.AttemptStartSeq)
 	artifacts, err := w.repo.Artifacts(ctx, taskID)
 	if err != nil {
 		return checkpointState{}, false, err

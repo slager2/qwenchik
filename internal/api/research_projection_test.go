@@ -23,6 +23,9 @@ func TestResearchEventsAndSourcesUseSafeNestedProjections(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	if _, claimed, err := store.ClaimNext(ctx); err != nil || !claimed {
+		t.Fatalf("claim research fixture: %v %v", claimed, err)
+	}
 	owned, e := store.SaveEvidence(ctx, domain.Evidence{ID: "owned-evidence", TaskID: turn.Run.ID, CanonicalURL: "https://example.org/article", OriginalURL: "https://example.org/article", Title: "Actual title", Provider: "searxng", ContentSHA256: "owned-content", HTTPStatus: 200, Excerpt: "Actual fetched evidence", RetrievedAt: time.Now()})
 	if e != nil {
 		t.Fatal(e)

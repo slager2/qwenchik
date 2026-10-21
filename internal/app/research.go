@@ -16,6 +16,17 @@ type researchRunDefaults struct {
 	policies           map[string]domain.ResearchPolicy
 	model              domain.ModelProfileSnapshot
 	allowEmptyEndpoint bool
+	keepAwake          bool
+}
+
+func (s *Service) SetKeepAwakeDefault(enabled bool) {
+	defaults := s.researchDefaults()
+	s.researchMu.Lock()
+	defer s.researchMu.Unlock()
+	if s.researchRunDefaults == nil {
+		s.researchRunDefaults = &defaults
+	}
+	s.researchRunDefaults.keepAwake = enabled
 }
 
 func (s *Service) SetResearchRunDefaults(defaultProfile string, policies map[string]domain.ResearchPolicy, model domain.ModelProfileSnapshot) {
@@ -25,7 +36,11 @@ func (s *Service) SetResearchRunDefaults(defaultProfile string, policies map[str
 	}
 	model.StopSequences = []string{}
 	s.researchMu.Lock()
-	s.researchRunDefaults = &researchRunDefaults{profile: defaultProfile, policies: copies, model: model}
+	keepAwake := false
+	if s.researchRunDefaults != nil {
+		keepAwake = s.researchRunDefaults.keepAwake
+	}
+	s.researchRunDefaults = &researchRunDefaults{profile: defaultProfile, policies: copies, model: model, keepAwake: keepAwake}
 	s.researchMu.Unlock()
 }
 
@@ -122,6 +137,10 @@ func (s *Service) researchSession(conversation domain.Conversation) (domain.Rese
 	policy, ok := defaults.policies[profile]
 	if !ok || policy.Profile != profile {
 		return domain.ResearchSession{}, fmt.Errorf("%w: research profile is unavailable", domain.ErrInvalidConversation)
+	}
+	policy.KeepAwake = policy.KeepAwake || defaults.keepAwake
+	if explicit, ok := conversation.ResearchSettings["profile"].(string); ok && explicit == domain.ResearchProfileOvernight {
+		policy.KeepAwake = true
 	}
 	if err := config.ValidateResearchPolicy(policy); err != nil {
 		return domain.ResearchSession{}, fmt.Errorf("%w: %v", domain.ErrInvalidConversation, err)

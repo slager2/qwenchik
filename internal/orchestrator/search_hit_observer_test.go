@@ -22,6 +22,15 @@ func TestObservedSearchPersistsSafeHitLifecycle(t *testing.T) {
 	if _, err := store.CreateTask(ctx, domain.Task{ID: "hits", Title: "Research"}, ""); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.QueueTask(ctx, "hits", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.ClaimNext(ctx); err != nil || !ok {
+		t.Fatalf("claim=%v err=%v", ok, err)
+	}
+	if _, err := store.TransitionTask(ctx, "hits", domain.StatusRunning, nil, "", "user", nil); err != nil {
+		t.Fatal(err)
+	}
 	provider := &diagnosticSearchStub{report: research.SearchReport{
 		Hits: []research.SearchHit{
 			{Provider: "searxng", URL: "https://example.org/source", Title: "Source", Snippet: "Useful lead"},

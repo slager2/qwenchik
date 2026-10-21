@@ -125,7 +125,8 @@ func (c Config) ResearchProfile(name string) (domain.ResearchPolicy, error) {
 	budget.MaxSearchQueries = min(budget.MaxSearchQueries, c.MaxSearchQueries)
 
 	policy := domain.ResearchPolicy{
-		Version: 1, Profile: name, AdaptiveEnabled: c.ResearchAdaptiveEnabled, Budget: budget,
+		KeepAwake: c.KeepAwake,
+		Version:   1, Profile: name, AdaptiveEnabled: c.ResearchAdaptiveEnabled, Budget: budget,
 		TaskFetchBudgetBytes: c.MaxFetchBytes, SourceFetchBytes: c.MaxSourceBytes, PDFBytes: c.PDFPolicy.MaxInputBytes,
 		PDFPages: c.PDFPolicy.MaxPages, PDFTextRunes: c.PDFPolicy.MaxTextRunes,
 		PDFDownloadTimeoutSec: c.PDFDownloadTimeoutSeconds,

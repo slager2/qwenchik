@@ -333,6 +333,9 @@ func (w *Worker) synthesizeResearchCitations(ctx context.Context, task domain.Ta
 	var review citationReview
 	if len(catalogue) > 0 {
 		answer, err = w.synthesize(ctx, task, goal, "", scoped, "", ids, "", messageID)
+		if modelResourceReason(err) != "" || errors.Is(err, errResourcePause) {
+			return "", err
+		}
 		if errors.Is(err, sqlite.ErrResearchBudgetExceeded) {
 			return "", err
 		}
@@ -341,6 +344,9 @@ func (w *Worker) synthesizeResearchCitations(ctx context.Context, task domain.Ta
 		}
 		if err == nil {
 			review, err = w.reviewCitationClaims(ctx, task.ID, answer, catalogue)
+		}
+		if modelResourceReason(err) != "" || errors.Is(err, errResourcePause) {
+			return "", err
 		}
 		if errors.Is(err, sqlite.ErrResearchBudgetExceeded) {
 			return "", err

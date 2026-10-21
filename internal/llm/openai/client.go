@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/slager2/qwenchik/internal/llm"
+	"github.com/slager2/qwenchik/internal/runtime/resources"
 )
 
 const maxResponseBytes = 4 << 20
@@ -231,9 +232,14 @@ func (c *Client) readStream(ctx context.Context, body io.ReadCloser, events chan
 	emit(llm.ChatEvent{Err: llm.ErrStreamInterrupted})
 }
 
-type HTTPError struct{ StatusCode int }
+type HTTPError struct {
+	StatusCode int
+	cause      error
+}
 
 func (e *HTTPError) Error() string { return fmt.Sprintf("local LLM returned HTTP %d", e.StatusCode) }
+func (e *HTTPError) Unwrap() error { return e.cause }
+func (e *HTTPError) HTTPStatusCode() int { return e.StatusCode }
 
 type requestFailure struct{ cause error }
 
@@ -302,6 +308,13 @@ func (c *Client) send(ctx context.Context, request llm.ChatRequest, stream bool)
 			return resp, nil
 		}
 		fallback := false
+		var cause error
+		if resp.StatusCode == 500 || resp.StatusCode == 503 || resp.StatusCode == 507 {
+			data, readErr := io.ReadAll(io.LimitReader(resp.Body, 4097))
+			if readErr == nil {
+				cause = resources.ClassifyModelHTTPError(resp.StatusCode, data)
+			}
+		}
 		if attempt == 0 && len(request.JSONSchema) > 0 && (resp.StatusCode == 400 || resp.StatusCode == 422) {
 			data, readErr := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 			if readErr != nil {
@@ -312,7 +325,7 @@ func (c *Client) send(ctx context.Context, request llm.ChatRequest, stream bool)
 		}
 		_ = resp.Body.Close()
 		if !fallback {
-			return nil, &HTTPError{StatusCode: resp.StatusCode}
+			return nil, &HTTPError{StatusCode: resp.StatusCode, cause: cause}
 		}
 		if request.BeforeFallbackAttempt != nil {
 			if err := request.BeforeFallbackAttempt(); err != nil {

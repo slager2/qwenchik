@@ -37,6 +37,11 @@ type ConversationMessage struct {
 }
 
 type Run struct {
+	PauseReason           string     `json:"pause_reason,omitempty"`
+	ResourceReason        string     `json:"resource_reason,omitempty"`
+	ResumeAfter           *time.Time `json:"resume_after,omitempty"`
+	ResourceProbeAttempts int        `json:"resource_probe_attempts"`
+	TerminalOutcome       string     `json:"terminal_outcome,omitempty"`
 	ID                    string     `json:"id"`
 	ConversationID        string     `json:"conversation_id"`
 	UserMessageID         string     `json:"user_message_id"`

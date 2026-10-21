@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/slager2/qwenchik/internal/api"
 	"github.com/slager2/qwenchik/internal/config"
 	"github.com/slager2/qwenchik/internal/llm"
 	"github.com/slager2/qwenchik/internal/llm/openai"
@@ -17,6 +18,7 @@ import (
 )
 
 type doctorReport struct {
+	Runtime        map[string]any         `json:"runtime,omitempty"`
 	Status         string                 `json:"status"`
 	Checks         map[string]doctorCheck `json:"checks"`
 	ResearchLimits map[string]any         `json:"research_limits,omitempty"`
@@ -103,7 +105,9 @@ func runningAppDoctor(ctx context.Context, cfg config.Config) doctorReport {
 	} else if raw.Status == "warning" && makeDoctorReport(checks, nil, nil).Status == "ok" {
 		checks["app"] = doctorCheck{Status: "warning", Message: "Running application reports a readiness warning"}
 	}
-	return makeDoctorReport(checks, limits, pdf)
+	report := makeDoctorReport(checks, limits, pdf)
+	report.Runtime = api.SafeRuntimeStatus(raw.Runtime)
+	return report
 }
 
 func safeDoctorLimits(input map[string]any) map[string]any {

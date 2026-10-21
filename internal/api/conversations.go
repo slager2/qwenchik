@@ -202,6 +202,14 @@ func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, e)
 		return
 	}
+	task, e := s.service.GetTask(r.Context(), result.ID)
+	if e != nil {
+		s.writeServiceError(w, e)
+		return
+	}
+	result.PauseReason, result.ResourceReason = task.PauseReason, task.ResourceReason
+	result.ResumeAfter, result.ResourceProbeAttempts = task.ResumeAfter, task.ResourceProbeAttempts
+	result.TerminalOutcome = task.TerminalOutcome
 	writeJSON(w, 200, result)
 }
 func (s *Server) cancelRun(w http.ResponseWriter, r *http.Request) {

@@ -525,7 +525,7 @@ func TestResearchRunFailedToolsConsumeBudgetsBeforeExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner.tools.SeedTaskURLs(saved.TaskID, "https://docs.example.com/protocol")
+	runner.tools.SeedTaskURLs(saved.TaskID, "https://docs.example.com/protocol https://reference.example.net/protocol")
 	for _, name := range []string{"search", "fetch_url"} {
 		arguments := json.RawMessage(`{"query":"protocol architecture"}`)
 		if name == "fetch_url" {
@@ -533,6 +533,9 @@ func TestResearchRunFailedToolsConsumeBudgetsBeforeExecution(t *testing.T) {
 		}
 		if _, err := runner.executeObservedTool(ctx, saved.TaskID, nil, "researcher", name, arguments, ""); err == nil {
 			t.Fatalf("failed %s unexpectedly succeeded", name)
+		}
+		if name == "fetch_url" {
+			arguments = json.RawMessage(`{"url":"https://reference.example.net/protocol"}`)
 		}
 		if _, err := runner.executeObservedTool(ctx, saved.TaskID, nil, "researcher", name, arguments, ""); !errors.Is(err, sqlite.ErrResearchBudgetExceeded) {
 			t.Fatalf("second %s error=%v, want durable budget denial", name, err)
@@ -551,8 +554,13 @@ func TestResearchRunFailedToolsConsumeBudgetsBeforeExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	runner.tools.SeedTaskURLs(saved.TaskID, "https://benchmark.example.org/protocol")
 	for _, name := range []string{"search", "fetch_url"} {
-		if _, err := runner.executeObservedTool(ctx, saved.TaskID, nil, "researcher", name, json.RawMessage(`{}`), ""); !errors.Is(err, sqlite.ErrResearchBudgetExceeded) {
+		arguments := json.RawMessage(`{"query":"independent protocol compatibility"}`)
+		if name == "fetch_url" {
+			arguments = json.RawMessage(`{"url":"https://benchmark.example.org/protocol"}`)
+		}
+		if _, err := runner.executeObservedTool(ctx, saved.TaskID, nil, "researcher", name, arguments, ""); !errors.Is(err, sqlite.ErrResearchBudgetExceeded) {
 			t.Fatalf("reopened %s reservation error=%v", name, err)
 		}
 	}

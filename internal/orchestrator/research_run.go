@@ -31,10 +31,13 @@ type sessionModelClient struct {
 }
 
 func (c *sessionModelClient) prepare(ctx context.Context, request llm.ChatRequest) (llm.ChatRequest, error) {
+	if err := checkRunResources(ctx); err != nil {
+		return request, err
+	}
 	if err := ctx.Err(); err != nil {
 		return request, err
 	}
-	if c.repo != nil {
+	if c.repo != nil && !ownsInvocationReservations(c.inner) {
 		if _, err := c.repo.ReserveResearchLLMCall(ctx, c.runID); err != nil {
 			return request, err
 		}
@@ -101,6 +104,7 @@ func (w *Worker) researchExecutor(ctx context.Context, taskID string) (context.C
 		stored, current := session.Policy, *w.options.RuntimeResearchPolicy
 		stored.Profile, current.Profile = "", ""
 		stored.Budget, current.Budget = domain.ResearchBudget{}, domain.ResearchBudget{}
+		stored.KeepAwake, current.KeepAwake = false, false
 		if stored != current {
 			return ctx, nil, errResearchRuntimeChanged
 		}
@@ -112,7 +116,7 @@ func (w *Worker) researchExecutor(ctx context.Context, taskID string) (context.C
 	options := w.options
 	options.MaxSteps, options.MaxSearchQueries = session.Budget.MaxSteps, session.Budget.MaxSearchQueries
 	options.MaxFetchBytes = session.Policy.TaskFetchBudgetBytes
-	runner, err := w.modelExecutor(model, &sessionModelClient{inner: w.client, repo: repo, runID: taskID, model: model}, options)
+	runner, err := w.modelExecutor(model, &sessionModelClient{inner: newInvocationClient(w.repo, w.client, taskID), repo: repo, runID: taskID, model: model}, options)
 	if err != nil {
 		return ctx, nil, err
 	}
@@ -151,11 +155,14 @@ func (w *Worker) chatModelExecutor(ctx context.Context, taskID string) (context.
 	if err != nil {
 		return ctx, nil, err
 	}
-	runner, err := w.modelExecutor(model, &sessionModelClient{inner: w.client, runID: taskID, model: model}, w.options)
+	runner, err := w.modelExecutor(model, &sessionModelClient{inner: newInvocationClient(w.repo, w.client, taskID), runID: taskID, model: model}, w.options)
 	return ctx, runner, err
 }
 
 func (w *Worker) reserveResearchTool(ctx context.Context, taskID, name string) error {
+	if owned, _ := ctx.Value(invocationReservationOwner{}).(bool); owned {
+		return nil
+	}
 	if name != "search" && name != "fetch_url" {
 		return nil
 	}

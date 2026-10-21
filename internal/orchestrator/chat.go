@@ -179,6 +179,9 @@ func (w *Worker) executeChat(ctx context.Context, task domain.Task, run domain.R
 	if _, err := w.repo.RecordEvent(ctx, task.ID, "chat.started", &stage, "user", map[string]any{"prompt_version": "chat-v1", "context_messages": len(contextMessages)}); err != nil {
 		return err
 	}
+	if err := checkRunResources(ctx); err != nil {
+		return err
+	}
 	stream, err := w.client.Stream(ctx, llm.ChatRequest{Messages: contextMessages, MaxTokens: w.options.MaxOutputTokens, Temperature: w.options.Temperature, TopP: w.options.TopP})
 	if err != nil {
 		return fmt.Errorf("%w: %w", errLLMUnavailable, err)

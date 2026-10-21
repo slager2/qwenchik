@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,7 +22,9 @@ import (
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/orchestrator"
 	"github.com/slager2/qwenchik/internal/providers/research"
+	"github.com/slager2/qwenchik/internal/runtime/keepawake"
 	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
+	"github.com/slager2/qwenchik/internal/runtime/resources"
 	"github.com/slager2/qwenchik/internal/runtime/sandbox"
 	"github.com/slager2/qwenchik/internal/storage/artifacts"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
@@ -615,6 +619,21 @@ func serve(parent context.Context) error {
 	}
 	defer lock.Close()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return errors.New("worker identity could not be generated")
+	}
+	if err := deps.store.EnableWorkerLeases("serve-"+hex.EncodeToString(nonce[:]), time.Duration(cfg.WorkerLeaseSeconds)*time.Second); err != nil {
+		return err
+	}
+	resourceProvider, err := resources.NewHostProvider(cfg.LLMBaseURL, cfg.ResourcePolicy)
+	if err != nil {
+		return err
+	}
+	resourceMonitor, err := resources.NewMonitor(resourceProvider, cfg.ResourcePolicy)
+	if err != nil {
+		return err
+	}
 	configuredContext := cfg.LLMContextLength
 	cfg.LLMContextLength = effectiveModelContext(parent, cfg)
 	if cfg.LLMContextLength != configuredContext {
@@ -666,16 +685,20 @@ func serve(parent context.Context) error {
 		return err
 	}
 	deps.worker = orchestrator.New(deps.store, model, registry, orchestrator.Options{
+		ResourceMonitor: resourceMonitor, ResourcePolicy: cfg.ResourcePolicy,
+		KeepAwake: cfg.KeepAwake, SleepProvider: keepawake.NewProvider(),
 		MaxSteps: cfg.MaxSteps, MaxSearchQueries: cfg.MaxSearchQueries, MaxFetchBytes: cfg.MaxFetchBytes,
 		TaskTimeout:     time.Duration(cfg.TaskTimeoutSeconds) * time.Second,
 		MaxOutputTokens: cfg.LLMMaxOutputTokens, MaxInputBytes: maxInputBytes(cfg),
 		Temperature: cfg.LLMTemperature, TopP: cfg.LLMTopP, Logger: logger,
 		RuntimeResearchPolicy: &runtimeResearchPolicy, RuntimeModelContext: cfg.LLMContextLength,
+		UseWorkerLeases: true,
 	})
 	apiServer := api.New(deps.app, deps.worker, deps.store.Ping, cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.SearXNGURL, logger)
 	apiServer.SetLLMModel(cfg.LLMModel)
 	apiServer.SetLLMClient(model)
 	apiServer.SetWorkerHeartbeat(deps.worker.Heartbeat)
+	apiServer.SetRuntimeStatus(deps.worker.RuntimeStatus)
 	apiServer.SetResearchPolicy(cfg.ResearchLimits(), pdfExtractor.Check)
 	setResearchRunDefaultsForServe(deps.app, cfg)
 	apiServer.SetTavilyConfigured(cfg.TavilyAPIKey != "")
@@ -732,6 +755,7 @@ func serve(parent context.Context) error {
 
 func setResearchRunDefaultsForServe(service *app.Service, cfg config.Config) {
 	service.SetResearchRunDefaults(cfg.ResearchDefaultProfile, cfg.ResearchPolicies(), cfg.ResearchModelSnapshot())
+	service.SetKeepAwakeDefault(cfg.KeepAwake)
 }
 
 func providerStatus(baseURL string) string {

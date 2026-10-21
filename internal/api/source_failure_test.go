@@ -58,6 +58,9 @@ func TestPDFFailureProjectionAndReplayPreserveIdentityBytesAndEvidence(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, claimed, err := store.ClaimNext(ctx); err != nil || !claimed {
+		t.Fatalf("claim research fixture: %v %v", claimed, err)
+	}
 	emit := func(kind, visibility string, payload map[string]any) {
 		t.Helper()
 		if _, err := store.RecordEvent(ctx, turn.Run.ID, kind, nil, visibility, payload); err != nil {

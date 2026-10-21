@@ -66,6 +66,9 @@ func (s *Store) PauseTaskForResource(ctx context.Context, taskID, reason string,
 	if err != nil {
 		return domain.Task{}, err
 	}
+	if _, err := tx.ExecContext(ctx, `UPDATE conversation_messages SET status='paused',metadata_json=json_set(metadata_json,'$.pause_reason','resource_guard','$.resource_reason',?),updated_at=?,last_event_seq=? WHERE id=(SELECT assistant_message_id FROM tasks WHERE id=?)`, reason, stamp(now), seq, taskID); err != nil {
+		return domain.Task{}, err
+	}
 	if err := insertCheckpoint(ctx, tx, taskID, 1, seq, state); err != nil {
 		return domain.Task{}, err
 	}

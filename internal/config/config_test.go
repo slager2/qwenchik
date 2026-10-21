@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/slager2/qwenchik/internal/runtime/resources"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,6 +104,8 @@ func clearConfigEnv(t *testing.T) {
 		"LLM_REQUEST_TIMEOUT_SECONDS", "LLM_MAX_CONCURRENCY", "SEARXNG_URL",
 		"TAVILY_API_KEY", "MAX_STEPS", "TASK_TIMEOUT_SECONDS", "MAX_SEARCH_QUERIES",
 		"MAX_FETCH_BYTES", "RESEARCH_DEFAULT_PROFILE", "RESEARCH_ADAPTIVE_ENABLED", "ALLOWED_DOMAINS", "SEARCH_ENABLE_DDG",
+		"RESOURCE_GUARD_ENABLED", "MIN_FREE_RAM_BYTES", "MIN_FREE_VRAM_MB", "GPU_TEMP_MAX_C", "PROCESS_RSS_MAX_BYTES", "LLAMA_HEALTH_TIMEOUT_MS",
+		"RESOURCE_CHECK_INTERVAL_SECONDS", "RESOURCE_MAX_RESUME_ATTEMPTS", "RESOURCE_BACKOFF_SECONDS", "RESOURCE_BACKOFF_MAX_SECONDS", "WORKER_LEASE_SECONDS", "KEEP_AWAKE",
 	} {
 		name := name
 		value, wasSet := os.LookupEnv(name)
@@ -185,6 +188,7 @@ func TestLoadAcceptsOnlyImmutablePDFExtractorImageReferences(t *testing.T) {
 
 func TestValidateRejectsNonLoopbackBindAndLLM(t *testing.T) {
 	cfg := Config{
+		ResourcePolicy: resources.DefaultPolicy(), WorkerLeaseSeconds: 30,
 		BindAddr: "0.0.0.0:8080", DatabasePath: "./data/test.db", ArtifactsPath: "./data/artifacts", WorkspaceRoot: "./data/workspaces", SandboxRuntime: "auto", SandboxImage: "golang:1.23-alpine", SandboxNetwork: "disabled",
 		LLMBaseURL: "http://127.0.0.1:8000/v1", LLMModel: "test", LLMContextLength: 8192,
 		LLMMaxOutputTokens: 1024, LLMTemperature: 0.2, LLMTopP: 0.8, LLMRequestTimeoutSecs: 30,

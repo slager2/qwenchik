@@ -118,6 +118,7 @@ func TestResearchSubmitSelectsConfiguredAndConversationProfiles(t *testing.T) {
 			}
 			turn := repo.turns[0]
 			want, err := cfg.ResearchProfile(wantProfile)
+			want.KeepAwake = override == domain.ResearchProfileOvernight
 			if err != nil || turn.ResearchProfile != wantProfile || turn.DeadlineSeconds != int(want.Budget.WallTimeSeconds) || *turn.ResearchPolicy != want {
 				t.Fatalf("turn=%#v want=%#v err=%v", turn, want, err)
 			}

@@ -95,6 +95,7 @@ type Server struct {
 	llmClient         llm.Client
 	healthMu          sync.RWMutex
 	workerHeartbeat   func(context.Context) (time.Time, error)
+	runtimeStatus     func() map[string]any
 	researchPolicy    map[string]any
 	pdfCheck          func(context.Context) error
 }
@@ -717,7 +718,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	if s.worker == nil {
 		workerState = "absent"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "database": "ok", "worker": workerState, "worker_details": s.workerHealth(r.Context()), "api_version": 1, "model": map[string]string{"id": s.llmModel, "status": "configured"}})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "database": "ok", "worker": workerState, "worker_details": s.workerHealth(r.Context()), "runtime": s.runtimeHealth(), "api_version": 1, "model": map[string]string{"id": s.llmModel, "status": "configured"}})
 }
 
 func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
@@ -838,7 +839,7 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	if status == "error" {
 		code = http.StatusServiceUnavailable
 	}
-	writeJSON(w, code, map[string]any{"status": status, "checks": checks, "providers": providerHealth, "research_limits": researchLimits, "pdf_extractor": pdfRuntime})
+	writeJSON(w, code, map[string]any{"status": status, "checks": checks, "providers": providerHealth, "research_limits": researchLimits, "pdf_extractor": pdfRuntime, "runtime": s.runtimeHealth()})
 }
 
 func (s *Server) probeStructuredLLM(ctx context.Context) error {
@@ -1007,6 +1008,10 @@ func (s *Server) searchProviderStatus() map[string]map[string]any {
 }
 
 func safePublicEvent(event domain.Event) domain.Event {
+	if resourceEventType(event.Type) {
+		event.Payload, _ = json.Marshal(safeResourceEvent(event.Payload))
+		return event
+	}
 	if event.Type == "research.warning" {
 		event.Payload, _ = json.Marshal(safeResearchWarning(event.Payload))
 		return event
@@ -1119,6 +1124,17 @@ func writeError(w http.ResponseWriter, status int, code, message string, retryab
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
+	switch item := value.(type) {
+	case domain.Task:
+		item.Lease = nil
+		value = item
+	case []domain.Task:
+		items := append([]domain.Task(nil), item...)
+		for i := range items {
+			items[i].Lease = nil
+		}
+		value = items
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
@@ -1151,6 +1167,9 @@ func parseAfter(value string) (int64, error) {
 func publicEvent(event domain.Event) bool {
 	if event.Visibility != "user" {
 		return false
+	}
+	if resourceEventType(event.Type) {
+		return true
 	}
 	switch event.Type {
 	case "research.warning", "source.updated", "source.fetch.started", "source.fetch.failed", "source.failed", "source.extracted", "search.hit", "query.updated", "verification.updated", "search.provider", "tool.failed", "task.created", "task.status_changed", "task.recovered", "message.created", "message.delta", "plan.created", "step.started", "step.completed", "step.skipped", "tool.started", "tool.completed", "approval.requested", "approval.approved", "approval.rejected", "approval.expired", "artifact.created", "evidence.created", "task.completed", "task.failed", "task.cancelled":

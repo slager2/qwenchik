@@ -66,6 +66,15 @@ func TestObservedSearchPersistsSafeExecutedQueryOnce(t *testing.T) {
 			if _, e = store.CreateTask(ctx, domain.Task{ID: taskID, Title: "Search"}, ""); e != nil {
 				t.Fatal(e)
 			}
+			if _, e = store.QueueTask(ctx, taskID, ""); e != nil {
+				t.Fatal(e)
+			}
+			if _, ok, err := store.ClaimNext(ctx); err != nil || !ok {
+				t.Fatalf("claim=%v err=%v", ok, err)
+			}
+			if _, e = store.TransitionTask(ctx, taskID, domain.StatusRunning, nil, "", "user", nil); e != nil {
+				t.Fatal(e)
+			}
 			provider := &observedQueryProvider{store: store, taskID: taskID, t: t}
 			registry := tools.NewRegistry()
 			if e = tools.RegisterResearchTools(registry, tools.ResearchTools{SearchProvider: provider, Fetcher: unavailableResearchFetcher{}}); e != nil {

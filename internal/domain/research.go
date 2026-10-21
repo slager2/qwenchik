@@ -26,6 +26,7 @@ type ResearchBudget struct {
 }
 
 type ResearchPolicy struct {
+	KeepAwake             bool           `json:"keep_awake"`
 	Version               int            `json:"version"`
 	Profile               string         `json:"profile"`
 	AdaptiveEnabled       bool           `json:"adaptive_enabled"`

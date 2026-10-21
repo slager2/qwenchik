@@ -18,7 +18,29 @@ import (
 	"github.com/slager2/qwenchik/internal/tools"
 )
 
-func (w *Worker) executeObservedTool(ctx context.Context, taskID string, stage *domain.Stage, role, name string, arguments json.RawMessage, grant string, stepIDs ...string) (any, error) {
+func (w *Worker) executeObservedTool(ctx context.Context, taskID string, stage *domain.Stage, role, name string, arguments json.RawMessage, grant string, stepIDs ...string) (returned any, returnedErr error) {
+	if err := checkRunResources(ctx); err != nil {
+		return nil, err
+	}
+	if _, ok := w.repo.(invocationRepository); ok {
+		_, decision, err := w.tools.Authorize(ctx, role, name, arguments)
+		if err != nil {
+			return nil, err
+		}
+		if decision.Action != policy.Allow && !(decision.Action == policy.ApprovalRequired && grant != "") {
+			return nil, tools.DecisionError(name, decision)
+		}
+	}
+	ctx, journal, invocation, cachedResult, cached, beginErr := w.beginToolInvocation(ctx, taskID, role, name, arguments, stepIDs)
+	if beginErr != nil {
+		return nil, beginErr
+	}
+	if cached {
+		return cachedResult, nil
+	}
+	if journal != nil {
+		defer func() { returnedErr = finishInvocation(ctx, journal, invocation, returned, returnedErr) }()
+	}
 	if err := w.reserveResearchTool(ctx, taskID, name); err != nil {
 		return nil, err
 	}
