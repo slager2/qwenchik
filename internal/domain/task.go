@@ -142,10 +142,11 @@ type Artifact struct {
 }
 
 type QuoteSpan struct {
-	Start int    `json:"start"`
-	End   int    `json:"end"`
-	Page  int    `json:"page,omitempty"`
-	Text  string `json:"text"`
+	CoordinateSpace string `json:"coordinate_space,omitempty"`
+	Start           int    `json:"start"`
+	End             int    `json:"end"`
+	Page            int    `json:"page,omitempty"`
+	Text            string `json:"text"`
 }
 
 type Evidence struct {

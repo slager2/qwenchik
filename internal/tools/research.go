@@ -239,24 +239,32 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			if err != nil {
 				return nil, err
 			}
-			rawArtifact, err = runtime.Repository.SaveArtifact(ctx, rawArtifact, rawRef)
-			if err != nil {
-				return nil, err
-			}
 			textBytes := []byte(extracted.Text)
 			textArtifact, textRef, err := runtime.Artifacts.Put(ctx, taskID, artifactFileName("source", fetched.ContentSHA256, ".txt"), "text/plain; charset=utf-8", textBytes)
 			if err != nil {
 				return nil, err
 			}
-			textArtifact, err = runtime.Repository.SaveArtifact(ctx, textArtifact, textRef)
-			if err != nil {
-				return nil, err
-			}
+			fetched.ContentSHA256 = rawArtifact.SHA256
 			evidence, err := provenance.BuildEvidence(taskID, args.OriginalQuery, fetched, extracted, rawArtifact.ID, textArtifact.ID)
 			if err != nil {
 				return nil, err
 			}
-			evidence, err = runtime.Repository.SaveEvidence(ctx, evidence)
+			if atomic, ok := runtime.Repository.(interface {
+				SaveResearchSource(context.Context, domain.Artifact, string, domain.Artifact, string, domain.Evidence) (domain.Evidence, error)
+			}); ok {
+				evidence, err = atomic.SaveResearchSource(ctx, rawArtifact, rawRef, textArtifact, textRef, evidence)
+			} else {
+				rawArtifact, err = runtime.Repository.SaveArtifact(ctx, rawArtifact, rawRef)
+				if err != nil {
+					return nil, err
+				}
+				textArtifact, err = runtime.Repository.SaveArtifact(ctx, textArtifact, textRef)
+				if err != nil {
+					return nil, err
+				}
+				evidence.RawArtifactID, evidence.TextArtifactID = rawArtifact.ID, textArtifact.ID
+				evidence, err = runtime.Repository.SaveEvidence(ctx, evidence)
+			}
 			if err != nil {
 				return nil, err
 			}

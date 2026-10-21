@@ -35,10 +35,10 @@ func BuildEvidence(taskID, query string, fetched research.FetchedDocument, extra
 	if retrievedAt.IsZero() {
 		retrievedAt = time.Now().UTC()
 	}
-	excerpt := selectEvidenceExcerpt(extracted.Text, query, 4000)
+	excerpt, start, end := SelectExcerptWithSpan(extracted.Text, query, 4000)
 	quotes := []domain.QuoteSpan{}
 	if excerpt != "" {
-		quotes = append(quotes, domain.QuoteSpan{Start: 0, End: utf8.RuneCountInString(excerpt), Text: excerpt})
+		quotes = append(quotes, domain.QuoteSpan{Start: start, End: end, Text: excerpt, CoordinateSpace: "extracted_text_runes"})
 	}
 	provider := fetched.Provider
 	if provider == "" {
@@ -56,18 +56,35 @@ func BuildEvidence(taskID, query string, fetched research.FetchedDocument, extra
 }
 
 func selectEvidenceExcerpt(text, query string, maxRunes int) string {
-	text = strings.TrimSpace(text)
-	if maxRunes < 1 || text == "" {
-		return ""
-	}
+	return SelectExcerpt(text, query, maxRunes)
+}
+
+func SelectExcerpt(text, query string, maxRunes int) string {
+	excerpt, _, _ := SelectExcerptWithSpan(text, query, maxRunes)
+	return excerpt
+}
+
+func SelectExcerptWithSpan(text, query string, maxRunes int) (string, int, int) {
 	runes := []rune(text)
+	if maxRunes < 1 || text == "" {
+		return "", 0, 0
+	}
+	window := func(start, end int) (string, int, int) {
+		for start < end && unicode.IsSpace(runes[start]) {
+			start++
+		}
+		for end > start && unicode.IsSpace(runes[end-1]) {
+			end--
+		}
+		return string(runes[start:end]), start, end
+	}
 	if len(runes) <= maxRunes {
-		return text
+		return window(0, len(runes))
 	}
 
 	queryTerms := excerptQueryTerms(query)
 	if len(queryTerms) == 0 {
-		return string(runes[:maxRunes])
+		return string(runes[:maxRunes]), 0, maxRunes
 	}
 	type scoredLine struct {
 		start  int
@@ -132,7 +149,7 @@ func selectEvidenceExcerpt(text, query string, maxRunes int) string {
 		}
 	}
 	if bestStart < 0 || bestScore <= 0 {
-		return string(runes[:maxRunes])
+		return string(runes[:maxRunes]), 0, maxRunes
 	}
 
 	maxStart := max(0, len(runes)-maxRunes)
@@ -148,7 +165,7 @@ func selectEvidenceExcerpt(text, query string, maxRunes int) string {
 		end = min(len(runes), bestStart+maxRunes)
 		start = bestStart
 	}
-	return strings.TrimSpace(string(runes[start:end]))
+	return window(start, end)
 }
 
 func excerptQueryTerms(value string) []string {
