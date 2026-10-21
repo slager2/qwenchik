@@ -49,7 +49,7 @@ func (s *Store) PauseTaskForResource(ctx context.Context, taskID, reason string,
 	if err := transitionStageTx(ctx, tx, taskID, task.Stage, nil, "paused", now); err != nil {
 		return domain.Task{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status='paused',stage=NULL,pause_reason='resource_guard',resource_reason=?,resume_after=?,resource_probe_attempts=0,version=version+1,updated_at=? WHERE id=? AND cancel_requested=0`, reason, stamp(nextProbe), stamp(now), taskID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status='paused',stage=NULL,pause_reason='resource_guard',resource_reason=?,resume_after=?,version=version+1,updated_at=? WHERE id=? AND cancel_requested=0`, reason, stamp(nextProbe), stamp(now), taskID); err != nil {
 		return domain.Task{}, err
 	}
 	var cancelled bool
@@ -62,7 +62,7 @@ func (s *Store) PauseTaskForResource(ctx context.Context, taskID, reason string,
 	if err := updateResearchSessionStatus(ctx, tx, taskID, domain.StatusPaused, "paused_resource_guard", false, "", now); err != nil {
 		return domain.Task{}, err
 	}
-	seq, err := appendEvent(ctx, tx, taskID, "run.paused", nil, "user", map[string]any{"status": domain.StatusPaused, "pause_reason": "resource_guard", "resource_reason": reason, "resume_after": nextProbe, "resource_probe_attempts": 0})
+	seq, err := appendEvent(ctx, tx, taskID, "run.paused", nil, "user", map[string]any{"status": domain.StatusPaused, "pause_reason": "resource_guard", "resource_reason": reason, "resume_after": nextProbe, "resource_probe_attempts": task.ResourceProbeAttempts})
 	if err != nil {
 		return domain.Task{}, err
 	}
@@ -141,21 +141,24 @@ func (s *Store) ResolveResourceProbe(ctx context.Context, taskID string, healthy
 	status := domain.StatusPaused
 	outcome, code, eventType := "", "", "run.resource_probe"
 	attempts := task.ResourceProbeAttempts
+	exhausted := attempts >= maxAttempts
+	if !exhausted {
+		attempts++
+	}
 	if expired {
 		status = domain.StatusFailed
 		outcome = "budget_exhausted"
 		code = "deadline_exceeded"
 		eventType = "run.failed"
-	} else if healthy {
-		status = domain.StatusQueued
-		eventType = "run.resumed"
 	} else {
-		attempts++
-		if attempts >= maxAttempts {
+		if exhausted || !healthy && attempts >= maxAttempts {
 			status = domain.StatusFailed
 			outcome = "blocked"
 			code = "resource_guard_exhausted"
 			eventType = "run.blocked"
+		} else if healthy {
+			status = domain.StatusQueued
+			eventType = "run.resumed"
 		}
 	}
 	pauseReason := "resource_guard"

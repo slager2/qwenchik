@@ -80,6 +80,10 @@ func (s *Store) CommitStepResult(ctx context.Context, taskID, stepID, tool, summ
 	if task.Status != domain.StatusRunning {
 		return domain.Checkpoint{}, ErrConflict
 	}
+	state, err = completePendingStepInvocationTx(ctx, tx, taskID, stepID, tool, result, state)
+	if err != nil {
+		return domain.Checkpoint{}, err
+	}
 	updated, err := tx.ExecContext(ctx, `UPDATE task_steps SET status='completed',updated_at=? WHERE task_id=? AND step_id=? AND status='running'`, stamp(time.Now()), taskID, stepID)
 	if err != nil {
 		return domain.Checkpoint{}, err
@@ -100,6 +104,9 @@ func (s *Store) CommitStepResult(ctx context.Context, taskID, stepID, tool, summ
 	}
 	cp, err := saveCheckpointTx(ctx, tx, taskID, 1, seq, state)
 	if err != nil {
+		return domain.Checkpoint{}, err
+	}
+	if err := fenceExecution(ctx, tx, taskID); err != nil {
 		return domain.Checkpoint{}, err
 	}
 	if err := tx.Commit(); err != nil {

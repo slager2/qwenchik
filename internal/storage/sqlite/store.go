@@ -1832,6 +1832,10 @@ func saveCheckpointTx(ctx context.Context, tx *sql.Tx, taskID string, planVersio
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
+	encoded, err = reconcileInvocationCheckpoint(ctx, tx, taskID, encoded)
+	if err != nil {
+		return domain.Checkpoint{}, err
+	}
 	checkpoint := domain.Checkpoint{ID: newID(), TaskID: taskID, PlanVersion: planVersion, State: state, LastEventSeq: seq, CreatedAt: time.Now().UTC()}
 	checkpoint.StateSchemaVersion = 1
 	digest := sha256.Sum256(encoded)

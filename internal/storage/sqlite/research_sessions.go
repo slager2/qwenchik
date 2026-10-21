@@ -352,6 +352,17 @@ func (s *Store) reserveResearchOperation(ctx context.Context, taskID, kind, oper
 		return domain.ResearchCounters{}, err
 	}
 	defer tx.Rollback()
+	counters, err := reserveResearchOperationTx(ctx, tx, taskID, kind, operationID)
+	if err != nil {
+		return counters, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.ResearchCounters{}, err
+	}
+	return counters, nil
+}
+
+func reserveResearchOperationTx(ctx context.Context, tx *sql.Tx, taskID, kind, operationID string) (domain.ResearchCounters, error) {
 	session, err := researchSession(ctx, tx, taskID)
 	if err != nil {
 		return domain.ResearchCounters{}, err
@@ -436,9 +447,6 @@ func (s *Store) reserveResearchOperation(ctx context.Context, taskID, kind, oper
 	_, err = tx.ExecContext(ctx, `INSERT INTO events(id,task_id,seq,type,schema_version,created_at,visibility,payload_json) VALUES(?,?,?,'research.operation_reserved',1,?,'internal',?)`,
 		eventID, taskID, seq, stamp(time.Now().UTC()), string(payload))
 	if err != nil {
-		return domain.ResearchCounters{}, err
-	}
-	if err := tx.Commit(); err != nil {
 		return domain.ResearchCounters{}, err
 	}
 	return counters, nil
@@ -560,6 +568,9 @@ func prepareResearchCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, p
 				continue
 			}
 			if current, exists := values[key]; exists {
+				if key == "pending_invocation" {
+					continue
+				}
 				values[key] = mergeResearchFutureField(value, current)
 			} else {
 				values[key] = value
