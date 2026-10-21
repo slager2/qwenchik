@@ -193,7 +193,7 @@ func TestFetchFallbackRejectsSafetyBudgetAndTaskCancellationErrors(t *testing.T)
 		{research.ErrFetchRequestFailed, true},
 		{context.DeadlineExceeded, true},
 		{research.ErrUnsafeURL, false},
-		{research.ErrResponseTooBig, false},
+		{research.ErrResponseTooBig, true},
 		{research.ErrPDFEncrypted, true},
 		{research.ErrPDFNoText, true},
 		{research.ErrUnsupportedMIME, true},

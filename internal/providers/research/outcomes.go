@@ -15,9 +15,11 @@ var ErrSearchFilteredByPolicy = errors.New("search results filtered by policy")
 type SearchFailure struct {
 	Code     string
 	Outcomes []ProviderOutcome
+	Cause    error
 }
 
 func (e *SearchFailure) Error() string { return outcomeMessage(e.Code) }
+func (e *SearchFailure) Unwrap() error { return e.Cause }
 
 func (e *SearchFailure) Is(target error) bool {
 	if target == ErrSearchUnavailable {
@@ -77,6 +79,14 @@ func outcomeMessage(code string) string {
 		return "Configured provider has not been checked."
 	case "search_ok":
 		return "Provider returned results."
+	case "search_partial":
+		return "Provider returned partial results."
+	case "search_provider_timeout":
+		return "Search collection timed out."
+	case "search_validation_timeout":
+		return "Source URL validation timed out."
+	case "search_no_usable_hits":
+		return "Search returned no usable source URLs."
 	default:
 		return "Provider search is unavailable."
 	}
@@ -110,12 +120,17 @@ func makeOutcome(name string, hits []SearchHit, err error, started time.Time) Pr
 	if err != nil {
 		o.State, o.Code, o.HTTPStatus, o.Retryable = "unavailable", "search_unavailable", 0, true
 		var classifiedErr *ClassifiedError
-		if errors.As(err, &classifiedErr) {
+		if errors.Is(err, context.DeadlineExceeded) {
+			o.State, o.Code = "unavailable", "search_provider_timeout"
+		} else if errors.As(err, &classifiedErr) {
 			o.State, o.Code, o.HTTPStatus, o.Retryable = classifiedErr.State, classifiedErr.Code, classifiedErr.HTTPStatus, classifiedErr.Retryable
 		} else if errors.Is(err, ErrSearchResponseTooBig) {
 			o.State, o.Code, o.Retryable = "malformed", "search_response_too_big", false
 		} else if errors.Is(err, ErrSearchFilteredByPolicy) {
 			o.State, o.Code, o.Retryable = "degraded", "search_filtered_by_policy", false
+		}
+		if len(hits) > 0 {
+			o.State, o.Code = "degraded", "search_partial"
 		}
 	}
 	o.Message = outcomeMessage(o.Code)
@@ -129,7 +144,6 @@ func diagnosticSearch(ctx context.Context, options SearchOptions, provider Searc
 	hits, err := provider.Search(ctx, options)
 	if ctx.Err() != nil {
 		err = ctx.Err()
-		hits = nil
 	}
 	if hits == nil {
 		hits = []SearchHit{}

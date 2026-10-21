@@ -2,6 +2,7 @@ package research
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -24,9 +25,8 @@ var (
 	ErrResponseTooBig         = errors.New("response exceeds configured byte limit")
 	ErrFetchSourceUnavailable = errors.New("fetched source returned a non-success HTTP status")
 	ErrFetchRequestFailed     = errors.New("fetch request failed")
+	ErrDNSLookupFailed        = errors.New("DNS lookup failed")
 )
-
-const maxPDFFetchBytes int64 = 5_000_000
 
 type opaqueNetworkError struct {
 	operation string
@@ -37,8 +37,10 @@ type opaqueNetworkError struct {
 func (e opaqueNetworkError) Error() string { return e.operation + " failed" }
 func (e opaqueNetworkError) Unwrap() error { return e.cause }
 func (e opaqueNetworkError) Is(target error) bool {
-	return target == ErrFetchRequestFailed && e.operation == "fetch request" && e.retryable
+	return target == ErrFetchRequestFailed && e.operation == "fetch request" && e.retryable || target == ErrDNSLookupFailed && e.operation == "DNS lookup"
 }
+
+func (e opaqueNetworkError) OperationalValidationFailure() bool { return true }
 
 type IPResolver interface {
 	LookupIPAddr(context.Context, string) ([]net.IPAddr, error)
@@ -55,11 +57,8 @@ type SafeFetcher struct {
 	client   *http.Client
 	maxBytes int64
 	domains  []string
-}
-
-type replayBody struct {
-	io.Reader
-	io.Closer
+	policy   FetchPolicy
+	initErr  error
 }
 
 func NewSafeFetcher(maxBytes int64, timeout time.Duration) *SafeFetcher {
@@ -71,16 +70,38 @@ func NewSafeFetcherWithResolver(maxBytes int64, timeout time.Duration, resolver 
 }
 
 func NewSafeFetcherWithPolicy(maxBytes int64, timeout time.Duration, resolver IPResolver, allowedDomains []string) *SafeFetcher {
-	if maxBytes < 1 {
-		maxBytes = 5_000_000
+	p := DefaultFetchPolicy()
+	if maxBytes > 0 {
+		p.SourceFetchBytes = min(maxBytes, p.SourceFetchBytes)
+		p.PDFBytes = min(maxBytes, p.PDFBytes)
 	}
-	if timeout <= 0 {
-		timeout = 20 * time.Second
+	if timeout > 0 {
+		p.SourceDownloadTimeout = timeout
+		p.PDFDownloadTimeout = timeout
 	}
+	f, err := NewSafeFetcherWithFetchPolicy(p, resolver, allowedDomains)
+	if err != nil {
+		f = newSafeFetcher(p, resolver, allowedDomains)
+		f.initErr = err
+	}
+	return f
+}
+
+func NewSafeFetcherWithFetchPolicy(policy FetchPolicy, resolver IPResolver, allowedDomains []string) (*SafeFetcher, error) {
+	if err := policy.Validate(); err != nil {
+		return nil, err
+	}
+	if _, err := createFetchTemp(context.Background(), policy, "", 0); err != nil {
+		return nil, err
+	}
+	return newSafeFetcher(policy, resolver, allowedDomains), nil
+}
+
+func newSafeFetcher(policy FetchPolicy, resolver IPResolver, allowedDomains []string) *SafeFetcher {
 	if resolver == nil {
 		resolver = systemResolver{resolver: net.DefaultResolver}
 	}
-	fetcher := &SafeFetcher{resolver: resolver, maxBytes: maxBytes, domains: append([]string(nil), allowedDomains...)}
+	fetcher := &SafeFetcher{resolver: resolver, maxBytes: policy.TaskFetchBudgetBytes, policy: policy, domains: append([]string(nil), allowedDomains...)}
 	transport := &http.Transport{
 		Proxy:                 nil,
 		DialContext:           fetcher.dialContext,
@@ -91,7 +112,7 @@ func NewSafeFetcherWithPolicy(maxBytes int64, timeout time.Duration, resolver IP
 	}
 	fetcher.client = &http.Client{
 		Transport: transport,
-		Timeout:   timeout,
+		Timeout:   max(policy.PDFDownloadTimeout, policy.SourceDownloadTimeout),
 		CheckRedirect: func(request *http.Request, via []*http.Request) error {
 			if len(via) >= 5 {
 				return errors.New("too many redirects")
@@ -103,6 +124,9 @@ func NewSafeFetcherWithPolicy(maxBytes int64, timeout time.Duration, resolver IP
 }
 
 func (f *SafeFetcher) ValidateURL(ctx context.Context, rawURL string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if len(rawURL) > 4096 {
 		return fmt.Errorf("%w: URL exceeds 4096 characters", ErrUnsafeURL)
 	}
@@ -120,8 +144,8 @@ func (f *SafeFetcher) ValidateURL(ctx context.Context, rawURL string) error {
 	if len(f.domains) > 0 && !matchesDomainAllowlist(host, f.domains) {
 		return fmt.Errorf("%w: host is outside the configured domain allowlist", ErrUnsafeURL)
 	}
-	if hasSensitiveQuery(parsed) {
-		return fmt.Errorf("%w: URLs with credential-like query parameters are blocked", ErrUnsafeURL)
+	if URLHasSensitiveData(parsed) {
+		return fmt.Errorf("%w: URLs with credential-like data are blocked", ErrUnsafeURL)
 	}
 	port := parsed.Port()
 	if port != "" {
@@ -140,8 +164,14 @@ func (f *SafeFetcher) ValidateURL(ctx context.Context, rawURL string) error {
 		return nil
 	}
 	addresses, err := f.resolver.LookupIPAddr(ctx, host)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
 	if err != nil || len(addresses) == 0 {
-		return fmt.Errorf("%w: hostname did not resolve", ErrUnsafeURL)
+		return opaqueNetworkError{operation: "DNS lookup", cause: err}
 	}
 	for _, address := range addresses {
 		if !isPublicIP(address.IP) {
@@ -155,10 +185,17 @@ func (f *SafeFetcher) Fetch(ctx context.Context, rawURL string, options FetchOpt
 	if err := f.ValidateURL(ctx, rawURL); err != nil {
 		return FetchedDocument{}, err
 	}
-	limit := f.maxBytes
-	if options.MaxBytes > 0 && options.MaxBytes < limit {
-		limit = options.MaxBytes
+	if f.initErr != nil {
+		return FetchedDocument{}, &FetchFailure{Err: f.initErr, Code: "pdf_resource_exceeded", Phase: "fetch"}
 	}
+	parent := ctx
+	deadlineCtx, deadlineCancel := context.WithTimeout(ctx, max(f.policy.PDFDownloadTimeout, f.policy.SourceDownloadTimeout))
+	defer deadlineCancel()
+	ctx, cancel := context.WithCancelCause(deadlineCtx)
+	defer cancel(nil)
+	started := time.Now()
+	sourceTimer := time.AfterFunc(f.policy.SourceDownloadTimeout, func() { cancel(context.DeadlineExceeded) })
+	defer sourceTimer.Stop()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return FetchedDocument{}, errors.New("fetch request could not be created")
@@ -167,9 +204,9 @@ func (f *SafeFetcher) Fetch(ctx context.Context, rawURL string, options FetchOpt
 	request.Header.Set("User-Agent", "QwenchikLocalResearch/1.0")
 	response, err := f.client.Do(request)
 	if err != nil {
-		retryable := ctx.Err() == nil && !errors.Is(err, ErrUnsafeURL)
+		retryable := parent.Err() == nil && !errors.Is(err, ErrUnsafeURL)
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			err = errors.Join(err, ctxErr)
+			err = context.Cause(ctx)
 		}
 		return FetchedDocument{}, opaqueNetworkError{operation: "fetch request", cause: err, retryable: retryable}
 	}
@@ -177,43 +214,190 @@ func (f *SafeFetcher) Fetch(ctx context.Context, rawURL string, options FetchOpt
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return FetchedDocument{}, fmt.Errorf("%w: HTTP %d", ErrFetchSourceUnavailable, response.StatusCode)
 	}
-	if response.ContentLength > limit {
-		return FetchedDocument{}, ErrResponseTooBig
-	}
 	contentType := response.Header.Get("Content-Type")
 	mediaType, _, parseErr := mime.ParseMediaType(contentType)
-	if parseErr != nil || mediaType == "" {
-		preview, _ := io.ReadAll(io.LimitReader(response.Body, 512))
+	if mediaType == "application/pdf" {
+		sourceTimer.Stop()
+		remaining := time.Until(started.Add(f.policy.PDFDownloadTimeout))
+		if remaining <= 0 {
+			cancel(context.DeadlineExceeded)
+		} else {
+			pdfTimer := time.AfterFunc(remaining, func() { cancel(context.DeadlineExceeded) })
+			defer pdfTimer.Stop()
+		}
+	}
+	encoding := strings.ToLower(strings.TrimSpace(response.Header.Get("Content-Encoding")))
+	comparableLength := encoding == "" || encoding == "identity"
+	var declared *int64
+	if response.ContentLength >= 0 && !response.Uncompressed {
+		n := response.ContentLength
+		declared = &n
+	}
+	capFor := func(pdf bool) int64 {
+		if pdf {
+			return f.policy.PDFBytes
+		}
+		return f.policy.SourceFetchBytes
+	}
+	limitFor := func(cap int64) int64 {
+		n := min(cap, f.policy.TaskFetchBudgetBytes)
+		if options.MaxBytes > 0 {
+			n = min(n, options.MaxBytes)
+		}
+		return n
+	}
+	policyCap := capFor(mediaType == "application/pdf")
+	limit := limitFor(policyCap)
+	var consumed int64
+	failure := func(cause error, code string) (FetchedDocument, error) {
+		kind := "source"
+		if limit < policyCap {
+			kind = "task_remaining"
+		}
+		if errors.Is(cause, ErrResponseTooBig) {
+			code = "source_response_too_large"
+			if mediaType == "application/pdf" {
+				code = "pdf_source_too_large"
+			}
+			if kind == "task_remaining" && (!comparableLength || declared == nil || *declared <= policyCap) {
+				code = "task_fetch_budget_exceeded"
+			}
+		}
+		if parent.Err() != nil {
+			cause = errors.Join(cause, parent.Err())
+		} else if ctx.Err() != nil {
+			cause = context.Cause(ctx)
+			if errors.Is(cause, context.DeadlineExceeded) {
+				code = "fetch_timeout"
+			}
+		}
+		return FetchedDocument{}, &FetchFailure{Err: cause, Code: code, Phase: "fetch", DeclaredBytes: declared, EffectiveLimitBytes: limit, FetchedBytes: consumed, MIMEType: mediaType, LimitKind: kind}
+	}
+	if comparableLength && declared != nil && *declared > limit && mediaType == "application/pdf" {
+		return failure(ErrResponseTooBig, "")
+	}
+	if comparableLength && declared != nil && *declared > limitFor(max(f.policy.PDFBytes, f.policy.SourceFetchBytes)) {
+		return failure(ErrResponseTooBig, "")
+	}
+	var reader io.Reader = response.Body
+	if encoding == "gzip" {
+		gz, err := gzip.NewReader(response.Body)
+		if err != nil {
+			return failure(err, "source_unavailable")
+		}
+		defer gz.Close()
+		reader = gz
+	} else if encoding != "" && encoding != "identity" {
+		return failure(ErrUnsupportedMIME, "unsupported_content")
+	}
+	reader = &fetchCountingReader{reader: reader, count: &consumed}
+	preview, err := io.ReadAll(io.LimitReader(&fetchContextReader{ctx: ctx, reader: reader}, min(int64(512), limitFor(min(f.policy.SourceFetchBytes, f.policy.PDFBytes))+1)))
+	if err != nil {
+		return failure(err, "source_unavailable")
+	}
+	isPDF := bytes.HasPrefix(preview, []byte("%PDF-"))
+	if isPDF {
+		if mediaType != "application/pdf" {
+			sourceTimer.Stop()
+			remaining := time.Until(started.Add(f.policy.PDFDownloadTimeout))
+			if remaining <= 0 {
+				return failure(context.DeadlineExceeded, "fetch_timeout")
+			}
+			pdfTimer := time.AfterFunc(remaining, func() { cancel(context.DeadlineExceeded) })
+			defer pdfTimer.Stop()
+		}
+		mediaType = "application/pdf"
+	} else if mediaType == "application/pdf" {
+		return failure(ErrUnsupportedMIME, "pdf_malformed")
+	} else if parseErr != nil || mediaType == "" {
 		mediaType, _, _ = mime.ParseMediaType(http.DetectContentType(preview))
-		originalBody := response.Body
-		response.Body = replayBody{Reader: io.MultiReader(bytes.NewReader(preview), originalBody), Closer: originalBody}
+	}
+	policyCap = capFor(isPDF)
+	limit = limitFor(policyCap)
+	if consumed > limit || comparableLength && declared != nil && *declared > limit {
+		return failure(ErrResponseTooBig, "")
 	}
 	if !allowedMIME(mediaType) {
-		return FetchedDocument{}, fmt.Errorf("%w: %s", ErrUnsupportedMIME, mediaType)
+		return failure(ErrUnsupportedMIME, "unsupported_content")
 	}
-	if mediaType == "application/pdf" && limit > maxPDFFetchBytes {
-		limit = maxPDFFetchBytes
+	if !isPDF {
+		remaining := time.Until(started.Add(f.policy.SourceDownloadTimeout))
+		if remaining <= 0 {
+			return failure(context.DeadlineExceeded, "fetch_timeout")
+		}
 	}
-	if response.ContentLength > limit {
-		return FetchedDocument{}, ErrResponseTooBig
+	reader = io.MultiReader(bytes.NewReader(preview), reader)
+	hash := sha256.New()
+	var body []byte
+	var lease *fetchTemp
+	if isPDF {
+		lease, err = createFetchTemp(ctx, f.policy, options.TaskID, limit)
+		if err != nil {
+			return failure(err, "pdf_resource_exceeded")
+		}
+		defer func() {
+			if lease != nil {
+				lease.cleanup()
+			}
+		}()
+		_, err = io.Copy(io.MultiWriter(lease.file, hash), io.LimitReader(&fetchContextReader{ctx: ctx, reader: reader}, limit+1))
+	} else {
+		body, err = io.ReadAll(io.LimitReader(&fetchContextReader{ctx: ctx, reader: reader}, limit+1))
+		_, _ = hash.Write(body)
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
-		return FetchedDocument{}, fmt.Errorf("read fetched document: %w", err)
+		return failure(err, "source_unavailable")
 	}
-	if int64(len(body)) > limit {
-		return FetchedDocument{}, ErrResponseTooBig
+	if consumed > limit {
+		return failure(ErrResponseTooBig, "")
 	}
-	hash := sha256.Sum256(body)
+	if ctx.Err() != nil {
+		return failure(ctx.Err(), "fetch_timeout")
+	}
 	finalURL := rawURL
 	if response.Request != nil && response.Request.URL != nil {
 		finalURL = response.Request.URL.String()
 	}
-	return FetchedDocument{
+	document := FetchedDocument{
 		Provider: "direct_http", OriginalURL: rawURL, FinalURL: finalURL, ContentType: mediaType,
 		HTTPStatus: response.StatusCode, RetrievedAt: time.Now().UTC(),
-		ContentSHA256: hex.EncodeToString(hash[:]), Body: body,
-	}, nil
+		ContentSHA256: hex.EncodeToString(hash.Sum(nil)), Body: body, SizeBytes: consumed, DeclaredBytes: declared, EffectiveLimitBytes: limit,
+	}
+	if lease != nil {
+		if err := lease.file.Truncate(consumed); err != nil {
+			return failure(err, "pdf_resource_exceeded")
+		}
+		if _, err := lease.file.Seek(0, io.SeekStart); err != nil {
+			return failure(err, "pdf_resource_exceeded")
+		}
+		document.File = lease.file
+		document.cleanup = lease.cleanup
+		lease = nil
+	}
+	return document, nil
+}
+
+type fetchContextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+type fetchCountingReader struct {
+	reader io.Reader
+	count  *int64
+}
+
+func (r *fetchCountingReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	*r.count += int64(n)
+	return n, err
+}
+
+func (r *fetchContextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, context.Cause(r.ctx)
+	}
+	return r.reader.Read(p)
 }
 
 func (f *SafeFetcher) dialContext(ctx context.Context, network, address string) (net.Conn, error) {
@@ -226,8 +410,14 @@ func (f *SafeFetcher) dialContext(ctx context.Context, network, address string) 
 		ips = []net.IP{ip}
 	} else {
 		resolved, err := f.resolver.LookupIPAddr(ctx, host)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
 		if err != nil || len(resolved) == 0 {
-			return nil, fmt.Errorf("resolve outbound host: %w", ErrUnsafeURL)
+			return nil, opaqueNetworkError{operation: "DNS lookup", cause: err}
 		}
 		for _, item := range resolved {
 			ips = append(ips, item.IP)
@@ -263,6 +453,45 @@ func hasSensitiveQuery(parsed *url.URL) bool {
 	for key := range parsed.Query() {
 		switch strings.ToLower(key) {
 		case "token", "access_token", "auth_token", "api_key", "apikey", "key", "auth", "authorization", "password", "passwd", "secret", "signature", "session", "sid", "credential", "client_secret", "x-amz-credential", "x-amz-signature":
+			return true
+		}
+	}
+	return false
+}
+
+func URLHasSensitiveData(parsed *url.URL) bool {
+	if parsed == nil || parsed.User != nil || hasSensitiveQuery(parsed) {
+		return true
+	}
+	for key, values := range parsed.Query() {
+		key = strings.ToLower(key)
+		for _, marker := range []string{"token", "secret", "password", "credential", "signature", "authorization", "api_key", "apikey"} {
+			if strings.Contains(key, marker) {
+				return true
+			}
+		}
+		for _, value := range values {
+			lower := strings.ToLower(value)
+			for _, marker := range []string{"bearer ", "token=", "secret=", "password=", "api_key=", "apikey=", "signature="} {
+				if strings.Contains(lower, marker) {
+					return true
+				}
+			}
+			if strings.HasPrefix(lower, "eyj") && strings.Count(lower, ".") >= 2 {
+				return true
+			}
+			if nested, err := url.Parse(value); err == nil && nested.Host != "" && (nested.User != nil || hasSensitiveQuery(nested)) {
+				return true
+			}
+		}
+	}
+	parts := strings.FieldsFunc(strings.ToLower(parsed.Path), func(r rune) bool { return r == '/' || r == '=' || r == ';' })
+	for _, part := range parts {
+		switch part {
+		case "token", "access_token", "api_key", "apikey", "secret", "password", "credentials", "bearer", "session":
+			return true
+		}
+		if len(part) >= 64 && !strings.Contains(part, "-") || strings.HasPrefix(part, "eyj") && strings.Count(part, ".") >= 2 {
 			return true
 		}
 	}

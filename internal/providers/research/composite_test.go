@@ -4,11 +4,29 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 type compositeSearchStub struct {
 	hits []SearchHit
 	err  error
+}
+
+type deadlineCompositeStub struct{}
+
+func (deadlineCompositeStub) Search(ctx context.Context, _ SearchOptions) ([]SearchHit, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func TestCompositeReturnsCollectedHitsAlongsideCollectionDeadline(t *testing.T) {
+	provider := NewCompositeSearch(compositeSearchStub{hits: []SearchHit{{URL: "https://example.org/source"}}}, deadlineCompositeStub{})
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	defer cancel()
+	report, err := provider.SearchWithDiagnostics(ctx, SearchOptions{Query: "query", MaxResults: 2})
+	if !errors.Is(err, context.DeadlineExceeded) || len(report.Hits) != 1 || len(report.Outcomes) != 2 || report.Outcomes[0].Code != "search_ok" || report.Outcomes[1].Code != "search_provider_timeout" {
+		t.Fatalf("collected hits lost at deadline: report=%#v err=%v", report, err)
+	}
 }
 
 func (stub compositeSearchStub) Search(context.Context, SearchOptions) ([]SearchHit, error) {
@@ -112,5 +130,27 @@ func TestCompositeSearchHonorsCanceledContextAndRejectsInvalidLimit(t *testing.T
 	}
 	if _, err := provider.Search(context.Background(), SearchOptions{Query: "query", MaxResults: 0}); err == nil {
 		t.Fatal("invalid max results unexpectedly succeeded")
+	}
+}
+
+func TestCompositeAndDiagnosticWrapperPreserveHitsWithLateErrors(t *testing.T) {
+	for _, lateError := range []error{context.DeadlineExceeded, errors.New("late provider failure")} {
+		stub := compositeSearchStub{hits: []SearchHit{{URL: "https://example.org/source", Title: "Source"}}, err: lateError}
+		report, err := diagnosticSearch(context.Background(), SearchOptions{Query: "query", MaxResults: 2}, stub)
+		if !errors.Is(err, lateError) || len(report.Hits) != 1 || report.Outcomes[0].Code != "search_partial" || report.Outcomes[0].State != "degraded" {
+			t.Fatalf("diagnostic report=%#v err=%v", report, err)
+		}
+		report, err = NewCompositeSearch(stub).SearchWithDiagnostics(context.Background(), SearchOptions{Query: "query", MaxResults: 2})
+		if err != nil || len(report.Hits) != 1 || report.Outcomes[0].Code != "search_partial" || report.Outcomes[0].ResultCount != 1 {
+			t.Fatalf("composite report=%#v err=%v", report, err)
+		}
+	}
+}
+
+func TestCompositeClassifiesProviderTimeout(t *testing.T) {
+	report, err := NewCompositeSearch(compositeSearchStub{err: context.DeadlineExceeded}).SearchWithDiagnostics(context.Background(), SearchOptions{Query: "query", MaxResults: 1})
+	var failure *SearchFailure
+	if !errors.As(err, &failure) || failure.Code != "search_provider_timeout" || report.Outcomes[0].Code != "search_provider_timeout" {
+		t.Fatalf("report=%#v err=%#v", report, err)
 	}
 }

@@ -18,8 +18,6 @@ import (
 	"github.com/slager2/qwenchik/internal/app"
 	"github.com/slager2/qwenchik/internal/config"
 	"github.com/slager2/qwenchik/internal/domain"
-	"github.com/slager2/qwenchik/internal/llm"
-	"github.com/slager2/qwenchik/internal/llm/openai"
 	"github.com/slager2/qwenchik/internal/orchestrator"
 	"github.com/slager2/qwenchik/internal/providers/research"
 	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
@@ -54,6 +52,7 @@ func NewRoot() *cobra.Command {
 	}
 	root.PersistentFlags().BoolVar(&jsonMode, "json", false, "write machine-readable JSON")
 	root.AddCommand(newServeCommand())
+	root.AddCommand(newRuntimeCommand())
 	root.AddCommand(newDoctorCommand(&jsonMode))
 	root.AddCommand(newSearchSmokeCommand(&jsonMode))
 	root.AddCommand(newTaskCommand(&jsonMode))
@@ -320,17 +319,9 @@ func newDoctorCommand(jsonMode *bool) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			checks := doctor(cmd.Context(), cfg)
-			status := "ok"
-			for _, check := range checks {
-				if check.Status == "error" {
-					status = "error"
-				} else if check.Status == "warning" && status == "ok" {
-					status = "warning"
-				}
-			}
-			printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{"status": status, "checks": checks})
-			if status == "error" {
+			report := doctor(cmd.Context(), cfg)
+			printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, report)
+			if report.Status == "error" {
 				return errors.New("doctor found required checks in error state")
 			}
 			return nil
@@ -594,6 +585,9 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 					"pdf_extractor_image": cfg.PDFExtractorImage,
 					"llm_context_length":  cfg.LLMContextLength, "llm_max_output_tokens": cfg.LLMMaxOutputTokens,
 					"llm_max_concurrency": cfg.LLMMaxConcurrency, "allowed_domains": cfg.AllowedDomains,
+					"research_default_profile":  cfg.ResearchDefaultProfile,
+					"research_adaptive_enabled": cfg.ResearchAdaptiveEnabled,
+					"research_profiles":         cfg.ResearchPolicies(),
 				})
 			}
 			return nil
@@ -629,28 +623,37 @@ func serve(parent context.Context) error {
 	if cfg.LLMContextLength-cfg.LLMMaxOutputTokens < 2304 {
 		return errors.New("server-reported model context is too small for output and prompt reserves; lower LLM_MAX_OUTPUT_TOKENS")
 	}
-	model := openai.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, time.Duration(cfg.LLMRequestTimeoutSecs)*time.Second, cfg.LLMMaxOutputTokens, cfg.LLMTemperature, cfg.LLMTopP, cfg.LLMEnableThinking)
+	model := configuredModelClient(cfg)
 	registry := tools.NewRegistry()
 	searchProvider, err := configuredSearchProvider(cfg)
 	if err != nil {
 		return err
 	}
-	artifactStore, err := artifacts.New(cfg.ArtifactsPath, cfg.MaxFetchBytes)
+	artifactStore, err := artifacts.New(cfg.ArtifactsPath, cfg.ArtifactMaxBytes)
 	if err != nil {
 		return err
 	}
-	sandboxRuntime, err := sandbox.New(cfg.SandboxImage, cfg.WorkspaceRoot, nil, sandbox.Limits{OutputBytes: 64 << 10, MaxFileCount: 100, MaxFileBytes: cfg.MaxFetchBytes})
+	sandboxRuntime, err := sandbox.New(cfg.SandboxImage, cfg.WorkspaceRoot, nil, sandbox.Limits{OutputBytes: 64 << 10, MaxFileCount: 100, MaxFileBytes: cfg.SandboxMaxFileBytes})
 	if err != nil {
 		return err
 	}
-	pdfExtractor, err := pdfextract.New(cfg.PDFExtractorImage, nil)
+	pdfExtractor, err := pdfextract.NewWithPolicy(cfg.PDFExtractorImage, nil, cfg.PDFPolicy)
+	if err != nil {
+		return err
+	}
+	fetcher, err := research.NewSafeFetcherWithFetchPolicy(cfg.FetchPolicy(), nil, cfg.AllowedDomains)
+	if err != nil {
+		return err
+	}
+	htmlExtractor, err := research.NewHTMLExtractorWithPDFPolicy(100_000, pdfExtractor, cfg.PDFPolicy)
 	if err != nil {
 		return err
 	}
 	if err := tools.RegisterResearchTools(registry, tools.ResearchTools{
 		SearchProvider: searchProvider,
-		Fetcher:        research.NewSafeFetcherWithPolicy(cfg.MaxFetchBytes, 20*time.Second, nil, cfg.AllowedDomains),
-		Extractor:      research.NewHTMLExtractorWithPDF(100_000, pdfExtractor), Artifacts: artifactStore,
+		Fetcher:        fetcher,
+		Extractor:      htmlExtractor, Artifacts: artifactStore,
+		FetchPolicy: cfg.FetchPolicy(), PDFPolicy: cfg.PDFPolicy,
 		Repository: deps.store, MaxFetchBytes: cfg.MaxFetchBytes, AllowedDomains: cfg.AllowedDomains,
 	}); err != nil {
 		return err
@@ -658,14 +661,23 @@ func serve(parent context.Context) error {
 	if err := tools.RegisterSandboxTools(registry, tools.SandboxTools{Runtime: sandboxRuntime, Artifacts: artifactStore, Repository: deps.store}); err != nil {
 		return err
 	}
+	runtimeResearchPolicy, err := cfg.ResearchProfile(cfg.ResearchDefaultProfile)
+	if err != nil {
+		return err
+	}
 	deps.worker = orchestrator.New(deps.store, model, registry, orchestrator.Options{
 		MaxSteps: cfg.MaxSteps, MaxSearchQueries: cfg.MaxSearchQueries, MaxFetchBytes: cfg.MaxFetchBytes,
 		TaskTimeout:     time.Duration(cfg.TaskTimeoutSeconds) * time.Second,
 		MaxOutputTokens: cfg.LLMMaxOutputTokens, MaxInputBytes: maxInputBytes(cfg),
 		Temperature: cfg.LLMTemperature, TopP: cfg.LLMTopP, Logger: logger,
+		RuntimeResearchPolicy: &runtimeResearchPolicy, RuntimeModelContext: cfg.LLMContextLength,
 	})
 	apiServer := api.New(deps.app, deps.worker, deps.store.Ping, cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.SearXNGURL, logger)
 	apiServer.SetLLMModel(cfg.LLMModel)
+	apiServer.SetLLMClient(model)
+	apiServer.SetWorkerHeartbeat(deps.worker.Heartbeat)
+	apiServer.SetResearchPolicy(cfg.ResearchLimits(), pdfExtractor.Check)
+	setResearchRunDefaultsForServe(deps.app, cfg)
 	apiServer.SetTavilyConfigured(cfg.TavilyAPIKey != "")
 	apiServer.SetDDGEnabled(cfg.SearchEnableDDG)
 	if diagnostic, ok := searchProvider.(interface {
@@ -716,6 +728,10 @@ func serve(parent context.Context) error {
 		return serveErr
 	}
 	return nil
+}
+
+func setResearchRunDefaultsForServe(service *app.Service, cfg config.Config) {
+	service.SetResearchRunDefaults(cfg.ResearchDefaultProfile, cfg.ResearchPolicies(), cfg.ResearchModelSnapshot())
 }
 
 func providerStatus(baseURL string) string {
@@ -799,16 +815,21 @@ type doctorCheck struct {
 	Outcomes []research.ProviderOutcome `json:"outcomes,omitempty"`
 }
 
-func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
+func doctor(ctx context.Context, cfg config.Config) doctorReport {
+	if ctx.Err() != nil {
+		return unavailableAppDoctor()
+	}
 	checks := map[string]doctorCheck{
 		"go":   {Status: "ok", Message: "qagent binary is running on Go"},
 		"bind": {Status: "ok", Message: "application bind address is loopback-only"},
 	}
 	appCtx, appCancel := context.WithTimeout(ctx, 2*time.Second)
+	appResponding := false
 	appRequest, appErr := http.NewRequestWithContext(appCtx, http.MethodGet, "http://"+cfg.BindAddr+"/api/health", nil)
 	if appErr == nil {
-		response, requestErr := (&http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{Proxy: nil}}).Do(appRequest)
+		response, requestErr := (&http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}).Do(appRequest)
 		if requestErr == nil {
+			appResponding = true
 			var health struct {
 				Worker string `json:"worker"`
 			}
@@ -832,12 +853,18 @@ func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 		}
 	}
 	appCancel()
+	if appResponding {
+		return runningAppDoctor(ctx, cfg)
+	}
+	if ctx.Err() != nil {
+		return unavailableAppDoctor()
+	}
 	if api.FrontendAvailable() {
 		checks["frontend"] = doctorCheck{Status: "ok", Message: "embedded frontend assets are available"}
 	} else {
 		checks["frontend"] = doctorCheck{Status: "error", Message: "embedded frontend assets are missing; run make build"}
 	}
-	sandboxRuntime, sandboxErr := sandbox.New(cfg.SandboxImage, cfg.WorkspaceRoot, nil, sandbox.Limits{OutputBytes: 64 << 10, MaxFileCount: 100, MaxFileBytes: cfg.MaxFetchBytes})
+	sandboxRuntime, sandboxErr := sandbox.New(cfg.SandboxImage, cfg.WorkspaceRoot, nil, sandbox.Limits{OutputBytes: 64 << 10, MaxFileCount: 100, MaxFileBytes: cfg.SandboxMaxFileBytes})
 	if sandboxErr != nil {
 		checks["sandbox"] = doctorCheck{Status: "error", Message: "sandbox configuration is invalid"}
 	} else if status := sandboxRuntime.Doctor(ctx); status.Available {
@@ -845,13 +872,24 @@ func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 	} else {
 		checks["sandbox"] = doctorCheck{Status: "warning", Message: status.Message}
 	}
-	pdfExtractor, pdfErr := pdfextract.New(cfg.PDFExtractorImage, nil)
+	pdfRuntime := map[string]any{"isolated_available": false, "isolated_status": "unavailable", "fallback_allowed": cfg.PDFPolicy.AllowUnsandboxedFallback}
+	pdfExtractor, pdfErr := pdfextract.NewWithPolicy(cfg.PDFExtractorImage, nil, cfg.PDFPolicy)
 	if pdfErr != nil {
 		checks["pdf_extractor"] = doctorCheck{Status: "error", Message: "PDF extractor image reference is invalid"}
-	} else if err := pdfExtractor.Check(ctx); err != nil {
-		checks["pdf_extractor"] = doctorCheck{Status: "warning", Message: "isolated Poppler is unavailable; bounded pure-Go helper fallback will be used without container isolation"}
 	} else {
-		checks["pdf_extractor"] = doctorCheck{Status: "ok", Message: "rootless Docker and local PDF extractor image are available"}
+		pdfCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		err := pdfExtractor.Check(pdfCtx)
+		cancel()
+		if err != nil {
+			message := "isolated PDF extractor is unavailable; unsandboxed fallback is disabled by policy; PDF sources will be skipped"
+			if cfg.PDFPolicy.AllowUnsandboxedFallback {
+				message = "isolated PDF extractor is unavailable; explicitly allowed pure-Go fallback has only a soft memory target, not OS isolation"
+			}
+			checks["pdf_extractor"] = doctorCheck{Status: "warning", Message: message}
+		} else {
+			pdfRuntime["isolated_available"], pdfRuntime["isolated_status"] = true, "available"
+			checks["pdf_extractor"] = doctorCheck{Status: "ok", Message: "rootless Docker and local PDF extractor image are available"}
+		}
 	}
 	store, err := sqlite.Open(ctx, cfg.DatabasePath)
 	if err != nil {
@@ -892,35 +930,10 @@ func doctor(ctx context.Context, cfg config.Config) map[string]doctorCheck {
 			checks["search"] = check
 		}
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(cfg.LLMBaseURL, "/")+"/models", nil)
-	if err == nil && cfg.LLMAPIKey != "" {
-		request.Header.Set("Authorization", "Bearer "+cfg.LLMAPIKey)
-	}
-	if err != nil {
-		checks["llm"] = doctorCheck{Status: "error", Message: "local LLM health request is invalid"}
-	} else if response, err := (&http.Client{
-		Timeout:       3 * time.Second,
-		Transport:     &http.Transport{Proxy: nil},
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
-	}).Do(request); err != nil {
-		checks["llm"] = doctorCheck{Status: "error", Message: "local OpenAI-compatible LLM endpoint is unavailable"}
-	} else {
-		_ = response.Body.Close()
-		if response.StatusCode >= 200 && response.StatusCode < 300 {
-			probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			probeClient := openai.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, 30*time.Second, 24, 0, 1, cfg.LLMEnableThinking)
-			probeErr := llm.ProbeStructuredOutput(probeCtx, probeClient)
-			cancel()
-			if probeErr != nil {
-				checks["llm"] = doctorCheck{Status: "error", Message: "local model failed the bounded strict JSON Schema smoke request"}
-			} else {
-				checks["llm"] = doctorCheck{Status: "ok", Message: "local model passed the bounded strict JSON Schema smoke request"}
-			}
-		} else {
-			checks["llm"] = doctorCheck{Status: "error", Message: fmt.Sprintf("local LLM returned HTTP %d", response.StatusCode)}
-		}
-	}
-	return checks
+	checks["llm"] = doctorModel(ctx, cfg, appResponding)
+	limits := safeDoctorLimits(cfg.ResearchLimits())
+	limits["configured"] = true
+	return makeDoctorReport(checks, limits, pdfRuntime)
 }
 
 func printValue(out output, value any) {

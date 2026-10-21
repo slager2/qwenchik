@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"runtime/debug"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	pdf "github.com/dslipak/pdf"
@@ -33,14 +35,16 @@ func init() {
 // dslipak/pdf has no context-aware parser API, so it runs only in a re-executed
 // worker that CommandContext can kill. This is a wall-clock deadline, not CPU
 // time accounting.
-func extractPureGoSubprocess(ctx context.Context, document []byte) (Result, error) {
-	if err := ctx.Err(); err != nil {
+func extractPureGoFile(ctx context.Context, file *os.File, size int64, policy Policy) (Result, error) {
+	if !policy.AllowUnsandboxedFallback {
+		return Result{}, ErrUnavailable
+	}
+	if err := policy.Validate(); err != nil {
 		return Result{}, err
 	}
-	if len(document) > MaxInputBytes {
+	if size > policy.MaxInputBytes {
 		return Result{}, ErrInputTooLarge
 	}
-
 	executable, err := os.Executable()
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: pure-Go worker executable is unavailable", ErrUnavailable)
@@ -49,17 +53,20 @@ func extractPureGoSubprocess(ctx context.Context, document []byte) (Result, erro
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: pure-Go worker token could not be generated", ErrUnavailable)
 	}
-	runCtx, cancel := context.WithTimeout(ctx, ExtractionBudget)
-	defer cancel()
-	command := exec.CommandContext(runCtx, executable)
-	command.Env = workerEnvironment(token)
-	command.Stdin = bytes.NewReader(document)
-	stdout := &limitedBuffer{limit: maxStdoutBytes}
+	command := exec.CommandContext(ctx, executable)
+	command.WaitDelay = time.Second
+	encoded, err := json.Marshal(policy)
+	if err != nil {
+		return Result{}, err
+	}
+	command.Env = append(workerEnvironment(token), "QAGENT_PDFEXTRACT_POLICY="+string(encoded))
+	command.ExtraFiles = []*os.File{file}
+	stdout := &limitedBuffer{limit: policy.stdoutBytes()}
 	stderr := &limitedBuffer{limit: maxStderrBytes}
 	command.Stdout = stdout
 	command.Stderr = stderr
 	runErr := command.Run()
-	if err := runCtx.Err(); err != nil {
+	if err := ctx.Err(); err != nil {
 		return Result{}, err
 	}
 	if stdout.exceeded || stderr.exceeded {
@@ -85,7 +92,7 @@ func extractPureGoSubprocess(ctx context.Context, document []byte) (Result, erro
 		}
 		return Result{}, fmt.Errorf("%w: pure-Go worker could not be started", ErrUnavailable)
 	}
-	result, err := parseOutput(stdout.Bytes())
+	result, err := parseOutputWithPolicy(stdout.Bytes(), policy)
 	if err != nil {
 		return Result{}, err
 	}
@@ -98,17 +105,26 @@ func workerEnvironment(token string) []string {
 }
 
 func runPureGoWorker() int {
-	debug.SetMemoryLimit(256 << 20)
-	debug.SetMaxStack(16 << 20)
-	debug.SetMaxThreads(32)
-	document, err := io.ReadAll(io.LimitReader(os.Stdin, MaxInputBytes+1))
-	if err != nil {
+	var policy Policy
+	if json.Unmarshal([]byte(os.Getenv("QAGENT_PDFEXTRACT_POLICY")), &policy) != nil || policy.Validate() != nil || !policy.AllowUnsandboxedFallback {
 		return 1
 	}
-	if len(document) > MaxInputBytes {
+	debug.SetMemoryLimit(policy.MemoryBytes)
+	debug.SetMaxStack(16 << 20)
+	debug.SetMaxThreads(32)
+	file := os.NewFile(3, "pdf-input")
+	if file == nil {
+		return 1
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return 1
+	}
+	if info.Size() > policy.MaxInputBytes {
 		return 26
 	}
-	result, err := parsePureGoPDF(document)
+	result, err := parsePureGoReader(file, info.Size(), policy)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrEncrypted):
@@ -132,16 +148,20 @@ func runPureGoWorker() int {
 }
 
 func parsePureGoPDF(document []byte) (result Result, err error) {
+	return parsePureGoReader(bytes.NewReader(document), int64(len(document)), DefaultPolicy())
+}
+
+func parsePureGoReader(document io.ReaderAt, size int64, policy Policy) (result Result, err error) {
 	defer func() {
 		if recover() != nil {
 			result = Result{}
 			err = ErrMalformed
 		}
 	}()
-	if len(document) > MaxInputBytes {
+	if size > policy.MaxInputBytes {
 		return Result{}, ErrInputTooLarge
 	}
-	reader, err := pdf.NewReader(bytes.NewReader(document), int64(len(document)))
+	reader, err := pdf.NewReader(document, size)
 	if err != nil {
 		if errors.Is(err, pdf.ErrInvalidPassword) || strings.Contains(strings.ToLower(err.Error()), "encrypt") {
 			return Result{}, ErrEncrypted
@@ -152,7 +172,7 @@ func parsePureGoPDF(document []byte) (result Result, err error) {
 		return Result{}, ErrEncrypted
 	}
 	pageCount := reader.NumPage()
-	if pageCount > MaxPages {
+	if pageCount > policy.MaxPages {
 		return Result{}, ErrTooManyPages
 	}
 	if pageCount < 1 {
@@ -163,7 +183,7 @@ func parsePureGoPDF(document []byte) (result Result, err error) {
 	text.Grow(4_096)
 	textRunes := 0
 	fonts := make(map[string]*pdf.Font)
-	pageTextLimit := MaxTextRunes*utf8.UTFMax + 1
+	pageTextLimit := policy.MaxTextRunes*utf8.UTFMax + 1
 	for pageNumber := 1; pageNumber <= pageCount; pageNumber++ {
 		page := reader.Page(pageNumber)
 		if page.V.IsNull() {
@@ -186,7 +206,7 @@ func parsePureGoPDF(document []byte) (result Result, err error) {
 		}
 		text.WriteString(cleanPage)
 		textRunes += utf8.RuneCountInString(cleanPage)
-		if textRunes > MaxTextRunes {
+		if textRunes > policy.MaxTextRunes {
 			return Result{}, ErrTextTooLarge
 		}
 	}

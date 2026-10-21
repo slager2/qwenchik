@@ -17,13 +17,20 @@ func ProbeStructuredOutput(ctx context.Context, client Client) error {
 	if client == nil {
 		return errors.New("local model client is required")
 	}
-	response, err := client.Complete(ctx, ChatRequest{
+	request := ChatRequest{
 		Messages: []ChatMessage{
 			{Role: "system", Content: "Return exactly the requested JSON object. Do not include explanations."},
 			{Role: "user", Content: "Set ok to true."},
 		},
 		MaxTokens: 24, TopP: 1, JSONSchema: doctorJSONSchema,
-	})
+	}
+	complete := client.Complete
+	if guarded, ok := client.(interface {
+		TryComplete(context.Context, ChatRequest) (ChatResponse, error)
+	}); ok {
+		complete = guarded.TryComplete
+	}
+	response, err := complete(ctx, request)
 	if err != nil {
 		return fmt.Errorf("strict JSON Schema request failed: %w", err)
 	}

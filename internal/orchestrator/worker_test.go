@@ -1129,7 +1129,7 @@ func TestResearchFetchDependenciesMayBePartialButSearchesStayFirst(t *testing.T)
 	}
 }
 
-func TestWorkerReturnsInsufficiencyWhenAllFetchCandidatesFail(t *testing.T) {
+func TestWorkerReturnsTypedFailureForRequiredURL(t *testing.T) {
 	ctx := context.Background()
 	store, err := sqlite.Open(ctx, t.TempDir()+"/fetch-request-failure.db")
 	if err != nil {
@@ -1201,7 +1201,7 @@ func TestWorkerReturnsInsufficiencyWhenAllFetchCandidatesFail(t *testing.T) {
 			}
 		}
 	}
-	if gotFailureCode != "verification_incomplete" || !gotInsufficiencyDetails || !sawToolFailed || sawFetchCompleted {
+	if gotFailureCode != "source_unavailable" || gotInsufficiencyDetails || !sawToolFailed || sawFetchCompleted {
 		t.Fatalf("fetch failure events: code=%q details=%t tool_failed=%t fetch_completed=%t", gotFailureCode, gotInsufficiencyDetails, sawToolFailed, sawFetchCompleted)
 	}
 	checkpoint, err := worker.currentCheckpoint(ctx, task.ID)

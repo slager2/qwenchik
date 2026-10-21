@@ -22,12 +22,16 @@ var locationPrepositionPattern = regexp.MustCompile(`(?:^|[^\p{L}\p{N}])(?i:in|a
 var whoIsEntityPattern = regexp.MustCompile(`(?i)(?:^|[^\p{L}\p{N}])(?:who\s+(?:is|are)|what\s+(?:is|are)|кто\s+(?:такой|такая|такое|такие)|что\s+такое)(?:$|[^\p{L}\p{N}])`)
 var interrogativePattern = regexp.MustCompile(`(?i)(?:^|[^\p{L}\p{N}])(?:who|what|where|when|which|why|how|кто|что|где|когда|какой|какая|какое|какие|сколько|почему|зачем|как|ли)(?:$|[^\p{L}\p{N}])`)
 var inlineWordCountPattern = regexp.MustCompile(`(?i)(?:count\s+(?:\p{L}+\s+){0,3}words\s+here|(?:сосчитай|посчитай)\s+слова\s+в\s+строке)`)
+var noDiscoveryPattern = regexp.MustCompile(`(?i)(?:без\s+(?:дополнительн\p{L}*\s+|веб[- ]?)?поиск\p{L}*|не\s+(?:выполняй|делай|используй)\s+(?:дополнительн\p{L}*\s+|веб[- ]?)?поиск\p{L}*|(?:without|no)\s+(?:(?:additional|further|web|external)\s+)?(?:search(?:ing)?|research)\b|(?:do\s+not|don't)\s+(?:search|browse)\b)`)
 
 func requiresWebResearch(value string) bool {
 	value = quotedResearchTermPattern.ReplaceAllString(value, " ")
 	hasURL := hasUserURL(value)
 	value = userURLPattern.ReplaceAllString(value, " ")
 	value = strings.ToLower(value)
+	if hasURL && noDiscoveryPattern.MatchString(value) {
+		return false
+	}
 	value = strings.ReplaceAll(value, "user update:", " ")
 	instruction := strings.SplitN(value, ":", 2)[0]
 	if containsAny(instruction, "search the web", "search online", "в интернете", "в сети", "external sources", "независимые источники") {

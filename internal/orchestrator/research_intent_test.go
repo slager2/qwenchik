@@ -93,6 +93,23 @@ func TestGenericResearchDecomposesIntoBoundedSearchAndFetchSteps(t *testing.T) {
 	}
 }
 
+func TestSuppliedURLWithoutDiscoveryDoesNotAddSearchSteps(t *testing.T) {
+	for _, goal := range []string{
+		"Прочитай https://example.org/page и опиши страну. Используй только содержимое указанной страницы, без дополнительного поиска.",
+		"Прочитай https://example.org/page, не выполняй поиск в интернете.",
+		"Read https://example.org/page without additional search.",
+		"Read https://example.org/page; do not search the web.",
+		"Read https://example.org/page with no external research.",
+	} {
+		if requiresWebResearch(goal) || minimumResearchSearches(goal) != 0 || minimumResearchFetches(goal) != 1 {
+			t.Errorf("supplied-URL restriction triggered discovery: %q", goal)
+		}
+		if kinds := requiredResearchKinds("Inspect source", goal); len(kinds) != 1 || kinds[0] != "fetch" {
+			t.Errorf("restricted URL kinds=%v for %q", kinds, goal)
+		}
+	}
+}
+
 func TestConditionalRetryRequiresSuccessfulZeroHitResult(t *testing.T) {
 	worker := &Worker{tools: tools.NewRegistry()}
 	state := checkpointState{ToolResults: map[string]any{
@@ -494,6 +511,10 @@ func TestPersistedPlanReplacementRequiresOnlyIdempotentUntouchedActions(t *testi
 			}
 			if state.SearchQueries != 2 || state.FetchedBytes != 123 || state.ToolResults["existing"] == nil {
 				t.Fatalf("replaceable checkpoint did not preserve budget/result state: %#v", state)
+			}
+			reset := resetPlanCheckpoint(state)
+			if reset.SearchQueries != 2 || reset.FetchedBytes != 123 || len(reset.ToolResults) != 0 || len(reset.CompletedSteps) != 0 || len(reset.HistoricalObservations) != 1 || reset.HistoricalObservations[0].ToolResults["existing"] == nil {
+				t.Fatalf("replacement did not archive observations independently: %#v", reset)
 			}
 		})
 	}

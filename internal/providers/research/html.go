@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -12,10 +13,12 @@ import (
 )
 
 var (
+	ErrExtractionEmpty         = errors.New("empty_after_extraction")
+	ErrExtractionChallenge     = errors.New("challenge_detected")
 	ErrPDFExtractorUnavailable = errors.New("isolated PDF extraction is unavailable")
 	ErrPDFExtractionFailed     = errors.New("PDF extraction failed")
 	ErrPDFEncrypted            = errors.New("encrypted PDFs are not supported")
-	ErrPDFTooManyPages         = errors.New("PDF exceeds the 20 page limit")
+	ErrPDFTooManyPages         = errors.New("PDF exceeds the configured page limit")
 	ErrPDFTooLarge             = errors.New("PDF exceeds an extraction size limit")
 	ErrPDFNoText               = errors.New("PDF contains no extractable text")
 )
@@ -23,10 +26,15 @@ var (
 type HTMLExtractor struct {
 	maxChars     int
 	pdfExtractor IsolatedPDFExtractor
+	pdfPolicy    pdfextract.Policy
 }
 
 type IsolatedPDFExtractor interface {
 	Extract(context.Context, []byte) (pdfextract.Result, error)
+}
+
+type FilePDFExtractor interface {
+	ExtractFile(context.Context, *os.File) (pdfextract.Result, error)
 }
 
 func NewHTMLExtractor(maxChars int) *HTMLExtractor {
@@ -35,10 +43,18 @@ func NewHTMLExtractor(maxChars int) *HTMLExtractor {
 }
 
 func NewHTMLExtractorWithPDF(maxChars int, pdfExtractor IsolatedPDFExtractor) *HTMLExtractor {
+	extractor, _ := NewHTMLExtractorWithPDFPolicy(maxChars, pdfExtractor, pdfextract.DefaultPolicy())
+	return extractor
+}
+
+func NewHTMLExtractorWithPDFPolicy(maxChars int, pdfExtractor IsolatedPDFExtractor, policy pdfextract.Policy) (*HTMLExtractor, error) {
+	if err := policy.Validate(); err != nil {
+		return nil, err
+	}
 	if maxChars < 1 {
 		maxChars = 100_000
 	}
-	return &HTMLExtractor{maxChars: maxChars, pdfExtractor: pdfExtractor}
+	return &HTMLExtractor{maxChars: maxChars, pdfExtractor: pdfExtractor, pdfPolicy: policy}, nil
 }
 
 func (e *HTMLExtractor) Extract(ctx context.Context, document FetchedDocument) (ExtractedDocument, error) {
@@ -50,9 +66,32 @@ func (e *HTMLExtractor) Extract(ctx context.Context, document FetchedDocument) (
 		if e.pdfExtractor == nil {
 			return ExtractedDocument{}, ErrPDFExtractorUnavailable
 		}
-		result, err := e.pdfExtractor.Extract(ctx, document.Body)
+		var result pdfextract.Result
+		var err error
+		if document.File != nil {
+			info, statErr := document.File.Stat()
+			if statErr != nil {
+				return ExtractedDocument{}, errors.Join(ErrPDFExtractionFailed, statErr)
+			}
+			if !info.Mode().IsRegular() {
+				return ExtractedDocument{}, errors.Join(ErrPDFExtractionFailed, pdfextract.ErrMalformed)
+			}
+			if info.Size() > e.pdfPolicy.MaxInputBytes {
+				return ExtractedDocument{}, errors.Join(ErrPDFTooLarge, pdfextract.ErrInputTooLarge)
+			}
+			delegate, ok := e.pdfExtractor.(FilePDFExtractor)
+			if !ok {
+				return ExtractedDocument{}, errors.Join(ErrPDFExtractorUnavailable, pdfextract.ErrUnavailable)
+			}
+			result, err = delegate.ExtractFile(ctx, document.File)
+		} else {
+			if int64(len(document.Body)) > e.pdfPolicy.MaxInputBytes {
+				return ExtractedDocument{}, errors.Join(ErrPDFTooLarge, pdfextract.ErrInputTooLarge)
+			}
+			result, err = e.pdfExtractor.Extract(ctx, document.Body)
+		}
 		if errors.Is(err, pdfextract.ErrUnavailable) {
-			return ExtractedDocument{}, ErrPDFExtractorUnavailable
+			return ExtractedDocument{}, errors.Join(ErrPDFExtractorUnavailable, err)
 		}
 		if err != nil {
 			switch {
@@ -74,13 +113,13 @@ func (e *HTMLExtractor) Extract(ctx context.Context, document FetchedDocument) (
 		if result.PageCount < 1 {
 			return ExtractedDocument{}, errors.Join(ErrPDFExtractionFailed, pdfextract.ErrMalformed)
 		}
-		if result.PageCount > pdfextract.MaxPages {
+		if result.PageCount > e.pdfPolicy.MaxPages {
 			return ExtractedDocument{}, errors.Join(ErrPDFTooManyPages, pdfextract.ErrTooManyPages)
 		}
-		if utf8.RuneCountInString(result.Text) > pdfextract.MaxTextRunes {
+		if utf8.RuneCountInString(result.Text) > e.pdfPolicy.MaxTextRunes {
 			return ExtractedDocument{}, errors.Join(ErrPDFTooLarge, pdfextract.ErrTextTooLarge)
 		}
-		text := normalizeExtractedText(result.Text, pdfextract.MaxTextRunes)
+		text := normalizeExtractedText(result.Text, e.pdfPolicy.MaxTextRunes)
 		if text == "" {
 			return ExtractedDocument{}, ErrPDFNoText
 		}
@@ -97,7 +136,10 @@ func (e *HTMLExtractor) Extract(ctx context.Context, document FetchedDocument) (
 		text := normalizeExtractedText(string(document.Body), e.maxChars)
 		flags := []string{}
 		if text == "" {
-			flags = append(flags, "empty_after_extraction")
+			return ExtractedDocument{}, ErrExtractionEmpty
+		}
+		if isChallengeDocument(nil, "", text) {
+			return ExtractedDocument{}, ErrExtractionChallenge
 		}
 		return ExtractedDocument{Text: text, Method: "local_text_extractor", ContentSHA256: document.ContentSHA256, Taint: TaintExternal, QualityFlags: flags}, nil
 	case "text/html", "application/xhtml+xml":
@@ -109,9 +151,12 @@ func (e *HTMLExtractor) Extract(ctx context.Context, document FetchedDocument) (
 		return ExtractedDocument{}, fmt.Errorf("parse HTML: %w", err)
 	}
 	title, cleanText := extractSmartHTML(root, e.maxChars)
+	if isChallengeDocument(root, title, cleanText) {
+		return ExtractedDocument{}, ErrExtractionChallenge
+	}
 	flags := []string{}
 	if cleanText == "" {
-		flags = append(flags, "empty_after_extraction")
+		return ExtractedDocument{}, ErrExtractionEmpty
 	}
 	return ExtractedDocument{
 		Title:         trimRunes(title, 500),
@@ -121,6 +166,48 @@ func (e *HTMLExtractor) Extract(ctx context.Context, document FetchedDocument) (
 		Taint:         TaintExternal,
 		QualityFlags:  flags,
 	}, nil
+}
+
+func isChallengeDocument(root *html.Node, title, text string) bool {
+	title = strings.ToLower(strings.TrimSpace(title))
+	for _, marker := range []string{"just a moment", "attention required!", "verify you are human", "robot check", "access denied", "security verification"} {
+		if strings.Contains(title, marker) {
+			return true
+		}
+	}
+	var challengeForm bool
+	var visit func(*html.Node)
+	visit = func(n *html.Node) {
+		if n == nil {
+			return
+		}
+		if n.Type == html.ElementNode && n.Data == "form" {
+			for _, attr := range n.Attr {
+				if attr.Key == "id" || attr.Key == "action" {
+					value := strings.ToLower(attr.Val)
+					if strings.Contains(value, "challenge") || strings.Contains(value, "captcha") {
+						challengeForm = true
+					}
+				}
+			}
+		}
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			visit(child)
+		}
+	}
+	visit(root)
+	if challengeForm {
+		return true
+	}
+	if utf8.RuneCountInString(text) <= 1000 {
+		lower := strings.ToLower(text)
+		for _, marker := range []string{"verify you are human", "checking your browser before accessing", "enable javascript and cookies to continue", "complete the captcha", "подтвердите, что вы не робот"} {
+			if strings.Contains(lower, marker) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func isDiscardedTag(tag string) bool {

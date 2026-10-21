@@ -32,6 +32,7 @@ var (
 	ErrIdempotency             = errors.New("idempotency key was used for another operation")
 	ErrApprovalExpired         = errors.New("approval expired")
 	ErrApprovalAlreadyConsumed = errors.New("approval was already consumed")
+	ErrResearchBudgetExceeded  = errors.New("research budget exceeded")
 )
 
 type Store struct {
@@ -203,6 +204,13 @@ func (s *Store) TransitionTask(ctx context.Context, id string, to domain.TaskSta
 	if err != nil {
 		return domain.Task{}, err
 	}
+	if to == domain.StatusQueued && task.Status.Terminal() {
+		if _, err := run(ctx, tx, id); err == nil {
+			return domain.Task{}, fmt.Errorf("%w: conversation retry requires a new run", ErrConflict)
+		} else if !errors.Is(err, ErrNotFound) {
+			return domain.Task{}, err
+		}
+	}
 	if task.Status == to && (stage == nil || task.Stage != nil && *task.Stage == *stage) {
 		return task, nil
 	}
@@ -234,6 +242,19 @@ func (s *Store) TransitionTask(ctx context.Context, id string, to domain.TaskSta
 	if _, err := appendEvent(ctx, tx, id, eventType, stage, visibility, payload); err != nil {
 		return domain.Task{}, err
 	}
+	if to.Terminal() {
+		if err := syncConversationTerminal(ctx, tx, id, to, payload); err != nil {
+			return domain.Task{}, err
+		}
+	} else {
+		phase := ""
+		if stage != nil {
+			phase = string(*stage)
+		}
+		if err := updateResearchSessionStatus(ctx, tx, id, to, phase, false, "", updated); err != nil {
+			return domain.Task{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return domain.Task{}, err
 	}
@@ -264,6 +285,11 @@ func (s *Store) QueueTask(ctx context.Context, id, idempotencyKey string) (domai
 		return domain.Task{}, err
 	}
 	if task.Status != domain.StatusQueued {
+		if _, err := run(ctx, tx, id); err == nil && task.Status.Terminal() {
+			return domain.Task{}, fmt.Errorf("%w: conversation retry requires a new run", ErrConflict)
+		} else if err != nil && !errors.Is(err, ErrNotFound) {
+			return domain.Task{}, err
+		}
 		if !domain.CanTransition(task.Status, domain.StatusQueued) {
 			return domain.Task{}, fmt.Errorf("%w: %s -> %s", domain.ErrInvalidTransition, task.Status, domain.StatusQueued)
 		}
@@ -275,6 +301,9 @@ func (s *Store) QueueTask(ctx context.Context, id, idempotencyKey string) (domai
 			return domain.Task{}, err
 		}
 		if _, err := appendEvent(ctx, tx, id, "task.status_changed", nil, "user", map[string]any{"from": task.Status, "to": domain.StatusQueued}); err != nil {
+			return domain.Task{}, err
+		}
+		if err := updateResearchSessionStatus(ctx, tx, id, domain.StatusQueued, string(domain.StatusQueued), false, "", now); err != nil {
 			return domain.Task{}, err
 		}
 		task.Status = domain.StatusQueued
@@ -319,6 +348,13 @@ func (s *Store) AddMessage(ctx context.Context, message domain.Message, idempote
 	task, err := getTask(ctx, tx, message.TaskID)
 	if err != nil {
 		return domain.Message{}, err
+	}
+	if message.Role == "user" {
+		if _, err := run(ctx, tx, message.TaskID); err == nil {
+			return domain.Message{}, fmt.Errorf("%w: use conversation submission for linked runs", ErrConflict)
+		} else if !errors.Is(err, ErrNotFound) {
+			return domain.Message{}, err
+		}
 	}
 	if message.Role == "user" && task.Status != domain.StatusInbox && task.Status != domain.StatusQueued && task.Status != domain.StatusPaused && task.Status != domain.StatusFailed {
 		return domain.Message{}, fmt.Errorf("%w: task is not accepting user messages", ErrConflict)
@@ -435,6 +471,18 @@ func (s *Store) RecordMessageDelta(ctx context.Context, taskID, streamID, messag
 	if err != nil {
 		return domain.Event{}, err
 	}
+	linked, linkErr := run(ctx, tx, taskID)
+	if linkErr != nil && !errors.Is(linkErr, ErrNotFound) {
+		return domain.Event{}, linkErr
+	}
+	if linkErr == nil {
+		messageID = linked.AssistantMessageID
+		if event, found, err := committedConversationDelta(ctx, tx, taskID, streamID, messageID, chunkIndex, delta); err != nil {
+			return domain.Event{}, err
+		} else if found {
+			return event, nil
+		}
+	}
 	if task.Status != domain.StatusVerifying {
 		return domain.Event{}, fmt.Errorf("%w: message deltas are only accepted during final synthesis", ErrConflict)
 	}
@@ -445,6 +493,7 @@ func (s *Store) RecordMessageDelta(ctx context.Context, taskID, streamID, messag
 			StreamID   string `json:"stream_id"`
 			MessageID  string `json:"message_id"`
 			ChunkIndex int    `json:"chunk_index"`
+			Delta      string `json:"delta"`
 		}
 		if err := json.Unmarshal([]byte(previousPayload), &previous); err != nil {
 			return domain.Event{}, fmt.Errorf("decode previous message delta: %w", err)
@@ -466,6 +515,22 @@ func (s *Store) RecordMessageDelta(ctx context.Context, taskID, streamID, messag
 	})
 	if err != nil {
 		return domain.Event{}, err
+	}
+	if linkErr == nil {
+		message, err := conversationMessage(ctx, tx, messageID)
+		if err != nil {
+			return domain.Event{}, err
+		}
+		var currentStream string
+		if err := tx.QueryRowContext(ctx, `SELECT stream_id FROM conversation_messages WHERE id=?`, messageID).Scan(&currentStream); err != nil {
+			return domain.Event{}, err
+		}
+		if len(delta) > 100000 || currentStream == streamID && len(message.Content)+len(delta) > 100000 {
+			return domain.Event{}, fmt.Errorf("%w: assistant message exceeds size limit", ErrConflict)
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE conversation_messages SET content=CASE WHEN stream_id=? THEN content||? ELSE ? END,status='streaming',stream_id=?,chunk_index=?,updated_at=?,last_event_seq=? WHERE id=?`, streamID, delta, delta, streamID, chunkIndex, stamp(time.Now().UTC()), seq, messageID); err != nil {
+			return domain.Event{}, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return domain.Event{}, err
@@ -612,6 +677,18 @@ func (s *Store) SaveArtifact(ctx context.Context, artifact domain.Artifact, stor
 	if !errors.Is(err, sql.ErrNoRows) {
 		return domain.Artifact{}, err
 	}
+	session, sessionErr := researchSession(ctx, tx, artifact.TaskID)
+	if sessionErr != nil && !errors.Is(sessionErr, ErrNotFound) {
+		return domain.Artifact{}, sessionErr
+	}
+	if sessionErr == nil {
+		if err := researchReservationAllowed(ctx, tx, session); err != nil {
+			return domain.Artifact{}, err
+		}
+		if _, err := researchEvidenceCapacity(ctx, tx, session); err != nil {
+			return domain.Artifact{}, err
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO artifacts(id,task_id,name,mime_type,sha256,size_bytes,storage_path,created_at) VALUES(?,?,?,?,?,?,?,?)`,
 		artifact.ID, artifact.TaskID, artifact.Name, artifact.MIMEType, artifact.SHA256, artifact.SizeBytes, storagePath, stamp(artifact.CreatedAt)); err != nil {
 		return domain.Artifact{}, err
@@ -668,6 +745,20 @@ func (s *Store) SaveEvidence(ctx context.Context, evidence domain.Evidence) (dom
 	if !errors.Is(err, sql.ErrNoRows) {
 		return domain.Evidence{}, err
 	}
+	session, sessionErr := researchSession(ctx, tx, evidence.TaskID)
+	if sessionErr != nil && !errors.Is(sessionErr, ErrNotFound) {
+		return domain.Evidence{}, sessionErr
+	}
+	if sessionErr == nil {
+		if err := researchReservationAllowed(ctx, tx, session); err != nil {
+			return domain.Evidence{}, err
+		}
+		count, err := researchEvidenceCapacity(ctx, tx, session)
+		if err != nil {
+			return domain.Evidence{}, err
+		}
+		session.Counters.Evidence = count + 1
+	}
 	if evidence.ID == "" {
 		evidence.ID = newID()
 	}
@@ -692,6 +783,11 @@ func (s *Store) SaveEvidence(ctx context.Context, evidence domain.Evidence) (dom
 		"evidence_id": evidence.ID, "title": evidence.Title, "canonical_url": evidence.CanonicalURL,
 	}); err != nil {
 		return domain.Evidence{}, err
+	}
+	if sessionErr == nil {
+		if err := writeResearchCounters(ctx, tx, evidence.TaskID, session.Counters); err != nil {
+			return domain.Evidence{}, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return domain.Evidence{}, err
@@ -1127,8 +1223,17 @@ func transitionStatusTx(ctx context.Context, tx *sql.Tx, task domain.Task, to do
 	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status=?,stage=?,version=version+1,updated_at=? WHERE id=?`, to, nullableStage(stage), stamp(now), task.ID); err != nil {
 		return err
 	}
-	_, err := appendEvent(ctx, tx, task.ID, eventType, stage, "user", payload)
-	return err
+	if _, err := appendEvent(ctx, tx, task.ID, eventType, stage, "user", payload); err != nil {
+		return err
+	}
+	phase := ""
+	if stage != nil {
+		phase = string(*stage)
+	}
+	if to.Terminal() {
+		return updateResearchSessionStatus(ctx, tx, task.ID, to, string(to), true, researchTerminalStopReason(to, payload), now)
+	}
+	return updateResearchSessionStatus(ctx, tx, task.ID, to, phase, false, "", now)
 }
 
 func saveApprovalCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, state any, approvalID, status string) error {
@@ -1244,12 +1349,8 @@ func (s *Store) SaveCheckpoint(ctx context.Context, taskID string, planVersion i
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
-	checkpoint := domain.Checkpoint{ID: newID(), TaskID: taskID, PlanVersion: planVersion, State: state, LastEventSeq: seq, CreatedAt: time.Now().UTC()}
-	stateJSON, err := json.Marshal(checkpoint.State)
+	checkpoint, err := saveCheckpointTx(ctx, tx, taskID, planVersion, seq, state)
 	if err != nil {
-		return domain.Checkpoint{}, err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO checkpoints(id,task_id,plan_version,state_json,last_event_seq,created_at) VALUES(?,?,?,?,?,?)`, checkpoint.ID, checkpoint.TaskID, checkpoint.PlanVersion, string(stateJSON), checkpoint.LastEventSeq, stamp(checkpoint.CreatedAt)); err != nil {
 		return domain.Checkpoint{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1330,6 +1431,19 @@ func (s *Store) CompleteTask(ctx context.Context, taskID, answer string, checkpo
 	}
 	now := time.Now().UTC()
 	stage := domain.StageFinalization
+	linked, linkErr := run(ctx, tx, taskID)
+	if linkErr != nil && !errors.Is(linkErr, ErrNotFound) {
+		return domain.Task{}, linkErr
+	}
+	if linkErr == nil {
+		messageID = linked.AssistantMessageID
+		if _, err := tx.ExecContext(ctx, `UPDATE conversation_messages SET content=?,status='completed',updated_at=? WHERE id=?`, answer, stamp(now), messageID); err != nil {
+			return domain.Task{}, err
+		}
+		if err := persistVerification(ctx, tx, taskID, messageID); err != nil {
+			return domain.Task{}, err
+		}
+	}
 	if err := transitionStageTx(ctx, tx, taskID, task.Stage, &stage, "completed", now); err != nil {
 		return domain.Task{}, err
 	}
@@ -1347,6 +1461,9 @@ func (s *Store) CompleteTask(ctx context.Context, taskID, answer string, checkpo
 	}
 	seq, err := appendEvent(ctx, tx, taskID, "task.completed", &stage, "user", map[string]any{"status": domain.StatusCompleted})
 	if err != nil {
+		return domain.Task{}, err
+	}
+	if err := syncConversationTerminal(ctx, tx, taskID, domain.StatusCompleted, nil); err != nil {
 		return domain.Task{}, err
 	}
 	if err := insertCheckpoint(ctx, tx, taskID, 1, seq, checkpointState); err != nil {
@@ -1391,6 +1508,21 @@ func (s *Store) ClaimNext(ctx context.Context) (domain.Task, bool, error) {
 	if _, err := appendEvent(ctx, tx, id, "task.status_changed", &stage, "user", map[string]any{"from": task.Status, "to": domain.StatusPlanning}); err != nil {
 		return domain.Task{}, false, err
 	}
+	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET started_at=COALESCE(started_at,?),heartbeat_at=? WHERE id=? AND conversation_id IS NOT NULL`, stamp(now), stamp(now), id); err != nil {
+		return domain.Task{}, false, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE research_sessions SET status=?,current_phase=?,started_at=COALESCE(started_at,?),heartbeat_at=?,updated_at=? WHERE task_id=?`,
+		domain.StatusPlanning, domain.StagePlanning, stamp(now), stamp(now), stamp(now), id); err != nil {
+		return domain.Task{}, false, err
+	}
+	if allowed, err := enforceClaimPermission(ctx, tx, id); err != nil {
+		return domain.Task{}, false, err
+	} else if !allowed {
+		if err = tx.Commit(); err != nil {
+			return domain.Task{}, false, err
+		}
+		return domain.Task{}, false, nil
+	}
 	if err := tx.Commit(); err != nil {
 		return domain.Task{}, false, err
 	}
@@ -1430,6 +1562,35 @@ func (s *Store) RecoverInterrupted(ctx context.Context) (int64, error) {
 	}
 	for _, item := range tasks {
 		now := time.Now().UTC()
+		linked, linkErr := run(ctx, tx, item.id)
+		if linkErr != nil && !errors.Is(linkErr, ErrNotFound) {
+			return 0, linkErr
+		}
+		if linkErr == nil && linked.Mode == "chat" {
+			message, err := conversationMessage(ctx, tx, linked.AssistantMessageID)
+			if err != nil {
+				return 0, err
+			}
+			if message.Content != "" {
+				payload := map[string]any{"error_code": "generation_interrupted", "message": "Генерация прервана перезапуском. Продолжите ответ или повторите запрос."}
+				if err := transitionStageTx(ctx, tx, item.id, linked.Stage, nil, "failed", now); err != nil {
+					return 0, err
+				}
+				if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status='failed',stage=NULL,version=version+1,updated_at=? WHERE id=?`, stamp(now), item.id); err != nil {
+					return 0, err
+				}
+				if _, err := appendEvent(ctx, tx, item.id, "task.failed", nil, "user", payload); err != nil {
+					return 0, err
+				}
+				if err := syncConversationTerminal(ctx, tx, item.id, domain.StatusFailed, payload); err != nil {
+					return 0, err
+				}
+				if _, err := tx.ExecContext(ctx, `UPDATE conversation_messages SET status='interrupted' WHERE id=?`, linked.AssistantMessageID); err != nil {
+					return 0, err
+				}
+				continue
+			}
+		}
 		var previousStage *domain.Stage
 		if item.stage.Valid {
 			value := domain.Stage(item.stage.String)
@@ -1442,6 +1603,9 @@ func (s *Store) RecoverInterrupted(ctx context.Context) (int64, error) {
 			return 0, err
 		}
 		if _, err := appendEvent(ctx, tx, item.id, "task.recovered", nil, "user", map[string]any{"previous_status": item.status, "status": domain.StatusQueued}); err != nil {
+			return 0, err
+		}
+		if err := updateResearchSessionStatus(ctx, tx, item.id, domain.StatusQueued, string(domain.StatusQueued), false, "", now); err != nil {
 			return 0, err
 		}
 	}
@@ -1531,12 +1695,29 @@ func closeStageStatus(status domain.TaskStatus) string {
 }
 
 func insertCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, planVersion int, seq int64, state any) error {
-	encoded, err := json.Marshal(state)
-	if err != nil {
-		return err
-	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO checkpoints(id,task_id,plan_version,state_json,last_event_seq,created_at) VALUES(?,?,?,?,?,?)`, newID(), taskID, planVersion, string(encoded), seq, stamp(time.Now().UTC()))
+	_, err := saveCheckpointTx(ctx, tx, taskID, planVersion, seq, state)
 	return err
+}
+
+func saveCheckpointTx(ctx context.Context, tx *sql.Tx, taskID string, planVersion int, seq int64, state any) (domain.Checkpoint, error) {
+	encoded, planVersion, err := prepareResearchCheckpoint(ctx, tx, taskID, planVersion, state)
+	if err != nil {
+		return domain.Checkpoint{}, err
+	}
+	checkpoint := domain.Checkpoint{ID: newID(), TaskID: taskID, PlanVersion: planVersion, State: state, LastEventSeq: seq, CreatedAt: time.Now().UTC()}
+	original, err := json.Marshal(state)
+	if err != nil {
+		return domain.Checkpoint{}, err
+	}
+	if !bytes.Equal(encoded, original) {
+		var decoded any
+		if err := json.Unmarshal(encoded, &decoded); err != nil {
+			return domain.Checkpoint{}, err
+		}
+		checkpoint.State = decoded
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO checkpoints(id,task_id,plan_version,state_json,last_event_seq,created_at) VALUES(?,?,?,?,?,?)`, checkpoint.ID, taskID, planVersion, string(encoded), seq, stamp(checkpoint.CreatedAt))
+	return checkpoint, err
 }
 
 func findIdempotency(ctx context.Context, q interface {

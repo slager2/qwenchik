@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -11,36 +12,47 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
 )
 
 type Config struct {
-	BindAddr              string
-	DatabasePath          string
-	ArtifactsPath         string
-	WorkspaceRoot         string
-	SandboxRuntime        string
-	SandboxImage          string
-	SandboxNetwork        string
-	PDFExtractorImage     string
-	LLMBaseURL            string
-	LLMAPIKey             string
-	LLMModel              string
-	LLMContextLength      int
-	LLMMaxOutputTokens    int
-	LLMTemperature        float64
-	LLMTopP               float64
-	LLMEnableThinking     bool
-	LLMRequestTimeoutSecs int
-	LLMMaxConcurrency     int
-	SearXNGURL            string
-	TavilyAPIKey          string
-	SearchEnableDDG       bool
-	MaxSteps              int
-	TaskTimeoutSeconds    int
-	MaxSearchQueries      int
-	MaxFetchBytes         int64
-	AllowedDomains        []string
+	BindAddr                  string
+	DatabasePath              string
+	ArtifactsPath             string
+	WorkspaceRoot             string
+	SandboxRuntime            string
+	SandboxImage              string
+	SandboxNetwork            string
+	PDFExtractorImage         string
+	LLMBaseURL                string
+	LLMAPIKey                 string
+	LLMModel                  string
+	LLMContextLength          int
+	LLMMaxOutputTokens        int
+	LLMTemperature            float64
+	LLMTopP                   float64
+	LLMEnableThinking         bool
+	LLMRequestTimeoutSecs     int
+	LLMMaxConcurrency         int
+	SearXNGURL                string
+	TavilyAPIKey              string
+	SearchEnableDDG           bool
+	MaxSteps                  int
+	TaskTimeoutSeconds        int
+	MaxSearchQueries          int
+	MaxFetchBytes             int64
+	ResearchDefaultProfile    string
+	ResearchAdaptiveEnabled   bool
+	MaxSourceBytes            int64
+	PDFPolicy                 pdfextract.Policy
+	PDFDownloadTimeoutSeconds int
+	ArtifactMaxBytes          int64
+	SandboxMaxFileBytes       int64
+	FetchTempDir              string
+	FetchTempTaskBytes        int64
+	FetchTempGlobalBytes      int64
+	AllowedDomains            []string
 }
 
 func Load() (Config, error) {
@@ -97,7 +109,10 @@ func Load() (Config, error) {
 	if cfg.MaxSearchQueries, err = intEnv("MAX_SEARCH_QUERIES", 12); err != nil {
 		return Config{}, err
 	}
-	if cfg.MaxFetchBytes, err = int64Env("MAX_FETCH_BYTES", 5_000_000); err != nil {
+	if cfg.MaxFetchBytes, err = int64Env("MAX_FETCH_BYTES", domain.DefaultTaskFetchBudgetBytes); err != nil {
+		return Config{}, err
+	}
+	if err := loadResearchPolicy(&cfg); err != nil {
 		return Config{}, err
 	}
 	cfg.AllowedDomains = splitList(os.Getenv("ALLOWED_DOMAINS"))
@@ -307,13 +322,13 @@ func (c Config) Validate() error {
 	if appPort == llmPort {
 		return errors.New("LLM_BASE_URL must use a different port from APP_BIND_ADDR")
 	}
-	if c.LLMModel == "" {
+	if strings.TrimSpace(c.LLMModel) == "" {
 		return errors.New("LLM_MODEL must not be empty")
 	}
 	if c.LLMContextLength < 1024 || c.LLMMaxOutputTokens < 1 || c.LLMContextLength-c.LLMMaxOutputTokens < 2304 {
 		return errors.New("LLM token budgets are invalid")
 	}
-	if c.LLMTemperature < 0 || c.LLMTemperature > 2 || c.LLMTopP <= 0 || c.LLMTopP > 1 {
+	if math.IsNaN(c.LLMTemperature) || math.IsInf(c.LLMTemperature, 0) || math.IsNaN(c.LLMTopP) || math.IsInf(c.LLMTopP, 0) || c.LLMTemperature < 0 || c.LLMTemperature > 2 || c.LLMTopP <= 0 || c.LLMTopP > 1 {
 		return errors.New("LLM_TEMPERATURE must be 0..2 and LLM_TOP_P must be in (0,1]")
 	}
 	if c.LLMRequestTimeoutSecs < 1 || c.LLMRequestTimeoutSecs > 3600 {
@@ -328,8 +343,25 @@ func (c Config) Validate() error {
 			return errors.New("ALLOWED_DOMAINS must contain hostnames or IP addresses, not URLs or paths")
 		}
 	}
-	if c.MaxSteps < 1 || c.MaxSteps > 12 || c.TaskTimeoutSeconds < 1 || c.MaxSearchQueries < 1 || c.MaxFetchBytes < 1 {
+	if c.TaskTimeoutSeconds < 1 || c.TaskTimeoutSeconds > 21600 {
+		return errors.New("TASK_TIMEOUT_SECONDS must be between 1 and 21600")
+	}
+	if c.MaxSteps < 1 || c.MaxSteps > 12 || c.MaxSearchQueries < 1 || c.MaxFetchBytes < 1 {
 		return errors.New("task and tool budgets are invalid")
+	}
+	if c.ResearchAdaptiveEnabled {
+		return errors.New("RESEARCH_ADAPTIVE_ENABLED=true is unavailable until Phase 3")
+	}
+	if c.ResearchDefaultProfile != "" && !knownResearchProfile(c.ResearchDefaultProfile) {
+		return errors.New("RESEARCH_DEFAULT_PROFILE must be quick, standard, deep_laptop, long_laptop, or overnight_laptop")
+	}
+	if c.PDFPolicy.MaxInputBytes != 0 {
+		if err := c.validateResearchLimits(); err != nil {
+			return err
+		}
+		if c.ArtifactMaxBytes < max(c.MaxSourceBytes, c.PDFPolicy.MaxInputBytes) || c.SandboxMaxFileBytes < 1 {
+			return errors.New("artifact or sandbox file limits are invalid")
+		}
 	}
 	return nil
 }

@@ -14,3 +14,5 @@ The current browser gate requires a verified design that enforces all of the fol
 - output bytes, actions, screenshots, traces, and wall time are bounded and cleaned up.
 
 Until those conditions are verified by browser smoke tests and SSRF tests, planner validation rejects `browser` steps. Static public HTML is supported through the SSRF-safe fetcher. This avoids silently presenting the installed Chrome binary as an isolated browser subsystem.
+
+PDF extraction has a separate [runtime policy and verification boundary](../pdf-limits-repair.md). The 33-test frontend suite and mocked Chrome run passed, verifying presentation/replay of source failures. The gated live PDF test verified a file-backed download only; `RootlessExtractor` was skipped because `PDF_EXTRACTOR_IMAGE` was unset and the runtime check was unavailable. These results do not establish successful parsing of the real PDF. Neither browser availability nor rootful Docker may be reported as isolated PDF extraction readiness.

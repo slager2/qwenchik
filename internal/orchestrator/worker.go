@@ -11,7 +11,6 @@ import (
 	"io"
 	"log/slog"
 	"math"
-	"net"
 	"net/url"
 	"regexp"
 	"sort"
@@ -80,48 +79,65 @@ type Repository interface {
 }
 
 type Options struct {
-	MaxSteps         int
-	MaxSearchQueries int
-	MaxFetchBytes    int64
-	TaskTimeout      time.Duration
-	MaxOutputTokens  int
-	MaxInputBytes    int
-	Temperature      float64
-	TopP             float64
-	PollInterval     time.Duration
-	Logger           *slog.Logger
+	MaxSteps              int
+	MaxSearchQueries      int
+	MaxFetchBytes         int64
+	TaskTimeout           time.Duration
+	MaxOutputTokens       int
+	MaxInputBytes         int
+	Temperature           float64
+	TopP                  float64
+	PollInterval          time.Duration
+	Logger                *slog.Logger
+	RuntimeResearchPolicy *domain.ResearchPolicy
+	RuntimeModelContext   int
 }
 
 type Worker struct {
-	repo     Repository
-	client   llm.Client
-	tools    *tools.Registry
-	options  Options
-	wake     chan struct{}
-	activeMu sync.Mutex
-	active   map[string]context.CancelFunc
+	repo      Repository
+	client    llm.Client
+	tools     *tools.Registry
+	options   Options
+	wake      chan struct{}
+	activeMu  sync.Mutex
+	active    map[string]context.CancelFunc
+	heartbeat time.Time
 }
 
 type checkpointState struct {
-	PlanVersion           int               `json:"plan_version"`
-	SearchQueries         int               `json:"search_queries"`
-	SearchQueryHistory    []string          `json:"search_query_history,omitempty"`
-	SearchQueryByStep     map[string]string `json:"search_query_by_step,omitempty"`
-	FetchedBytes          int64             `json:"fetched_bytes"`
-	PendingTool           string            `json:"pending_tool,omitempty"`
-	PendingToolIdempotent bool              `json:"pending_tool_idempotent,omitempty"`
-	PendingApproval       bool              `json:"pending_approval,omitempty"`
-	PendingArguments      json.RawMessage   `json:"pending_arguments,omitempty"`
-	PendingSummary        string            `json:"pending_summary,omitempty"`
-	PendingTarget         string            `json:"pending_target,omitempty"`
-	PendingRisk           string            `json:"pending_risk,omitempty"`
-	FailedFetchURLs       []string          `json:"failed_fetch_urls,omitempty"`
-	RejectedFetchURLs     []string          `json:"rejected_fetch_urls,omitempty"`
-	CurrentStep           string            `json:"current_step,omitempty"`
-	CompletedSteps        []string          `json:"completed_steps"`
-	SkippedSteps          []string          `json:"skipped_steps,omitempty"`
-	ToolResults           map[string]any    `json:"tool_results,omitempty"`
-	Summary               string            `json:"summary,omitempty"`
+	PlanAttempt                int                `json:"plan_attempt,omitempty"`
+	AttemptStartSeq            int64              `json:"attempt_start_seq,omitempty"`
+	HistoricalObservations     []planObservations `json:"historical_observations,omitempty"`
+	LifetimeSearchQueryHistory []string           `json:"lifetime_search_query_history,omitempty"`
+	PlanVersion                int                `json:"plan_version"`
+	SearchQueries              int                `json:"search_queries"`
+	SearchQueryHistory         []string           `json:"search_query_history,omitempty"`
+	SearchQueryByStep          map[string]string  `json:"search_query_by_step,omitempty"`
+	FetchedBytes               int64              `json:"fetched_bytes"`
+	SourceFailures             []sourceFailure    `json:"source_failures,omitempty"`
+	CurrentCandidate           int                `json:"current_candidate"`
+	Partial                    bool               `json:"partial,omitempty"`
+	PendingTool                string             `json:"pending_tool,omitempty"`
+	PendingToolIdempotent      bool               `json:"pending_tool_idempotent,omitempty"`
+	PendingApproval            bool               `json:"pending_approval,omitempty"`
+	PendingArguments           json.RawMessage    `json:"pending_arguments,omitempty"`
+	PendingSummary             string             `json:"pending_summary,omitempty"`
+	PendingTarget              string             `json:"pending_target,omitempty"`
+	PendingRisk                string             `json:"pending_risk,omitempty"`
+	FailedFetchURLs            []string           `json:"failed_fetch_urls,omitempty"`
+	RejectedFetchURLs          []string           `json:"rejected_fetch_urls,omitempty"`
+	CurrentStep                string             `json:"current_step,omitempty"`
+	CompletedSteps             []string           `json:"completed_steps"`
+	SkippedSteps               []string           `json:"skipped_steps,omitempty"`
+	ToolResults                map[string]any     `json:"tool_results,omitempty"`
+	Summary                    string             `json:"summary,omitempty"`
+}
+
+type planObservations struct {
+	PlanAttempt        int               `json:"plan_attempt"`
+	ToolResults        map[string]any    `json:"tool_results"`
+	SearchQueryHistory []string          `json:"search_query_history,omitempty"`
+	SearchQueryByStep  map[string]string `json:"search_query_by_step,omitempty"`
 }
 
 type actionDecision struct {
@@ -159,9 +175,9 @@ func New(repo Repository, client llm.Client, registry *tools.Registry, options O
 		options.MaxSearchQueries = 12
 	}
 	if options.MaxFetchBytes < 1 {
-		options.MaxFetchBytes = 5_000_000
+		options.MaxFetchBytes = domain.DefaultTaskFetchBudgetBytes
 	}
-	if options.MaxOutputTokens < 128 {
+	if options.MaxOutputTokens < 1 {
 		options.MaxOutputTokens = 4096
 	}
 	if options.MaxInputBytes < 1 {
@@ -189,6 +205,21 @@ func (w *Worker) Busy() bool {
 	return len(w.active) > 0
 }
 
+func (w *Worker) Heartbeat(ctx context.Context) (time.Time, error) {
+	if err := ctx.Err(); err != nil {
+		return time.Time{}, err
+	}
+	w.activeMu.Lock()
+	defer w.activeMu.Unlock()
+	return w.heartbeat, nil
+}
+
+func (w *Worker) touchHeartbeat() {
+	w.activeMu.Lock()
+	w.heartbeat = time.Now().UTC()
+	w.activeMu.Unlock()
+}
+
 func (w *Worker) Interrupt(taskID string) {
 	w.activeMu.Lock()
 	cancel := w.active[taskID]
@@ -200,6 +231,7 @@ func (w *Worker) Interrupt(taskID string) {
 }
 
 func (w *Worker) Run(ctx context.Context) error {
+	w.touchHeartbeat()
 	recovered, err := w.repo.RecoverInterrupted(ctx)
 	if err != nil {
 		return fmt.Errorf("recover interrupted tasks: %w", err)
@@ -252,6 +284,7 @@ func (w *Worker) expireApprovalLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			w.touchHeartbeat()
 			workCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			expired, err := w.repo.ExpireApprovals(workCtx)
 			cancel()
@@ -265,7 +298,8 @@ func (w *Worker) expireApprovalLoop(ctx context.Context) {
 }
 
 func (w *Worker) runTask(parent context.Context, task domain.Task) {
-	ctx, cancel := context.WithTimeout(parent, w.options.TaskTimeout)
+	deadline, researchDeadline := w.runDeadline(parent, task.ID)
+	ctx, cancel := context.WithDeadline(parent, deadline)
 	ctx = tools.WithTaskID(ctx, task.ID)
 	w.activeMu.Lock()
 	w.active[task.ID] = cancel
@@ -283,7 +317,7 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 	}()
 
 	w.options.Logger.Info("task execution started", "task_id", task.ID, "stage", domain.StagePlanning)
-	err := w.execute(ctx, task)
+	err := w.executeRun(ctx, task)
 	if err == nil || parent.Err() != nil {
 		return
 	}
@@ -295,12 +329,31 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 	timedOut := errors.Is(ctx.Err(), context.DeadlineExceeded)
 	if timedOut {
 		code = "task_timeout"
+		if researchDeadline {
+			code = "run_deadline"
+		}
 	}
 	if errors.Is(err, ErrInterrupted) || errors.Is(err, ErrAwaitingApproval) || errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
 	if !timedOut {
-		if errors.Is(err, errLLMUnavailable) {
+		if errors.Is(err, sqlite.ErrResearchBudgetExceeded) {
+			code = "research_budget_exceeded"
+		} else if errors.Is(err, errResearchRuntimeChanged) {
+			code = "research_runtime_changed"
+		} else if errors.Is(err, errRunDeadline) {
+			code = "run_deadline"
+		} else if errors.Is(err, errWorkerPanic) {
+			code = "internal_error"
+		} else if errors.Is(err, llm.ErrModelTimeout) {
+			code = "model_timeout"
+		} else if errors.Is(err, llm.ErrOutputTruncated) {
+			code = "model_output_truncated"
+		} else if errors.Is(err, llm.ErrStreamInterrupted) {
+			code = "model_stream_interrupted"
+		} else if errors.Is(err, llm.ErrInvalidModelOutput) {
+			code = "invalid_model_output"
+		} else if errors.Is(err, errLLMUnavailable) {
 			code = "llm_unavailable"
 		} else if errors.Is(err, research.ErrSearchFilteredByPolicy) {
 			code = "search_filtered_by_policy"
@@ -323,7 +376,9 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 		} else if errors.Is(err, errSearchBudgetExceeded) {
 			code = "search_budget_exceeded"
 		} else if errors.Is(err, errFetchBudgetExceeded) {
-			code = "fetch_budget_exceeded"
+			code = "task_fetch_budget_exceeded"
+		} else if errors.Is(err, research.ErrDNSLookupFailed) && !errors.Is(err, research.ErrUnsafeURL) {
+			code = "fetch_dns_failed"
 		} else if errors.Is(err, research.ErrFetchSourceUnavailable) || errors.Is(err, research.ErrFetchRequestFailed) && !errors.Is(err, research.ErrUnsafeURL) {
 			code = "fetch_source_unavailable"
 		} else if errors.Is(err, errFetchOutcomeUnknown) {
@@ -341,7 +396,11 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 		} else if errors.Is(err, research.ErrPDFTooLarge) || errors.Is(err, research.ErrPDFNoText) || errors.Is(err, research.ErrPDFExtractionFailed) {
 			code = "pdf_extraction_failed"
 		} else if errors.Is(err, research.ErrResponseTooBig) {
-			code = "fetch_budget_exceeded"
+			code = "source_response_too_large"
+		} else if errors.Is(err, research.ErrExtractionChallenge) {
+			code = "extraction_challenge"
+		} else if errors.Is(err, research.ErrExtractionEmpty) {
+			code = "extraction_empty"
 		} else if errors.Is(err, sandbox.ErrSandboxUnavailable) {
 			code = "sandbox_unavailable"
 		} else if errors.Is(err, ErrRecoveryRequired) {
@@ -357,6 +416,12 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 		}
 	}
 	searchCode, providerOutcomes := searchFailureMetadata(err)
+	var sourceError *research.FetchFailure
+	if !timedOut && !errors.Is(err, errRunDeadline) && (errors.As(err, &sourceError) || errors.Is(err, errFetchBudgetExceeded) || errors.Is(err, research.ErrResponseTooBig)) {
+		if sourceCode := fetchFailureCode(err); sourceCode != "" {
+			code = sourceCode
+		}
+	}
 	if !timedOut && searchCode != "" {
 		code = searchCode
 	}
@@ -373,6 +438,9 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 		retryable := false
 		for _, outcome := range providerOutcomes {
 			retryable = retryable || outcome["retryable"] == true
+		}
+		if code == "search_provider_timeout" || code == "search_validation_timeout" || code == "search_no_usable_hits" {
+			retryable = true
 		}
 		if code == "search_no_results" || code == "search_filtered_by_policy" {
 			retryable = false
@@ -457,7 +525,7 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 				return err
 			}
 		}
-		if retried && failureCode == "verification_incomplete" {
+		if retried && (failureCode == "verification_incomplete" || sourceFallbackCode(failureCode)) {
 			previousState, canReplace, replaceErr := w.canReplacePlan(ctx, task.ID)
 			if replaceErr != nil {
 				return replaceErr
@@ -469,7 +537,10 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 			if err != nil {
 				return err
 			}
-			initialPlanState = resetPlanCheckpoint(previousState)
+			initialPlanState, err = w.resetPlanCheckpoint(ctx, task.ID, previousState)
+			if err != nil {
+				return err
+			}
 			newPlan = true
 		}
 	}
@@ -484,7 +555,10 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 		if !canReplace {
 			return err
 		}
-		initialPlanState = resetPlanCheckpoint(previousState)
+		initialPlanState, err = w.resetPlanCheckpoint(ctx, task.ID, previousState)
+		if err != nil {
+			return err
+		}
 		plan, err = w.createPlan(ctx, task, goal, memoryContext)
 		if err != nil {
 			return err
@@ -524,6 +598,8 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 			return err
 		}
 	}
+	w.tools.ClearTaskURLs(task.ID)
+	w.tools.SeedTaskURLs(task.ID, goal)
 	w.tools.RememberURLs(task.ID, state.ToolResults)
 	w.tools.RememberFetchedURLs(task.ID, state.ToolResults)
 	requiredResearchSources := minimumResearchFetches(task.Title + "\n" + goal)
@@ -589,10 +665,23 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 		var decision actionDecision
 		approvalGrant := ""
 		var fetchURLs []string
+		requiredURL := step.Kind == "fetch" && step.ID == plan.Subtasks[0].ID && hasUserURL(goal) && (noDiscoveryPattern.MatchString(goal) || !requiresWebResearch(goal))
 		if step.Kind == "fetch" {
 			fetchURLs = w.availableFetchURLs(task.ID, state.ToolResults, state.FailedFetchURLs, userProvidedURLs(goal), minimumResearchFetches(task.Title+"\n"+goal) > 1)
+			if requiredURL {
+				fetchURLs = userProvidedURLs(goal)
+			}
 			fetchURLs = filterFetchURLs(fetchURLs, attemptedFetchURLs, state.RejectedFetchURLs)
+			fetchURLs = filterFailedSourceIdentities(fetchURLs, state.SourceFailures)
 			if len(fetchURLs) == 0 {
+				if requiredURL && len(state.SourceFailures) > 0 {
+					return &research.FetchFailure{Err: research.ErrFetchSourceUnavailable, Code: state.SourceFailures[len(state.SourceFailures)-1].Code}
+				}
+				if deferred, err := w.deferFailedFetchToDiscovery(ctx, task, goal, plan, step, &stage, &state, requiredURL); err != nil {
+					return err
+				} else if deferred {
+					continue
+				}
 				if searchesExhaustedWithoutResults(plan, state) {
 					return w.searchNoResultsFailure(ctx, task.ID)
 				}
@@ -668,7 +757,11 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 				return fmt.Errorf("%w: search query repeats an earlier research question", errInvalidModelOutput)
 			}
 			if !duplicateResearchQuery(query, state.SearchQueryHistory) {
+				if len(state.LifetimeSearchQueryHistory) == 0 {
+					state.LifetimeSearchQueryHistory = append([]string(nil), state.SearchQueryHistory...)
+				}
 				state.SearchQueryHistory = append(state.SearchQueryHistory, query)
+				state.LifetimeSearchQueryHistory = append(state.LifetimeSearchQueryHistory, query)
 			}
 			if state.SearchQueryByStep == nil {
 				state.SearchQueryByStep = make(map[string]string)
@@ -680,12 +773,17 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 		if step.Kind == "fetch" {
 			var exhausted bool
 			result, descriptor, exhausted, err = w.executeFetchCandidates(
-				ctx, task.ID, &stage, step, role, expectedRisk, fetchURLs, &decision, &state, attemptedFetchURLs, approvalGrant,
+				ctx, task.ID, &stage, step, role, expectedRisk, fetchURLs, &decision, &state, attemptedFetchURLs, approvalGrant, requiredURL,
 			)
 			if err != nil {
 				return err
 			}
 			if exhausted {
+				if deferred, err := w.deferFailedFetchToDiscovery(ctx, task, goal, plan, step, &stage, &state, requiredURL); err != nil {
+					return err
+				} else if deferred {
+					continue
+				}
 				if incomplete := insufficientResearchEvidence(task.Title, goal, state); incomplete != nil {
 					return incomplete
 				}
@@ -871,6 +969,15 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 	}
 	finalState := state
 	finalState.Summary = verified.Summary
+	if len(state.SourceFailures) > 0 {
+		finalState.Partial = true
+		if _, err := w.repo.RecordEvent(ctx, task.ID, "research.warning", &finalizationStage, "user", map[string]any{
+			"code": "sources_skipped", "partial": true, "source_failures": state.SourceFailures,
+			"message": "Some sources could not be used. The answer is based only on the accepted evidence.",
+		}); err != nil {
+			return err
+		}
+	}
 	_, err = w.repo.CompleteTask(ctx, task.ID, answer, finalState)
 	return err
 }
@@ -886,6 +993,7 @@ func (w *Worker) executeFetchCandidates(
 	state *checkpointState,
 	attemptedURLs map[string]struct{},
 	approvalGrant string,
+	requiredURL ...bool,
 ) (any, tools.Descriptor, bool, error) {
 	if decision == nil || decision.ToolCall == nil || decision.ToolCall.Name != "fetch_url" {
 		return nil, tools.Descriptor{}, false, fmt.Errorf("%w: fetch step did not select fetch_url", errInvalidModelOutput)
@@ -929,11 +1037,12 @@ func (w *Worker) executeFetchCandidates(
 		return nil, tools.Descriptor{}, false, tools.ErrUnknownTarget
 	}
 	// A consumed approval applies only to the exact arguments the user approved.
-	if approvalGrant != "" {
+	if approvalGrant != "" || len(requiredURL) > 0 && requiredURL[0] {
 		candidates = candidates[:1]
 	}
 
 	for index, candidate := range candidates {
+		state.CurrentCandidate = index
 		if err := w.ensureActive(ctx, taskID); err != nil {
 			return nil, tools.Descriptor{}, false, err
 		}
@@ -978,20 +1087,36 @@ func (w *Worker) executeFetchCandidates(
 			policyDecision.Action = policy.Allow
 			policyDecision.Reason = "matching single-use approval was consumed"
 		}
+		safeTarget, fingerprint := safeSourceIdentity(candidate)
 		if _, err := w.repo.RecordEvent(ctx, taskID, "policy.decision", stage, "audit", map[string]any{
-			"tool": "fetch_url", "target_url": candidate, "action": policyDecision.Action,
+			"tool": "fetch_url", "target_url": safeTarget, "source_fingerprint": fingerprint, "action": policyDecision.Action,
 			"capability": descriptor.RequiredCapability, "risk_class": descriptor.RiskClass,
 			"reason": policyDecision.Reason,
 		}); err != nil {
 			return nil, tools.Descriptor{}, false, err
 		}
 		if errors.Is(authorizeErr, research.ErrUnsafeURL) {
-			if err := w.recordFetchCandidateFailure(ctx, taskID, stage, step.ID, candidate, "unsafe_url", true, state); err != nil {
+			if err := w.recordSourceFailure(ctx, taskID, stage, step.ID, candidate, authorizeErr, "url_rejected_ssrf", true, false, len(candidates)-index-1, state); err != nil {
 				return nil, tools.Descriptor{}, false, err
 			}
-			continue
+			return nil, descriptor, false, authorizeErr
 		}
 		if authorizeErr != nil {
+			if ctx.Err() != nil || errors.Is(authorizeErr, context.Canceled) || errors.Is(authorizeErr, ErrInterrupted) || errors.Is(authorizeErr, ErrRecoveryRequired) || errors.Is(authorizeErr, errFetchOutcomeUnknown) {
+				return nil, descriptor, false, authorizeErr
+			}
+			if code := fetchFailureCode(authorizeErr); code != "" {
+				remaining := len(candidates) - index - 1
+				alternativesAllowed := !(len(requiredURL) > 0 && requiredURL[0]) && approvalGrant == ""
+				canPivot := alternativesAllowed && isRetryableFetchError(ctx, authorizeErr)
+				if err := w.recordSourceFailure(ctx, taskID, stage, step.ID, candidate, authorizeErr, code, !sameURLRetryable(code), canPivot && remaining > 0, remaining, state); err != nil {
+					return nil, descriptor, false, err
+				}
+				if canPivot {
+					continue
+				}
+				return nil, descriptor, false, &research.FetchFailure{Err: authorizeErr, Code: code}
+			}
 			return nil, tools.Descriptor{}, false, authorizeErr
 		}
 		if policyDecision.Action == policy.ApprovalRequired {
@@ -1025,8 +1150,21 @@ func (w *Worker) executeFetchCandidates(
 		state.PendingSummary = attemptSummary
 		state.PendingTarget = ""
 		state.PendingRisk = ""
+		var fallbackSource *sourceFailure
+		if index > 0 && len(state.SourceFailures) > 0 {
+			previous := &state.SourceFailures[len(state.SourceFailures)-1]
+			if previous.StepID == step.ID && previous.TryNextSource && !previous.FallbackAttempted {
+				previous.FallbackAttempted = true
+				fallbackSource = previous
+			}
+		}
 		if _, err := w.repo.SaveCheckpoint(ctx, taskID, 1, state); err != nil {
 			return nil, tools.Descriptor{}, false, err
+		}
+		if fallbackSource != nil {
+			if _, err := w.repo.RecordEvent(ctx, taskID, "source.updated", stage, "user", fallbackSource.payload()); err != nil {
+				return nil, tools.Descriptor{}, false, err
+			}
 		}
 		if _, err := w.repo.RecordEvent(ctx, taskID, "tool.started", stage, "user", map[string]any{
 			"step_id": step.ID, "tool": "fetch_url", "summary": attemptSummary, "target_url": candidate,
@@ -1046,41 +1184,28 @@ func (w *Worker) executeFetchCandidates(
 		if err == nil {
 			return result, descriptor, false, nil
 		}
-		var failedFetch *research.FetchFailure
-		var failedBytes int64
-		if errors.As(err, &failedFetch) && failedFetch.FetchedBytes > 0 {
-			failedBytes = failedFetch.FetchedBytes
+		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, ErrInterrupted) || errors.Is(err, errFetchOutcomeUnknown) || errors.Is(err, ErrRecoveryRequired) {
+			return nil, descriptor, false, err
 		}
-		if errors.Is(err, research.ErrUnsafeURL) {
-			_, _ = w.repo.RecordEvent(ctx, taskID, "policy.decision", stage, "audit", map[string]any{
-				"tool": "fetch_url", "target_url": candidate, "action": policy.Deny,
-				"capability": descriptor.RequiredCapability, "risk_class": descriptor.RiskClass,
-				"reason": "arguments failed execution-time URL safety revalidation",
-			})
-			if err := w.recordFetchCandidateFailure(ctx, taskID, stage, step.ID, candidate, "unsafe_url", true, state, failedBytes); err != nil {
-				return nil, tools.Descriptor{}, false, err
-			}
-			continue
+		code := fetchFailureCode(err)
+		if code == "" {
+			return nil, descriptor, false, err
 		}
-		if isRetryableFetchError(ctx, err) {
-			if err := w.recordFetchCandidateFailure(ctx, taskID, stage, step.ID, candidate, "source_unavailable", false, state, failedBytes); err != nil {
-				return nil, tools.Descriptor{}, false, err
-			}
-			continue
+		remaining := len(candidates) - index - 1
+		tryNext := isRetryableFetchError(ctx, err) && remaining > 0 && code != "task_fetch_budget_exceeded"
+		var failure *research.FetchFailure
+		if errors.As(err, &failure) && failure.FetchedBytes >= remainingBytes {
+			tryNext = false
 		}
-		if failedBytes > 0 {
-			if saveErr := w.recordFetchCandidateFailure(ctx, taskID, stage, step.ID, candidate, "source_unavailable", false, state, failedBytes); saveErr != nil {
-				return nil, descriptor, false, saveErr
-			}
+		if saveErr := w.recordSourceFailure(ctx, taskID, stage, step.ID, candidate, err, code, !sameURLRetryable(code), tryNext, remaining, state); saveErr != nil {
+			return nil, descriptor, false, saveErr
 		}
-		if errors.Is(err, tools.ErrInvalidArguments) {
-			_, _ = w.repo.RecordEvent(ctx, taskID, "policy.decision", stage, "audit", map[string]any{
-				"tool": "fetch_url", "target_url": candidate, "action": policy.Deny,
-				"capability": descriptor.RequiredCapability, "risk_class": descriptor.RiskClass,
-				"reason": "arguments failed execution-time revalidation",
-			})
+		if code == "task_fetch_budget_exceeded" || state.FetchedBytes >= w.options.MaxFetchBytes {
+			return nil, descriptor, false, errFetchBudgetExceeded
 		}
-		return nil, descriptor, false, err
+		if !isRetryableFetchError(ctx, err) || len(requiredURL) > 0 && requiredURL[0] || approvalGrant != "" {
+			return nil, descriptor, false, &research.FetchFailure{Err: err, Code: code}
+		}
 	}
 	return nil, tools.Descriptor{}, true, nil
 }
@@ -1090,39 +1215,7 @@ func (w *Worker) recordFetchCandidateFailure(ctx context.Context, taskID string,
 	if len(consumed) > 0 {
 		fetchedBytes = consumed[0]
 	}
-	if fetchedBytes < 0 || state.FetchedBytes < 0 || fetchedBytes > math.MaxInt64-state.FetchedBytes {
-		return ErrRecoveryRequired
-	}
-	if _, err := w.repo.RecordEvent(ctx, taskID, "tool.failed", stage, "audit", map[string]any{
-		"step_id": stepID, "tool": "fetch_url", "target_url": rawURL, "failure": failure, "fetched_bytes": fetchedBytes,
-	}); err != nil {
-		return err
-	}
-	state.FetchedBytes += fetchedBytes
-	canonical, err := provenance.CanonicalURL(rawURL)
-	if err == nil {
-		if !contains(state.FailedFetchURLs, canonical) {
-			state.FailedFetchURLs = append(state.FailedFetchURLs, canonical)
-		}
-		if rejected && !contains(state.RejectedFetchURLs, canonical) {
-			state.RejectedFetchURLs = append(state.RejectedFetchURLs, canonical)
-		}
-	}
-	state.PendingTool = ""
-	state.PendingToolIdempotent = false
-	state.PendingApproval = false
-	state.PendingArguments = nil
-	state.PendingSummary = ""
-	state.PendingTarget = ""
-	state.PendingRisk = ""
-	if _, err := w.repo.SaveCheckpoint(ctx, taskID, 1, state); err != nil {
-		return err
-	}
-	_, err = w.repo.RecordEvent(ctx, taskID, "tool.failed", stage, "user", map[string]any{
-		"step_id": stepID, "tool": "fetch_url", "code": failure, "retryable": !rejected,
-		"message": "Source could not be used; another approved candidate will be considered.",
-	})
-	return err
+	return w.recordSourceFailure(ctx, taskID, stage, stepID, rawURL, &research.FetchFailure{Err: research.ErrFetchSourceUnavailable, FetchedBytes: fetchedBytes}, failure, rejected, false, 0, state)
 }
 
 func filterFetchURLs(urls []string, attempted map[string]struct{}, rejectedURLs []string) []string {
@@ -1155,7 +1248,10 @@ func filterFetchURLs(urls []string, attempted map[string]struct{}, rejectedURLs 
 }
 
 func isRetryableFetchError(ctx context.Context, err error) bool {
-	if err == nil || ctx.Err() != nil || errors.Is(err, research.ErrUnsafeURL) {
+	if err == nil || ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, research.ErrUnsafeURL) || errors.Is(err, tools.ErrInvalidArguments) || errors.Is(err, tools.ErrApprovalRequired) || errors.Is(err, tools.ErrToolDenied) || errors.Is(err, tools.ErrUnknownTarget) || errors.Is(err, sqlite.ErrApprovalExpired) || errors.Is(err, ErrAwaitingApproval) || errors.Is(err, ErrInterrupted) || errors.Is(err, errRunDeadline) || errors.Is(err, errFetchBudgetExceeded) || errors.Is(err, errFetchOutcomeUnknown) || errors.Is(err, ErrRecoveryRequired) {
+		return false
+	}
+	if !sourceFallbackCode(fetchFailureCode(err)) {
 		return false
 	}
 	if errors.Is(err, research.ErrFetchSourceUnavailable) {
@@ -1165,19 +1261,8 @@ func isRetryableFetchError(ctx context.Context, err error) bool {
 				return status >= 400 && status <= 599
 			}
 		}
-		return true
 	}
-	if errors.Is(err, research.ErrFetchRequestFailed) || errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	if errors.Is(err, research.ErrUnsupportedMIME) || errors.Is(err, research.ErrPDFNoText) || errors.Is(err, research.ErrPDFExtractionFailed) || errors.Is(err, research.ErrPDFEncrypted) || errors.Is(err, research.ErrPDFTooManyPages) || errors.Is(err, research.ErrPDFTooLarge) || errors.Is(err, research.ErrPDFExtractorUnavailable) {
-		return true
-	}
-	if errors.Is(err, io.ErrUnexpectedEOF) {
-		return true
-	}
-	var networkErr net.Error
-	return errors.As(err, &networkErr)
+	return true
 }
 
 func insufficientFetchEvidenceError() error {
@@ -1463,6 +1548,23 @@ func (w *Worker) planSafetyEvents(ctx context.Context, taskID string) ([]domain.
 }
 
 func resetPlanCheckpoint(state checkpointState) checkpointState {
+	state.HistoricalObservations = append(append([]planObservations(nil), state.HistoricalObservations...), planObservations{
+		PlanAttempt: state.PlanAttempt, ToolResults: state.ToolResults,
+		SearchQueryHistory: state.SearchQueryHistory, SearchQueryByStep: state.SearchQueryByStep,
+	})
+	if len(state.LifetimeSearchQueryHistory) == 0 {
+		state.LifetimeSearchQueryHistory = append([]string(nil), state.SearchQueryHistory...)
+	}
+	state.PlanAttempt++
+	state.SearchQueryHistory = nil
+	state.SearchQueryByStep = make(map[string]string)
+	state.ToolResults = make(map[string]any)
+	state.FailedFetchURLs = nil
+	state.RejectedFetchURLs = nil
+	state.SourceFailures = nil
+	state.CurrentCandidate = 0
+	state.Partial = false
+	state.Summary = ""
 	state.PlanVersion = 1
 	state.CurrentStep = ""
 	state.PendingTool = ""
@@ -1474,10 +1576,19 @@ func resetPlanCheckpoint(state checkpointState) checkpointState {
 	state.PendingRisk = ""
 	state.CompletedSteps = []string{}
 	state.SkippedSteps = []string{}
-	if state.ToolResults == nil {
-		state.ToolResults = map[string]any{}
-	}
 	return state
+}
+
+func (w *Worker) resetPlanCheckpoint(ctx context.Context, taskID string, state checkpointState) (checkpointState, error) {
+	events, err := w.planSafetyEvents(ctx, taskID)
+	if err != nil {
+		return checkpointState{}, err
+	}
+	state = resetPlanCheckpoint(state)
+	if len(events) > 0 {
+		state.AttemptStartSeq = events[len(events)-1].Seq
+	}
+	return state, nil
 }
 
 func composeGoal(description string, messages []domain.Message) string {
@@ -1762,6 +1873,14 @@ func conditionalSearchRetryResultKey(stepID string) string {
 	return "conditional-search-retry:" + stepID
 }
 
+func (state checkpointState) conditionalSearchRetryResultKey(stepID string) string {
+	key := conditionalSearchRetryResultKey(stepID)
+	if state.PlanAttempt > 0 {
+		key += fmt.Sprintf(":attempt:%d", state.PlanAttempt)
+	}
+	return key
+}
+
 func isConditionalSearchRetryStepID(stepID string) bool {
 	return strings.HasPrefix(stepID, "conditional-search-retry:")
 }
@@ -1794,7 +1913,7 @@ func (w *Worker) retryInitialSearchIfEmpty(ctx context.Context, taskID string, s
 	if !exists || !searchResultIsSuccessfulEmpty(initialResult) {
 		return nil
 	}
-	retryResultKey := conditionalSearchRetryResultKey(initialStep.ID)
+	retryResultKey := state.conditionalSearchRetryResultKey(initialStep.ID)
 	if _, alreadyRetried := state.ToolResults[retryResultKey]; alreadyRetried {
 		return nil
 	}
@@ -1809,7 +1928,7 @@ func (w *Worker) retryInitialSearchIfEmpty(ctx context.Context, taskID string, s
 		return err
 	}
 	for _, event := range events {
-		if event.Type != "tool.started" {
+		if event.Seq <= state.AttemptStartSeq || event.Type != "tool.started" {
 			continue
 		}
 		var payload struct {
@@ -1862,7 +1981,11 @@ func (w *Worker) retryInitialSearchIfEmpty(ctx context.Context, taskID string, s
 	}
 	if previousQuery, scheduled := state.SearchQueryByStep[retryResultKey]; !scheduled {
 		state.SearchQueryByStep[retryResultKey] = retryQuery
+		if len(state.LifetimeSearchQueryHistory) == 0 {
+			state.LifetimeSearchQueryHistory = append([]string(nil), state.SearchQueryHistory...)
+		}
 		state.SearchQueryHistory = append(state.SearchQueryHistory, retryQuery)
+		state.LifetimeSearchQueryHistory = append(state.LifetimeSearchQueryHistory, retryQuery)
 	} else if previousQuery != retryQuery {
 		return fmt.Errorf("%w: durable retry query changed unexpectedly", errInvalidModelOutput)
 	}
@@ -2373,6 +2496,16 @@ func verificationCriterionMissing(plan domain.Plan, state checkpointState, asses
 }
 
 func (w *Worker) synthesizeValidated(ctx context.Context, task domain.Task, goal, memoryContext string, state checkpointState, verificationSummary string, evidenceIDs []string, messageID string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	linked, err := w.isConversationResearch(ctx, task.ID)
+	if err != nil {
+		return "", err
+	}
+	if linked {
+		return w.synthesizeResearchCitations(ctx, task, goal, state, evidenceIDs, messageID)
+	}
 	answer, err := w.synthesize(ctx, task, goal, memoryContext, state, verificationSummary, evidenceIDs, "", messageID)
 	if err != nil {
 		return "", err
@@ -2392,6 +2525,11 @@ func (w *Worker) synthesizeValidated(ctx context.Context, task domain.Task, goal
 
 func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryContext string, state checkpointState, verificationSummary string, evidenceIDs []string, correction, messageID string) (string, error) {
 	system := synthesisSystemPrompt()
+	citationStream, enhanced := ctx.Value(citationStreamKey{}).(*citationStreamState)
+	if enhanced {
+		_, maxClaims := citationLimits(ctx)
+		system = researchSynthesisPrompt(maxClaims)
+	}
 	schema := finalizerOutputSchema()
 	inputData := map[string]any{"task": task.Title, "goal": goal, "accepted_memories_untrusted": memoryContext, "tool_results": map[string]any{}, "analysis_summary": truncateRunes(state.Summary, 500), "verification": verificationSummary, "available_evidence_ids": evidenceIDs, "correction": correction}
 	resultsBudget := toolResultsBudget(w.options.MaxInputBytes, system, schema, inputData, "tool_results")
@@ -2414,6 +2552,9 @@ func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryC
 	if err != nil {
 		return "", err
 	}
+	if enhanced {
+		citationStream.ID, citationStream.NextChunk = streamID, 0
+	}
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream, err := w.client.Stream(streamCtx, llm.ChatRequest{
@@ -2422,7 +2563,7 @@ func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryC
 		JSONSchema: schema,
 	})
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", errLLMUnavailable, err)
+		return "", fmt.Errorf("%w: %w", errLLMUnavailable, err)
 	}
 	if stream == nil {
 		return "", fmt.Errorf("%w: local LLM returned no synthesis stream", errLLMUnavailable)
@@ -2447,6 +2588,9 @@ func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryC
 		answer.WriteString(delta)
 		batch.Reset()
 		chunkIndex++
+		if enhanced {
+			citationStream.NextChunk = chunkIndex
+		}
 		return nil
 	}
 	appendText := func(text string) error {
@@ -2490,7 +2634,7 @@ func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryC
 					return "", err
 				}
 				final := strings.TrimSpace(answer.String())
-				if final != "" && errors.Is(validateCitations(final, evidenceIDs), errMissingEvidenceCitation) {
+				if !enhanced && final != "" && errors.Is(validateCitations(final, evidenceIDs), errMissingEvidenceCitation) {
 					references := make([]string, 0, len(evidenceIDs))
 					for _, evidenceID := range evidenceIDs {
 						references = append(references, "["+evidenceID+"]")
@@ -2513,7 +2657,7 @@ func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryC
 				return final, nil
 			}
 			if event.Err != nil {
-				return "", fmt.Errorf("%w: %v", errLLMUnavailable, event.Err)
+				return "", fmt.Errorf("%w: %w", errLLMUnavailable, event.Err)
 			}
 			if event.Text == "" {
 				continue
@@ -2904,7 +3048,7 @@ func (w *Worker) complete(ctx context.Context, system, user string, schema json.
 		MaxTokens: w.options.MaxOutputTokens, Temperature: w.options.Temperature, TopP: w.options.TopP, JSONSchema: schema,
 	})
 	if err != nil {
-		return llm.ChatResponse{}, fmt.Errorf("%w: %v", errLLMUnavailable, err)
+		return llm.ChatResponse{}, fmt.Errorf("%w: %w", errLLMUnavailable, err)
 	}
 	return response, nil
 }
@@ -2993,6 +3137,16 @@ func (w *Worker) reconcileResearchState(ctx context.Context, taskID string, stat
 	completedToolByStep := make(map[string]string)
 	stepCompletedSinceCheckpoint := make(map[string]bool)
 	completedOrder := make([]string, 0)
+	seenFailureAttempts := make(map[string]bool)
+	publicFailureAttempts := make(map[string]bool)
+	for _, event := range events {
+		if event.Type == "tool.failed" && event.Visibility == "user" {
+			var failure sourceFailure
+			if json.Unmarshal(event.Payload, &failure) == nil && failure.AttemptID != "" {
+				publicFailureAttempts[failure.AttemptID] = true
+			}
+		}
+	}
 	for _, event := range events {
 		var payload struct {
 			Tool         string          `json:"tool"`
@@ -3005,6 +3159,59 @@ func (w *Worker) reconcileResearchState(ctx context.Context, taskID string, stat
 		}
 		if json.Unmarshal(event.Payload, &payload) != nil {
 			continue
+		}
+		if event.Type == "source.updated" && event.Seq > state.AttemptStartSeq {
+			var update sourceFailure
+			if json.Unmarshal(event.Payload, &update) == nil && update.FallbackAttempted {
+				for index := range state.SourceFailures {
+					if state.SourceFailures[index].AttemptID == update.AttemptID && !state.SourceFailures[index].FallbackAttempted {
+						state.SourceFailures[index].FallbackAttempted = true
+						changed = true
+					}
+				}
+			}
+		}
+		if event.Type == "tool.failed" && payload.Tool == "fetch_url" {
+			var failure sourceFailure
+			if json.Unmarshal(event.Payload, &failure) == nil && failure.AttemptID != "" {
+				if seenFailureAttempts[failure.AttemptID] {
+					continue
+				}
+				seenFailureAttempts[failure.AttemptID] = true
+				if event.Seq > state.AttemptStartSeq {
+					if applySourceFailure(&state, failure) {
+						changed = true
+					}
+					if !publicFailureAttempts[failure.AttemptID] {
+						if _, err := w.repo.RecordEvent(ctx, taskID, "tool.failed", event.Stage, "user", failure.payload()); err != nil {
+							return checkpointState{}, false, err
+						}
+					}
+				}
+			} else {
+				if event.Visibility != "audit" {
+					continue
+				}
+				if event.Seq > state.AttemptStartSeq {
+					var legacy struct {
+						Failure string `json:"failure"`
+					}
+					_ = json.Unmarshal(event.Payload, &legacy)
+					failure.AttemptID = fmt.Sprintf("legacy-fetch-%d", event.Seq)
+					failure.Code = legacy.Failure
+					if failure.Code == "unsafe_url" {
+						failure.Code = "url_rejected_ssrf"
+					}
+					if failure.Code == "" {
+						failure.Code = "source_unavailable"
+					}
+					failure.TargetURL, failure.Fingerprint = safeSourceIdentity(payload.TargetURL)
+					failure.Status = "failed"
+					if applySourceFailure(&state, failure) {
+						changed = true
+					}
+				}
+			}
 		}
 		if event.Type == "tool.started" && payload.Tool == "search" {
 			searchAttempts++
@@ -3061,6 +3268,7 @@ func (w *Worker) reconcileResearchState(ctx context.Context, taskID string, stat
 				state.PendingSummary = ""
 				state.PendingTarget = ""
 				state.PendingRisk = ""
+				state.PendingApproval = false
 				if canonical, err := provenance.CanonicalURL(payload.TargetURL); err == nil && !contains(state.FailedFetchURLs, canonical) {
 					state.FailedFetchURLs = append(state.FailedFetchURLs, canonical)
 				}
@@ -3172,7 +3380,7 @@ func (w *Worker) reconcileResearchState(ctx context.Context, taskID string, stat
 			StepID string          `json:"step_id"`
 			Result json.RawMessage `json:"result"`
 		}
-		if json.Unmarshal(event.Payload, &payload) != nil || payload.Tool != state.PendingTool || (payload.StepID != "" && payload.StepID != state.CurrentStep) {
+		if event.Seq <= state.AttemptStartSeq || json.Unmarshal(event.Payload, &payload) != nil || payload.Tool != state.PendingTool || (payload.StepID != "" && payload.StepID != state.CurrentStep) {
 			continue
 		}
 		if event.Type == "tool.started" {
@@ -3329,6 +3537,32 @@ var (
 
 func publicError(code string) string {
 	switch code {
+	case "research_budget_exceeded":
+		return "Исчерпан сохранённый бюджет исследования. Полученные сообщения и источники сохранены; новые вызовы модели или инструментов не выполняются."
+	case "research_runtime_changed":
+		return "Настройки runtime изменились и не позволяют безопасно применить сохранённый профиль этого исследования. Snapshot не изменён."
+	case "run_deadline":
+		return "Истёк сохранённый срок выполнения исследования. Частичный результат сохранён; повтор запускается только по вашей команде."
+	case "internal_error":
+		return "Обработка ответа прервана внутренней ошибкой. Сохранённые сообщения доступны; можно повторить запрос."
+	case "model_timeout":
+		return "Локальная модель не успела ответить в установленное время. Частичный ответ сохранён."
+	case "model_output_truncated":
+		return "Достигнут лимит длины ответа модели. Полученный текст сохранён; нажмите «Продолжить»."
+	case "model_stream_interrupted":
+		return "Соединение с локальной моделью прервалось до завершения ответа. Полученный текст сохранён."
+	case "fetch_dns_failed":
+		return "Не удалось разрешить DNS-имя источника. Адрес не загружен; при наличии разрешённых альтернатив исследование использует другой источник."
+	case "search_provider_timeout":
+		return "Истекло время сбора результатов поиска. Посмотрите результаты отдельных провайдеров и повторите запрос при необходимости."
+	case "search_validation_timeout":
+		return "Истекло время безопасной проверки найденных URL. Поиск выполнялся, но ни один источник не удалось разрешить для загрузки."
+	case "search_no_usable_hits":
+		return "Поиск вернул результаты, но доступных и разрешённых для загрузки URL не осталось. Попробуйте уточнить запрос или указать источник."
+	case "extraction_empty":
+		return "На странице не найдено содержательного текста; источник не принят как evidence."
+	case "extraction_challenge":
+		return "Страница требует captcha или проверки робота; она не принята как evidence."
 	case "llm_unavailable":
 		return "Локальная модель недоступна или вернула ошибку. Проверьте llama.cpp server и повторите задачу."
 	case "invalid_model_output":
@@ -3361,8 +3595,32 @@ func publicError(code string) string {
 		return "Сохранённый план не покрывает требуемое веб-исследование; создайте новую задачу без уже выполненных действий."
 	case "research_plan_budget":
 		return "Лимита MAX_STEPS недостаточно для требуемого числа источников. Увеличьте лимит или сузьте задачу."
-	case "fetch_budget_exceeded":
+	case "fetch_budget_exceeded", "task_fetch_budget_exceeded":
 		return "Исчерпан лимит загружаемых данных для этой задачи."
+	case "source_response_too_large":
+		return "Размер источника превышает допустимый лимит загрузки."
+	case "pdf_source_too_large":
+		return "Размер PDF превышает допустимый лимит загрузки PDF."
+	case "pdf_extraction_input_too_large":
+		return "Размер PDF превышает лимит входных данных обработчика."
+	case "pdf_text_limit_exceeded":
+		return "Извлечённый текст PDF превышает допустимый лимит."
+	case "pdf_resource_exceeded":
+		return "Обработка PDF превысила лимит ресурсов; частичный результат не принят."
+	case "pdf_timeout":
+		return "Истекло время обработки PDF; частичный результат не принят."
+	case "pdf_malformed":
+		return "PDF повреждён или имеет неподдерживаемую структуру."
+	case "pdf_no_text":
+		return "PDF не содержит доступного для извлечения текста."
+	case "url_rejected_ssrf":
+		return "Источник отклонён сетевой политикой безопасности."
+	case "unsupported_content":
+		return "Тип содержимого источника не поддерживается."
+	case "fetch_timeout":
+		return "Истекло время загрузки источника."
+	case "source_unavailable", "fetch_request_failed":
+		return "Источник недоступен; его содержимое не принято как evidence."
 	case "fetch_source_unavailable":
 		return "Выбранная страница недоступна. Повторите задачу: этот URL будет пропущен, а поиск выберет другой источник."
 	case "fetch_outcome_unknown":
@@ -3378,9 +3636,9 @@ func publicError(code string) string {
 	case "unknown_research_target":
 		return "URL не был указан в задаче или получен из разрешённого поиска, поэтому загрузка заблокирована."
 	case "pdf_extractor_unavailable":
-		return "Для PDF нужен локальный rootless Docker и настроенный образ Poppler; загрузка остановлена."
+		return "Разрешённый политикой обработчик PDF недоступен; источник не был принят как evidence."
 	case "pdf_page_limit_exceeded":
-		return "PDF превышает лимит в 20 страниц и не был использован как evidence."
+		return "PDF превышает настроенный лимит страниц и не был использован как evidence."
 	case "pdf_encrypted":
 		return "Зашифрованный PDF не поддерживается и не был использован как evidence."
 	case "pdf_extraction_failed":

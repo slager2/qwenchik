@@ -152,6 +152,63 @@ func TestSmartHTMLMetadataFallback(t *testing.T) {
 	}
 }
 
+func TestSmartHTMLShortTeasersFallThroughToSubstantialContent(t *testing.T) {
+	teaser := `<article><p>Unrelated teaser.</p></article>`
+	body := strings.Repeat("Detailed education requirements and verified funding information. ", 9)
+	for _, fixture := range []struct {
+		name string
+		html string
+	}{
+		{"article body", teaser + `<div class="article-body"><p>` + body + `</p></div>`},
+		{"content", teaser + `<div id="content"><p>` + body + `</p></div>`},
+		{"body", teaser + `<div><p>` + body + `</p></div>`},
+		{"main containing teaser", `<main>` + teaser + `<p>` + body + `</p></main>`},
+		{"tiny main", `<main>` + teaser + `</main><div class="article-body"><p>` + body + `</p></div>`},
+		{"multibyte teaser", `<article>` + strings.Repeat("界", 150) + `</article><main><p>` + body + `</p></main>`},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			result := extractHTMLFixture(t, `<body><nav>Navigation poison</nav>`+fixture.html+`<aside>Sidebar poison</aside><div class="related">Related poison</div><script>Script poison</script></body>`, 2000)
+			if !strings.Contains(result.Text, strings.TrimSpace(body)) || strings.Contains(result.Text, "poison") {
+				t.Fatalf("substantial content lost to teaser: %q", result.Text)
+			}
+		})
+	}
+}
+
+func TestSmartHTMLSubstantialArticleKeepsPriority(t *testing.T) {
+	body := strings.Repeat("界", 301)
+	broader := strings.Repeat("Broader unrelated text. ", 40)
+	result := extractHTMLFixture(t, `<main><article>`+body+`</article><p>`+broader+`</p></main>`, 2000)
+	if result.Text != body {
+		t.Fatalf("substantial article lost priority: %q", result.Text)
+	}
+}
+
+func TestSmartHTMLShortConcisePagesArePreserved(t *testing.T) {
+	for _, scope := range []string{"article", "main", `div id="content"`, "div"} {
+		t.Run(scope, func(t *testing.T) {
+			tag := strings.Fields(scope)[0]
+			result := extractHTMLFixture(t, `<body><nav>Navigation poison</nav><`+scope+`>Price: 42 EUR.</`+tag+`><aside>Sidebar poison</aside></body>`, 1000)
+			if result.Text != "Price: 42 EUR." {
+				t.Fatalf("concise content lost: %q", result.Text)
+			}
+		})
+	}
+}
+
+func TestSmartHTMLStructuredArticleOverridesBroaderDOMAfterTeaser(t *testing.T) {
+	body := strings.Repeat("Structured primary evidence. ", 15)
+	data, err := json.Marshal(map[string]any{"@type": "Article", "headline": "Primary headline", "articleBody": body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := `<script type="application/ld+json">` + string(data) + `</script><body><article>Unrelated teaser.</article><div class="article-body">` + strings.Repeat("Broader DOM evidence. ", 30) + `</div></body>`
+	result := extractHTMLFixture(t, fixture, 2000)
+	if result.Title != "Primary headline" || !strings.Contains(result.Text, strings.TrimSpace(body)) || strings.Contains(result.Text, "Broader DOM") || strings.Contains(result.Text, "Unrelated teaser") {
+		t.Fatalf("structured article lost priority: %#v", result)
+	}
+}
+
 func TestSmartHTMLRejectsUnboundedJSON(t *testing.T) {
 	for _, fixture := range []struct {
 		name string

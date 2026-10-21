@@ -14,6 +14,8 @@ import (
 
 	"github.com/slager2/qwenchik/internal/app"
 	"github.com/slager2/qwenchik/internal/domain"
+	"github.com/slager2/qwenchik/internal/llm"
+	"github.com/slager2/qwenchik/internal/llm/openai"
 	"github.com/slager2/qwenchik/internal/providers/research"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
 )
@@ -427,6 +429,7 @@ func TestDoctorAggregatesWarningsAndRequiresStrictStructuredModelSmoke(t *testin
 			defer store.Close()
 			server := New(app.New(store), testWorker{}, store.Ping, llmServer.URL+"/v1", "EMPTY", searchURL, nil)
 			server.SetLLMModel("doctor-test")
+			server.SetLLMClient(llm.NewGuardedClient(openai.New(llmServer.URL+"/v1", "EMPTY", "doctor-test", time.Second, 24, 0, 1, false)))
 			server.SetTavilyConfigured(test.tavilyConfigured)
 			server.SetSandboxStatus(true, "rootless sandbox is available")
 			request := httptest.NewRequest(http.MethodGet, "/api/doctor", nil)

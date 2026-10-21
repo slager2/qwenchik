@@ -97,9 +97,6 @@ func (c *CompositeSearch) SearchWithDiagnostics(ctx context.Context, options Sea
 					providerReport, err = diagnosticSearch(providerCtx, options, provider)
 				}
 				providerCancel()
-				if err != nil {
-					providerReport.Hits = nil
-				}
 				results <- compositeSearchResult{index: index, hits: append([]SearchHit(nil), providerReport.Hits...), err: err, outcomes: providerReport.Outcomes}
 			}
 		}()
@@ -112,12 +109,22 @@ func (c *CompositeSearch) SearchWithDiagnostics(ctx context.Context, options Sea
 			providerResults[result.index] = result
 			received[result.index] = true
 		case <-searchCtx.Done():
+			for draining := true; draining; {
+				select {
+				case result := <-results:
+					providerResults[result.index] = result
+					received[result.index] = true
+				default:
+					draining = false
+				}
+			}
 			remaining = 0
 		}
 	}
 	succeeded := false
 	oversized := false
 	filtered := false
+	timedOut := false
 	failed := false
 	rawCount := 0
 	for index := range c.providers {
@@ -125,15 +132,20 @@ func (c *CompositeSearch) SearchWithDiagnostics(ctx context.Context, options Sea
 			providerResults[index] = compositeSearchResult{index: index, err: searchCtx.Err()}
 		}
 		result := providerResults[index]
+		timedOut = timedOut || errors.Is(result.err, context.DeadlineExceeded)
 		outcome := makeOutcome(providerName(c.providers[index]), result.hits, result.err, started)
 		if len(result.outcomes) > 0 {
 			outcome = result.outcomes[0]
 			outcome.Provider = providerName(c.providers[index])
 			outcome.Message = outcomeMessage(outcome.Code)
 		}
+		if result.err != nil && len(result.hits) > 0 {
+			outcome.State, outcome.Code, outcome.Message = "degraded", "search_partial", outcomeMessage("search_partial")
+			outcome.ResultCount = len(result.hits)
+		}
 		report.Outcomes = append(report.Outcomes, outcome)
 		rawCount += len(result.hits)
-		if result.err == nil {
+		if result.err == nil || len(result.hits) > 0 {
 			succeeded = true
 		} else {
 			failed = true
@@ -147,6 +159,7 @@ func (c *CompositeSearch) SearchWithDiagnostics(ctx context.Context, options Sea
 	c.mu.Lock()
 	c.outcomes = append([]ProviderOutcome(nil), report.Outcomes...)
 	c.mu.Unlock()
+	report.Hits = mergeSearchHits(providerResults, options)
 	if err := ctx.Err(); err != nil {
 		return report, err
 	}
@@ -154,16 +167,23 @@ func (c *CompositeSearch) SearchWithDiagnostics(ctx context.Context, options Sea
 		code := "search_unavailable"
 		if oversized {
 			code = "search_response_too_big"
+		} else if timedOut {
+			code = "search_provider_timeout"
 		} else if filtered {
 			code = "search_filtered_by_policy"
 		}
-		return report, &SearchFailure{Code: code, Outcomes: append([]ProviderOutcome(nil), report.Outcomes...)}
+		var cause error
+		if code == "search_provider_timeout" {
+			cause = context.DeadlineExceeded
+		}
+		return report, &SearchFailure{Code: code, Outcomes: append([]ProviderOutcome(nil), report.Outcomes...), Cause: cause}
 	}
-	report.Hits = mergeSearchHits(providerResults, options)
 	if len(report.Hits) == 0 && failed && rawCount == 0 {
 		code := "search_unavailable"
 		if oversized {
 			code = "search_response_too_big"
+		} else if timedOut {
+			code = "search_provider_timeout"
 		} else if filtered {
 			code = "search_filtered_by_policy"
 		}

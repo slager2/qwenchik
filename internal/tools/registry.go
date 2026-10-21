@@ -40,6 +40,22 @@ type Descriptor struct {
 type Executor func(context.Context, json.RawMessage) (any, error)
 type ArgumentsValidator func(context.Context, json.RawMessage) error
 
+type OperationalValidationError interface {
+	error
+	OperationalValidationFailure() bool
+}
+
+type executionParentContextKey struct{}
+
+func executionContextError(ctx context.Context) error {
+	if parent, ok := ctx.Value(executionParentContextKey{}).(context.Context); ok {
+		if err := parent.Err(); err != nil {
+			return err
+		}
+	}
+	return ctx.Err()
+}
+
 type registeredTool struct {
 	descriptor Descriptor
 	executor   Executor
@@ -247,6 +263,7 @@ func (r *Registry) Authorize(ctx context.Context, role, name string, arguments j
 		_, decision := r.Decide(role, name)
 		return descriptor, decision, nil
 	}
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(descriptor.TimeoutSeconds)*time.Second)
 	defer cancel()
 	if err := ctx.Err(); err != nil {
@@ -264,9 +281,25 @@ func (r *Registry) Authorize(ctx context.Context, role, name string, arguments j
 	}
 	if tool.validator != nil {
 		if err := tool.validator(ctx, trimmed); err != nil {
+			if parent.Err() != nil {
+				return descriptor, policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "tool authorization timed out or was cancelled"}, parent.Err()
+			}
+			if ctx.Err() != nil {
+				return descriptor, policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "tool authorization timed out or was cancelled"}, ctx.Err()
+			}
+			var operational OperationalValidationError
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.As(err, &operational) && operational.OperationalValidationFailure() {
+				return descriptor, policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "tool validation dependency is unavailable"}, err
+			}
 			decision := policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "arguments failed backend validation"}
 			return descriptor, decision, errors.Join(ErrInvalidArguments, err)
 		}
+	}
+	if parent.Err() != nil {
+		return descriptor, policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "tool authorization timed out or was cancelled"}, parent.Err()
+	}
+	if ctx.Err() != nil {
+		return descriptor, policy.Decision{Action: policy.Deny, Capability: descriptor.RequiredCapability, RiskClass: descriptor.RiskClass, Reason: "tool authorization timed out or was cancelled"}, ctx.Err()
 	}
 	_, decision := r.Decide(role, name)
 	return descriptor, decision, nil
@@ -310,17 +343,25 @@ func (r *Registry) execute(ctx context.Context, role, name string, arguments jso
 	default:
 		return nil, DecisionError(name, decision)
 	}
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(tool.descriptor.TimeoutSeconds)*time.Second)
 	defer cancel()
+	ctx = context.WithValue(ctx, executionParentContextKey{}, parent)
 	if approvalID != "" {
 		ctx = context.WithValue(ctx, approvalContextKey{}, approvalID)
 	}
-	if err := ctx.Err(); err != nil {
+	if err := executionContextError(ctx); err != nil {
 		return nil, err
 	}
 	result, err := tool.executor(ctx, arguments)
 	if err != nil {
+		if contextErr := executionContextError(ctx); contextErr != nil && !errors.Is(err, contextErr) {
+			return nil, errors.Join(err, contextErr)
+		}
 		return nil, err
+	}
+	if contextErr := executionContextError(ctx); contextErr != nil {
+		return nil, contextErr
 	}
 	encoded, err := json.Marshal(result)
 	if err != nil {

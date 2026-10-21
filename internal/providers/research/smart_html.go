@@ -109,15 +109,22 @@ func extractSmartHTML(root *html.Node, maxChars int) (string, string) {
 		limit = maxChars*2 + 1000
 	}
 	var dom string
+	domRunes := 0
 	for _, group := range scopes {
 		for _, n := range group {
 			text := nodeText(n, limit, true)
-			if len(text) > len(dom) {
+			if runes := utf8.RuneCountInString(text); runes > domRunes {
 				dom = text
+				domRunes = runes
 			}
 		}
-		if dom != "" {
+		if domRunes > 300 {
 			break
+		}
+	}
+	if domRunes > 0 && domRunes <= 300 {
+		if text := nodeText(root, limit, true); utf8.RuneCountInString(text) > 300 {
+			dom = text
 		}
 	}
 	chosen := htmlCandidate{}

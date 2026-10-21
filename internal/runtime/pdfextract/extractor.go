@@ -24,10 +24,10 @@ import (
 )
 
 const (
-	MaxInputBytes    = 5_000_000
+	MaxInputBytes    = 64 << 20
 	MaxTextRunes     = 50_000
 	MaxPages         = 20
-	ExtractionBudget = 5 * time.Second
+	ExtractionBudget = 30 * time.Second
 	maxStdoutBytes   = MaxTextRunes*utf8.UTFMax + 256
 	maxStderrBytes   = 16 << 10
 )
@@ -43,20 +43,27 @@ const (
 )
 
 var (
-	ErrUnavailable    = errors.New("isolated PDF extraction is unavailable")
-	ErrMalformed      = errors.New("PDF is malformed or could not be extracted")
-	ErrEncrypted      = errors.New("encrypted PDFs are not supported")
-	ErrTooManyPages   = errors.New("PDF exceeds the 20 page limit")
-	ErrTextTooLarge   = errors.New("PDF text exceeds the 50000 character limit")
-	ErrInputTooLarge  = errors.New("PDF input exceeds the 5 MB limit")
-	ErrOutputExceeded = errors.New("PDF extractor output exceeds its limit")
-	ErrNoText         = errors.New("PDF contains no extractable text")
+	ErrUnavailable      = errors.New("isolated PDF extraction is unavailable")
+	ErrMalformed        = errors.New("PDF is malformed or could not be extracted")
+	ErrEncrypted        = errors.New("encrypted PDFs are not supported")
+	ErrTooManyPages     = errors.New("PDF exceeds the configured page limit")
+	ErrTextTooLarge     = errors.New("PDF text exceeds the configured character limit")
+	ErrInputTooLarge    = errors.New("PDF input exceeds the configured byte limit")
+	ErrResourceExceeded = errors.New("PDF extractor resource limit exceeded")
+	ErrTimeout          = errors.New("PDF extraction timed out")
+	ErrOutputExceeded   = errors.New("PDF extractor output exceeds its limit")
+	ErrNoText           = errors.New("PDF contains no extractable text")
 
 	imageIDPattern     = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 	digestImagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:=-]{0,254}@sha256:[a-f0-9]{64}$`)
 )
 
 type Runner = sandbox.CommandRunner
+
+type InputRunner interface {
+	Runner
+	RunInput(context.Context, string, []string, io.Reader, io.Writer, io.Writer) error
+}
 
 // Result contains only fully validated extraction output.
 type Result struct {
@@ -68,6 +75,7 @@ type Result struct {
 type Extractor struct {
 	image  string
 	runner Runner
+	policy Policy
 }
 
 func ValidateImageReference(image string) error {
@@ -81,13 +89,20 @@ func ValidateImageReference(image string) error {
 }
 
 func New(image string, runner Runner) (*Extractor, error) {
+	return NewWithPolicy(image, runner, DefaultPolicy())
+}
+
+func NewWithPolicy(image string, runner Runner, policy Policy) (*Extractor, error) {
+	if err := policy.Validate(); err != nil {
+		return nil, err
+	}
 	if err := ValidateImageReference(image); err != nil {
 		return nil, err
 	}
 	if runner == nil {
-		runner = sandbox.ExecRunner{}
+		runner = inputExecRunner{}
 	}
-	return &Extractor{image: image, runner: runner}, nil
+	return &Extractor{image: image, runner: runner, policy: policy}, nil
 }
 
 // Check verifies the configured image and a local rootless Docker endpoint without
@@ -103,35 +118,86 @@ func (e *Extractor) Check(ctx context.Context) error {
 }
 
 func (e *Extractor) Extract(ctx context.Context, document []byte) (Result, error) {
+	if e == nil {
+		return Result{}, ErrUnavailable
+	}
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
 	}
-	if len(document) > MaxInputBytes {
+	if int64(len(document)) > e.policy.MaxInputBytes {
 		return Result{}, ErrInputTooLarge
 	}
-	if e == nil || e.image == "" {
-		return extractPureGoSubprocess(ctx, document)
-	}
-	if err := e.checkRuntime(ctx); err != nil {
-		if errors.Is(err, ErrUnavailable) {
-			return extractPureGoSubprocess(ctx, document)
-		}
+	runCtx, cancel := context.WithTimeout(ctx, e.policy.ExtractionTimeout)
+	defer cancel()
+	dir, path, err := stageInput(document)
+	if err != nil {
 		return Result{}, err
 	}
-	result, err := e.extractDocker(ctx, document)
-	if errors.Is(err, ErrUnavailable) {
-		return extractPureGoSubprocess(ctx, document)
+	defer os.RemoveAll(dir)
+	file, err := os.Open(path)
+	if err != nil {
+		return Result{}, err
+	}
+	defer file.Close()
+	return e.extractFile(ctx, runCtx, file)
+}
+
+func (e *Extractor) ExtractFile(ctx context.Context, file *os.File) (Result, error) {
+	if e == nil {
+		return Result{}, ErrUnavailable
+	}
+	runCtx, cancel := context.WithTimeout(ctx, e.policy.ExtractionTimeout)
+	defer cancel()
+	return e.extractFile(ctx, runCtx, file)
+}
+
+func (e *Extractor) extractFile(parent, ctx context.Context, file *os.File) (Result, error) {
+	if err := parent.Err(); err != nil {
+		return Result{}, err
+	}
+	if file == nil {
+		return Result{}, ErrMalformed
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return Result{}, err
+	}
+	if !info.Mode().IsRegular() {
+		return Result{}, ErrMalformed
+	}
+	if info.Size() > e.policy.MaxInputBytes {
+		return Result{}, ErrInputTooLarge
+	}
+	var result Result
+	if e.image == "" {
+		err = ErrUnavailable
+	} else {
+		err = e.checkRuntime(ctx)
+	}
+	if err == nil {
+		result, err = e.extractDocker(ctx, file, info.Size())
+	}
+	if errors.Is(err, ErrUnavailable) && e.policy.AllowUnsandboxedFallback && ctx.Err() == nil {
+		result, err = extractPureGoFile(ctx, file, info.Size(), e.policy)
+	}
+	if parent.Err() != nil {
+		return Result{}, parent.Err()
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+		return Result{}, errors.Join(ErrTimeout, context.DeadlineExceeded)
 	}
 	return result, err
 }
 
-func (e *Extractor) extractDocker(ctx context.Context, document []byte) (Result, error) {
-
-	inputDir, inputPath, err := stageInput(document)
-	if err != nil {
-		return Result{}, fmt.Errorf("stage PDF input: %w", err)
+func (e *Extractor) extractDocker(ctx context.Context, file *os.File, size int64) (Result, error) {
+	const metadataReserve = 64 << 10
+	if e.policy.TempBytes < metadataReserve || size > e.policy.TempBytes-metadataReserve {
+		return Result{}, ErrResourceExceeded
 	}
-	defer os.RemoveAll(inputDir)
+	inputRunner, ok := e.runner.(InputRunner)
+	if !ok {
+		return Result{}, ErrUnavailable
+	}
 
 	identifier, err := randomID()
 	if err != nil {
@@ -145,23 +211,23 @@ func (e *Extractor) extractDocker(ctx context.Context, document []byte) (Result,
 	defer os.RemoveAll(cidDir)
 	cidFile := filepath.Join(cidDir, "container.cid")
 
-	stdout := &limitedBuffer{limit: maxStdoutBytes}
+	stdout := &limitedBuffer{limit: e.policy.stdoutBytes()}
 	stderr := &limitedBuffer{limit: maxStderrBytes}
 	args := []string{
-		"run", "--rm", "--pull=never", "--cidfile", cidFile, "--name", containerName,
+		"run", "--rm", "-i", "--pull=never", "--cidfile", cidFile, "--name", containerName,
 		"--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
-		"--pids-limit", "16", "--memory", "128m", "--cpus", "0.50",
+		"--pids-limit", strconv.Itoa(e.policy.PIDs), "--memory", strconv.FormatInt(e.policy.MemoryBytes, 10), "--cpus", strconv.FormatFloat(e.policy.CPUs, 'f', -1, 64),
+		"--memory-swap", strconv.FormatInt(e.policy.MemoryBytes, 10),
 		"--ulimit", "nofile=64:64", "--user", "10001:10001",
-		"--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=8m",
-		"--mount", "type=bind,src=" + inputPath + ",dst=/input/document.pdf,readonly",
+		"--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=" + strconv.FormatInt(e.policy.TempBytes, 10),
+		"--env", "QAGENT_PDF_MAX_PAGES=" + strconv.Itoa(e.policy.MaxPages),
+		"--env", "QAGENT_PDF_MAX_INPUT_BYTES=" + strconv.FormatInt(e.policy.MaxInputBytes, 10),
 		"--entrypoint", "/usr/local/bin/extract-pdf",
 		e.image,
 	}
 
-	runCtx, cancel := context.WithTimeout(ctx, ExtractionBudget)
-	runErr := e.runner.Run(runCtx, "docker", args, stdout, stderr)
-	runContextErr := runCtx.Err()
-	cancel()
+	runErr := inputRunner.RunInput(ctx, "docker", args, io.NewSectionReader(file, 0, size), stdout, stderr)
+	runContextErr := ctx.Err()
 	if runContextErr != nil || stdout.exceeded || stderr.exceeded || runErr != nil {
 		e.cleanupContainer(containerName)
 		if runContextErr != nil {
@@ -180,6 +246,8 @@ func (e *Extractor) extractDocker(ctx context.Context, document []byte) (Result,
 				return Result{}, ErrEncrypted
 			case 24:
 				return Result{}, ErrTooManyPages
+			case 28, 137:
+				return Result{}, ErrResourceExceeded
 			case 125:
 				return Result{}, ErrUnavailable
 			}
@@ -194,7 +262,7 @@ func (e *Extractor) extractDocker(ctx context.Context, document []byte) (Result,
 		return Result{}, ErrOutputExceeded
 	}
 
-	result, err := parseOutput(stdout.Bytes())
+	result, err := parseOutputWithPolicy(stdout.Bytes(), e.policy)
 	if err != nil {
 		return Result{}, err
 	}
@@ -203,6 +271,10 @@ func (e *Extractor) extractDocker(ctx context.Context, document []byte) (Result,
 }
 
 func parseOutput(output []byte) (Result, error) {
+	return parseOutputWithPolicy(output, DefaultPolicy())
+}
+
+func parseOutputWithPolicy(output []byte, policy Policy) (Result, error) {
 	lineEnd := bytes.IndexByte(output, '\n')
 	if lineEnd < 0 || !bytes.HasPrefix(output[:lineEnd], []byte(outputPrefix)) {
 		return Result{}, ErrMalformed
@@ -212,7 +284,7 @@ func parseOutput(output []byte) (Result, error) {
 	if err != nil || pageCount < 1 {
 		return Result{}, ErrMalformed
 	}
-	if pageCount > MaxPages {
+	if pageCount > policy.MaxPages {
 		return Result{}, ErrTooManyPages
 	}
 	textBytes := output[lineEnd+1:]
@@ -223,7 +295,7 @@ func parseOutput(output []byte) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	if utf8.RuneCountInString(text) > MaxTextRunes {
+	if utf8.RuneCountInString(text) > policy.MaxTextRunes {
 		return Result{}, ErrTextTooLarge
 	}
 	if strings.TrimSpace(text) == "" {
@@ -325,10 +397,10 @@ func stageInput(document []byte) (directory, path string, err error) {
 		return "", "", errors.New("temporary PDF path contains Docker mount delimiters")
 	}
 	path = filepath.Join(directory, "document.pdf")
-	if err := os.WriteFile(path, document, 0o444); err != nil {
+	if err := os.WriteFile(path, document, 0o600); err != nil {
 		return "", "", err
 	}
-	if err := os.Chmod(path, 0o444); err != nil {
+	if err := os.Chmod(path, 0o600); err != nil {
 		return "", "", err
 	}
 	cleanup = false
@@ -380,3 +452,12 @@ func (b *limitedBuffer) Write(value []byte) (int, error) {
 func (b *limitedBuffer) Bytes() []byte { return b.buffer.Bytes() }
 
 var _ Runner = sandbox.ExecRunner{}
+
+type inputExecRunner struct{ sandbox.ExecRunner }
+
+func (inputExecRunner) RunInput(ctx context.Context, name string, args []string, input io.Reader, stdout, stderr io.Writer) error {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = input, stdout, stderr
+	cmd.WaitDelay = time.Second
+	return cmd.Run()
+}

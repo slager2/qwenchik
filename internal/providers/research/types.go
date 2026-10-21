@@ -2,6 +2,7 @@ package research
 
 import (
 	"context"
+	"os"
 	"time"
 )
 
@@ -53,32 +54,78 @@ type SearchReport struct {
 	Outcomes []ProviderOutcome `json:"outcomes"`
 }
 
+type SearchHitObservation struct {
+	ID               string    `json:"id"`
+	Fingerprint      string    `json:"fingerprint"`
+	URL              string    `json:"url,omitempty"`
+	Origin           string    `json:"origin,omitempty"`
+	Title            string    `json:"title,omitempty"`
+	Snippet          string    `json:"snippet,omitempty"`
+	Provider         string    `json:"provider"`
+	QueryFingerprint string    `json:"query_fingerprint"`
+	Status           string    `json:"status"`
+	ErrorCode        string    `json:"error_code,omitempty"`
+	Retryable        bool      `json:"retryable"`
+	Time             time.Time `json:"time"`
+}
+
 type DiagnosticSearchProvider interface {
 	SearchWithDiagnostics(context.Context, SearchOptions) (SearchReport, error)
 }
 
 type FetchOptions struct {
 	MaxBytes int64
+	TaskID   string
 }
 
 type FetchFailure struct {
-	Err          error
-	FetchedBytes int64
+	Err                 error
+	FetchedBytes        int64
+	Code                string
+	Phase               string
+	DeclaredBytes       *int64
+	EffectiveLimitBytes int64
+	MIMEType            string
+	LimitKind           string
 }
 
 func (e *FetchFailure) Error() string { return e.Err.Error() }
 func (e *FetchFailure) Unwrap() error { return e.Err }
 
 type FetchedDocument struct {
-	Provider      string
-	OriginalURL   string
-	FinalURL      string
-	ContentType   string
-	Language      string
-	HTTPStatus    int
-	RetrievedAt   time.Time
-	ContentSHA256 string
-	Body          []byte
+	Provider            string
+	OriginalURL         string
+	FinalURL            string
+	ContentType         string
+	Language            string
+	HTTPStatus          int
+	RetrievedAt         time.Time
+	ContentSHA256       string
+	Body                []byte
+	File                *os.File
+	SizeBytes           int64
+	DeclaredBytes       *int64
+	EffectiveLimitBytes int64
+	cleanup             func()
+}
+
+func (d FetchedDocument) ByteSize() int64 {
+	if d.File != nil {
+		return d.SizeBytes
+	}
+	return int64(len(d.Body))
+}
+
+func (d FetchedDocument) Cleanup() {
+	if d.cleanup != nil {
+		d.cleanup()
+		return
+	}
+	if d.File != nil {
+		name := d.File.Name()
+		_ = d.File.Close()
+		_ = os.Remove(name)
+	}
 }
 
 type Fetcher interface {

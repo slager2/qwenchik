@@ -27,6 +27,9 @@ func TestCompleteUsesOpenAICompatibleJSONContract(t *testing.T) {
 		if request["model"] != "qwen-test" || request["response_format"].(map[string]any)["type"] != "json_object" {
 			t.Errorf("unexpected request body: %#v", request)
 		}
+		if request["temperature"] != 0.2 || request["top_p"] != 0.8 {
+			t.Errorf("configured sampling defaults were not sent: %#v", request)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"ok\":true}"}}],"usage":{"prompt_tokens":7,"completion_tokens":3}}`)
 	}))
@@ -76,6 +79,31 @@ func TestCompleteUsesStrictJSONSchemaResponseFormat(t *testing.T) {
 	if _, err := client.Complete(context.Background(), llm.ChatRequest{
 		Messages: []llm.ChatMessage{{Role: "user", Content: "hello"}}, JSONSchema: schema,
 	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCompleteSendsExplicitZeroSamplingValues(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			return
+		}
+		if request["temperature"] != float64(0) || request["top_p"] != float64(0) {
+			t.Errorf("explicit zero values were not sent: %#v", request)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}]}`)
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "", "qwen-test", time.Second, 128, 0.7, 0.8, false)
+	_, err := client.Complete(context.Background(), llm.ChatRequest{
+		Temperature: 0, TemperatureSet: true,
+		TopP: 0, TopPSet: true,
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 }

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { api } from './api'
+import ChatShell from './ChatShell'
+import { legacyDraft } from './conversation-state.mjs'
 import { createTaskDetailTracker } from './task-detail.mjs'
 import { diagnosticSummary, failureSummary, streamLabel } from './observability.mjs'
 import { ProviderCard, TaskFailureCard, SourceList } from './diagnostic-ui.mjs'
@@ -100,7 +102,7 @@ function eventSummary(event: AgentEvent) {
   return ''
 }
 
-function App() {
+function Workspace() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [selectedID, setSelectedID] = useState('')
   const [detailTracker] = useState(createTaskDetailTracker)
@@ -143,24 +145,31 @@ function App() {
 
   const refreshDetail = useCallback(async (id: string) => {
     const isCurrent = detailTracker.beginRequest(id)
-    try {
-      const [task, nextMessages, nextEvents, nextCheckpoints, nextSteps, nextArtifacts, nextEvidence, nextApprovals] = await Promise.all([
-        api.task(id), api.messages(id), api.events(id), api.checkpoints(id), api.steps(id), api.artifacts(id), api.evidence(id), api.approvals(id),
-      ])
-      if (!isCurrent()) return
-      setTasks((current) => current.map((item) => item.id === task.id ? task : item))
-      setMessages(nextMessages)
-      setDraft((current) => current && nextMessages.some((message) => message.id === current.message_id) ? null : current)
-      setEvents(nextEvents.filter((event) => event.type !== 'message.delta'))
-      setCheckpoints(nextCheckpoints)
-      setSteps(nextSteps)
-      setArtifacts(nextArtifacts)
-      setEvidence(nextEvidence)
-      setApprovals(nextApprovals)
-    } catch (caught) {
-      if (!isCurrent()) return
-      setError(caught instanceof Error ? caught.message : 'Не удалось загрузить задачу')
+    let savedIDs: string[] = []
+    async function load<T>(request: Promise<T>, apply: (value: T) => void) {
+      const value = await request
+      if (isCurrent()) apply(value)
     }
+    const results = await Promise.allSettled([
+      load(api.task(id), (task) => setTasks((current) => current.map((item) => item.id === task.id ? task : item))),
+      load(api.messages(id), (items) => {
+        savedIDs = items.map((message) => message.id)
+        setMessages(items)
+        setDraft((current) => current && savedIDs.includes(current.message_id) ? null : current)
+      }),
+      load(api.events(id), (items) => {
+        setEvents(items.filter((event) => event.type !== 'message.delta'))
+        const restored = legacyDraft(items, savedIDs)
+        if (restored) setDraft((current) => current && current.seq > restored.seq ? current : restored)
+      }),
+      load(api.checkpoints(id), setCheckpoints),
+      load(api.steps(id), setSteps),
+      load(api.artifacts(id), setArtifacts),
+      load(api.evidence(id), setEvidence),
+      load(api.approvals(id), setApprovals),
+    ])
+    if (!isCurrent()) return
+    if (results.some((result) => result.status === 'rejected')) setError('Часть сведений задачи недоступна. Загруженные данные сохранены; обновите задачу для повтора.')
   }, [detailTracker])
 
   useEffect(() => {
@@ -171,6 +180,14 @@ function App() {
 
   useLayoutEffect(() => {
     detailTracker.select(selectedID)
+    setMessages([])
+    setDraft(null)
+    setEvents([])
+    setCheckpoints([])
+    setSteps([])
+    setArtifacts([])
+    setEvidence([])
+    setApprovals([])
     return () => detailTracker.select('')
   }, [selectedID, detailTracker])
 
@@ -249,13 +266,6 @@ function App() {
             }
           })
           return
-        }
-        if (parsed.type === 'message.created' && typeof parsed.payload.message_id === 'string') {
-          const messageID = parsed.payload.message_id
-          setDraft((current) => current?.message_id === messageID ? null : current)
-        }
-        if (parsed.type === 'task.failed' || parsed.type === 'task.cancelled' || (parsed.type === 'task.status_changed' && ['failed', 'cancelled', 'paused'].includes(String(parsed.payload.to)))) {
-          setDraft(null)
         }
         setEvents((current) => current.some((item) => item.seq === parsed.seq) ? current : [...current, parsed].slice(-200))
         if (['task.completed', 'task.failed', 'task.cancelled'].includes(parsed.type)) {
@@ -412,11 +422,12 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="rail" aria-label="Основная навигация">
-        <a className="brand" href="#board" aria-label="Qwenchik, доска задач">
+        <a className="brand" href="#/workspace" aria-label="Qwenchik, доска задач">
           <span className="brand-mark">Q</span>
           <span className="brand-name">qwenchik</span>
         </a>
         <div className="rail-divider" />
+        <a className="rail-link" href="#/chat" aria-label="Открыть чаты">Чаты</a>
         <button className="rail-link is-current" type="button" aria-current="page" onClick={() => document.getElementById('board')?.scrollIntoView()}>
           <span className="rail-glyph">▦</span><span>Доска</span>
         </button>
@@ -844,6 +855,16 @@ function CommandPalette({ tasks, onClose, onExecute }: PaletteProps) {
       </section>
     </div>
   )
+}
+
+function App() {
+  const [workspace, setWorkspace] = useState(() => window.location.hash.startsWith('#/workspace'))
+  useEffect(() => {
+    const navigate = () => setWorkspace(window.location.hash.startsWith('#/workspace'))
+    window.addEventListener('hashchange', navigate)
+    return () => window.removeEventListener('hashchange', navigate)
+  }, [])
+  return workspace ? <Workspace /> : <ChatShell />
 }
 
 export default App

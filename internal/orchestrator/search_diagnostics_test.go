@@ -32,13 +32,18 @@ func (s *diagnosticSearchStub) SearchWithDiagnostics(context.Context, research.S
 
 type providerEventRepository struct {
 	Repository
-	err    error
-	events []map[string]any
+	err         error
+	events      []map[string]any
+	queryEvents int
 }
 
 func (r *providerEventRepository) RecordEvent(ctx context.Context, taskID, kind string, stage *domain.Stage, visibility string, payload map[string]any) (domain.Event, error) {
-	if kind != "search.provider" || visibility != "user" || stage == nil || *stage != domain.StageSearch {
+	if kind != "search.provider" && kind != "query.updated" || visibility != "user" || stage == nil || *stage != domain.StageSearch {
 		return domain.Event{}, errors.New("unexpected provider event envelope")
+	}
+	if kind == "query.updated" {
+		r.queryEvents++
+		return domain.Event{}, nil
 	}
 	r.events = append(r.events, payload)
 	return domain.Event{}, r.err
@@ -65,7 +70,7 @@ func TestSearchObserverRecordsSafeOutcomesAndPropagatesPersistenceFailure(t *tes
 		if failEvent && !errors.Is(err, persistErr) || !failEvent && !errors.Is(err, research.ErrSearchUnavailable) {
 			t.Fatalf("provider execution failure = %v", err)
 		}
-		if ctx.Err() != nil || provider.calls != 1 || len(repo.events) != 1 {
+		if ctx.Err() != nil || provider.calls != 1 || len(repo.events) != 1 || repo.queryEvents != 1 {
 			t.Fatalf("observer execution: calls=%d events=%d ctx=%v", provider.calls, len(repo.events), ctx.Err())
 		}
 		encoded, _ := json.Marshal(repo.events[0])

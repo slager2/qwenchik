@@ -57,7 +57,7 @@ func TestUnavailableDockerFallsBackToBoundedPureGoWorker(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "")
 	runner := newFakeRunner()
 	runner.imageErr = errors.New("PDF image not found locally")
-	result, err := newFakeExtractor(t, runner).Extract(context.Background(), testPDF(2, "fallback evidence"))
+	result, err := newOptInExtractor(t, fakeImageID, runner).Extract(context.Background(), testPDF(2, "fallback evidence"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,10 +73,7 @@ func TestUnavailableDockerFallsBackToBoundedPureGoWorker(t *testing.T) {
 }
 
 func TestPureGoFallbackWorksWithoutConfiguredDockerImage(t *testing.T) {
-	result, err := New("", newFakeRunner())
-	if err != nil {
-		t.Fatal(err)
-	}
+	result := newOptInExtractor(t, "", newFakeRunner())
 	extracted, err := result.Extract(context.Background(), testPDF(1, "offline text"))
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +102,7 @@ func TestRootfulDockerFallsBackToPureGoParser(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "")
 	runner := newFakeRunner()
 	runner.securityOptions = `["name=seccomp,profile=builtin"]`
-	result, err := newFakeExtractor(t, runner).Extract(context.Background(), testPDF(1, "rootless fallback"))
+	result, err := newOptInExtractor(t, fakeImageID, runner).Extract(context.Background(), testPDF(1, "rootless fallback"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,6 +112,17 @@ func TestRootfulDockerFallsBackToPureGoParser(t *testing.T) {
 	if len(runner.runs) != 0 {
 		t.Fatalf("rootful Docker unexpectedly ran a container: %v", runner.runs)
 	}
+}
+
+func newOptInExtractor(t *testing.T, image string, runner Runner) *Extractor {
+	t.Helper()
+	policy := DefaultPolicy()
+	policy.AllowUnsandboxedFallback = true
+	extractor, err := NewWithPolicy(image, runner, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return extractor
 }
 
 func TestPDFOutputStripsControlsAndRejectsEmptyText(t *testing.T) {

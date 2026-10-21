@@ -79,6 +79,15 @@ func (f *fakeRunner) Run(ctx context.Context, name string, args []string, stdout
 	return f.runErr
 }
 
+func (f *fakeRunner) RunInput(ctx context.Context, name string, args []string, input io.Reader, stdout, stderr io.Writer) error {
+	var err error
+	f.input, err = io.ReadAll(input)
+	if err != nil {
+		return err
+	}
+	return f.Run(ctx, name, args, stdout, stderr)
+}
+
 func newFakeRunner() *fakeRunner {
 	return &fakeRunner{
 		contextEndpoint: "unix:///run/user/1000/docker.sock",
@@ -119,8 +128,8 @@ func TestExtractUsesFixedRootlessLocalContainerAndReturnsCompleteOutput(t *testi
 	joined := strings.Join(args, " ")
 	for _, required := range []string{
 		"--pull=never", "--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
-		"--pids-limit 16", "--memory 128m", "--cpus 0.50", "--user 10001:10001",
-		"--tmpfs /tmp:rw,nosuid,nodev,noexec,size=8m", "dst=/input/document.pdf,readonly",
+		"--pids-limit 32", "--memory 536870912", "--cpus 1", "--user 10001:10001", "-i",
+		"--tmpfs /tmp:rw,nosuid,nodev,noexec,size=67108864", "--env QAGENT_PDF_MAX_PAGES=20", "--env QAGENT_PDF_MAX_INPUT_BYTES=67108864",
 		"--entrypoint /usr/local/bin/extract-pdf", fakeImageID,
 	} {
 		if !strings.Contains(joined, required) {
@@ -140,7 +149,7 @@ func TestExtractUsesFixedRootlessLocalContainerAndReturnsCompleteOutput(t *testi
 	}
 }
 
-func TestExtractSharesOneFiveSecondDeadlineAcrossContainerWork(t *testing.T) {
+func TestExtractSharesOnePolicyDeadlineAcrossContainerWork(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	runner := newFakeRunner()
@@ -236,22 +245,22 @@ func TestExtractRejectsPageCountAndMalformedOutput(t *testing.T) {
 	}
 }
 
-func TestExtractFallsBackWithoutRootlessLocalDockerOrImage(t *testing.T) {
+func TestExtractFailsClosedWithoutRootlessLocalDockerOrImage(t *testing.T) {
 	t.Run("no configured image", func(t *testing.T) {
 		extractor, err := New("", newFakeRunner())
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := extractor.Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrMalformed) {
-			t.Fatalf("no-image fallback error = %v, want malformed input", err)
+		if _, err := extractor.Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("no-image error = %v, want unavailable", err)
 		}
 	})
 	t.Run("remote Docker host", func(t *testing.T) {
 		t.Setenv("DOCKER_CONTEXT", "")
 		t.Setenv("DOCKER_HOST", "tcp://docker.example:2376")
 		runner := newFakeRunner()
-		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrMalformed) {
-			t.Fatalf("remote Docker fallback error = %v, want malformed input", err)
+		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("remote Docker error = %v, want unavailable", err)
 		}
 		if len(runner.outputs) != 0 || len(runner.runs) != 0 {
 			t.Fatalf("remote context reached Docker: outputs=%v runs=%v", runner.outputs, runner.runs)
@@ -262,8 +271,8 @@ func TestExtractFallsBackWithoutRootlessLocalDockerOrImage(t *testing.T) {
 		t.Setenv("DOCKER_HOST", "")
 		runner := newFakeRunner()
 		runner.contextEndpoint = "tcp://docker.example:2376"
-		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrMalformed) {
-			t.Fatalf("remote-context fallback error = %v, want malformed input", err)
+		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("remote-context error = %v, want unavailable", err)
 		}
 		if len(runner.outputs) != 1 || len(runner.runs) != 0 {
 			t.Fatalf("remote context was used: outputs=%v runs=%v", runner.outputs, runner.runs)
@@ -274,8 +283,8 @@ func TestExtractFallsBackWithoutRootlessLocalDockerOrImage(t *testing.T) {
 		t.Setenv("DOCKER_HOST", "")
 		runner := newFakeRunner()
 		runner.securityOptions = `["name=seccomp,profile=builtin"]`
-		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrMalformed) {
-			t.Fatalf("non-rootless fallback error = %v, want malformed input", err)
+		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("non-rootless error = %v, want unavailable", err)
 		}
 		if len(runner.runs) != 0 {
 			t.Fatalf("non-rootless Docker ran a container: %v", runner.runs)
@@ -286,8 +295,8 @@ func TestExtractFallsBackWithoutRootlessLocalDockerOrImage(t *testing.T) {
 		t.Setenv("DOCKER_HOST", "")
 		runner := newFakeRunner()
 		runner.imageErr = errors.New("image not found")
-		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrMalformed) {
-			t.Fatalf("missing-image fallback error = %v, want malformed input", err)
+		if _, err := newFakeExtractor(t, runner).Extract(context.Background(), []byte("pdf")); !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("missing-image error = %v, want unavailable", err)
 		}
 		if len(runner.runs) != 0 {
 			t.Fatalf("missing image ran a container: %v", runner.runs)
@@ -295,7 +304,7 @@ func TestExtractFallsBackWithoutRootlessLocalDockerOrImage(t *testing.T) {
 	})
 }
 
-func TestExtractRejectsInputAboveFiveMegabytesBeforeDocker(t *testing.T) {
+func TestExtractRejectsInputAbovePolicyBeforeDocker(t *testing.T) {
 	runner := newFakeRunner()
 	input := make([]byte, MaxInputBytes+1)
 	_, err := newFakeExtractor(t, runner).Extract(context.Background(), input)
@@ -331,8 +340,8 @@ func TestWrapperUsesFixedPopplerCommandsAndRejectsUnsafeInputs(t *testing.T) {
 	}
 	value := string(script)
 	for _, required := range []string{
-		"pdfinfo \"$input\"", "Encrypted:", "\"$pages\" -gt 20", "pdftotext -enc UTF-8 -nopgbrk \"$input\" \"$text\"",
-		"QAGENT_PDF_PAGES:%s\\n", "cat \"$text\"",
+		"pdfinfo \"$input\"", "Encrypted:", "\"$pages\" -gt \"$QAGENT_PDF_MAX_PAGES\"", "pdftotext -enc UTF-8 -nopgbrk \"$input\" -",
+		"QAGENT_PDF_PAGES:%s\\n", "umask 077", "cat >\"$input\"",
 	} {
 		if !strings.Contains(value, required) {
 			t.Errorf("fixed wrapper missing %q", required)

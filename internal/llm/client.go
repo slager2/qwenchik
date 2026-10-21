@@ -3,6 +3,15 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
+)
+
+var (
+	ErrModelTimeout       = errors.New("local model request timed out")
+	ErrStreamInterrupted  = errors.New("local model stream interrupted")
+	ErrOutputTruncated    = errors.New("local model output truncated")
+	ErrInvalidModelOutput = errors.New("local model returned invalid output")
+	ErrInferenceBusy      = errors.New("local model inference slot is busy")
 )
 
 type ChatMessage struct {
@@ -11,12 +20,18 @@ type ChatMessage struct {
 }
 
 type ChatRequest struct {
-	Messages    []ChatMessage
-	MaxTokens   int
-	Temperature float64
-	TopP        float64
-	JSONMode    bool
-	JSONSchema  json.RawMessage
+	Messages              []ChatMessage
+	Model                 string   `json:"-"`
+	BaseURL               string   `json:"-"`
+	Stop                  []string `json:"-"`
+	MaxTokens             int
+	Temperature           float64
+	TemperatureSet        bool
+	TopP                  float64
+	TopPSet               bool
+	JSONMode              bool
+	JSONSchema            json.RawMessage
+	BeforeFallbackAttempt func() error `json:"-"`
 }
 
 type ChatResponse struct {

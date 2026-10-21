@@ -9,11 +9,13 @@ import (
 	"io"
 	"net"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/provenance"
 	"github.com/slager2/qwenchik/internal/providers/research"
+	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
 	"github.com/slager2/qwenchik/internal/storage/artifacts"
 )
 
@@ -30,6 +32,8 @@ type ResearchTools struct {
 	Repository     ResearchRepository
 	MaxFetchBytes  int64
 	AllowedDomains []string
+	PDFPolicy      pdfextract.Policy
+	FetchPolicy    research.FetchPolicy
 }
 
 var ErrDuplicateResearchTarget = errors.New("research URL was already fetched for this task")
@@ -69,46 +73,65 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 				Recency: args.Recency, MaxResults: count, SafeSearch: true,
 			}
 			var hits []research.SearchHit
+			collectionCtx, collectionCancel := searchCollectionContext(ctx)
+			defer collectionCancel()
+			var outcomes []research.ProviderOutcome
 			if diagnostic, ok := runtime.SearchProvider.(research.DiagnosticSearchProvider); ok {
-				report, searchErr := diagnostic.SearchWithDiagnostics(ctx, options)
+				report, searchErr := diagnostic.SearchWithDiagnostics(collectionCtx, options)
+				if searchErr == nil && collectionCtx.Err() != nil {
+					searchErr = collectionCtx.Err()
+				}
+				if searchErr != nil && len(report.Hits) > 0 {
+					hasFailureReport := false
+					for _, outcome := range report.Outcomes {
+						hasFailureReport = hasFailureReport || outcome.Code != "search_ok" && outcome.Code != "search_no_results"
+					}
+					if !hasFailureReport {
+						for i := range report.Outcomes {
+							if report.Outcomes[i].ResultCount > 0 {
+								report.Outcomes[i].State, report.Outcomes[i].Code = "degraded", "search_partial"
+								report.Outcomes[i].Message = "Provider returned partial results."
+							}
+						}
+					}
+				}
+				outcomes = report.Outcomes
 				for _, outcome := range report.Outcomes {
 					observeSearchOutcome(ctx, outcome)
 				}
 				hits, err = report.Hits, searchErr
 			} else {
-				hits, err = runtime.SearchProvider.Search(ctx, options)
+				hits, err = runtime.SearchProvider.Search(collectionCtx, options)
+				if err == nil && collectionCtx.Err() != nil {
+					err = collectionCtx.Err()
+				}
 			}
+			if contextErr := executionContextError(ctx); contextErr != nil {
+				return nil, contextErr
+			}
+			if len(hits) == 0 && err != nil {
+				if errors.Is(err, context.DeadlineExceeded) || collectionCtx.Err() == context.DeadlineExceeded {
+					return nil, &research.SearchFailure{Code: "search_provider_timeout", Outcomes: outcomes, Cause: context.DeadlineExceeded}
+				}
+				var failure *research.SearchFailure
+				if errors.As(err, &failure) {
+					return nil, err
+				}
+				code := "search_unavailable"
+				if errors.Is(err, research.ErrSearchFilteredByPolicy) {
+					code = "search_filtered_by_policy"
+				} else if errors.Is(err, research.ErrSearchResponseTooBig) {
+					code = "search_response_too_big"
+				}
+				return nil, &research.SearchFailure{Code: code, Outcomes: outcomes, Cause: err}
+			}
+			collectionCancel()
+			safeHits, err := validateSearchHits(ctx, runtime.Fetcher, hits, outcomes, options.Query)
 			if err != nil {
 				return nil, err
 			}
-			safeHits := make([]research.SearchHit, 0, len(hits))
-			for _, hit := range hits {
-				if err := ctx.Err(); err != nil {
-					return nil, err
-				}
-				if runtime.Fetcher == nil {
-					return nil, errors.New("search URL policy requires a fetcher")
-				}
-				if err := runtime.Fetcher.ValidateURL(ctx, hit.URL); err != nil {
-					if ctx.Err() != nil {
-						return nil, ctx.Err()
-					}
-					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-						return nil, err
-					}
-					continue
-				}
-				hit.Snippet = truncateUTF8(hit.Snippet, 400)
-				hit.Taint = research.TaintExternal
-				safeHits = append(safeHits, hit)
-			}
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-			if len(hits) > 0 && len(safeHits) == 0 {
-				outcome := research.ProviderOutcome{Provider: "search", State: "degraded", Code: "search_filtered_by_policy", Message: "All search URLs were excluded by outbound policy."}
-				observeSearchOutcome(ctx, outcome)
-				return nil, &research.SearchFailure{Code: "search_filtered_by_policy", Outcomes: []research.ProviderOutcome{outcome}}
+			if contextErr := executionContextError(ctx); contextErr != nil {
+				return nil, contextErr
 			}
 			registry.urlLedger.Remember(taskIDFromContext(ctx), safeHits)
 			return safeHits, nil
@@ -117,11 +140,29 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 		}
 	}
 	if runtime.Fetcher != nil && runtime.Extractor != nil && runtime.Artifacts != nil && runtime.Repository != nil {
+		pdfPolicy := runtime.PDFPolicy
+		if pdfPolicy.MaxPages == 0 {
+			pdfPolicy = pdfextract.DefaultPolicy()
+		}
+		if err := pdfPolicy.Validate(); err != nil {
+			return err
+		}
+		fetchPolicy := runtime.FetchPolicy
+		if fetchPolicy.TaskFetchBudgetBytes == 0 {
+			fetchPolicy = research.DefaultFetchPolicy()
+		}
+		if err := fetchPolicy.Validate(); err != nil {
+			return err
+		}
+		if runtime.MaxFetchBytes <= 0 {
+			runtime.MaxFetchBytes = fetchPolicy.TaskFetchBudgetBytes
+		}
+		fetchTimeout := int((max(fetchPolicy.PDFDownloadTimeout, fetchPolicy.SourceDownloadTimeout) + pdfPolicy.ExtractionTimeout + 10*time.Second + time.Second - 1) / time.Second)
 		if err := registry.RegisterValidated(Descriptor{
 			Name: "fetch_url", Description: "Fetch a public HTTP(S) URL safely, extract local text, and persist source evidence.",
 			ArgumentsSchema:    json.RawMessage(`{"type":"object","properties":{"url":{"type":"string","maxLength":2048},"original_query":{"type":"string","maxLength":1000}},"required":["url"],"additionalProperties":false}`),
-			OutputSchema:       json.RawMessage(`{"type":"object","properties":{"evidence_id":{"type":"string"},"url":{"type":"string"},"requested_url":{"type":"string"},"title":{"type":"string"},"excerpt":{"type":"string"},"content_sha256":{"type":"string"},"taint":{"type":"string"},"fetched_bytes":{"type":"integer"},"page_count":{"type":"integer","minimum":1,"maximum":20}},"required":["evidence_id","url","requested_url","title","excerpt","content_sha256","taint","fetched_bytes"],"additionalProperties":false}`),
-			RequiredCapability: "research.fetch", RiskClass: "read", TimeoutSeconds: 30,
+			OutputSchema:       json.RawMessage(fmt.Sprintf(`{"type":"object","properties":{"evidence_id":{"type":"string"},"url":{"type":"string"},"requested_url":{"type":"string"},"title":{"type":"string"},"excerpt":{"type":"string"},"content_sha256":{"type":"string"},"taint":{"type":"string"},"fetched_bytes":{"type":"integer"},"page_count":{"type":"integer","minimum":1,"maximum":%d}},"required":["evidence_id","url","requested_url","title","excerpt","content_sha256","taint","fetched_bytes"],"additionalProperties":false}`, pdfPolicy.MaxPages)),
+			RequiredCapability: "research.fetch", RiskClass: "read", TimeoutSeconds: fetchTimeout,
 			Idempotent: true, MaxOutputBytes: 32 << 10, AllowedRoles: []string{"researcher"},
 		}, func(ctx context.Context, raw json.RawMessage) error {
 			var args fetchArgs
@@ -158,23 +199,43 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			if taskLimit := FetchByteLimit(ctx, fetchLimit); taskLimit > 0 && taskLimit < fetchLimit {
 				fetchLimit = taskLimit
 			}
-			fetched, err := runtime.Fetcher.Fetch(ctx, args.URL, research.FetchOptions{MaxBytes: fetchLimit})
+			fetched, err := runtime.Fetcher.Fetch(ctx, args.URL, research.FetchOptions{MaxBytes: fetchLimit, TaskID: taskID})
+			defer fetched.Cleanup()
 			if err != nil {
 				return nil, err
 			}
-			if int64(len(fetched.Body)) > fetchLimit {
-				return nil, research.ErrResponseTooBig
+			if fetched.ByteSize() > fetchLimit {
+				return nil, &research.FetchFailure{Err: research.ErrResponseTooBig, Code: "task_fetch_budget_exceeded", Phase: "fetch", FetchedBytes: fetched.ByteSize(), DeclaredBytes: fetched.DeclaredBytes, EffectiveLimitBytes: fetchLimit, MIMEType: fetched.ContentType, LimitKind: "task_remaining"}
 			}
 			if observer, ok := ctx.Value(extractionObserverKey{}).(func() error); ok && observer != nil {
 				if err := observer(); err != nil {
-					return nil, &research.FetchFailure{Err: err, FetchedBytes: int64(len(fetched.Body))}
+					return nil, extractionFailure(ctx, fetched, err)
 				}
 			}
 			extracted, err := runtime.Extractor.Extract(ctx, fetched)
 			if err != nil {
-				return nil, &research.FetchFailure{Err: err, FetchedBytes: int64(len(fetched.Body))}
+				return nil, extractionFailure(ctx, fetched, err)
 			}
-			rawArtifact, rawRef, err := runtime.Artifacts.Put(ctx, taskID, artifactFileName("source", fetched.ContentSHA256, ".raw"), fetched.ContentType, fetched.Body)
+			if err := ctx.Err(); err != nil {
+				return nil, extractionFailure(ctx, fetched, err)
+			}
+			if strings.TrimSpace(extracted.Text) == "" {
+				return nil, extractionFailure(ctx, fetched, research.ErrExtractionEmpty)
+			}
+			if utf8.RuneCountInString(extracted.Text) > pdfPolicy.MaxTextRunes {
+				return nil, extractionFailure(ctx, fetched, pdfextract.ErrTextTooLarge)
+			}
+			if extracted.PageCount > pdfPolicy.MaxPages {
+				return nil, extractionFailure(ctx, fetched, pdfextract.ErrTooManyPages)
+			}
+			persistCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			ctx = persistCtx
+			var rawReader io.Reader = bytes.NewReader(fetched.Body)
+			if fetched.File != nil {
+				rawReader = io.NewSectionReader(fetched.File, 0, fetched.ByteSize())
+			}
+			rawArtifact, rawRef, err := runtime.Artifacts.PutReader(ctx, taskID, artifactFileName("source", fetched.ContentSHA256, ".raw"), fetched.ContentType, rawReader)
 			if err != nil {
 				return nil, err
 			}
@@ -204,7 +265,7 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			output := map[string]any{
 				"evidence_id": evidence.ID, "url": evidence.CanonicalURL, "requested_url": args.URL, "title": evidence.Title,
 				"excerpt": truncateUTF8(evidence.Excerpt, 4000), "content_sha256": evidence.ContentSHA256,
-				"taint": research.TaintExternal, "fetched_bytes": int64(len(fetched.Body)),
+				"taint": research.TaintExternal, "fetched_bytes": fetched.ByteSize(),
 			}
 			if extracted.PageCount > 0 {
 				output["page_count"] = extracted.PageCount
@@ -215,6 +276,49 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 		}
 	}
 	return nil
+}
+
+func extractionFailure(ctx context.Context, fetched research.FetchedDocument, err error) error {
+	code := "extraction_failed"
+	if fetched.ContentType == "application/pdf" {
+		code = "pdf_extraction_failed"
+		for _, item := range []struct {
+			cause error
+			code  string
+		}{
+			{pdfextract.ErrInputTooLarge, "pdf_extraction_input_too_large"},
+			{pdfextract.ErrTooManyPages, "pdf_page_limit_exceeded"},
+			{pdfextract.ErrTextTooLarge, "pdf_text_limit_exceeded"},
+			{pdfextract.ErrResourceExceeded, "pdf_resource_exceeded"},
+			{pdfextract.ErrOutputExceeded, "pdf_resource_exceeded"},
+			{pdfextract.ErrTimeout, "pdf_timeout"},
+			{pdfextract.ErrUnavailable, "pdf_extractor_unavailable"},
+			{pdfextract.ErrMalformed, "pdf_malformed"},
+			{pdfextract.ErrEncrypted, "pdf_encrypted"},
+			{pdfextract.ErrNoText, "pdf_no_text"},
+			{research.ErrPDFExtractorUnavailable, "pdf_extractor_unavailable"},
+			{research.ErrPDFTooManyPages, "pdf_page_limit_exceeded"},
+			{research.ErrPDFTooLarge, "pdf_extraction_input_too_large"},
+			{research.ErrPDFEncrypted, "pdf_encrypted"},
+			{research.ErrPDFNoText, "pdf_no_text"},
+		} {
+			if errors.Is(err, item.cause) {
+				code = item.code
+				break
+			}
+		}
+	}
+	if errors.Is(err, research.ErrExtractionEmpty) {
+		code = "extraction_empty"
+	}
+	if errors.Is(err, research.ErrExtractionChallenge) {
+		code = "extraction_challenge"
+	}
+	if ctx.Err() != nil {
+		err = errors.Join(err, ctx.Err())
+		code = ""
+	}
+	return &research.FetchFailure{Err: err, Code: code, Phase: "extract", FetchedBytes: fetched.ByteSize(), DeclaredBytes: fetched.DeclaredBytes, EffectiveLimitBytes: fetched.EffectiveLimitBytes, MIMEType: fetched.ContentType}
 }
 
 type searchOutcomeObserverKey struct{}

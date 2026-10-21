@@ -9,6 +9,7 @@ export default defineConfig({
     },
   },
   build: {
+    assetsInlineLimit: 0,
     outDir: '../internal/api/web/dist',
     emptyOutDir: true,
   },

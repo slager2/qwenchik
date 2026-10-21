@@ -13,12 +13,20 @@ import (
 	"time"
 
 	"github.com/slager2/qwenchik/internal/domain"
+	"github.com/slager2/qwenchik/internal/policy"
 	"github.com/slager2/qwenchik/internal/providers/research"
 	"github.com/slager2/qwenchik/internal/tools"
 )
 
 func (w *Worker) executeObservedTool(ctx context.Context, taskID string, stage *domain.Stage, role, name string, arguments json.RawMessage, grant string, stepIDs ...string) (any, error) {
-	toolCtx, cancel := context.WithCancel(ctx)
+	if err := w.reserveResearchTool(ctx, taskID, name); err != nil {
+		return nil, err
+	}
+	budget := 20 * time.Second
+	if descriptor, ok := w.tools.Descriptor(name); ok && descriptor.TimeoutSeconds > 0 {
+		budget = time.Duration(descriptor.TimeoutSeconds) * time.Second
+	}
+	toolCtx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	var mu sync.Mutex
 	var eventErr error
@@ -55,6 +63,14 @@ func (w *Worker) executeObservedTool(ctx context.Context, taskID string, stage *
 			cancel()
 		}
 	})
+	toolCtx = tools.WithSearchHitObserver(toolCtx, func(observerCtx context.Context, observation research.SearchHitObservation) error {
+		payload := map[string]any{"hit": tools.SafeSearchHitObservation(observation)}
+		if len(stepIDs) > 0 {
+			payload["step_id"] = stepIDs[0]
+		}
+		_, err := w.repo.RecordEvent(observerCtx, taskID, "search.hit", eventStage, "user", payload)
+		return err
+	})
 	if name == "fetch_url" {
 		toolCtx = tools.WithExtractionObserver(toolCtx, func() error {
 			if err := w.ensureActive(toolCtx, taskID); err != nil {
@@ -70,6 +86,31 @@ func (w *Worker) executeObservedTool(ctx context.Context, taskID string, stage *
 	}
 	var result any
 	var err error
+	if name == "search" && role == "researcher" {
+		_, decision, authorizeErr := w.tools.Authorize(toolCtx, role, name, arguments)
+		if authorizeErr != nil {
+			return nil, authorizeErr
+		}
+		if decision.Action == policy.Allow || decision.Action == policy.ApprovalRequired && grant != "" {
+			var query struct {
+				Query string `json:"query"`
+			}
+			if err := json.Unmarshal(arguments, &query); err != nil {
+				return nil, err
+			}
+			hash := sha256.Sum256([]byte(query.Query))
+			payload := map[string]any{"query_fingerprint": hex.EncodeToString(hash[:])}
+			if safe := tools.SafeSearchQuery(query.Query); safe != "" {
+				payload["query"] = safe
+			}
+			if len(stepIDs) > 0 {
+				payload["step_id"] = stepIDs[0]
+			}
+			if _, err := w.repo.RecordEvent(toolCtx, taskID, "query.updated", eventStage, "user", payload); err != nil {
+				return nil, err
+			}
+		}
+	}
 	if grant != "" {
 		result, err = w.tools.ExecuteApproved(toolCtx, role, name, arguments, grant)
 	} else {
@@ -143,6 +184,14 @@ func safeSearchCode(code string) (string, string) {
 	switch code {
 	case "search_ok":
 		return code, "Provider returned results."
+	case "search_partial":
+		return code, "Provider returned partial results."
+	case "search_provider_timeout":
+		return code, "Search collection timed out."
+	case "search_validation_timeout":
+		return code, "Source URL validation timed out."
+	case "search_no_usable_hits":
+		return code, "Search returned no usable source URLs."
 	case "search_no_results":
 		return code, "Provider returned no results."
 	case "provider_blocked":
@@ -216,7 +265,7 @@ func searchesExhaustedWithoutResults(plan domain.Plan, state checkpointState) bo
 			return false
 		}
 	}
-	retry, exists := state.ToolResults[conditionalSearchRetryResultKey(firstSearchStepID(plan))]
+	retry, exists := state.ToolResults[state.conditionalSearchRetryResultKey(firstSearchStepID(plan))]
 	return searches > 0 && exists && searchResultIsSuccessfulEmpty(retry)
 }
 

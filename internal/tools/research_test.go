@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -57,7 +58,7 @@ func TestSearchURLValidationPropagatesCancellation(t *testing.T) {
 	}{
 		{"canceled validation error", 1, false, research.ErrUnsafeURL, context.Canceled},
 		{"canceled successful validation", 2, false, nil, context.Canceled},
-		{"deadline during validation", 2, true, research.ErrUnsafeURL, context.DeadlineExceeded},
+		{"child budget preserves first hit", 2, true, research.ErrUnsafeURL, context.DeadlineExceeded},
 		{"wrapped cancellation", 0, false, fmt.Errorf("validation: %w", context.Canceled), context.Canceled},
 		{"wrapped deadline", 0, false, fmt.Errorf("validation: %w", context.DeadlineExceeded), context.DeadlineExceeded},
 	} {
@@ -68,12 +69,11 @@ func TestSearchURLValidationPropagatesCancellation(t *testing.T) {
 				ctx, cancel = context.WithTimeout(context.Background(), 50*time.Millisecond)
 			}
 			defer cancel()
-			calls := 0
+			var calls atomic.Int64
 			fetcher := &validationFetchStub{validate: func(validationCtx context.Context, _ string) error {
-				calls++
-				if calls == fixture.cancelAt {
+				if calls.Add(1) == int64(fixture.cancelAt) {
 					if fixture.deadline {
-						<-validationCtx.Done()
+						<-ctx.Done()
 					} else {
 						cancel()
 					}
@@ -92,6 +92,12 @@ func TestSearchURLValidationPropagatesCancellation(t *testing.T) {
 			observed := 0
 			ctx = WithSearchOutcomeObserver(WithTaskID(ctx, "canceled-search"), func(research.ProviderOutcome) { observed++ })
 			result, err := registry.Execute(ctx, "researcher", "search", json.RawMessage(`{"query":"official evidence","max_results":2}`))
+			if fixture.deadline && ctx.Err() == nil {
+				if err != nil || len(result.([]research.SearchHit)) != 1 || len(registry.urlLedger.URLs("canceled-search")) != 1 || observed != 0 {
+					t.Fatalf("child validation budget lost usable hit: result=%#v err=%v", result, err)
+				}
+				return
+			}
 			if !errors.Is(err, fixture.want) || errors.Is(err, research.ErrSearchFilteredByPolicy) || result != nil {
 				t.Fatalf("result=%#v err=%v", result, err)
 			}

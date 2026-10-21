@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
@@ -50,7 +51,9 @@ type Repository interface {
 }
 
 type Service struct {
-	repo Repository
+	repo                Repository
+	researchMu          sync.RWMutex
+	researchRunDefaults *researchRunDefaults
 }
 
 func New(repo Repository) *Service { return &Service{repo: repo} }

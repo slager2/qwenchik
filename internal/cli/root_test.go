@@ -2,10 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/slager2/qwenchik/internal/app"
 	"github.com/slager2/qwenchik/internal/config"
+	"github.com/slager2/qwenchik/internal/domain"
+	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
 )
 
 func TestMaxInputBytesScalesWithConfiguredContext(t *testing.T) {
@@ -113,5 +117,58 @@ func TestConfigCommandShowsPDFExtractorImageReference(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), `"pdf_extractor_image":"`+imageID+`"`) {
 		t.Fatalf("config output omitted the configured PDF image: %s", output.String())
+	}
+}
+
+type serveResearchRepository struct {
+	app.Repository
+	app.ConversationRepository
+	conversation domain.Conversation
+	turn         domain.SubmitTurn
+}
+
+func (r *serveResearchRepository) GetConversation(context.Context, string) (domain.Conversation, error) {
+	return r.conversation, nil
+}
+
+func (r *serveResearchRepository) SubmitTurn(_ context.Context, turn domain.SubmitTurn, _ string) (domain.SubmitResponse, error) {
+	r.turn = turn
+	return domain.SubmitResponse{}, nil
+}
+
+func TestServeResearchDefaultsCarryConfiguredProfileAndImmutableLimits(t *testing.T) {
+	cfg := config.Config{
+		ResearchDefaultProfile: "deep_laptop", MaxSteps: 8, MaxSearchQueries: 7,
+		MaxFetchBytes: 128 << 20, MaxSourceBytes: 16 << 20,
+		PDFPolicy:                 pdfextract.DefaultPolicy(),
+		PDFDownloadTimeoutSeconds: 120, FetchTempDir: "./data/fetch-temp",
+		FetchTempTaskBytes: 128 << 20, FetchTempGlobalBytes: 256 << 20,
+		LLMModel: "local-qwen", LLMBaseURL: "http://127.0.0.1:8000/v1",
+		LLMContextLength: 16384, LLMMaxOutputTokens: 4096, LLMTemperature: 0, LLMTopP: 0.8,
+	}
+	repo := &serveResearchRepository{conversation: domain.Conversation{ID: "c", Title: "Title", Mode: "research"}}
+	service := app.New(repo)
+	setResearchRunDefaultsForServe(service, cfg)
+	configured := cfg
+	cfg.LLMContextLength = 131072
+	cfg.MaxSourceBytes = 1
+	for _, profile := range []string{"", "quick"} {
+		repo.conversation.ResearchSettings = map[string]any{}
+		want := "deep_laptop"
+		if profile != "" {
+			repo.conversation.ResearchSettings["profile"] = profile
+			want = profile
+		}
+		if _, err := service.SubmitTurn(context.Background(), domain.SubmitTurn{ConversationID: "c", Content: "Question"}, ""); err != nil {
+			t.Fatal(err)
+		}
+		turn := repo.turn
+		policy, model := turn.ResearchPolicy, turn.ModelSnapshot
+		if policy == nil || model == nil || turn.ResearchProfile != want || policy.Profile != want || policy.SourceFetchBytes != configured.MaxSourceBytes || policy.PDFBytes != configured.PDFPolicy.MaxInputBytes || policy.Budget.MaxSteps > configured.MaxSteps || policy.Budget.MaxSearchQueries > configured.MaxSearchQueries {
+			t.Fatalf("serve research turn=%#v policy=%#v", turn, policy)
+		}
+		if model.Model != configured.LLMModel || model.BaseURL != configured.LLMBaseURL || model.ContextLength != configured.LLMContextLength || model.MaxOutputTokens != configured.LLMMaxOutputTokens || model.Temperature != 0 || model.TopP != configured.LLMTopP || model.PromptVersion != "local-research-v1" || model.SchemaVersion != 1 || model.StopSequences == nil || len(model.StopSequences) != 0 {
+			t.Fatalf("serve model snapshot=%#v", model)
+		}
 	}
 }

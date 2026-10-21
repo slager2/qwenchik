@@ -22,9 +22,9 @@ import (
 
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/llm"
-	"github.com/slager2/qwenchik/internal/llm/openai"
 	"github.com/slager2/qwenchik/internal/providers/research"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
+	"github.com/slager2/qwenchik/internal/tools"
 )
 
 const maxRequestBytes = 1 << 20
@@ -92,6 +92,11 @@ type Server struct {
 	llmProbeMu        sync.Mutex
 	llmProbeAt        time.Time
 	llmProbeError     error
+	llmClient         llm.Client
+	healthMu          sync.RWMutex
+	workerHeartbeat   func(context.Context) (time.Time, error)
+	researchPolicy    map[string]any
+	pdfCheck          func(context.Context) error
 }
 
 func New(service TaskService, worker WorkerControl, dbPing func(context.Context) error, llmURL, llmKey, searchURL string, logger *slog.Logger) *Server {
@@ -107,6 +112,7 @@ func New(service TaskService, worker WorkerControl, dbPing func(context.Context)
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	s.conversationRoutes(mux)
 	assets, err := fs.Sub(frontendAssets, "web/dist")
 	if err == nil {
 		fileServer := http.FileServer(http.FS(assets))
@@ -162,6 +168,10 @@ func (s *Server) Handler() http.Handler {
 			writeError(w, http.StatusForbidden, "invalid_host", "Запросы принимаются только с loopback Host.", false)
 			return
 		}
+		if !safeMutationOrigin(r) {
+			writeError(w, http.StatusForbidden, "invalid_origin", "Изменения разрешены только из локального интерфейса.", false)
+			return
+		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -176,6 +186,14 @@ func (s *Server) SetLLMModel(model string) {
 	if strings.TrimSpace(model) != "" {
 		s.llmModel = strings.TrimSpace(model)
 	}
+}
+
+func (s *Server) SetLLMClient(client llm.Client) {
+	s.llmProbeMu.Lock()
+	defer s.llmProbeMu.Unlock()
+	s.llmClient = client
+	s.llmProbeAt = time.Time{}
+	s.llmProbeError = nil
 }
 
 func (s *Server) SetTavilyConfigured(configured bool) {
@@ -348,7 +366,12 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	result := make([]domain.Event, 0, len(events))
 	for _, event := range events {
 		if publicEvent(event) {
-			result = append(result, safePublicEvent(event))
+			projected, err := s.projectPublicEvent(r.Context(), event)
+			if err != nil {
+				s.writeServiceError(w, err)
+				return
+			}
+			result = append(result, projected)
 		}
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -360,7 +383,11 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, err)
 		return
 	}
-	after, err := parseAfter(r.Header.Get("Last-Event-ID"))
+	cursor := r.Header.Get("Last-Event-ID")
+	if cursor == "" {
+		cursor = r.URL.Query().Get("after")
+	}
+	after, err := parseAfter(cursor)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_cursor", "Заголовок Last-Event-ID должен быть неотрицательным целым числом.", false)
 		return
@@ -394,7 +421,12 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 			if !publicEvent(event) {
 				continue
 			}
-			encoded, err := json.Marshal(safePublicEvent(event))
+			projected, err := s.projectPublicEvent(r.Context(), event)
+			if err != nil {
+				s.logger.Warn("SSE event projection failed", "task_id", taskID)
+				return
+			}
+			encoded, err := json.Marshal(projected)
 			if err != nil {
 				continue
 			}
@@ -685,11 +717,13 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	if s.worker == nil {
 		workerState = "absent"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "database": "ok", "worker": workerState})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "database": "ok", "worker": workerState, "worker_details": s.workerHealth(r.Context()), "api_version": 1, "model": map[string]string{"id": s.llmModel, "status": "configured"}})
 }
 
 func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	checks := map[string]map[string]string{}
+	researchLimits, pdfRuntime, pdfReadiness := s.researchPolicyStatus(r.Context())
+	checks["pdf_extractor"] = pdfReadiness
 	checks["app"] = map[string]string{"status": "ok", "message": "API application is ready"}
 	if s.service == nil {
 		checks["app"] = map[string]string{"status": "error", "message": "Task service is absent"}
@@ -773,9 +807,13 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 			if workerBusy {
 				checks["llm"] = map[string]string{"status": "ok", "message": "Local model endpoint is available; inference smoke is deferred while the single worker is busy"}
 			} else if err := s.probeStructuredLLM(r.Context()); err != nil {
-				checks["llm"] = map[string]string{"status": "error", "message": "local model failed the strict JSON Schema smoke request"}
+				if errors.Is(err, llm.ErrInferenceBusy) {
+					checks["llm"] = map[string]string{"status": "ok", "message": "Local model endpoint is available; inference smoke is deferred while the inference slot is busy"}
+				} else {
+					checks["llm"] = map[string]string{"status": "error", "message": "local model failed the bounded structured JSON smoke request"}
+				}
 			} else {
-				checks["llm"] = map[string]string{"status": "ok", "message": "local model passed the strict JSON Schema smoke request"}
+				checks["llm"] = map[string]string{"status": "ok", "message": "local model passed the bounded structured JSON smoke request"}
 			}
 		} else {
 			checks["llm"] = map[string]string{"status": "error", "message": fmt.Sprintf("LLM endpoint returned HTTP %d", response.StatusCode)}
@@ -800,7 +838,7 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	if status == "error" {
 		code = http.StatusServiceUnavailable
 	}
-	writeJSON(w, code, map[string]any{"status": status, "checks": checks, "providers": providerHealth})
+	writeJSON(w, code, map[string]any{"status": status, "checks": checks, "providers": providerHealth, "research_limits": researchLimits, "pdf_extractor": pdfRuntime})
 }
 
 func (s *Server) probeStructuredLLM(ctx context.Context) error {
@@ -811,8 +849,14 @@ func (s *Server) probeStructuredLLM(ctx context.Context) error {
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	client := openai.New(s.llmURL, s.llmKey, s.llmModel, 30*time.Second, 24, 0, 1, false)
-	s.llmProbeError = llm.ProbeStructuredOutput(probeCtx, client)
+	if s.llmClient == nil {
+		return llm.ErrInferenceBusy
+	}
+	err := llm.ProbeStructuredOutput(probeCtx, s.llmClient)
+	if errors.Is(err, llm.ErrInferenceBusy) || ctx.Err() != nil {
+		return err
+	}
+	s.llmProbeError = err
 	s.llmProbeAt = time.Now()
 	return s.llmProbeError
 }
@@ -963,6 +1007,53 @@ func (s *Server) searchProviderStatus() map[string]map[string]any {
 }
 
 func safePublicEvent(event domain.Event) domain.Event {
+	if event.Type == "research.warning" {
+		event.Payload, _ = json.Marshal(safeResearchWarning(event.Payload))
+		return event
+	}
+	if payload, ok := sourceLifecycleEvent(event); ok {
+		event.Payload, _ = json.Marshal(payload)
+		return event
+	}
+	if event.Type == "search.hit" {
+		var payload struct {
+			StepID string                        `json:"step_id"`
+			Hit    research.SearchHitObservation `json:"hit"`
+		}
+		_ = json.Unmarshal(event.Payload, &payload)
+		result := map[string]any{"hit": tools.SafeSearchHitObservation(payload.Hit)}
+		if safeStepID(payload.StepID) {
+			result["step_id"] = payload.StepID
+		}
+		event.Payload, _ = json.Marshal(result)
+		return event
+	}
+	if event.Type == "query.updated" {
+		var payload struct {
+			StepID      string `json:"step_id"`
+			Query       string `json:"query"`
+			Fingerprint string `json:"query_fingerprint"`
+		}
+		_ = json.Unmarshal(event.Payload, &payload)
+		fingerprint := payload.Fingerprint
+		if !validFingerprint(fingerprint) {
+			sum := sha256.Sum256([]byte(payload.Query))
+			fingerprint = hex.EncodeToString(sum[:])
+		}
+		result := map[string]any{"query_fingerprint": fingerprint}
+		if query := tools.SafeSearchQuery(payload.Query); query != "" {
+			result["query"] = query
+		}
+		if safeStepID(payload.StepID) {
+			result["step_id"] = payload.StepID
+		}
+		event.Payload, _ = json.Marshal(result)
+		return event
+	}
+	if event.Type == "verification.updated" {
+		event.Payload, _ = json.Marshal(sqlite.SafeVerificationMetadata(event.Payload, nil))
+		return event
+	}
 	if event.Type != "search.provider" && event.Type != "tool.failed" {
 		return event
 	}
@@ -989,6 +1080,10 @@ func safePublicEvent(event domain.Event) domain.Event {
 
 func (s *Server) writeServiceError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, sqlite.ErrWebDisabled):
+		writeError(w, http.StatusConflict, "web_disabled", "Веб-поиск отключён для этого разговора. Выберите Chat или измените настройки.", false)
+	case errors.Is(err, domain.ErrInvalidConversation):
+		writeError(w, http.StatusBadRequest, "invalid_request", "Некорректные параметры разговора или сообщения.", false)
 	case errors.Is(err, sqlite.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "Задача не найдена.", false)
 	case errors.Is(err, domain.ErrInvalidTransition), errors.Is(err, sqlite.ErrConflict), errors.Is(err, sqlite.ErrIdempotency):
@@ -1058,7 +1153,7 @@ func publicEvent(event domain.Event) bool {
 		return false
 	}
 	switch event.Type {
-	case "search.provider", "tool.failed", "task.created", "task.status_changed", "task.recovered", "message.created", "message.delta", "plan.created", "step.started", "step.completed", "step.skipped", "tool.started", "tool.completed", "approval.requested", "approval.approved", "approval.rejected", "approval.expired", "artifact.created", "evidence.created", "task.completed", "task.failed", "task.cancelled":
+	case "research.warning", "source.updated", "source.fetch.started", "source.fetch.failed", "source.failed", "source.extracted", "search.hit", "query.updated", "verification.updated", "search.provider", "tool.failed", "task.created", "task.status_changed", "task.recovered", "message.created", "message.delta", "plan.created", "step.started", "step.completed", "step.skipped", "tool.started", "tool.completed", "approval.requested", "approval.approved", "approval.rejected", "approval.expired", "artifact.created", "evidence.created", "task.completed", "task.failed", "task.cancelled":
 		return true
 	default:
 		return false

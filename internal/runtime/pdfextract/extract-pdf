@@ -5,11 +5,25 @@ if [ "$#" -ne 0 ]; then
 	exit 22
 fi
 
-input=/input/document.pdf
+umask 077
+case "${QAGENT_PDF_MAX_PAGES:-}" in
+	''|*[!0-9]*) exit 22 ;;
+esac
+case "${QAGENT_PDF_MAX_INPUT_BYTES:-}" in
+	''|*[!0-9]*) exit 22 ;;
+esac
+[ "$QAGENT_PDF_MAX_PAGES" -gt 0 ] || exit 22
+[ "$QAGENT_PDF_MAX_INPUT_BYTES" -gt 0 ] || exit 22
+input=/tmp/document.pdf
 info=/tmp/pdfinfo.txt
 info_error=/tmp/pdfinfo.stderr
-text=/tmp/pdftotext.txt
 text_error=/tmp/pdftotext.stderr
+
+if ! cat >"$input"; then
+	exit 28
+fi
+size=$(wc -c <"$input")
+[ "$size" -le "$QAGENT_PDF_MAX_INPUT_BYTES" ] || exit 26
 
 if ! pdfinfo "$input" >"$info" 2>"$info_error"; then
 	exit 20
@@ -26,22 +40,17 @@ esac
 if [ "$encrypted" != "no" ]; then
 	exit 23
 fi
-if [ "${#pages}" -gt 2 ]; then
-	exit 24
-fi
 if [ "$pages" -lt 1 ]; then
 	exit 22
 fi
-if [ "$pages" -gt 20 ]; then
+if [ "$pages" -gt "$QAGENT_PDF_MAX_PAGES" ]; then
 	exit 24
 fi
 
-if ! pdftotext -enc UTF-8 -nopgbrk "$input" "$text" 2>"$text_error"; then
+printf 'QAGENT_PDF_PAGES:%s\n' "$pages"
+if ! pdftotext -enc UTF-8 -nopgbrk "$input" - 2>"$text_error"; then
 	exit 25
 fi
 if [ -s "$text_error" ]; then
 	exit 26
 fi
-
-printf 'QAGENT_PDF_PAGES:%s\n' "$pages"
-cat "$text"

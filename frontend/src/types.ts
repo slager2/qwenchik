@@ -50,6 +50,7 @@ export type TaskStage =
 
 export interface PlanStep {
   id: string
+  status?: string
   kind: string
   description: string
   dependencies: string[]
@@ -209,4 +210,132 @@ export interface Memory {
 export interface MemoryMatch {
   memory: Memory
   relevance: number
+}
+
+export type ConversationMode = 'chat' | 'research'
+
+export interface Conversation {
+  id: string
+  title: string
+  mode: ConversationMode
+  created_at: string
+  updated_at: string
+  active_run_id?: string
+  latest_run_id?: string
+  archived_at?: string
+  research_settings?: { web_enabled?: boolean }
+  model_profile?: Record<string, number>
+}
+
+export interface Citation {
+  id?: string
+  evidence_id: string
+  source_id?: string
+  url?: string
+  label?: string
+}
+
+export interface ConversationMessage {
+  id: string
+  conversation_id: string
+  run_id: string
+  role: 'user' | 'assistant' | 'system' | 'tool'
+  content: string
+  status: string
+  parent_message_id?: string
+  created_at: string
+  updated_at: string
+  last_event_seq: number
+  metadata?: Record<string, unknown>
+  citations?: Citation[]
+}
+
+export interface Run {
+  id: string
+  conversation_id: string
+  user_message_id: string
+  assistant_message_id: string
+  mode: ConversationMode
+  operation: string
+  status: TaskStatus
+  stage?: string
+  phase?: string
+  error_code?: string
+  error_message?: string
+  retry_count: number
+}
+
+export interface Submission {
+  conversation_id: string
+  user_message: ConversationMessage
+  assistant_message: ConversationMessage
+  run: Run
+}
+
+export interface SourceRecord {
+  id: string
+  title: string
+  url?: string
+  canonical_url?: string
+  original_url?: string
+  provider?: string
+  query?: string
+  status?: string
+  retrieval_status?: string
+  extraction_status?: string
+  retrieved_at?: string
+  error_code?: string
+  error_message?: string
+  excerpt?: string
+  snippet?: string
+  fingerprint?: string
+  source_fingerprint?: string
+  evidence_id?: string
+  attempt_id?: string
+  plan_attempt?: number
+  step_id?: string
+  event_seq?: number
+  retryable?: boolean
+  try_next_source?: boolean
+  user_retry_task?: boolean
+  declared_bytes?: number
+  effective_limit_bytes?: number
+  fetched_bytes?: number
+  mime_type?: string
+  remaining_candidates?: number
+  timestamp?: string
+  fallback_attempted?: boolean
+}
+
+export interface ResearchPlan {
+  goal?: string
+  plan?: TaskPlan
+  subtasks?: PlanStep[]
+  steps?: TaskStep[]
+  current_step?: string
+}
+
+export interface DoctorResponse {
+  status: string
+  checks: Record<string, { status: string; message: string }>
+  research_limits?: {
+    configured: boolean
+    pdf_allow_unsandboxed_fallback: boolean
+    task_fetch_budget_bytes?: number
+    source_fetch_bytes?: number
+    pdf_bytes?: number
+    pdf_pages?: number
+    pdf_text_runes?: number
+    pdf_extraction_timeout_seconds?: number
+    pdf_download_timeout_seconds?: number
+    pdf_memory_bytes?: number
+    pdf_temp_bytes?: number
+    pdf_cpu_limit?: number
+    pdf_pid_limit?: number
+    artifact_max_bytes?: number
+    sandbox_max_file_bytes?: number
+    fetch_temp_task_bytes?: number
+    fetch_temp_global_bytes?: number
+  }
+  pdf_extractor?: { isolated_available: boolean; isolated_status: 'available' | 'unavailable'; fallback_allowed: boolean }
 }

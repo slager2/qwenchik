@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -29,7 +30,17 @@ func TestHTMLExtractorRemovesExecutableAndNavigationContent(t *testing.T) {
 
 func TestHTMLExtractorUsesPureGoFallbackWithoutDockerImage(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "tcp://unavailable.example:2376")
-	extracted, err := NewHTMLExtractor(1000).Extract(context.Background(), FetchedDocument{
+	policy := pdfextract.DefaultPolicy()
+	policy.AllowUnsandboxedFallback = true
+	delegate, err := pdfextract.NewWithPolicy("", nil, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	extractor, err := NewHTMLExtractorWithPDFPolicy(1000, delegate, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	extracted, err := extractor.Extract(context.Background(), FetchedDocument{
 		ContentType: "application/pdf", ContentSHA256: "fixture-hash", Body: minimalPDFDocument("Pure Go fallback PDF text"),
 	})
 	if err != nil {
@@ -37,6 +48,71 @@ func TestHTMLExtractorUsesPureGoFallbackWithoutDockerImage(t *testing.T) {
 	}
 	if extracted.Method != "pure_go_pdf_subprocess" || extracted.PageCount != 1 || !strings.Contains(extracted.Text, "Pure Go fallback PDF text") {
 		t.Fatalf("pure-Go PDF fallback result = %#v", extracted)
+	}
+}
+
+func TestHTMLExtractorDefaultPDFPolicyFailsClosed(t *testing.T) {
+	_, err := NewHTMLExtractor(1000).Extract(context.Background(), FetchedDocument{ContentType: "application/pdf", Body: minimalPDFDocument("text")})
+	if !errors.Is(err, ErrPDFExtractorUnavailable) || !errors.Is(err, pdfextract.ErrUnavailable) {
+		t.Fatalf("default PDF policy: %v", err)
+	}
+}
+
+type filePDFExtractor struct {
+	fakePDFExtractor
+	file *os.File
+}
+
+func (f *filePDFExtractor) ExtractFile(_ context.Context, file *os.File) (pdfextract.Result, error) {
+	f.file = file
+	return f.result, f.err
+}
+
+func TestHTMLFilePDFDelegationAndPolicyValidation(t *testing.T) {
+	file, err := os.CreateTemp(t.TempDir(), "pdf-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if _, err := file.WriteString("file"); err != nil {
+		t.Fatal(err)
+	}
+	p := pdfextract.DefaultPolicy()
+	p.MaxPages, p.MaxTextRunes = 25, 60_000
+	delegate := &filePDFExtractor{fakePDFExtractor: fakePDFExtractor{result: pdfextract.Result{PageCount: 21, Text: strings.Repeat("я", 50_001), Method: "file-test"}}}
+	e, err := NewHTMLExtractorWithPDFPolicy(1, delegate, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := FetchedDocument{ContentType: "application/pdf", File: file, ContentSHA256: "hash"}
+	result, err := e.Extract(context.Background(), doc)
+	if err != nil || delegate.file != file || len(delegate.input) != 0 || result.PageCount != 21 || result.Method != "file-test" || result.ContentSHA256 != "hash" {
+		t.Fatalf("file delegation: %#v %v", result, err)
+	}
+	if _, err := file.Stat(); err != nil {
+		t.Fatalf("borrowed file closed: %v", err)
+	}
+	p.MaxInputBytes = 3
+	e, _ = NewHTMLExtractorWithPDFPolicy(1, delegate, p)
+	if _, err := e.Extract(context.Background(), doc); !errors.Is(err, pdfextract.ErrInputTooLarge) {
+		t.Fatalf("input policy: %v", err)
+	}
+	p = pdfextract.DefaultPolicy()
+	e, _ = NewHTMLExtractorWithPDFPolicy(1, &fakePDFExtractor{}, p)
+	if _, err := e.Extract(context.Background(), doc); !errors.Is(err, pdfextract.ErrUnavailable) {
+		t.Fatalf("file silently converted to bytes: %v", err)
+	}
+	for _, cause := range []error{pdfextract.ErrResourceExceeded, pdfextract.ErrTimeout, pdfextract.ErrMalformed} {
+		delegate.err = cause
+		e, _ = NewHTMLExtractorWithPDFPolicy(100, delegate, p)
+		result, err := e.Extract(context.Background(), doc)
+		if !errors.Is(err, cause) || result.Text != "" {
+			t.Fatalf("sentinel not preserved: %#v %v", result, err)
+		}
+	}
+	p.MaxTextRunes = 0
+	if _, err := NewHTMLExtractorWithPDFPolicy(1, delegate, p); err == nil {
+		t.Fatal("invalid policy accepted")
 	}
 }
 
@@ -144,5 +220,30 @@ func TestLocalExtractorAcceptsBoundedPlainText(t *testing.T) {
 	}
 	if extracted.Text != "plain\ntext" || extracted.Taint != TaintExternal {
 		t.Fatalf("unexpected plain text extraction: %#v", extracted)
+	}
+}
+
+func TestHTMLExtractorRejectsEmptyAndChallengeDocuments(t *testing.T) {
+	for _, fixture := range []struct {
+		name, mime, body string
+		want             error
+	}{
+		{"empty HTML", "text/html", "<html><nav>menu</nav><script>ignored</script></html>", ErrExtractionEmpty},
+		{"empty text", "text/plain", " \n\t", ErrExtractionEmpty},
+		{"challenge title", "text/html", "<title>Just a moment...</title><body>Checking your browser</body>", ErrExtractionChallenge},
+		{"challenge form", "text/html", `<form id="challenge-form"><p>Continue</p></form>`, ErrExtractionChallenge},
+		{"challenge text", "text/html", "<main>Verify you are human to continue</main>", ErrExtractionChallenge},
+		{"challenge plain text", "text/plain", "Verify you are human to continue", ErrExtractionChallenge},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			doc, err := NewHTMLExtractor(2000).Extract(context.Background(), FetchedDocument{ContentType: fixture.mime, Body: []byte(fixture.body)})
+			if !errors.Is(err, fixture.want) || doc.Text != "" {
+				t.Fatalf("doc=%#v err=%v", doc, err)
+			}
+		})
+	}
+	article := "<title>CAPTCHA implementation guide</title><article>" + strings.Repeat("Technical explanation of captcha integration and browser security. ", 40) + "</article>"
+	if _, err := NewHTMLExtractor(4000).Extract(context.Background(), FetchedDocument{ContentType: "text/html", Body: []byte(article)}); err != nil {
+		t.Fatalf("legitimate article rejected: %v", err)
 	}
 }

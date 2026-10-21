@@ -3,14 +3,18 @@ package artifacts
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/slager2/qwenchik/internal/domain"
@@ -23,6 +27,35 @@ type Store struct {
 	maxBytes int64
 }
 
+func openDirectory(path string, create bool) (*os.File, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	fd, err := syscall.Open("/", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	for _, part := range strings.Split(strings.TrimPrefix(absolute, "/"), "/") {
+		if part == "" {
+			continue
+		}
+		if create {
+			if e := syscall.Mkdirat(fd, part, 0700); e != nil && e != syscall.EEXIST {
+				syscall.Close(fd)
+				return nil, e
+			}
+		}
+		next, e := syscall.Openat(fd, part, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+		syscall.Close(fd)
+		if e != nil {
+			return nil, e
+		}
+		fd = next
+	}
+	return os.NewFile(uintptr(fd), absolute), nil
+}
+
 func New(root string, maxBytes int64) (*Store, error) {
 	if root == "" {
 		return nil, errors.New("artifact root is required")
@@ -30,119 +63,163 @@ func New(root string, maxBytes int64) (*Store, error) {
 	if maxBytes < 1 {
 		maxBytes = 10_000_000
 	}
-	absolute, err := filepath.Abs(root)
+	if maxBytes == math.MaxInt64 {
+		return nil, errors.New("invalid artifact limit")
+	}
+	directory, err := openDirectory(root, true)
 	if err != nil {
-		return nil, fmt.Errorf("resolve artifact root: %w", err)
+		return nil, err
 	}
-	if err := os.MkdirAll(absolute, 0o700); err != nil {
-		return nil, fmt.Errorf("create artifact root: %w", err)
+	defer directory.Close()
+	return &Store{root: directory.Name(), maxBytes: maxBytes}, nil
+}
+
+func (s *Store) taskDirectory(task string, create bool) (*os.File, error) {
+	if !safeSegment.MatchString(task) {
+		return nil, errors.New("invalid task identifier")
 	}
-	return &Store{root: absolute, maxBytes: maxBytes}, nil
+	return openDirectory(filepath.Join(s.root, task), create)
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(p)
 }
 
 func (s *Store) Put(ctx context.Context, taskID, name, mimeType string, content []byte) (domain.Artifact, string, error) {
-	if !safeSegment.MatchString(taskID) {
-		return domain.Artifact{}, "", errors.New("invalid task identifier")
-	}
-	if name == "" || len(name) > 200 || filepath.Base(name) != name {
+	return s.PutReader(ctx, taskID, name, mimeType, bytes.NewReader(content))
+}
+
+func (s *Store) PutReader(ctx context.Context, taskID, name, mimeType string, content io.Reader) (domain.Artifact, string, error) {
+	if name == "" || name == "." || name == ".." || len(name) > 200 || filepath.Base(name) != name {
 		return domain.Artifact{}, "", errors.New("invalid artifact name")
 	}
-	if mimeType == "" || len(mimeType) > 200 {
-		return domain.Artifact{}, "", errors.New("invalid artifact MIME type")
+	if mimeType == "" || len(mimeType) > 200 || content == nil {
+		return domain.Artifact{}, "", errors.New("invalid artifact MIME type or reader")
 	}
-	if int64(len(content)) > s.maxBytes {
+	if err := ctx.Err(); err != nil {
+		return domain.Artifact{}, "", err
+	}
+	dir, err := s.taskDirectory(taskID, true)
+	if err != nil {
+		return domain.Artifact{}, "", err
+	}
+	defer dir.Close()
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return domain.Artifact{}, "", err
+	}
+	temporaryName := ".artifact-" + hex.EncodeToString(random[:])
+	fd, err := syscall.Openat(int(dir.Fd()), temporaryName, syscall.O_CREAT|syscall.O_EXCL|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
+	if err != nil {
+		return domain.Artifact{}, "", err
+	}
+	temporary := os.NewFile(uintptr(fd), temporaryName)
+	defer temporary.Close()
+	defer syscall.Unlinkat(int(dir.Fd()), temporaryName)
+	hash := sha256.New()
+	n, err := io.Copy(io.MultiWriter(temporary, hash), io.LimitReader(contextReader{ctx, content}, s.maxBytes+1))
+	if err != nil {
+		return domain.Artifact{}, "", err
+	}
+	if n > s.maxBytes {
 		return domain.Artifact{}, "", errors.New("artifact exceeds configured size limit")
 	}
-	if err := ctx.Err(); err != nil {
+	if err := temporary.Sync(); err != nil {
 		return domain.Artifact{}, "", err
 	}
-	contentHash := sha256.Sum256(content)
-	hashText := hex.EncodeToString(contentHash[:])
+	hashText := hex.EncodeToString(hash.Sum(nil))
 	identity := sha256.Sum256([]byte(taskID + "\x00" + mimeType + "\x00" + hashText))
 	id := hex.EncodeToString(identity[:])
-	taskDir := filepath.Join(s.root, taskID)
-	if err := os.MkdirAll(taskDir, 0o700); err != nil {
-		return domain.Artifact{}, "", fmt.Errorf("create task artifact directory: %w", err)
-	}
-	temporary, err := os.CreateTemp(taskDir, ".artifact-*")
-	if err != nil {
-		return domain.Artifact{}, "", fmt.Errorf("create temporary artifact: %w", err)
-	}
-	temporaryPath := temporary.Name()
-	cleanup := func() { _ = os.Remove(temporaryPath) }
-	if err := temporary.Chmod(0o600); err != nil {
-		_ = temporary.Close()
-		cleanup()
-		return domain.Artifact{}, "", err
-	}
-	if _, err := io.Copy(temporary, bytes.NewReader(content)); err != nil {
-		_ = temporary.Close()
-		cleanup()
-		return domain.Artifact{}, "", fmt.Errorf("write artifact: %w", err)
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		cleanup()
-		return domain.Artifact{}, "", err
-	}
-	if err := temporary.Close(); err != nil {
-		cleanup()
-		return domain.Artifact{}, "", err
-	}
 	if err := ctx.Err(); err != nil {
-		cleanup()
 		return domain.Artifact{}, "", err
 	}
-	finalPath := filepath.Join(taskDir, id)
-	if existingFile, err := os.Open(finalPath); err == nil {
-		existing, readErr := io.ReadAll(io.LimitReader(existingFile, s.maxBytes+1))
-		closeErr := existingFile.Close()
-		if readErr != nil {
-			cleanup()
-			return domain.Artifact{}, "", readErr
+	lockFD, err := syscall.Openat(int(dir.Fd()), ".artifact.lock", syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
+	if err != nil {
+		return domain.Artifact{}, "", err
+	}
+	defer syscall.Close(lockFD)
+	if err := lockArtifact(ctx,lockFD); err != nil {
+		return domain.Artifact{}, "", err
+	}
+	defer syscall.Flock(lockFD, syscall.LOCK_UN)
+	existingFD, err := syscall.Openat(int(dir.Fd()), id, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	if err == nil {
+		existing := os.NewFile(uintptr(existingFD), id)
+		defer existing.Close()
+		info, e := existing.Stat()
+		if e != nil {
+			return domain.Artifact{}, "", e
 		}
-		if closeErr != nil {
-			cleanup()
-			return domain.Artifact{}, "", closeErr
+		if !info.Mode().IsRegular() {
+			return domain.Artifact{}, "", errors.New("artifact is not a regular file")
 		}
-		if int64(len(existing)) > s.maxBytes {
-			cleanup()
-			return domain.Artifact{}, "", errors.New("existing artifact exceeds configured size limit")
+		h := sha256.New()
+		count, e := io.Copy(h, io.LimitReader(contextReader{ctx, existing}, s.maxBytes+1))
+		if e != nil {
+			return domain.Artifact{}, "", e
 		}
-		existingHash := sha256.Sum256(existing)
-		if hex.EncodeToString(existingHash[:]) != hashText {
-			cleanup()
+		if count != n || hex.EncodeToString(h.Sum(nil)) != hashText {
 			return domain.Artifact{}, "", errors.New("existing artifact content does not match its deterministic identifier")
 		}
-		cleanup()
-		record := domain.Artifact{ID: id, TaskID: taskID, Name: name, MIMEType: mimeType, SHA256: hashText, SizeBytes: int64(len(content)), CreatedAt: time.Now().UTC()}
-		return record, filepath.Join(taskID, id), nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		cleanup()
+	} else if err != syscall.ENOENT {
 		return domain.Artifact{}, "", err
+	} else {
+		if err := ctx.Err(); err != nil {
+			return domain.Artifact{}, "", err
+		}
+		if err := syscall.Renameat(int(dir.Fd()), temporaryName, int(dir.Fd()), id); err != nil {
+			return domain.Artifact{}, "", fmt.Errorf("commit artifact: %w", err)
+		}
 	}
-	if err := os.Rename(temporaryPath, finalPath); err != nil {
-		cleanup()
-		return domain.Artifact{}, "", fmt.Errorf("commit artifact: %w", err)
-	}
-	record := domain.Artifact{ID: id, TaskID: taskID, Name: name, MIMEType: mimeType, SHA256: hashText, SizeBytes: int64(len(content)), CreatedAt: time.Now().UTC()}
+	record := domain.Artifact{ID: id, TaskID: taskID, Name: name, MIMEType: mimeType, SHA256: hashText, SizeBytes: n, CreatedAt: time.Now().UTC()}
 	return record, filepath.Join(taskID, id), nil
 }
 
+func lockArtifact(ctx context.Context,fd int) error {
+	for {
+		if err:=ctx.Err(); err!=nil { return err }
+		err:=syscall.Flock(fd,syscall.LOCK_EX|syscall.LOCK_NB)
+		if err==nil { return nil }
+		if err!=syscall.EWOULDBLOCK && err!=syscall.EAGAIN && err!=syscall.EINTR { return err }
+		timer:=time.NewTimer(5*time.Millisecond)
+		select { case <-ctx.Done(): timer.Stop(); return ctx.Err(); case <-timer.C: }
+	}
+}
+
 func (s *Store) Read(ctx context.Context, taskID, artifactID string) ([]byte, error) {
-	if !safeSegment.MatchString(taskID) || !safeSegment.MatchString(artifactID) {
+	if !safeSegment.MatchString(artifactID) {
 		return nil, errors.New("invalid artifact identifier")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	path := filepath.Join(s.root, taskID, artifactID)
-	file, err := os.Open(path)
+	dir, err := s.taskDirectory(taskID, false)
 	if err != nil {
 		return nil, err
 	}
+	defer dir.Close()
+	fd, err := syscall.Openat(int(dir.Fd()), artifactID, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	file := os.NewFile(uintptr(fd), artifactID)
 	defer file.Close()
-	content, err := io.ReadAll(io.LimitReader(file, s.maxBytes+1))
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("artifact is not a regular file")
+	}
+	content, err := io.ReadAll(io.LimitReader(contextReader{ctx, file}, s.maxBytes+1))
 	if err != nil {
 		return nil, err
 	}

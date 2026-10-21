@@ -1,11 +1,16 @@
 import type { AgentEvent, Approval, Artifact, Checkpoint, Evidence, Memory, MemoryMatch, MemoryStatus, Message, ProvidersResponse, Task, TaskStep } from './types'
+import type { Conversation, ConversationMessage, ConversationMode, DoctorResponse, ResearchPlan, Run, SourceRecord, Submission } from './types'
 
 export class ApiError extends Error {
   status: number
+  code: string
+  retryable: boolean
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code = '', retryable = false) {
     super(message)
     this.status = status
+    this.code = code
+    this.retryable = retryable
   }
 }
 
@@ -16,19 +21,40 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!response.ok) {
     let message = `Запрос завершился с кодом ${response.status}`
+    let code = ''
+    let retryable = false
     try {
       const body = await response.json()
       message = body.error?.message ?? message
+      code = body.error?.code ?? ''
+      retryable = body.error?.retryable === true
     } catch {
     }
-    throw new ApiError(message, response.status)
+    throw new ApiError(message, response.status, code, retryable)
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
 
 export const api = {
-  providers: () => request<ProvidersResponse>('/api/providers'),
+  health: (signal?: AbortSignal) => request<{ status: string; database: string }>('/api/health', { signal }),
+  conversations: (signal?: AbortSignal) => request<Conversation[]>('/api/conversations', { signal }),
+  conversation: (id: string, signal?: AbortSignal) => request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { signal }),
+  createConversation: (title: string, mode: ConversationMode, key: string) => request<Conversation>('/api/conversations', { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ title, mode }) }),
+  updateConversation: (id: string, patch: { title?: string; mode?: ConversationMode }) => request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteConversation: (id: string) => request<void>(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  conversationMessages: (id: string, signal?: AbortSignal) => request<ConversationMessage[]>(`/api/conversations/${encodeURIComponent(id)}/messages`, { signal }),
+  submitMessage: (id: string, content: string, mode: ConversationMode, key: string) => request<Submission>(`/api/conversations/${encodeURIComponent(id)}/messages`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ content, mode }) }),
+  conversationRun: (id: string, signal?: AbortSignal) => request<Run>(`/api/runs/${encodeURIComponent(id)}`, { signal }),
+  cancelRun: (id: string) => request<Run>(`/api/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  retryRun: (id: string, key: string) => request<Submission>(`/api/runs/${encodeURIComponent(id)}/retry`, { method: 'POST', headers: { 'Idempotency-Key': key } }),
+  continueRun: (id: string, key: string) => request<Submission>(`/api/runs/${encodeURIComponent(id)}/continue`, { method: 'POST', headers: { 'Idempotency-Key': key } }),
+  runEvents: (id: string, after = 0, signal?: AbortSignal) => request<AgentEvent[]>(`/api/runs/${encodeURIComponent(id)}/events?after=${after}`, { signal }),
+  runSources: (id: string, signal?: AbortSignal) => request<SourceRecord[]>(`/api/runs/${encodeURIComponent(id)}/sources`, { signal }),
+  runEvidence: (id: string, signal?: AbortSignal) => request<Evidence[]>(`/api/runs/${encodeURIComponent(id)}/evidence`, { signal }),
+  runPlan: (id: string, signal?: AbortSignal) => request<ResearchPlan>(`/api/runs/${encodeURIComponent(id)}/plan`, { signal }),
+  doctor: (signal?: AbortSignal) => request<DoctorResponse>('/api/doctor', { signal }),
+  providers: (signal?: AbortSignal) => request<ProvidersResponse>('/api/providers', { signal }),
   tasks: () => request<Task[]>('/api/tasks'),
   task: (id: string) => request<Task>(`/api/tasks/${encodeURIComponent(id)}`),
   messages: (id: string) => request<Message[]>(`/api/tasks/${encodeURIComponent(id)}/messages`),

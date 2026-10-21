@@ -161,7 +161,7 @@ func normalizeResearchPlan(plan domain.Plan, title, goal string) domain.Plan {
 			searchIndex++
 			steps[index].SuccessCriteria = []string{"The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."}
 			steps[index].Dependencies = []string{}
-			if userFetchID != "" {
+			if userFetchID != "" && (noDiscoveryPattern.MatchString(goal) || !requiresWebResearch(goal)) {
 				steps[index].Dependencies = []string{userFetchID}
 			}
 		case "fetch":
