@@ -58,10 +58,107 @@ func verifiedCheckpoints(ctx context.Context, tx *sql.Tx, taskID string) ([]doma
 		if err := json.Unmarshal([]byte(raw), &item.State); err != nil {
 			return invalid()
 		}
+		preserveContextSnapshotJSON(item.State, []byte(raw))
+		if err := verifyContextSnapshotCheckpoint(item, items); err != nil {
+			return invalid()
+		}
+		if err := verifyRoleInputsCheckpoint(ctx, tx, item, items); err != nil {
+			return invalid()
+		}
 		item.CreatedAt = parseTime(created)
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func preserveContextSnapshotJSON(state any, encoded []byte) {
+	values, ok := state.(map[string]any)
+	if !ok {
+		return
+	}
+	if raw, exists := checkpointObject(encoded)["context_snapshot"]; exists {
+		values["context_snapshot"] = raw
+	}
+	if raw, exists := checkpointObject(encoded)["role_inputs"]; exists {
+		values["role_inputs"] = raw
+	}
+}
+
+func verifyContextSnapshotCheckpoint(item domain.Checkpoint, prior []domain.Checkpoint) error {
+	snapshot, exists, err := checkpointSnapshot(item.State)
+	if err != nil {
+		return ErrCheckpointInvalid
+	}
+	var previous domain.ContextSnapshot
+	if len(prior) > 0 {
+		previous, _, err = checkpointSnapshot(prior[len(prior)-1].State)
+		if err != nil {
+			return ErrCheckpointInvalid
+		}
+	}
+	if !exists {
+		if item.ContextSnapshotHash != "" || previous.Number != 0 {
+			return ErrCheckpointInvalid
+		}
+		return nil
+	}
+	hash, err := snapshotHash(snapshot)
+	if err != nil || snapshot.Hash != hash || item.ContextSnapshotHash != hash || snapshot.ID != snapshotID(item.TaskID, hash) || snapshot.Number < 1 {
+		return ErrCheckpointInvalid
+	}
+	if previous.Number == 0 {
+		if snapshot.Number != 1 {
+			return ErrCheckpointInvalid
+		}
+	} else if snapshot.Number == previous.Number {
+		if snapshot.Hash != previous.Hash {
+			return ErrCheckpointInvalid
+		}
+	} else if snapshot.Number != previous.Number+1 || snapshot.Hash == previous.Hash {
+		return ErrCheckpointInvalid
+	}
+	return nil
+}
+
+func prepareContextSnapshotCheckpoint(encoded []byte, prior []domain.Checkpoint) ([]byte, error) {
+	if len(prior) == 0 {
+		return encoded, nil
+	}
+	last, err := json.Marshal(prior[len(prior)-1].State)
+	if err != nil {
+		return nil, err
+	}
+	previous := checkpointObject(last)
+	raw, hasSnapshot := previous["context_snapshot"]
+	_, hasPins := previous["role_inputs"]
+	if !hasSnapshot && !hasPins {
+		return encoded, nil
+	}
+	values := checkpointObject(encoded)
+	if values == nil {
+		return nil, ErrCheckpointInvalid
+	}
+	if _, exists := values["context_snapshot"]; !exists && hasSnapshot {
+		values["context_snapshot"] = raw
+	}
+	if hasPins {
+		pins, err := decodeRoleInputs(values["role_inputs"])
+		if err != nil {
+			return nil, err
+		}
+		old, err := decodeRoleInputs(previous["role_inputs"])
+		if err != nil {
+			return nil, err
+		}
+		if err := mergeRoleInputs(pins, old); err != nil {
+			return nil, err
+		}
+		values["role_inputs"], err = json.Marshal(pins)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(values)
 }
 
 func (s *Store) CommitStepResult(ctx context.Context, taskID, stepID, tool, summary string, result any, state any) (domain.Checkpoint, error) {

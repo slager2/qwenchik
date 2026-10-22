@@ -1828,11 +1828,18 @@ func saveCheckpointTx(ctx context.Context, tx *sql.Tx, taskID string, planVersio
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
+	if err := validateRoleInputsState(state, prior); err != nil {
+		return domain.Checkpoint{}, err
+	}
 	encoded, planVersion, err := prepareResearchCheckpoint(ctx, tx, taskID, planVersion, state)
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
 	encoded, err = reconcileInvocationCheckpoint(ctx, tx, taskID, encoded)
+	if err != nil {
+		return domain.Checkpoint{}, err
+	}
+	encoded, err = prepareContextSnapshotCheckpoint(encoded, prior)
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
@@ -1861,7 +1868,19 @@ func saveCheckpointTx(ctx context.Context, tx *sql.Tx, taskID string, planVersio
 		}
 		checkpoint.State = decoded
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO checkpoints(id,task_id,plan_version,state_json,last_event_seq,created_at,parent_id,state_schema_version,state_hash) VALUES(?,?,?,?,?,?,?,?,?)`, checkpoint.ID, taskID, planVersion, string(encoded), seq, stamp(checkpoint.CreatedAt), checkpoint.ParentID, checkpoint.StateSchemaVersion, checkpoint.StateHash)
+	preserveContextSnapshotJSON(checkpoint.State, encoded)
+	if snapshot, exists, snapshotErr := checkpointSnapshot(checkpoint.State); snapshotErr != nil {
+		return domain.Checkpoint{}, fmt.Errorf("%w: %v", ErrCheckpointInvalid, snapshotErr)
+	} else if exists {
+		checkpoint.ContextSnapshotHash = snapshot.Hash
+	}
+	if err := verifyContextSnapshotCheckpoint(checkpoint, prior); err != nil {
+		return domain.Checkpoint{}, err
+	}
+	if err := verifyRoleInputsCheckpoint(ctx, tx, checkpoint, prior); err != nil {
+		return domain.Checkpoint{}, err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO checkpoints(id,task_id,plan_version,state_json,last_event_seq,created_at,parent_id,state_schema_version,state_hash,context_snapshot_hash) VALUES(?,?,?,?,?,?,?,?,?,?)`, checkpoint.ID, taskID, planVersion, string(encoded), seq, stamp(checkpoint.CreatedAt), checkpoint.ParentID, checkpoint.StateSchemaVersion, checkpoint.StateHash, checkpoint.ContextSnapshotHash)
 	return checkpoint, err
 }
 
