@@ -121,6 +121,11 @@ func prepareInvocation(ctx context.Context, repo invocationRepository, taskID, k
 		phase = "step"
 	}
 	scopeHash, err := invocationHash([]any{kind, inputHash, step, phase, planAttempt})
+	if pin, ok := ctx.Value(rolePinContextKey{}).(pinnedRole); ok {
+		role = pin.Role
+		repair, _ := ctx.Value(roleRepairContextKey{}).(string)
+		scopeHash, err = invocationHash([]any{pin.Slot, kind, step, phase, planAttempt, repair})
+	}
 	if err != nil {
 		return domain.Invocation{}, false, err
 	}

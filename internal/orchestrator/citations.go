@@ -218,14 +218,32 @@ func (w *Worker) reviewCitationClaims(ctx context.Context, taskID, answer string
 	criticCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	for attempt := 0; attempt < 2; attempt++ {
-		input, _ := json.Marshal(map[string]any{"claims_to_check": units, "evidence_catalogue": catalogue, "current_date": time.Now().UTC().Format("2006-01-02"), "repair_invalid_mapping": attempt > 0})
-		if !w.requestFits(system, string(input), schema) {
+		roleCtx, snapshot, pinned, err := w.roleContext(criticCtx, taskID, fmt.Sprintf("critic_%d", attempt), "")
+		if err != nil {
+			return citationReview{}, err
+		}
+		input := pinned
+		if input == nil {
+			payload := map[string]any{"claims_to_check": units, "evidence_catalogue": catalogue, "current_date": time.Now().UTC().Format("2006-01-02"), "repair_invalid_mapping": attempt > 0}
+			if snapshot != nil {
+				payload["context_snapshot"] = snapshot
+			}
+			input, err = json.Marshal(payload)
+			if err != nil {
+				return citationReview{}, err
+			}
+		}
+		user, err := w.pinRoleInput(roleCtx, taskID, string(input))
+		if err != nil {
+			return citationReview{}, err
+		}
+		if !w.requestFits(system, user, schema) {
 			return citationReview{}, errInputBudgetExceeded
 		}
 		if err := w.ensureActive(ctx, taskID); err != nil {
 			return citationReview{}, err
 		}
-		response, err := w.client.Complete(criticCtx, llm.ChatRequest{Messages: []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: string(input)}}, JSONSchema: schema, MaxTokens: min(w.options.MaxOutputTokens, 2048), Temperature: 0, TemperatureSet: true, TopP: w.options.TopP, TopPSet: true})
+		response, err := w.client.Complete(roleCtx, llm.ChatRequest{Messages: []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}, JSONSchema: schema, MaxTokens: min(w.options.MaxOutputTokens, 2048), Temperature: 0, TemperatureSet: true, TopP: w.options.TopP, TopPSet: true})
 		if err != nil {
 			if ctx.Err() != nil {
 				return citationReview{}, ctx.Err()

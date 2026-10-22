@@ -143,6 +143,14 @@ func decodeRoleInputs(raw json.RawMessage) (map[string]pinnedRoleInput, error) {
 }
 
 func roleInputsFromState(state any) (map[string]pinnedRoleInput, error) {
+	if values, ok := state.(map[string]any); ok {
+		if raw, ok := values["role_inputs"].(json.RawMessage); ok {
+			return decodeRoleInputs(raw)
+		}
+		if _, exists := values["role_inputs"]; !exists {
+			return make(map[string]pinnedRoleInput), nil
+		}
+	}
 	encoded, err := json.Marshal(state)
 	if err != nil {
 		return nil, err
@@ -181,6 +189,17 @@ func validateRoleInputsState(state any, prior []domain.Checkpoint) error {
 }
 
 func verifyRoleInputsCheckpoint(ctx context.Context, tx *sql.Tx, item domain.Checkpoint, prior []domain.Checkpoint) error {
+	if len(prior) > 0 {
+		current, currentOK := item.State.(map[string]any)
+		previous, previousOK := prior[len(prior)-1].State.(map[string]any)
+		if currentOK && previousOK {
+			raw, rawOK := current["role_inputs"].(json.RawMessage)
+			old, oldOK := previous["role_inputs"].(json.RawMessage)
+			if rawOK && oldOK && bytes.Equal(raw, old) {
+				return nil
+			}
+		}
+	}
 	values, err := roleInputsFromState(item.State)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrCheckpointInvalid, err)

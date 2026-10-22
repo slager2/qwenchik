@@ -76,10 +76,11 @@ func preserveContextSnapshotJSON(state any, encoded []byte) {
 	if !ok {
 		return
 	}
-	if raw, exists := checkpointObject(encoded)["context_snapshot"]; exists {
+	object := checkpointObject(encoded)
+	if raw, exists := object["context_snapshot"]; exists {
 		values["context_snapshot"] = raw
 	}
-	if raw, exists := checkpointObject(encoded)["role_inputs"]; exists {
+	if raw, exists := object["role_inputs"]; exists {
 		values["role_inputs"] = raw
 	}
 }

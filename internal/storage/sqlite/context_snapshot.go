@@ -87,12 +87,25 @@ func validateSnapshot(snapshot domain.ContextSnapshot) error {
 }
 
 func checkpointSnapshot(state any) (domain.ContextSnapshot, bool, error) {
-	encoded, err := json.Marshal(state)
-	if err != nil {
-		return domain.ContextSnapshot{}, false, err
+	var raw json.RawMessage
+	var exists bool
+	if values, ok := state.(map[string]any); ok {
+		value, found := values["context_snapshot"]
+		exists = found
+		if found {
+			var err error
+			raw, err = json.Marshal(value)
+			if err != nil {
+				return domain.ContextSnapshot{}, false, err
+			}
+		}
+	} else {
+		encoded, err := json.Marshal(state)
+		if err != nil {
+			return domain.ContextSnapshot{}, false, err
+		}
+		raw, exists = checkpointObject(encoded)["context_snapshot"]
 	}
-	values := checkpointObject(encoded)
-	raw, exists := values["context_snapshot"]
 	if !exists {
 		return domain.ContextSnapshot{}, false, nil
 	}
