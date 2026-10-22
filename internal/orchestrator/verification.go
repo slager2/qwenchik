@@ -23,10 +23,11 @@ type criterionVerdict struct {
 }
 
 type verificationResponse struct {
-	Complete    bool                        `json:"ready_to_answer"`
-	Summary     string                      `json:"summary"`
-	Missing     []string                    `json:"missing"`
-	Assessments map[string]criterionVerdict `json:"criterion_assessments"`
+	Contradictions []string                    `json:"contradictions,omitempty"`
+	Complete       bool                        `json:"ready_to_answer"`
+	Summary        string                      `json:"summary"`
+	Missing        []string                    `json:"missing"`
+	Assessments    map[string]criterionVerdict `json:"criterion_assessments"`
 }
 
 func verificationCatalog(plan domain.Plan, state checkpointState) []verificationCriterion {

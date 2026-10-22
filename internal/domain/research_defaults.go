@@ -29,7 +29,8 @@ func ResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 func DefaultResearchPolicy() ResearchPolicy {
 	b, _ := ResearchBudgetForProfile(ResearchProfileStandard)
 	return ResearchPolicy{
-		Version: 1, Profile: ResearchProfileStandard, Budget: b,
+		MaxContinuations: 1,
+		Version:          1, Profile: ResearchProfileStandard, Budget: b,
 		TaskFetchBudgetBytes: DefaultTaskFetchBudgetBytes, SourceFetchBytes: 16 << 20, PDFBytes: 64 << 20,
 		PDFPages: 20, PDFTextRunes: 50000, PDFDownloadTimeoutSec: 120, PDFExtractTimeoutSec: 30,
 		PDFMemoryBytes: 512 << 20, PDFTempBytes: 64 << 20, PDFCPULimit: 1, PDFPIDLimit: 32,

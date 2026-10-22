@@ -192,6 +192,15 @@ func (s *Store) BeginInvocation(ctx context.Context, in domain.Invocation) (doma
 	if reused {
 		return domain.Invocation{}, ErrConflict
 	}
+	if in.Role == "verifier" || in.Role == "critic_0" || in.Role == "critic_1" {
+		var reviews int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE task_id=? AND type='invocation.started' AND json_valid(payload_json) AND json_extract(payload_json,'$.invocation.role') IN ('verifier','critic_0','critic_1')`, in.TaskID).Scan(&reviews); err != nil {
+			return domain.Invocation{}, err
+		}
+		if reviews >= 3 {
+			return domain.Invocation{}, ErrResearchBudgetExceeded
+		}
+	}
 	reservationKind := ""
 	switch in.Kind {
 	case "llm.complete", "llm.stream":

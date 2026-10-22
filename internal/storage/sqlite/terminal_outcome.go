@@ -11,9 +11,9 @@ func setTerminalOutcome(ctx context.Context, tx *sql.Tx, id string, status domai
 	outcome := string(status)
 	code, _ := payload["error_code"].(string)
 	switch code {
-	case "task_timeout", "deadline_exceeded", "research_budget_exceeded", "llm_budget_exceeded", "search_budget_exceeded", "fetch_budget_exceeded", "task_fetch_budget_exceeded", "context_budget_exceeded", "budget_exhausted":
+	case "task_timeout", "run_deadline", "deadline_exceeded", "research_plan_budget", "research_budget_exceeded", "llm_budget_exceeded", "search_budget_exceeded", "fetch_budget_exceeded", "task_fetch_budget_exceeded", "context_budget_exceeded", "budget_exhausted":
 		outcome = "budget_exhausted"
-	case "resource_guard_exhausted", "failed_recovery_required", "fetch_outcome_unknown":
+	case "resource_guard_exhausted", "failed_recovery_required", "fetch_outcome_unknown", "completion_blocked", "verification_incomplete", "invalid_model_output":
 		outcome = "blocked"
 	}
 	if status == domain.StatusCompleted {

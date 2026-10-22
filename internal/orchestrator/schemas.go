@@ -211,7 +211,7 @@ func stripOptionalNulls(value any, schema map[string]any) {
 	}
 }
 
-func verificationOutputSchema(catalog []verificationCriterion) json.RawMessage {
+func verificationOutputSchema(catalog []verificationCriterion, contradictions ...bool) json.RawMessage {
 	assessmentSchema := func(criterion verificationCriterion) map[string]any {
 		evidenceItem := boundedStringSchema(1, 128)
 		if len(criterion.EvidenceIDs) > 0 {
@@ -234,7 +234,7 @@ func verificationOutputSchema(catalog []verificationCriterion) json.RawMessage {
 		properties[criterion.ID] = assessmentSchema(criterion)
 		required = append(required, criterion.ID)
 	}
-	return encodeSchema(map[string]any{
+	output := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"ready_to_answer":       map[string]any{"type": "boolean"},
@@ -244,7 +244,11 @@ func verificationOutputSchema(catalog []verificationCriterion) json.RawMessage {
 		},
 		"required":             []string{"ready_to_answer", "summary", "missing", "criterion_assessments"},
 		"additionalProperties": false,
-	})
+	}
+	if len(contradictions) > 0 && contradictions[0] {
+		output["properties"].(map[string]any)["contradictions"] = boundedArraySchema(boundedStringSchema(1, 500), 0, 8)
+	}
+	return encodeSchema(output)
 }
 
 func boundedStringSchema(minLength, maxLength int) map[string]any {

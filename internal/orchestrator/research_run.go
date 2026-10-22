@@ -105,6 +105,7 @@ func (w *Worker) researchExecutor(ctx context.Context, taskID string) (context.C
 		stored.Profile, current.Profile = "", ""
 		stored.Budget, current.Budget = domain.ResearchBudget{}, domain.ResearchBudget{}
 		stored.KeepAwake, current.KeepAwake = false, false
+		stored.MaxContinuations, current.MaxContinuations = 0, 0
 		if stored != current {
 			return ctx, nil, errResearchRuntimeChanged
 		}

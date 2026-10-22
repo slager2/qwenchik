@@ -47,6 +47,7 @@ func newResearchRunStore(t *testing.T) *researchRunFixture {
 
 func researchRunDefaults() domain.ResearchSession {
 	policy := domain.DefaultResearchPolicy()
+	policy.MaxContinuations = 0
 	policy.Budget.MaxSteps, policy.Budget.MaxSearchQueries = 8, 4
 	return domain.ResearchSession{
 		Profile: policy.Profile, Policy: policy, Budget: policy.Budget,

@@ -129,8 +129,9 @@ func (c Config) ResearchProfile(name string) (domain.ResearchPolicy, error) {
 	budget.MaxSearchQueries = min(budget.MaxSearchQueries, c.MaxSearchQueries)
 
 	policy := domain.ResearchPolicy{
-		KeepAwake: c.KeepAwake,
-		Version:   1, Profile: name, AdaptiveEnabled: c.ResearchAdaptiveEnabled, Budget: budget,
+		MaxContinuations: min(1, budget.MaxRounds-1),
+		KeepAwake:        c.KeepAwake,
+		Version:          1, Profile: name, AdaptiveEnabled: c.ResearchAdaptiveEnabled, Budget: budget,
 		TaskFetchBudgetBytes: c.MaxFetchBytes, SourceFetchBytes: c.MaxSourceBytes, PDFBytes: c.PDFPolicy.MaxInputBytes,
 		PDFPages: c.PDFPolicy.MaxPages, PDFTextRunes: c.PDFPolicy.MaxTextRunes,
 		PDFDownloadTimeoutSec: c.PDFDownloadTimeoutSeconds,
@@ -170,6 +171,9 @@ func (c Config) validateResearchLimits() error {
 }
 
 func ValidateResearchPolicy(policy domain.ResearchPolicy) error {
+	if policy.MaxContinuations < 0 || policy.MaxContinuations > 1 {
+		return errors.New("max_continuations must be 0..1 for the single targeted-research round")
+	}
 	if policy.Version != 1 || !knownResearchProfile(policy.Profile) || policy.AdaptiveEnabled {
 		return errors.New("research policy version, profile, or adaptive setting is invalid")
 	}

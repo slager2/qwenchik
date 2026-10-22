@@ -69,6 +69,9 @@ func (w *Worker) roleContextWithConstraints(ctx context.Context, taskID, role, g
 		Attempt                          int
 		Completed, Failures, Constraints []string
 	}{role, state.CurrentStep, goal, state.PlanAttempt, append([]string{}, state.CompletedSteps...), failures, constraints})
+	if err == nil && state.Completion.Continuations > 0 {
+		slot, err = invocationHash([]any{slot, state.Completion.Continuations})
+	}
 	if err != nil {
 		return ctx, nil, nil, err
 	}
@@ -112,6 +115,7 @@ func (w *Worker) roleContextWithConstraints(ctx context.Context, taskID, role, g
 	snapshot.Goal = task.Description
 	snapshot.Constraints = uniqueContextValues(append(snapshot.Constraints, constraints...))
 	snapshot.CompletedSteps = append([]string{}, state.CompletedSteps...)
+	snapshot.OpenQuestions = uniqueContextValues(append(snapshot.OpenQuestions, state.Completion.Missing...))
 	snapshot.FailedAttempts = uniqueContextValues(append(snapshot.FailedAttempts, failures...))
 	snapshot.NextAction = role
 	if state.PendingTool != "" {

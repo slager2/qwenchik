@@ -663,7 +663,7 @@ func mergeResearchFutureField(prior, current json.RawMessage) json.RawMessage {
 
 func researchWorkerCheckpointField(key string) bool {
 	switch key {
-	case "plan_attempt", "attempt_start_seq", "historical_observations", "lifetime_search_query_history", "plan_version", "search_queries", "search_query_history", "search_query_by_step",
+	case "completion", "plan_attempt", "attempt_start_seq", "historical_observations", "lifetime_search_query_history", "plan_version", "search_queries", "search_query_history", "search_query_by_step",
 		"fetched_bytes", "source_failures", "current_candidate", "partial", "pending_tool", "pending_tool_idempotent", "pending_approval", "pending_arguments", "pending_summary",
 		"pending_target", "pending_risk", "failed_fetch_urls", "rejected_fetch_urls", "current_step", "completed_steps", "skipped_steps", "tool_results", "summary":
 		return true

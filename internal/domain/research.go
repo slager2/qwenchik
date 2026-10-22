@@ -26,6 +26,7 @@ type ResearchBudget struct {
 }
 
 type ResearchPolicy struct {
+	MaxContinuations      int            `json:"max_continuations,omitempty"`
 	KeepAwake             bool           `json:"keep_awake"`
 	Version               int            `json:"version"`
 	Profile               string         `json:"profile"`
