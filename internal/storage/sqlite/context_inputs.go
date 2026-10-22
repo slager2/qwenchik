@@ -272,6 +272,17 @@ func (s *Store) RoleContext(ctx context.Context, taskID, slot string) (json.RawM
 }
 
 func (s *Store) PinRoleContext(ctx context.Context, taskID, slot string, input json.RawMessage) (json.RawMessage, error) {
+	return s.pinRoleContext(ctx, taskID, slot, input, 0, 0)
+}
+
+func (s *Store) PinCompactedRoleContext(ctx context.Context, taskID, slot string, input json.RawMessage, before, after int) (json.RawMessage, error) {
+	if before <= after || after < 0 {
+		return nil, ErrCheckpointInvalid
+	}
+	return s.pinRoleContext(ctx, taskID, slot, input, before, after)
+}
+
+func (s *Store) pinRoleContext(ctx context.Context, taskID, slot string, input json.RawMessage, before, after int) (json.RawMessage, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -323,6 +334,20 @@ func (s *Store) PinRoleContext(ctx context.Context, taskID, slot string, input j
 		return nil, err
 	}
 	state["role_inputs"] = json.RawMessage(encoded)
+	if before > after {
+		snapshot, exists, err := checkpointSnapshot(state)
+		if err != nil || !exists {
+			return nil, ErrCheckpointInvalid
+		}
+		if _, err := appendEvent(ctx, tx, taskID, "context.compacted", nil, "user", map[string]any{
+			"slot": slot, "snapshot_id": snapshot.ID, "hash": snapshot.Hash,
+			"reason": "role_tool_results", "original_tool_result_bytes": before, "retained_tool_result_bytes": after,
+			"reduced_bytes": before - after, "accepted_evidence": len(snapshot.AcceptedEvidenceIDs),
+			"done_criteria": len(snapshot.DoneCriteria), "contradictions": len(snapshot.Contradictions),
+		}); err != nil {
+			return nil, err
+		}
+	}
 	seq, err := appendEvent(ctx, tx, taskID, "context.role_pinned", nil, "internal", map[string]any{"slot": slot, "input_hash": pin.InputHash, "input_bytes": len(canonical), "pin_count": len(values)})
 	if err != nil {
 		return nil, err

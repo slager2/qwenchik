@@ -1856,10 +1856,11 @@ func (w *Worker) chooseAction(ctx context.Context, task domain.Task, goal, memor
 		if resultsBudget < 0 {
 			return actionDecision{}, errInputBudgetExceeded
 		}
-		compacted, err := compactToolResultsWithinBudget(state.ToolResults, resultsBudget)
+		compactionCtx, compacted, err := compactRoleToolResults(ctx, state.ToolResults, resultsBudget)
 		if err != nil {
 			return actionDecision{}, err
 		}
+		ctx = compactionCtx
 		userInput["prior_tool_results_untrusted"] = compacted
 		userData, err := json.Marshal(userInput)
 		if err != nil {
@@ -2506,10 +2507,11 @@ func (w *Worker) verify(ctx context.Context, task domain.Task, goal, memoryConte
 		if resultsBudget < 0 {
 			return verification{}, errInputBudgetExceeded
 		}
-		compacted, err := compactToolResultsWithinBudget(state.ToolResults, resultsBudget)
+		compactionCtx, compacted, err := compactRoleToolResults(ctx, state.ToolResults, resultsBudget)
 		if err != nil {
 			return verification{}, err
 		}
+		ctx = compactionCtx
 		if len(compacted) == 0 {
 			return verification{}, insufficientFetchEvidenceError()
 		}
@@ -2668,10 +2670,11 @@ func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryC
 		if resultsBudget < 0 {
 			return "", errInputBudgetExceeded
 		}
-		compacted, err := compactToolResultsWithinBudget(state.ToolResults, resultsBudget)
+		compactionCtx, compacted, err := compactRoleToolResults(ctx, state.ToolResults, resultsBudget)
 		if err != nil {
 			return "", err
 		}
+		ctx = compactionCtx
 		inputData["tool_results"] = compacted
 		input, err = json.Marshal(inputData)
 		if err != nil {

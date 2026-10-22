@@ -34,10 +34,16 @@ For a recovery-required run, inspect its durable error/status and checkpoint bef
 
 Checkpoint validation still checks the complete chain, hashes and new-pin events. Byte-identical role-pin data inherited from an already verified parent is not reparsed repeatedly. Snapshot decoding reads the snapshot field without repeatedly serializing every embedded prompt. This removed race-test deadline failures without extending runtime deadlines or weakening corruption checks.
 
-## Verification and remaining Phase 3 acceptance
+## Runtime compaction
 
-Integration tests cover role builders, immutable replay across reopen, repair-slot separation, two-crash retry ceilings, prompt/schema drift, resource-pause pin stability, old-invocation upgrade handling, all user constraints, goal overflow, chat branch isolation and corrupt role payloads. Existing manual-replan tests cover fresh evidence after retry.
+Actor, verifier and finalizer compare the original tool-result JSON size with the bounded result actually supplied to inference. A genuine reduction is committed atomically with its first role pin and checkpoint as public `context.compacted`; replaying the same pin emits no second event. Its bounded payload contains `reason=role_tool_results`, slot/snapshot hashes, original/retained/reduced byte counts and counts of protected criteria, evidence and contradictions. It never contains external text or prompts. Storage-level snapshot compaction retains its existing event payload for reductions of the snapshot itself.
+
+The snapshot carries the persisted plan's exact final deliverable and success criteria. Its `next_action` also identifies a pending step/tool where present; original pending arguments and approval state stay in the checkpoint. Compaction changes only the role's selected tool-result text. Constraints, done criteria, accepted evidence IDs, contradictions, questions, budgets and the recovery pointer remain intact. If mandatory metadata does not fit, inference is refused rather than silently omitting protected state.
+
+## Verification and remaining acceptance
+
+Integration tests cover role builders, immutable replay across reopen, repair-slot separation, two-crash retry ceilings, prompt/schema drift, resource-pause pin stability, old-invocation upgrade handling, all user constraints, goal overflow, chat branch isolation and corrupt role payloads. Existing manual-replan tests cover fresh evidence after retry. Runtime compaction tests verify exact preservation of protected snapshot state, owned evidence and artifact references, pending arguments/approval after reopen, one durable event across replay, and rollback of pin/event/checkpoint on either event or checkpoint failure.
 
 The complete Go suite, vet and race suite pass with `sqlite_fts5`. Frontend tests (34), typecheck, production build and Chrome smoke pass.
 
-This completes role-input wiring, not the entire research harness. Phase 3 still needs its runtime compaction event path assessed against preservation of done criteria, pending actions and contradictions. The existing storage API emits `context.compacted` only for a genuine reduction; ordinary role-boundary saves are internal `context.snapshot_saved` events. PDF extraction remains dependent on a configured isolated extractor; download success alone is not extraction acceptance.
+Phase 3 role-context, bounded compaction and recovery contracts pass the current regression suite. Ordinary role-boundary saves remain internal `context.snapshot_saved` events. Completion governor/verifier extensions and the compaction UI projection belong to Phases 4 and 5. PDF extraction remains dependent on a configured isolated extractor; download success alone is not extraction acceptance.

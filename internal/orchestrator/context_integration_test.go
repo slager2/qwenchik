@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -367,5 +368,92 @@ func TestPhase3ChatConstraintsFollowOnlyActiveBranch(t *testing.T) {
 	})
 	if err != nil || len(constraints) != 2 || constraints[0] != "Keep old constraint" || constraints[1] != "Current request" {
 		t.Fatalf("branch constraints: %v %v", constraints, err)
+	}
+}
+
+func TestPhase3CompactionPinsProtectedStateAndEmitsOnce(t *testing.T) {
+	ctx := context.Background()
+	f := newResearchRunStore(t)
+	f.submit(t, "Inspect text and retain every constraint", nil)
+	evidence, err := f.store.SaveEvidence(ctx, domain.Evidence{TaskID: f.task.ID, Provider: "http", OriginalURL: "https://example.org/source", CanonicalURL: "https://example.org/source", ContentSHA256: strings.Repeat("a", 64), HTTPStatus: 200, ExtractionMethod: "text", Excerpt: "An exact source excerpt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := checkpointState{CurrentStep: "inspect", PendingTool: "text.inspect", PendingApproval: true,
+		PendingArguments: json.RawMessage(`{"text":"original input"}`), CompletedSteps: []string{},
+		ToolResults: map[string]any{"previous": map[string]any{"text": strings.Repeat("large external text ", 4000), "raw_artifact_id": "original-artifact", "evidence_id": evidence.ID}},
+	}
+	plan := domain.Plan{SchemaVersion: 1, Goal: f.task.Description, MaxSteps: 1, FinalDeliverable: "Faithful text result", Subtasks: []domain.PlanStep{{ID: "inspect", Kind: "analysis", Description: "Inspect text", SuccessCriteria: []string{"Count is recorded"}}}}
+	if _, err := f.store.SavePlan(ctx, f.task.ID, plan, state); err != nil {
+		t.Fatal(err)
+	}
+	initial, err := f.store.SaveContextSnapshot(ctx, f.task.ID, domain.ContextSnapshot{
+		Constraints: []string{"Never drop this"}, Contradictions: []string{"Two incompatible observations"}, OpenQuestions: []string{"Resolve discrepancy"},
+		AcceptedEvidenceIDs: []string{evidence.ID},
+	}, "initial")
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := &scriptedLLM{respond: func(llm.ChatRequest, int) (string, error) {
+		return `{"status":"continue","summary":"Inspect","tool_call":{"name":"text.inspect","arguments":{"text":"test"}}}`, nil
+	}}
+	registry := tools.NewRegistry()
+	w := New(f.store, model, registry, Options{MaxInputBytes: 12 << 10})
+	call := func() error {
+		_, err := w.chooseAction(ctx, f.task, f.task.Description, "", plan.Subtasks[0], "analyst", "text.inspect", "read", state, nil)
+		return err
+	}
+	if err := call(); err != nil {
+		t.Fatal(err)
+	}
+	var input struct {
+		Snapshot domain.ContextSnapshot `json:"context_snapshot"`
+		Results  map[string]any         `json:"prior_tool_results_untrusted"`
+	}
+	if err := json.Unmarshal([]byte(model.seen[0].Messages[1].Content), &input); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(input.Snapshot.AcceptedEvidenceIDs, initial.AcceptedEvidenceIDs) || !reflect.DeepEqual(input.Snapshot.Constraints, initial.Constraints) || !reflect.DeepEqual(input.Snapshot.Contradictions, initial.Contradictions) || !reflect.DeepEqual(input.Snapshot.OpenQuestions, initial.OpenQuestions) || !reflect.DeepEqual(input.Snapshot.BudgetRemaining, initial.BudgetRemaining) {
+		t.Fatalf("protected snapshot changed: %+v", input.Snapshot)
+	}
+	if !reflect.DeepEqual(input.Snapshot.DoneCriteria, []string{"Faithful text result", "Count is recorded"}) || input.Snapshot.NextAction != "actor:inspect:text.inspect" {
+		t.Fatalf("criteria/pending action lost: %+v", input.Snapshot)
+	}
+	retained, _ := json.Marshal(input.Results)
+	if len(retained) > 12<<10 || !strings.Contains(string(retained), "original-artifact") {
+		t.Fatalf("bad compacted references: %s", retained)
+	}
+	f.reopen(t)
+	w = New(f.store, model, registry, Options{MaxInputBytes: 12 << 10})
+	if err := call(); err != nil {
+		t.Fatal(err)
+	}
+	events, err := f.store.EventsAfter(ctx, f.task.ID, 0, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, event := range events {
+		if event.Type != "context.compacted" {
+			continue
+		}
+		count++
+		var payload struct {
+			Before int `json:"original_tool_result_bytes"`
+			After  int `json:"retained_tool_result_bytes"`
+		}
+		if err := json.Unmarshal(event.Payload, &payload); err != nil || payload.Before <= payload.After || payload.After != len(retained) {
+			t.Fatalf("false compaction: %s %v", event.Payload, err)
+		}
+		if strings.Contains(string(event.Payload), "large external text") {
+			t.Fatal("event leaked content")
+		}
+	}
+	if count != 1 {
+		t.Fatalf("compaction events=%d", count)
+	}
+	restored, err := w.currentCheckpoint(ctx, f.task.ID)
+	if err != nil || restored.PendingTool != state.PendingTool || !restored.PendingApproval || string(restored.PendingArguments) != string(state.PendingArguments) {
+		t.Fatalf("pending state lost: %+v %v", restored, err)
 	}
 }

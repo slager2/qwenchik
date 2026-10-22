@@ -19,6 +19,8 @@ type contextRepository interface {
 
 type rolePinContextKey struct{}
 type roleRepairContextKey struct{}
+type roleCompactionContextKey struct{}
+type roleCompaction struct{ Before, After int }
 type pinnedRole struct{ Slot, Role string }
 
 func roleCallSlot(ctx context.Context, slot string) context.Context {
@@ -104,6 +106,7 @@ func (w *Worker) roleContextWithConstraints(ctx context.Context, taskID, role, g
 		snapshot.Contradictions = []string{}
 		snapshot.FailedAttempts = []string{}
 		snapshot.WorkingSet = map[string]string{}
+		snapshot.DoneCriteria = []string{}
 	}
 	snapshot.PlanAttempt = state.PlanAttempt
 	snapshot.Goal = task.Description
@@ -111,6 +114,16 @@ func (w *Worker) roleContextWithConstraints(ctx context.Context, taskID, role, g
 	snapshot.CompletedSteps = append([]string{}, state.CompletedSteps...)
 	snapshot.FailedAttempts = uniqueContextValues(append(snapshot.FailedAttempts, failures...))
 	snapshot.NextAction = role
+	if state.PendingTool != "" {
+		snapshot.NextAction += ":" + state.CurrentStep + ":" + state.PendingTool
+	}
+	if task.Plan != nil && !strings.HasPrefix(role, "planner_") {
+		snapshot.DoneCriteria = []string{task.Plan.FinalDeliverable}
+		for _, step := range task.Plan.Subtasks {
+			snapshot.DoneCriteria = append(snapshot.DoneCriteria, step.SuccessCriteria...)
+		}
+		snapshot.DoneCriteria = uniqueContextValues(snapshot.DoneCriteria)
+	}
 	snapshot.Summary = state.Summary
 	if len(snapshot.Summary) > 2000 {
 		snapshot.Summary = truncateBytesUTF8(snapshot.Summary, 2000)
@@ -158,8 +171,32 @@ func (w *Worker) pinRoleInput(ctx context.Context, taskID, input string) (string
 	if !ok {
 		return "", sqlite.ErrCheckpointInvalid
 	}
+	if sizes, ok := ctx.Value(roleCompactionContextKey{}).(roleCompaction); ok && sizes.Before > sizes.After {
+		if compacted, ok := w.repo.(interface {
+			PinCompactedRoleContext(context.Context, string, string, json.RawMessage, int, int) (json.RawMessage, error)
+		}); ok {
+			data, err := compacted.PinCompactedRoleContext(ctx, taskID, pin.Slot, json.RawMessage(input), sizes.Before, sizes.After)
+			return string(data), err
+		}
+	}
 	data, err := repo.PinRoleContext(ctx, taskID, pin.Slot, json.RawMessage(input))
 	return string(data), err
+}
+
+func compactRoleToolResults(ctx context.Context, results map[string]any, budget int) (context.Context, map[string]any, error) {
+	compacted, err := compactToolResultsWithinBudget(results, budget)
+	if err != nil {
+		return ctx, nil, err
+	}
+	before, err := json.Marshal(results)
+	if err != nil {
+		return ctx, nil, err
+	}
+	after, err := json.Marshal(compacted)
+	if err != nil {
+		return ctx, nil, err
+	}
+	return context.WithValue(ctx, roleCompactionContextKey{}, roleCompaction{len(before), len(after)}), compacted, nil
 }
 
 func chatUserConstraints(run domain.Run, messages []domain.ConversationMessage) ([]string, error) {

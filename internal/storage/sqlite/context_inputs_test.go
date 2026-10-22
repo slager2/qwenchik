@@ -15,6 +15,45 @@ import (
 
 func roleSlot(name string) string { return roleInputHash([]byte(name)) }
 
+func TestCompactedRolePinRollsBackWithEventOrCheckpointFailure(t *testing.T) {
+	for _, boundary := range []string{"event", "checkpoint"} {
+		t.Run(boundary, func(t *testing.T) {
+			ctx := context.Background()
+			s, turn, _ := researchConversationFixture(t, nil)
+			claimResearchFixture(t, s)
+			id, slot := turn.Run.ID, roleSlot("compacted")
+			if _, err := s.SaveContextSnapshot(ctx, id, domain.ContextSnapshot{DoneCriteria: []string{"Preserved"}}, "initial"); err != nil {
+				t.Fatal(err)
+			}
+			before, err := s.LatestCheckpoint(ctx, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			trigger := `CREATE TRIGGER reject_compaction BEFORE INSERT ON events WHEN NEW.type='context.compacted' BEGIN SELECT RAISE(ABORT,'injected'); END`
+			if boundary == "checkpoint" {
+				trigger = `CREATE TRIGGER reject_compaction BEFORE INSERT ON checkpoints BEGIN SELECT RAISE(ABORT,'injected'); END`
+			}
+			if _, err := s.db.Exec(trigger); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.PinCompactedRoleContext(ctx, id, slot, json.RawMessage(`{"text":"bounded"}`), 10000, 200); err == nil {
+				t.Fatal("injected failure ignored")
+			}
+			if _, err := s.RoleContext(ctx, id, slot); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("pin escaped rollback: %v", err)
+			}
+			after, err := s.LatestCheckpoint(ctx, id)
+			if err != nil || after.ID != before.ID {
+				t.Fatalf("checkpoint escaped rollback: %+v %v", after, err)
+			}
+			var count int
+			if err := s.db.QueryRow(`SELECT COUNT(*) FROM events WHERE task_id=? AND type IN ('context.compacted','context.role_pinned')`, id).Scan(&count); err != nil || count != 0 {
+				t.Fatalf("event escaped rollback: %d %v", count, err)
+			}
+		})
+	}
+}
+
 func assertRolePin(t *testing.T, s *Store, taskID, slot string, expected []byte) {
 	t.Helper()
 	got, err := s.RoleContext(context.Background(), taskID, slot)
