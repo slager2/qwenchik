@@ -351,6 +351,18 @@ func (w *Worker) synthesizeResearchCitations(ctx context.Context, task domain.Ta
 	var review citationReview
 	if len(catalogue) > 0 {
 		answer, err = w.synthesize(ctx, task, goal, "", scoped, "", ids, "", messageID)
+		if session, ok := ctx.Value(researchExecutionKey{}).(domain.ResearchSession); ok && session.ModelSnapshot.Bundle != nil && ctx.Err() == nil {
+			mappingInvalid := errors.Is(err, errInvalidModelOutput)
+			if err == nil {
+				_, maxClaims := citationLimits(ctx)
+				_, mappingErr := citationUnits(answer, catalogue, maxClaims)
+				mappingInvalid = errors.Is(mappingErr, errCitationMapping)
+			}
+			if mappingInvalid {
+				correction := "The previous answer failed deterministic citation formatting. Return schema-bound JSON with an answer string. Write one short claim per paragraph. Each paragraph MUST end with exactly one [evidence_id] copied verbatim from available_evidence_ids. No numeric citations, headings, uncited text or extra claims. Use only exact supporting excerpts; omit unsupported assertions."
+				answer, err = w.synthesize(ctx, task, goal, "", scoped, "", ids, correction, messageID)
+			}
+		}
 		if modelResourceReason(err) != "" || errors.Is(err, errResourcePause) {
 			return "", err
 		}

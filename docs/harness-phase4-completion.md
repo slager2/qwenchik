@@ -23,3 +23,7 @@ On restart after `continuation.requested`, the appended steps resume using exist
 ## Checks
 
 The full Go test, vet and race suites pass with `sqlite_fts5`. Integration tests interrupt immediately after the continuation transaction, reopen SQLite, resume real worker execution with fake providers/model, and verify success or a finite blocked outcome. Storage fault injection covers event/checkpoint rollback and cancellation precedence. Tests also cover the durable three-review ceiling and narrative-independent progress fingerprints. No cloud inference, arbitrary shell, extra inference slot or orchestration framework is introduced.
+
+## Live citation-format follow-up
+
+The deployed local Qwen completed a two-source HTML research run in 67 seconds but omitted inline citation IDs. The backend correctly rejected that draft and delivered deterministic excerpts as `partial` (`ed322c5b-bdc3-4f1a-8315-e8fd2031c275`). Newly bundled runs now receive exactly one finalizer format correction before the critic when deterministic citation formatting fails. The corrected answer still undergoes full deterministic and local-critic checks; another invalid answer falls back to excerpts, never to a forged successful verdict. Tests cover both successful correction and a second invalid output with no third generation. Normal Go tests/vet and targeted citation race tests pass after this follow-up.
