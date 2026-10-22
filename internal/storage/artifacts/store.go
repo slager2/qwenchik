@@ -228,3 +228,48 @@ func (s *Store) Read(ctx context.Context, taskID, artifactID string) ([]byte, er
 	}
 	return content, nil
 }
+
+func (s *Store) ReadRange(ctx context.Context, taskID, artifactID string, offset int64, limit int) ([]byte, error) {
+	if !safeSegment.MatchString(artifactID) || offset < 0 || limit < 1 || limit > 64<<10 {
+		return nil, errors.New("invalid artifact range")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	dir, err := s.taskDirectory(taskID, false)
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	info, err := dir.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode().Perm() != 0700 {
+		return nil, errors.New("artifact task directory must be private")
+	}
+	fd, err := syscall.Openat(int(dir.Fd()), artifactID, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	file := os.NewFile(uintptr(fd), artifactID)
+	defer file.Close()
+	info, err = file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
+		return nil, errors.New("artifact must be a private regular file")
+	}
+	if offset > info.Size() {
+		return nil, errors.New("artifact offset exceeds size")
+	}
+	content, err := io.ReadAll(contextReader{ctx, io.NewSectionReader(file, offset, int64(limit))})
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return content, nil
+}

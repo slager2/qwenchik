@@ -21,6 +21,7 @@ import (
 	"github.com/slager2/qwenchik/internal/config"
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/orchestrator"
+	"github.com/slager2/qwenchik/internal/policy"
 	"github.com/slager2/qwenchik/internal/providers/research"
 	"github.com/slager2/qwenchik/internal/runtime/keepawake"
 	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
@@ -644,7 +645,7 @@ func serve(parent context.Context) error {
 		return errors.New("server-reported model context is too small for output and prompt reserves; lower LLM_MAX_OUTPUT_TOKENS")
 	}
 	model := configuredModelClient(cfg)
-	registry := tools.NewRegistry()
+	registry := tools.NewRegistry(policy.NewWorkingSetEvaluator())
 	searchProvider, err := configuredSearchProvider(cfg)
 	if err != nil {
 		return err
@@ -676,6 +677,10 @@ func serve(parent context.Context) error {
 		FetchPolicy: cfg.FetchPolicy(), PDFPolicy: cfg.PDFPolicy,
 		Repository: deps.store, MaxFetchBytes: cfg.MaxFetchBytes, AllowedDomains: cfg.AllowedDomains,
 	}); err != nil {
+		return err
+	}
+	workingSetTools := tools.NewWorkingSetTools(deps.store, artifactStore)
+	if err := tools.RegisterWorkingSetTools(registry, &workingSetTools); err != nil {
 		return err
 	}
 	if err := tools.RegisterSandboxTools(registry, tools.SandboxTools{Runtime: sandboxRuntime, Artifacts: artifactStore, Repository: deps.store}); err != nil {

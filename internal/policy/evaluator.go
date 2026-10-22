@@ -48,6 +48,16 @@ func NewDefaultEvaluator() *Evaluator {
 	})
 }
 
+func NewWorkingSetEvaluator() *Evaluator {
+	evaluator := NewDefaultEvaluator()
+	for _, role := range []string{"analyst", "researcher"} {
+		for _, capability := range []string{"task.evidence.read", "task.artifact.read", "task.context.read", "task.working_set.write"} {
+			evaluator.grants[role][capability] = struct{}{}
+		}
+	}
+	return evaluator
+}
+
 func (e *Evaluator) Evaluate(role string, tool Tool) Decision {
 	decision := Decision{Action: Deny, Capability: tool.RequiredCapability, RiskClass: tool.RiskClass}
 	if tool.Name == "" || tool.RequiredCapability == "" {
