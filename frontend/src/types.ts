@@ -251,6 +251,9 @@ export interface ConversationMessage {
 }
 
 export interface Run {
+	terminal_outcome?: string
+	pause_reason?: string
+	resource_reason?: string
   id: string
   conversation_id: string
   user_message_id: string
@@ -263,6 +266,41 @@ export interface Run {
   error_code?: string
   error_message?: string
   retry_count: number
+}
+
+export interface RunRuntime {
+  task_id: string
+  cursor: number
+  status: TaskStatus
+  stage?: string
+  terminal_outcome?: string
+  pause_reason?: string
+  resource_reason?: string
+  resume_after?: string
+  resource_probe_attempts?: number
+  profile?: string
+  step?: string
+  completed_steps?: number
+  deadline_at?: string
+  remaining_seconds?: number
+  elapsed_seconds?: number
+  budget?: Record<string, number>
+  counters?: Record<string, number>
+  budget_remaining?: Record<string, number>
+  completion?: { continuations: number; verdict?: string }
+  max_continuations?: number
+  compactions?: number
+  context_snapshot_hash?: string
+  context_snapshot_number?: number
+  contradictions?: string[]
+  verdict?: string
+  notification?: { status: string; attempt?: number; channel?: string }
+  keep_awake_requested?: boolean
+  runtime?: {
+    sleep_policy?: string
+    resources?: { free_ram_bytes?: number | null; rss_bytes?: number | null; gpu_free_vram_mb?: number | null; gpu_temp_c?: number | null; snapshot_at?: string; power_source?: string; warnings?: string[] }
+    sleep?: { active?: boolean; available?: boolean; provider?: string; failure_reason?: string }
+  }
 }
 
 export interface Submission {

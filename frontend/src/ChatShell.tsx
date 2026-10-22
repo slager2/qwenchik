@@ -3,13 +3,14 @@ import { api } from './api'
 import MarkdownMessage from './MarkdownMessage'
 import { applyRunEvent, citationReferences, createStreamState, mergeMessages, normalizeSources, terminal, type StreamState } from './conversation-state.mjs'
 import ResearchPanel from './ResearchPanel'
-import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, Evidence, ResearchPlan, Run, Submission } from './types'
+import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, Evidence, ResearchPlan, Run, RunRuntime, Submission } from './types'
 import './chat.css'
 
 const failure = (error: unknown) => error instanceof Error ? error.message : 'Не удалось выполнить запрос. Попробуйте ещё раз.'
+const terminalLabels: Record<string, string> = { partial: 'Частичный результат', blocked: 'Заблокировано проверкой', budget_exhausted: 'Бюджет исчерпан' }
 const stamp = (value: string) => new Date(value).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 const labels: Record<string, string> = { queued: 'В очереди', planning: 'Планирование', running: 'В работе', verifying: 'Проверка', completed: 'Готово', failed: 'Не удалось завершить', cancelled: 'Остановлено', paused: 'На паузе', waiting_approval: 'Нужно решение', search: 'Поиск источников', searching: 'Поиск источников', fetch: 'Чтение источников', fetching: 'Чтение источников', extract: 'Извлечение текста', synthesis: 'Подготовка ответа', synthesizing: 'Подготовка ответа', verification: 'Сверка источников', finalization: 'Завершение', discovered: 'Найден', validated: 'Проверен', rejected: 'Отклонён', extracted: 'Текст извлечён', cited: 'Использован в ответе' }
-const eventTypes = ['task.created', 'task.status_changed', 'task.recovered', 'message.created', 'message.delta', 'plan.created', 'step.started', 'step.completed', 'step.skipped', 'tool.started', 'tool.completed', 'tool.failed', 'source.updated', 'source.fetch.started', 'source.fetch.failed', 'source.failed', 'source.extracted', 'research.warning', 'search.provider', 'search.hit', 'query.updated', 'verification.updated', 'evidence.created', 'artifact.created', 'approval.requested', 'approval.approved', 'approval.rejected', 'approval.expired', 'task.completed', 'task.failed', 'task.cancelled']
+const eventTypes = ['context.compacted', 'continuation.requested', 'verification.completed', 'run.paused', 'run.resumed', 'run.resource_probe', 'run.blocked', 'run.failed', 'task.created', 'task.status_changed', 'task.recovered', 'message.created', 'message.delta', 'plan.created', 'step.started', 'step.completed', 'step.skipped', 'tool.started', 'tool.completed', 'tool.failed', 'source.updated', 'source.fetch.started', 'source.fetch.failed', 'source.failed', 'source.extracted', 'research.warning', 'search.provider', 'search.hit', 'query.updated', 'verification.updated', 'evidence.created', 'artifact.created', 'approval.requested', 'approval.approved', 'approval.rejected', 'approval.expired', 'task.completed', 'task.failed', 'task.cancelled']
 
 function useRemote<T>(load: (signal: AbortSignal) => Promise<T>, interval = 0) {
   const [data, setData] = useState<T>()
@@ -102,10 +103,11 @@ export default function ChatShell() {
 }
 
 interface Transcript { messages: ConversationMessage[]; stream: StreamState }
-type TranscriptAction = { type: 'snapshot'; messages: ConversationMessage[] } | { type: 'run'; id: string } | { type: 'event'; event: AgentEvent }
+type TranscriptAction = { type: 'snapshot'; messages: ConversationMessage[] } | { type: 'run'; id: string } | { type: 'event'; event: AgentEvent } | { type: 'resync'; id: string; cursor: number }
 function transcriptReducer(state: Transcript, action: TranscriptAction): Transcript {
   if (action.type === 'snapshot') return { ...state, stream: { ...state.stream, needsSync: false }, messages: mergeMessages(state.messages, action.messages) }
   if (action.type === 'run') return state.stream.runID === action.id ? state : { ...state, stream: createStreamState(action.id) }
+  if (action.type === 'resync') return { ...state, stream: { ...createStreamState(action.id), cursor: action.cursor } }
   const result = applyRunEvent(state.stream, state.messages, action.event)
   return { stream: result.state, messages: result.messages }
 }
@@ -116,6 +118,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const [transcript, dispatch] = useReducer(transcriptReducer, { messages: [], stream: createStreamState('') })
   const [runID, setRunID] = useState('')
   const run = useRemote(useCallback((signal) => runID ? api.conversationRun(runID, signal) : Promise.resolve<Run | null>(null), [runID]), runID ? 2500 : 0)
+  const runtime = useRemote(useCallback((signal) => runID ? api.runRuntime(runID, signal) : Promise.resolve<RunRuntime | null>(null), [runID]), runID ? 2500 : 0)
   const replay = useRemote(useCallback(async (signal) => {
     const history: AgentEvent[] = []
     if (!runID) return history
@@ -200,6 +203,15 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
       } catch { setConnection('invalid'); setError('Не удалось прочитать событие. Сохранённые сообщения продолжают обновляться.') }
     }
     for (const type of eventTypes) source.addEventListener(type, receive)
+    source.addEventListener('snapshot', (raw) => {
+      if (disposed) return
+      try { const next = JSON.parse((raw as MessageEvent<string>).data) as RunRuntime; if (next.task_id === runID && Number.isSafeInteger(next.cursor)) runtime.setData((previous) => previous?.task_id === runID && previous.cursor > next.cursor ? previous : next) } catch { setConnection('invalid') }
+    })
+    source.addEventListener('resync', (raw) => {
+      if (disposed) return
+      try { const next = JSON.parse((raw as MessageEvent<string>).data) as { cursor: number }; if (Number.isSafeInteger(next.cursor) && next.cursor >= 0) dispatch({ type: 'resync', id: runID, cursor: next.cursor }) } catch { setConnection('invalid') }
+      void snapshots.reload(); void run.reload(); void runtime.reload(); void replay.reload()
+    })
     source.onopen = () => {
       if (disposed) return
       setConnection('live')
@@ -209,7 +221,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
     }
     source.onerror = () => { if (!disposed) setConnection('reconnecting') }
     return () => { disposed = true; source.close() }
-  }, [runID, currentRun?.status, reconnect, snapshots.reload, run.reload, conversation.reload, replay.reload])
+  }, [runID, currentRun?.status, reconnect, snapshots.reload, run.reload, conversation.reload, replay.reload, runtime.reload, runtime.setData])
 
   useEffect(() => {
     if (!transcript.stream.needsSync) return
@@ -280,7 +292,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
     })
   }
 
-  const status = currentRun ? terminal(currentRun.status) ? labels[currentRun.status] : labels[currentRun.phase || currentRun.stage || ''] || labels[currentRun.status] || currentRun.status : 'Готов к сообщению'
+  const status = currentRun ? terminal(currentRun.status) ? terminalLabels[currentRun.terminal_outcome || ''] || labels[currentRun.status] : labels[currentRun.phase || currentRun.stage || ''] || labels[currentRun.status] || currentRun.status : 'Готов к сообщению'
   const content = [...transcript.messages.filter((message) => ['user', 'assistant'].includes(message.role)), ...optimistic]
   const latestAssistant = [...content].reverse().find((message) => message.role === 'assistant')
   const hasPartial = !!latestAssistant?.content.trim()
@@ -288,7 +300,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const references = useMemo(() => citationReferences(research.evidence.data ?? []), [research.evidence.data])
   const backendReady = health.data?.status === 'ok' && health.data.database === 'ok' && !health.error
   const modelReady = doctor.data?.checks.llm?.status === 'ok'
-  const detailsContent = <ResearchPanel resources={research} events={transcript.stream.events} run={currentRun} showHeading={!mobile} />
+  const detailsContent = <ResearchPanel resources={{ ...research, runtime }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onPause={() => void action(async () => { await api.pause(runID); await run.reload(); await runtime.reload() })} onResume={() => void action(async () => { await api.resume(runID); await run.reload(); await runtime.reload() })} />
 
   return <main className={`chat-main ${details ? 'chat-has-details' : ''}`}>
     <header className="chat-header"><button className="chat-mobile-menu" type="button" aria-label="Открыть разговоры" onClick={onSidebar}>☰</button><div className="chat-heading">{editing ? <form onSubmit={(event) => { event.preventDefault(); if (title.trim()) void action(async () => { const next = await api.updateConversation(id, { title: title.trim() }); if (alive.current) { conversation.setData(next); setEditing(false); void onChanged() } }) }}><input aria-label="Название разговора" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} autoFocus /><button type="submit" disabled={busy || !title.trim()}>Сохранить</button><button type="button" onClick={() => setEditing(false)}>Отмена</button></form> : <><h1>{conversation.data?.title || 'Новый разговор'}</h1><p>{mode === 'research' ? 'Deep Research' : 'Локальный чат'}<span aria-hidden="true"> · </span>{status}</p></>}</div><div className="chat-header-actions">{id && <><button type="button" onClick={() => setEditing(true)} disabled={busy} aria-label="Переименовать разговор">Название</button><button type="button" onClick={() => void action(async () => { await api.deleteConversation(id); if (alive.current) { void onChanged(); onSelect('') } })} disabled={busy || active} title={active ? 'Сначала остановите текущую генерацию' : 'Архивировать разговор'}>Удалить</button></>}<button type="button" aria-expanded={details} onClick={() => setDetails((value) => !value)}>Детали</button></div></header>

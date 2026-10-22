@@ -1779,6 +1779,17 @@ func appendEvent(ctx context.Context, tx *sql.Tx, taskID, eventType string, stag
 	if err != nil {
 		return 0, err
 	}
+	if notificationTerminal(eventType) {
+		var fields map[string]any
+		if json.Unmarshal(encoded, &fields) != nil || fields == nil {
+			fields = map[string]any{}
+		}
+		fields["notification_schema_version"] = 1
+		encoded, err = json.Marshal(fields)
+		if err != nil {
+			return 0, err
+		}
+	}
 	var seq int64
 	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(seq),0)+1 FROM events WHERE task_id=?`, taskID).Scan(&seq); err != nil {
 		return 0, err

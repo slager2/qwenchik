@@ -13,11 +13,15 @@ import (
 	"unicode"
 
 	"github.com/slager2/qwenchik/internal/domain"
+	"github.com/slager2/qwenchik/internal/runtime/notifications"
 	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
 	"github.com/slager2/qwenchik/internal/runtime/resources"
 )
 
 type Config struct {
+	NotificationChannel       string
+	NtfyURL                   string
+	NtfyToken                 string
 	ResourcePolicy            resources.Policy
 	KeepAwake                 bool
 	WorkerLeaseSeconds        int
@@ -66,21 +70,27 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		BindAddr:          env("APP_BIND_ADDR", "127.0.0.1:8080"),
-		DatabasePath:      env("DATABASE_PATH", "./data/qagent.db"),
-		ArtifactsPath:     env("ARTIFACTS_PATH", "./data/artifacts"),
-		WorkspaceRoot:     env("WORKSPACE_ROOT", "./data/workspaces"),
-		SandboxRuntime:    env("SANDBOX_RUNTIME", "auto"),
-		SandboxImage:      env("SANDBOX_IMAGE", "golang:1.23-alpine"),
-		SandboxNetwork:    env("SANDBOX_NETWORK", "disabled"),
-		PDFExtractorImage: strings.TrimSpace(env("PDF_EXTRACTOR_IMAGE", "")),
-		LLMBaseURL:        env("LLM_BASE_URL", "http://127.0.0.1:8000/v1"),
-		LLMAPIKey:         env("LLM_API_KEY", "EMPTY"),
-		LLMModel:          env("LLM_MODEL", "local-qwen"),
-		SearXNGURL:        env("SEARXNG_URL", ""),
-		TavilyAPIKey:      strings.TrimSpace(env("TAVILY_API_KEY", "")),
+		NotificationChannel: env("NOTIFICATION_CHANNEL", "desktop"),
+		NtfyURL:             env("NTFY_URL", ""),
+		NtfyToken:           env("NTFY_TOKEN", ""),
+		BindAddr:            env("APP_BIND_ADDR", "127.0.0.1:8080"),
+		DatabasePath:        env("DATABASE_PATH", "./data/qagent.db"),
+		ArtifactsPath:       env("ARTIFACTS_PATH", "./data/artifacts"),
+		WorkspaceRoot:       env("WORKSPACE_ROOT", "./data/workspaces"),
+		SandboxRuntime:      env("SANDBOX_RUNTIME", "auto"),
+		SandboxImage:        env("SANDBOX_IMAGE", "golang:1.23-alpine"),
+		SandboxNetwork:      env("SANDBOX_NETWORK", "disabled"),
+		PDFExtractorImage:   strings.TrimSpace(env("PDF_EXTRACTOR_IMAGE", "")),
+		LLMBaseURL:          env("LLM_BASE_URL", "http://127.0.0.1:8000/v1"),
+		LLMAPIKey:           env("LLM_API_KEY", "EMPTY"),
+		LLMModel:            env("LLM_MODEL", "local-qwen"),
+		SearXNGURL:          env("SEARXNG_URL", ""),
+		TavilyAPIKey:        strings.TrimSpace(env("TAVILY_API_KEY", "")),
 	}
 	var err error
+	if _, err := notifications.NewSender(cfg.NotificationChannel, cfg.NtfyURL, cfg.NtfyToken); err != nil {
+		return Config{}, err
+	}
 	if cfg.SearchEnableDDG, err = boolEnv("SEARCH_ENABLE_DDG", true); err != nil {
 		return Config{}, err
 	}

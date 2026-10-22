@@ -126,6 +126,7 @@ try {
       const run = runs[parts[2]]
       if (!run) return json({ error: { message: 'Run not found' } }, 404)
       if (!parts[3]) return json(run)
+      if (parts[3] === 'runtime') return json({ task_id: run.id, cursor: events[run.id]?.at(-1)?.seq || 0, status: run.status, terminal_outcome: run.terminal_outcome, pause_reason: run.status === 'paused' ? 'manual' : '', completed_steps: 1, compactions: 1, max_continuations: 1, completion: { continuations: 0 }, runtime: { resources: { free_ram_bytes: null, gpu_free_vram_mb: null, gpu_temp_c: null, power_source: 'unknown' }, sleep: { active: false, available: false } } })
       if (parts[3] === 'cancel') {
         run.status = 'cancelled'
         const conv = conversations.find((item) => item.id === run.conversation_id)

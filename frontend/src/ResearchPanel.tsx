@@ -1,8 +1,9 @@
 import { ProviderCard } from './diagnostic-ui.mjs'
+import RunStatus from './RunStatus'
 import { safeURL } from './conversation-state.mjs'
 import { diagnosticSummary } from './observability.mjs'
 import { formatSourceBytes, publicResearchEvents, researchError, researchQueries, researchSources, researchSteps } from './research-state.mjs'
-import type { AgentEvent, Evidence, ProvidersResponse, ResearchPlan, Run, SourceRecord } from './types'
+import type { AgentEvent, Evidence, ProvidersResponse, ResearchPlan, Run, RunRuntime, SourceRecord } from './types'
 
 interface Remote<T> { data?: T; error: string; loading: boolean; reload: () => Promise<void> }
 interface Resources {
@@ -10,6 +11,7 @@ interface Resources {
   sources: Remote<SourceRecord[]>
   evidence: Remote<Evidence[]>
   providers: Remote<ProvidersResponse | null>
+  runtime?: Remote<RunRuntime | null>
 }
 const labels: Record<string, string> = { pending: 'Ожидает выполнения', running: 'Выполняется', planning: 'Планирование', queued: 'В очереди', paused: 'На паузе', verifying: 'Сверка утверждений', waiting_approval: 'Нужно решение', completed: 'Завершено', cancelled: 'Остановлено', failed: 'Недоступен', skipped: 'Пропущен', search: 'Поиск', fetch: 'Чтение страниц', extract: 'Извлечение текста', synthesis: 'Подготовка ответа', verification: 'Проверка', finalization: 'Завершение', found: 'Найден', discovered: 'Найден', validated: 'Адрес проверен', rejected: 'Отклонён', fetching: 'Загрузка', extracted: 'Текст извлечён', cited: 'Использован в ответе' }
 const stamp = (value: string) => new Date(value).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -20,12 +22,12 @@ function Status({ resource, empty }: { resource: Remote<unknown>; empty?: boolea
   return empty ? <p className="chat-muted">Пока нет данных.</p> : null
 }
 
-export default function ResearchPanel({ resources, events, run, showHeading = true }: { resources: Resources; events: AgentEvent[]; run: Run | null; showHeading?: boolean }) {
+export default function ResearchPanel({ resources, events, run, showHeading = true, busy, onPause, onResume }: { resources: Resources; events: AgentEvent[]; run: Run | null; showHeading?: boolean; busy?: boolean; onPause?: () => void; onResume?: () => void }) {
   const { plan, sources, evidence, providers } = resources
   const steps = researchSteps(plan.data, events)
   const sourceList = researchSources(sources.data ?? [], events)
   const queries = researchQueries(events)
-  const activity = publicResearchEvents(events).filter((event) => ['search.provider', 'tool.started', 'tool.failed', 'plan.created', 'evidence.created', 'task.status_changed'].includes(event.type))
+  const activity = publicResearchEvents(events).filter((event) => ['search.provider', 'tool.started', 'tool.failed', 'plan.created', 'evidence.created', 'task.status_changed', 'context.compacted', 'continuation.requested', 'verification.completed', 'run.paused', 'run.resumed', 'run.blocked'].includes(event.type))
   const terminal = run && ['completed', 'cancelled', 'failed'].includes(run.status)
   const state = run ? terminal ? run.status : run.phase || run.stage || run.status : ''
   const warning = publicResearchEvents(events).filter((event) => event.type === 'research.warning').at(-1)
@@ -34,6 +36,8 @@ export default function ResearchPanel({ resources, events, run, showHeading = tr
   const fallback = verification?.payload.status === 'fallback_excerpts'
   return <div className="chat-research">
     <header>{showHeading && <h2>Детали исследования</h2>}<p>{labels[state] || 'Исследование ещё не запущено'}</p></header>
+    <RunStatus run={run} data={resources.runtime?.data} busy={busy} onPause={onPause} onResume={onResume} />
+    {resources.runtime?.error && <Status resource={resources.runtime} />}
     <nav className="chat-research-shortcuts" aria-label="Разделы исследования">
       <button type="button" onClick={(event) => event.currentTarget.closest('.chat-research')?.querySelector('[data-research-section="sources"]')?.scrollIntoView({ block: 'start', inline: 'nearest' })}>Источники · {sourceList.length}</button>
       <button type="button" onClick={(event) => event.currentTarget.closest('.chat-research')?.querySelector('[data-research-section="evidence"]')?.scrollIntoView({ block: 'start', inline: 'nearest' })}>Evidence · {evidence.data?.length ?? 0}</button>
@@ -41,6 +45,7 @@ export default function ResearchPanel({ resources, events, run, showHeading = tr
     {fallback && <p className="chat-partial-note" role="status">Показаны дословные выдержки. Синтезированный вывод надёжно подтвердить не удалось.</p>}
     {partial && <p className="chat-partial-note" role="status">Часть источников недоступна или отклонена. Это может ограничить полноту ответа.</p>}
     <section><h3>План</h3><Status resource={plan} empty={!steps.length} />
+      {steps.length > 0 && <div className="chat-step-board" aria-label="Этапы исследования">{[['Ожидают', ['pending']], ['В работе', ['running']], ['Завершены', ['completed', 'skipped', 'failed']]].map(([label, statuses]) => <div key={String(label)}><h4>{label}</h4><ul>{steps.filter((step) => (statuses as string[]).includes(step.status)).map((step) => <li key={step.id}>{step.description}<small>{labels[step.status] || step.status}</small></li>)}</ul></div>)}</div>}
       {steps.length > 0 && <ol className="chat-plan-list">{steps.map((step) => {
         const lead = step.description.split(/[.!?](?:\s|$)|:\s/)[0]
         const concise = lead.length > 120 ? `${lead.slice(0, 117).trimEnd()}…` : lead
@@ -83,7 +88,9 @@ export default function ResearchPanel({ resources, events, run, showHeading = tr
     <section><h3>Поисковые провайдеры</h3><Status resource={providers} empty={!providers.data} />{Object.entries(providers.data?.search.providers ?? {}).map(([name, provider]) => <ProviderCard key={name} name={name} provider={provider} checkedLabel={provider.last_checked ? stamp(provider.last_checked) : ''} />)}</section>
     <section><h3>Действия</h3>{!activity.length && <p className="chat-muted">События появятся во время работы.</p>}
       <ol>{activity.slice(-30).reverse().map((event) => <li key={event.seq}>
-        <strong>{event.type === 'search.provider' ? 'Результат провайдера' : event.type === 'tool.failed' ? 'Не удалось выполнить действие' : event.type === 'tool.started' ? 'Выполняется действие' : event.type === 'plan.created' ? 'План сохранён' : event.type === 'evidence.created' ? 'Источник сохранён' : labels[String(event.payload.to || event.stage || '')] || 'Состояние обновлено'}</strong>
+        <strong>{({ 'context.compacted': 'Рабочий контекст сжат', 'continuation.requested': 'Ограниченное продолжение исследования', 'verification.completed': 'Проверка готовности evidence', 'run.paused': 'Запуск на паузе', 'run.resumed': 'Запуск возобновлён', 'run.blocked': 'Запуск заблокирован' } as Record<string, string>)[event.type] || (event.type === 'search.provider' ? 'Результат провайдера' : event.type === 'tool.failed' ? 'Не удалось выполнить действие' : event.type === 'tool.started' ? 'Выполняется действие' : event.type === 'plan.created' ? 'План сохранён' : event.type === 'evidence.created' ? 'Источник сохранён' : labels[String(event.payload.to || event.stage || '')] || 'Состояние обновлено')}</strong>
+        {event.type === 'context.compacted' && typeof event.payload.reduced_bytes === 'number' && <p>Сокращено {formatSourceBytes(event.payload.reduced_bytes)}. Evidence и checkpoint сохранены.</p>}
+        {event.type === 'verification.completed' && typeof event.payload.verdict === 'string' && <p>{event.payload.verdict}</p>}
         {event.type === 'search.provider' && <p>{diagnosticSummary(event.payload)}</p>}
         {event.type === 'tool.failed' && <p>{researchError(typeof event.payload.error_code === 'string' ? event.payload.error_code : typeof event.payload.code === 'string' ? event.payload.code : '')}</p>}
         <time>{stamp(event.created_at)}</time>

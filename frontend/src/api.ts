@@ -1,5 +1,5 @@
 import type { AgentEvent, Approval, Artifact, Checkpoint, Evidence, Memory, MemoryMatch, MemoryStatus, Message, ProvidersResponse, Task, TaskStep } from './types'
-import type { Conversation, ConversationMessage, ConversationMode, DoctorResponse, ResearchPlan, Run, SourceRecord, Submission } from './types'
+import type { Conversation, ConversationMessage, ConversationMode, DoctorResponse, ResearchPlan, Run, RunRuntime, SourceRecord, Submission } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -46,6 +46,7 @@ export const api = {
   conversationMessages: (id: string, signal?: AbortSignal) => request<ConversationMessage[]>(`/api/conversations/${encodeURIComponent(id)}/messages`, { signal }),
   submitMessage: (id: string, content: string, mode: ConversationMode, key: string) => request<Submission>(`/api/conversations/${encodeURIComponent(id)}/messages`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ content, mode }) }),
   conversationRun: (id: string, signal?: AbortSignal) => request<Run>(`/api/runs/${encodeURIComponent(id)}`, { signal }),
+  runRuntime: (id: string, signal?: AbortSignal) => request<RunRuntime>(`/api/runs/${encodeURIComponent(id)}/runtime`, { signal }),
   cancelRun: (id: string) => request<Run>(`/api/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
   retryRun: (id: string, key: string) => request<Submission>(`/api/runs/${encodeURIComponent(id)}/retry`, { method: 'POST', headers: { 'Idempotency-Key': key } }),
   continueRun: (id: string, key: string) => request<Submission>(`/api/runs/${encodeURIComponent(id)}/continue`, { method: 'POST', headers: { 'Idempotency-Key': key } }),

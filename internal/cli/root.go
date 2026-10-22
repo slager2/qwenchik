@@ -24,6 +24,7 @@ import (
 	"github.com/slager2/qwenchik/internal/policy"
 	"github.com/slager2/qwenchik/internal/providers/research"
 	"github.com/slager2/qwenchik/internal/runtime/keepawake"
+	"github.com/slager2/qwenchik/internal/runtime/notifications"
 	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
 	"github.com/slager2/qwenchik/internal/runtime/resources"
 	"github.com/slager2/qwenchik/internal/runtime/sandbox"
@@ -721,6 +722,15 @@ func serve(parent context.Context) error {
 	server := &http.Server{Addr: cfg.BindAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	notificationSender, err := notifications.NewSender(cfg.NotificationChannel, cfg.NtfyURL, cfg.NtfyToken)
+	if err != nil {
+		return err
+	}
+	notificationsDone := make(chan struct{})
+	go func() {
+		defer close(notificationsDone)
+		notifications.Run(ctx, deps.store, notificationSender, cfg.NotificationChannel)
+	}()
 	workerDone := make(chan error, 1)
 	go func() { workerDone <- deps.worker.Run(ctx) }()
 	serverDone := make(chan error, 1)
@@ -752,6 +762,11 @@ func serve(parent context.Context) error {
 		case <-shutdownCtx.Done():
 			return errors.New("worker did not stop before shutdown deadline")
 		}
+	}
+	select {
+	case <-notificationsDone:
+	case <-shutdownCtx.Done():
+		return errors.New("notification worker did not stop before shutdown deadline")
 	}
 	if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
 		return serveErr

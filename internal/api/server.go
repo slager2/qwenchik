@@ -359,21 +359,38 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_cursor", "Параметр after должен быть неотрицательным целым числом.", false)
 		return
 	}
-	events, err := s.service.Events(r.Context(), r.PathValue("taskID"), after, 500)
-	if err != nil {
-		s.writeServiceError(w, err)
-		return
-	}
-	result := make([]domain.Event, 0, len(events))
-	for _, event := range events {
-		if publicEvent(event) {
-			projected, err := s.projectPublicEvent(r.Context(), event)
-			if err != nil {
-				s.writeServiceError(w, err)
-				return
-			}
-			result = append(result, projected)
+	result := make([]domain.Event, 0)
+	for page := 0; page < 20; page++ {
+		events, err := s.service.Events(r.Context(), r.PathValue("taskID"), after, 500)
+		if err != nil {
+			s.writeServiceError(w, err)
+			return
 		}
+		for _, event := range events {
+			if event.Seq > after {
+				after = event.Seq
+			}
+			if publicEvent(event) {
+				projected, err := s.projectPublicEvent(r.Context(), event)
+				if err != nil {
+					s.writeServiceError(w, err)
+					return
+				}
+				result = append(result, projected)
+				if len(result) >= 500 {
+					writeJSON(w, http.StatusOK, result)
+					return
+				}
+			}
+		}
+		if len(events) < 500 {
+			writeJSON(w, http.StatusOK, result)
+			return
+		}
+	}
+	if len(result) == 0 {
+		writeError(w, 409, "event_scan_limit", "История требует повторной синхронизации.", true)
+		return
 	}
 	writeJSON(w, http.StatusOK, result)
 }
@@ -393,6 +410,24 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_cursor", "Заголовок Last-Event-ID должен быть неотрицательным целым числом.", false)
 		return
 	}
+	var snapshot map[string]any
+	resync := false
+	if service, ok := s.service.(runRuntimeService); ok {
+		snapshot, err = service.RunRuntime(r.Context(), taskID)
+		if err != nil {
+			s.writeServiceError(w, err)
+			return
+		}
+		if after > 0 {
+			probe, probeErr := s.service.Events(r.Context(), taskID, after-1, 1)
+			if probeErr != nil {
+				s.writeServiceError(w, probeErr)
+				return
+			}
+			resync = len(probe) == 0 || probe[0].Seq != after
+		}
+		snapshot["runtime"] = s.runtimeHealth()
+	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "stream_unsupported", "SSE не поддерживается этим HTTP writer.", false)
@@ -404,6 +439,20 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, "retry: 1000\n\n")
+	if snapshot != nil {
+		encoded, _ := json.Marshal(snapshot)
+		if _, err := fmt.Fprintf(w, "event: snapshot\ndata: %s\n\n", encoded); err != nil {
+			return
+		}
+		if resync {
+			if _, err := fmt.Fprintf(w, "id: %v\nevent: resync\ndata: {\"reason\":\"cursor_gap\",\"cursor\":%v}\n\n", snapshot["cursor"], snapshot["cursor"]); err != nil {
+				return
+			}
+			if cursor, ok := snapshot["cursor"].(int64); ok {
+				after = cursor
+			}
+		}
+	}
 	flusher.Flush()
 	poll := time.NewTicker(500 * time.Millisecond)
 	defer poll.Stop()
@@ -416,6 +465,24 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, event := range events {
+			if after > 0 && event.Seq > after+1 {
+				if service, ok := s.service.(runRuntimeService); ok {
+					current, err := service.RunRuntime(r.Context(), taskID)
+					if err != nil {
+						return
+					}
+					current["runtime"] = s.runtimeHealth()
+					encoded, _ := json.Marshal(current)
+					if _, err := fmt.Fprintf(w, "event: snapshot\ndata: %s\n\nid: %v\nevent: resync\ndata: {\"reason\":\"cursor_gap\",\"cursor\":%v}\n\n", encoded, current["cursor"], current["cursor"]); err != nil {
+						return
+					}
+					if cursor, ok := current["cursor"].(int64); ok {
+						after = cursor
+					}
+					flusher.Flush()
+					break
+				}
+			}
 			if event.Seq > after {
 				after = event.Seq
 			}
@@ -1008,6 +1075,10 @@ func (s *Server) searchProviderStatus() map[string]map[string]any {
 }
 
 func safePublicEvent(event domain.Event) domain.Event {
+	if event.Type == "context.compacted" || event.Type == "continuation.requested" || event.Type == "verification.completed" {
+		event.Payload, _ = json.Marshal(safeHarnessEvent(event.Payload))
+		return event
+	}
 	if resourceEventType(event.Type) {
 		event.Payload, _ = json.Marshal(safeResourceEvent(event.Payload))
 		return event
@@ -1172,6 +1243,8 @@ func publicEvent(event domain.Event) bool {
 		return true
 	}
 	switch event.Type {
+	case "context.compacted", "continuation.requested", "verification.completed":
+		return true
 	case "research.warning", "source.updated", "source.fetch.started", "source.fetch.failed", "source.failed", "source.extracted", "search.hit", "query.updated", "verification.updated", "search.provider", "tool.failed", "task.created", "task.status_changed", "task.recovered", "message.created", "message.delta", "plan.created", "step.started", "step.completed", "step.skipped", "tool.started", "tool.completed", "approval.requested", "approval.approved", "approval.rejected", "approval.expired", "artifact.created", "evidence.created", "task.completed", "task.failed", "task.cancelled":
 		return true
 	default:
