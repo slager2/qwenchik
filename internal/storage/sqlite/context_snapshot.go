@@ -30,7 +30,7 @@ func validateWorkingSet(values map[string]string) error {
 			return fmt.Errorf("invalid working set key %q", key)
 		}
 		switch key {
-		case "version", "id", "number", "hash", "goal", "constraints", "done_criteria", "completed_steps", "accepted_evidence_ids", "evidence", "budget", "budget_remaining", "counters", "policy", "session_id", "task_id", "open_questions", "contradictions", "failed_attempts", "next_action", "summary", "file_changes", "working_set", "context_snapshot", "context_snapshot_hash", "plan_attempt", "pending_action":
+		case "version", "id", "number", "hash", "goal", "constraints", "done_criteria", "completed_steps", "accepted_evidence_ids", "evidence", "budget", "budget_remaining", "counters", "policy", "session_id", "task_id", "open_questions", "contradictions", "failed_attempts", "next_action", "summary", "file_changes", "working_set", "context_snapshot", "context_snapshot_hash", "plan_attempt", "pending_action", "bundle_hash", "agent_bundle", "completion":
 			return fmt.Errorf("reserved working set key %q", key)
 		case "budgets", "donecriteria", "acceptedevidenceids", "accepted_evidence", "budgetremaining", "llm_calls", "http_attempts", "search_queries", "fetches", "rounds", "steps", "questions_created", "questions_accepted", "stagnant_rounds", "fetched_bytes", "wall_time_seconds", "plan_version", "current_round", "current_phase", "model_snapshot", "research_schema_version", "deadline_at", "questions":
 			return fmt.Errorf("reserved working set key %q", key)
@@ -233,12 +233,25 @@ func (s *Store) updateContextSnapshot(ctx context.Context, taskID string, snapsh
 			return domain.ContextSnapshot{}, err
 		}
 		snapshot.Goal = session.Goal
+		if bundle := session.ModelSnapshot.Bundle; bundle != nil {
+			if err := bundle.Validate(); err != nil {
+				return domain.ContextSnapshot{}, err
+			}
+			snapshot.BundleHash = bundle.BundleHash
+		}
 		snapshot.BudgetRemaining, err = snapshotBudget(ctx, tx, session)
 		if err != nil {
 			return domain.ContextSnapshot{}, err
 		}
 	} else if errors.Is(err, ErrNotFound) {
 		snapshot.BudgetRemaining = map[string]int64{}
+		if model, err := runModelSnapshot(ctx, tx, taskID); err == nil {
+			if model.Bundle != nil {
+				snapshot.BundleHash = model.Bundle.BundleHash
+			}
+		} else if !errors.Is(err, ErrNotFound) {
+			return domain.ContextSnapshot{}, err
+		}
 	} else {
 		return domain.ContextSnapshot{}, err
 	}

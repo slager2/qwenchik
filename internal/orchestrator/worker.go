@@ -81,6 +81,7 @@ type Repository interface {
 }
 
 type Options struct {
+	RuntimeBundleHash     string
 	MaxSteps              int
 	MaxSearchQueries      int
 	MaxFetchBytes         int64

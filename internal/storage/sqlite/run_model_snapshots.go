@@ -17,6 +17,14 @@ import (
 )
 
 func validateModelProfileSnapshot(model domain.ModelProfileSnapshot) error {
+	if model.Bundle != nil {
+		if model.Bundle.ModelProfile != model.Model {
+			return errors.New("bundle model profile does not match the model snapshot")
+		}
+		if err := model.Bundle.Validate(); err != nil {
+			return err
+		}
+	}
 	if model.Version != 1 || model.SchemaVersion != 1 {
 		return errors.New("unsupported model snapshot version")
 	}

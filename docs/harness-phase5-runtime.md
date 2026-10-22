@@ -36,4 +36,10 @@ Restart the server normally to resume pending notification claims after their le
 
 Full Go tests, vet and race pass with `sqlite_fts5`. The frontend has 36 passing tests, typecheck, production build and Chrome smoke at widths 320/375/414/768/1440. Tests cover outbox atomic rollback, concurrent claims, restart, unknown delivery, late acknowledgement fencing, finite failure escalation, provider-error isolation and bounded static ntfy payloads. API tests verify private-context exclusion, snapshot/resync, safe event projection and replay through internal-only pages. UI tests verify unknown telemetry, guard pauses, unsafe-resume prevention, contradiction escaping and independent delivery failure.
 
-Versioned AgentBundle/refinement acceptance is tracked separately; these changes do not fabricate a bundle hash or claim successful isolated PDF extraction when the extractor is unavailable.
+## Baseline AgentBundle identity
+
+New production runs also pin a typed baseline `AgentBundle` in their existing immutable model snapshot. It records the bundle ID/version, model profile, role-schema/memory/evaluator versions, snapshotted budget-profile family and actual registered tool names. `prompt_hash` hashes embedded role-contract source files plus the actual typed tool descriptors; `bundle_hash` hashes the canonical operational spec. This is a conservative source-contract identity, not a hash or training update of model weights.
+
+The worker rejects a changed runtime bundle before inference. ContextSnapshot and the runtime/UI projection expose the same pinned hash. Legacy runs without a bundle retain their legacy snapshot contract. The build-time role source uses a Go embed directive; no source-file lookup is needed at runtime. Tests verify deterministic hashes, tool-set tamper rejection, caller-memory independence, persistence across reopen, context/UI identity and drift rejection before any model call.
+
+Runtime status explicitly exposes whether the resource guard is enabled. Unknown telemetry or a disabled guard is not reported as a measured healthy resource state. Refinement, candidate evaluation/promotion and rollback remain gated by phases 1–5 acceptance. Isolated PDF extraction is never claimed when the extractor is unavailable.

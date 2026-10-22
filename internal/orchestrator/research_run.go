@@ -125,6 +125,11 @@ func (w *Worker) researchExecutor(ctx context.Context, taskID string) (context.C
 }
 
 func (w *Worker) modelExecutor(model domain.ModelProfileSnapshot, client llm.Client, options Options) (*Worker, error) {
+	if model.Bundle != nil {
+		if model.Bundle.Validate() != nil || model.Bundle.ModelProfile != model.Model || options.RuntimeBundleHash != "" && model.Bundle.BundleHash != options.RuntimeBundleHash {
+			return nil, errResearchRuntimeChanged
+		}
+	}
 	if w.options.RuntimeModelContext > 0 && model.ContextLength > w.options.RuntimeModelContext {
 		return nil, errResearchRuntimeChanged
 	}

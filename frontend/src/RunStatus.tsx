@@ -25,6 +25,7 @@ export default function RunStatus({ run, data, busy, onPause, onResume }: { run:
     </div>
     {paused && current?.pause_reason === 'resource_guard' && <p>Возобновление разрешит backend после успешной проверки ресурсов. Можно остановить запуск.</p>}
     {current && <>
+	  {current.runtime?.enabled === false && <p className="chat-partial-note" role="status">Resource guard отключён в конфигурации runtime.</p>}
       <dl className="chat-runtime-grid">
         <dt>Профиль</dt><dd>{current.profile || 'Chat'}</dd>
         <dt>Текущий шаг</dt><dd>{current.step || 'Между шагами'} · выполнено {current.completed_steps ?? 0}</dd>
@@ -43,6 +44,7 @@ export default function RunStatus({ run, data, busy, onPause, onResume }: { run:
       {current.verdict && <p>Проверка готовности: {verdicts[current.verdict] || 'Статус неизвестен'}</p>}
       {!!current.contradictions?.length && <div className="chat-partial-note" role="status"><h4>Неразрешённые противоречия</h4><ul>{current.contradictions.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
       {current.context_snapshot_hash && <details><summary>Durable context · версия {current.context_snapshot_number}</summary><code>{current.context_snapshot_hash}</code></details>}
+	  {current.bundle_hash && <details><summary>AgentBundle · версия {current.bundle_version}</summary><code>{current.bundle_hash}</code></details>}
       {current.notification && <p>Уведомление: {({ pending: 'в очереди', attempted: 'доставка начата', failed: 'повтор доставки запланирован', delivered: 'принято провайдером', abandoned: 'доставка недоступна' } as Record<string, string>)[current.notification.status] || 'неизвестно'}{current.notification.channel ? ` · ${current.notification.channel}` : ''}</p>}
     </>}
   </section>

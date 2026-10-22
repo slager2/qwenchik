@@ -68,8 +68,21 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 			result["elapsed_seconds"] = max(int64(0), int64(task.UpdatedAt.Sub(session.CreatedAt).Seconds()))
 		}
 		result["max_continuations"] = session.Policy.MaxContinuations
+		if bundle := session.ModelSnapshot.Bundle; bundle != nil {
+			if err := bundle.Validate(); err != nil {
+				return nil, ErrCheckpointInvalid
+			}
+			result["bundle_hash"], result["bundle_version"] = bundle.BundleHash, bundle.Version
+		}
 	} else if !errors.Is(err, ErrNotFound) {
 		return nil, err
+	}
+	if _, present := result["bundle_hash"]; !present {
+		if model, err := runModelSnapshot(ctx, tx, taskID); err == nil && model.Bundle != nil {
+			result["bundle_hash"], result["bundle_version"] = model.Bundle.BundleHash, model.Bundle.Version
+		} else if err != nil && !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
 	}
 	var compactions int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE task_id=? AND type='context.compacted'`, taskID).Scan(&compactions); err != nil {

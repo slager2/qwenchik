@@ -269,6 +269,8 @@ export interface Run {
 }
 
 export interface RunRuntime {
+	bundle_hash?: string
+	bundle_version?: number
   task_id: string
   cursor: number
   status: TaskStatus
@@ -297,6 +299,7 @@ export interface RunRuntime {
   notification?: { status: string; attempt?: number; channel?: string }
   keep_awake_requested?: boolean
   runtime?: {
+	 enabled?: boolean
     sleep_policy?: string
     resources?: { free_ram_bytes?: number | null; rss_bytes?: number | null; gpu_free_vram_mb?: number | null; gpu_temp_c?: number | null; snapshot_at?: string; power_source?: string; warnings?: string[] }
     sleep?: { active?: boolean; available?: boolean; provider?: string; failure_reason?: string }

@@ -132,7 +132,9 @@ func (w *Worker) guardRun(ctx context.Context, task domain.Task) (context.Contex
 }
 
 func modelResourceReason(err error) string {
-	if errors.Is(err,context.Canceled) { return "" }
+	if errors.Is(err, context.Canceled) {
+		return ""
+	}
 	switch {
 	case errors.Is(err, ErrRecoveryRequired), errors.Is(err, sqlite.ErrResearchBudgetExceeded):
 		return ""
@@ -143,10 +145,12 @@ func modelResourceReason(err error) string {
 	case errors.Is(err, llm.ErrModelTimeout):
 		return "model_timeout"
 	}
-	if errors.Is(err,errLLMUnavailable) {
+	if errors.Is(err, errLLMUnavailable) {
 		var network net.Error
-		var response interface { HTTPStatusCode() int }
-		if errors.As(err,&network) || errors.As(err,&response) && response.HTTPStatusCode()>=500 && response.HTTPStatusCode()<600 { return "llama_unhealthy" }
+		var response interface{ HTTPStatusCode() int }
+		if errors.As(err, &network) || errors.As(err, &response) && response.HTTPStatusCode() >= 500 && response.HTTPStatusCode() < 600 {
+			return "llama_unhealthy"
+		}
 	}
 	return ""
 }
@@ -252,7 +256,7 @@ func (w *Worker) RuntimeStatus() map[string]any {
 	w.runtimeMu.RLock()
 	status, wanted := w.sleepStatus, w.sleepWanted
 	w.runtimeMu.RUnlock()
-	result := map[string]any{"status": "ok", "sleep_policy": "disabled", "keep_awake": wanted, "sleep": status, "max_resume_attempts": w.options.ResourcePolicy.MaxResumeAttempts}
+	result := map[string]any{"status": "ok", "enabled": w.options.ResourcePolicy.Enabled, "sleep_policy": "disabled", "keep_awake": wanted, "sleep": status, "max_resume_attempts": w.options.ResourcePolicy.MaxResumeAttempts}
 	if wanted {
 		result["sleep_policy"] = "keep_awake"
 	}

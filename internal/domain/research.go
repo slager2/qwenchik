@@ -47,16 +47,17 @@ type ResearchPolicy struct {
 }
 
 type ModelProfileSnapshot struct {
-	Version         int      `json:"version"`
-	Model           string   `json:"model"`
-	BaseURL         string   `json:"base_url"`
-	ContextLength   int      `json:"context_length"`
-	MaxOutputTokens int      `json:"max_output_tokens"`
-	Temperature     float64  `json:"temperature"`
-	TopP            float64  `json:"top_p"`
-	StopSequences   []string `json:"stop_sequences"`
-	PromptVersion   string   `json:"prompt_version"`
-	SchemaVersion   int      `json:"schema_version"`
+	Bundle          *AgentBundle `json:"bundle,omitempty"`
+	Version         int          `json:"version"`
+	Model           string       `json:"model"`
+	BaseURL         string       `json:"base_url"`
+	ContextLength   int          `json:"context_length"`
+	MaxOutputTokens int          `json:"max_output_tokens"`
+	Temperature     float64      `json:"temperature"`
+	TopP            float64      `json:"top_p"`
+	StopSequences   []string     `json:"stop_sequences"`
+	PromptVersion   string       `json:"prompt_version"`
+	SchemaVersion   int          `json:"schema_version"`
 }
 
 type ResearchCounters struct {

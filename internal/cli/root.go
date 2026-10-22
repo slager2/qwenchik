@@ -691,8 +691,10 @@ func serve(parent context.Context) error {
 	if err != nil {
 		return err
 	}
+	bundle := orchestrator.ResearchAgentBundle(cfg.LLMModel, registry)
 	deps.worker = orchestrator.New(deps.store, model, registry, orchestrator.Options{
-		ResourceMonitor: resourceMonitor, ResourcePolicy: cfg.ResourcePolicy,
+		RuntimeBundleHash: bundle.BundleHash,
+		ResourceMonitor:   resourceMonitor, ResourcePolicy: cfg.ResourcePolicy,
 		KeepAwake: cfg.KeepAwake, SleepProvider: keepawake.NewProvider(),
 		MaxSteps: cfg.MaxSteps, MaxSearchQueries: cfg.MaxSearchQueries, MaxFetchBytes: cfg.MaxFetchBytes,
 		TaskTimeout:     time.Duration(cfg.TaskTimeoutSeconds) * time.Second,
@@ -707,7 +709,7 @@ func serve(parent context.Context) error {
 	apiServer.SetWorkerHeartbeat(deps.worker.Heartbeat)
 	apiServer.SetRuntimeStatus(deps.worker.RuntimeStatus)
 	apiServer.SetResearchPolicy(cfg.ResearchLimits(), pdfExtractor.Check)
-	setResearchRunDefaultsForServe(deps.app, cfg)
+	setResearchRunDefaultsForServe(deps.app, cfg, &bundle)
 	apiServer.SetTavilyConfigured(cfg.TavilyAPIKey != "")
 	apiServer.SetDDGEnabled(cfg.SearchEnableDDG)
 	if diagnostic, ok := searchProvider.(interface {
@@ -774,8 +776,12 @@ func serve(parent context.Context) error {
 	return nil
 }
 
-func setResearchRunDefaultsForServe(service *app.Service, cfg config.Config) {
-	service.SetResearchRunDefaults(cfg.ResearchDefaultProfile, cfg.ResearchPolicies(), cfg.ResearchModelSnapshot())
+func setResearchRunDefaultsForServe(service *app.Service, cfg config.Config, bundles ...*domain.AgentBundle) {
+	model := cfg.ResearchModelSnapshot()
+	if len(bundles) > 0 {
+		model.Bundle = bundles[0]
+	}
+	service.SetResearchRunDefaults(cfg.ResearchDefaultProfile, cfg.ResearchPolicies(), model)
 	service.SetKeepAwakeDefault(cfg.KeepAwake)
 }
 
