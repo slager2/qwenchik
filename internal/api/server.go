@@ -1075,7 +1075,7 @@ func (s *Server) searchProviderStatus() map[string]map[string]any {
 }
 
 func safePublicEvent(event domain.Event) domain.Event {
-	if event.Type == "context.compacted" || event.Type == "continuation.requested" || event.Type == "verification.completed" {
+	if event.Type == "context.compacted" || event.Type == "continuation.requested" || event.Type == "verification.completed" || event.Type == "refinement.evaluated" || event.Type == "refinement.promoted" || event.Type == "refinement.rollback" {
 		event.Payload, _ = json.Marshal(safeHarnessEvent(event.Payload))
 		return event
 	}
@@ -1243,7 +1243,7 @@ func publicEvent(event domain.Event) bool {
 		return true
 	}
 	switch event.Type {
-	case "context.compacted", "continuation.requested", "verification.completed":
+	case "context.compacted", "continuation.requested", "verification.completed", "refinement.evaluated", "refinement.promoted", "refinement.rollback":
 		return true
 	case "research.warning", "source.updated", "source.fetch.started", "source.fetch.failed", "source.failed", "source.extracted", "search.hit", "query.updated", "verification.updated", "search.provider", "tool.failed", "task.created", "task.status_changed", "task.recovered", "message.created", "message.delta", "plan.created", "step.started", "step.completed", "step.skipped", "tool.started", "tool.completed", "approval.requested", "approval.approved", "approval.rejected", "approval.expired", "artifact.created", "evidence.created", "task.completed", "task.failed", "task.cancelled":
 		return true

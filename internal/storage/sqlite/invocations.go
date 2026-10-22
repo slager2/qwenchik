@@ -202,6 +202,15 @@ func (s *Store) BeginInvocation(ctx context.Context, in domain.Invocation) (doma
 		}
 	}
 	reservationKind := ""
+	if strings.HasPrefix(in.Role, "refinement_") {
+		var calls int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE task_id=? AND type='invocation.started' AND json_valid(payload_json) AND json_extract(payload_json,'$.invocation.role') LIKE 'refinement_%'`, in.TaskID).Scan(&calls); err != nil {
+			return domain.Invocation{}, err
+		}
+		if calls >= 10 {
+			return domain.Invocation{}, ErrResearchBudgetExceeded
+		}
+	}
 	switch in.Kind {
 	case "llm.complete", "llm.stream":
 		reservationKind = "llm"

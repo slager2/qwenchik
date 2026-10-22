@@ -35,12 +35,12 @@ func safeHarnessEvent(raw json.RawMessage) map[string]any {
 	if json.Unmarshal(raw, &input) != nil {
 		return result
 	}
-	for _, key := range []string{"attempt", "max_continuations", "number", "original_tool_result_bytes", "retained_tool_result_bytes", "reduced_bytes", "previous_bytes", "snapshot_bytes", "accepted_evidence", "completed_steps", "done_criteria", "contradictions", "open_questions"} {
+	for _, key := range []string{"version", "attempt", "max_continuations", "number", "original_tool_result_bytes", "retained_tool_result_bytes", "reduced_bytes", "previous_bytes", "snapshot_bytes", "accepted_evidence", "completed_steps", "done_criteria", "contradictions", "open_questions"} {
 		if n, ok := input[key].(float64); ok && n >= 0 && n <= 1<<40 && math.Trunc(n) == n {
 			result[key] = n
 		}
 	}
-	for _, key := range []string{"hash", "slot", "progress_fingerprint", "failure_hash"} {
+	for _, key := range []string{"bundle_hash", "hash", "slot", "progress_fingerprint", "failure_hash"} {
 		if value, ok := input[key].(string); ok && validFingerprint(value) {
 			result[key] = value
 		}
@@ -72,6 +72,25 @@ func safeHarnessEvent(raw json.RawMessage) map[string]any {
 			}
 		}
 		result["missing"] = missing
+	}
+	if status, ok := input["status"].(string); ok {
+		for _, allowed := range []string{"candidate", "evaluating", "ready", "approved", "rejected"} {
+			if status == allowed {
+				result["status"] = status
+			}
+		}
+	}
+	if evaluation, ok := input["evaluation"].(map[string]any); ok {
+		safe := map[string]any{}
+		for _, key := range []string{"case_count", "baseline_passed", "candidate_passed", "baseline_ms", "candidate_ms"} {
+			if n, ok := evaluation[key].(float64); ok && n >= 0 && n <= 300000 && math.Trunc(n) == n {
+				safe[key] = n
+			}
+		}
+		if passed, ok := evaluation["passed"].(bool); ok {
+			safe["passed"] = passed
+		}
+		result["evaluation"] = safe
 	}
 	return result
 }

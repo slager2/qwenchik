@@ -259,7 +259,7 @@ func mustCheckpointJSON(t *testing.T, s *Store, taskID, id string) string {
 	return raw
 }
 
-func TestMigration010OnlyExtendsExistingTables(t *testing.T) {
+func TestExecutionAndRefinementMigrationsPreserveExistingTables(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "009.db")
 	db := researchLegacyDatabase(t, path, 9)
@@ -279,8 +279,8 @@ func TestMigration010OnlyExtendsExistingTables(t *testing.T) {
 		t.Fatal("existing data changed")
 	}
 	after := researchMigrationSchemaSnapshot(t, s.db)
-	if len(after) != len(schema) {
-		t.Fatal("schema objects added")
+	if len(after) != len(schema)+5 {
+		t.Fatal("unexpected schema objects added beyond the refinement table and its indexes")
 	}
 	for name, sql := range schema {
 		if name != "table:tasks" && name != "table:checkpoints" && after[name] != sql {

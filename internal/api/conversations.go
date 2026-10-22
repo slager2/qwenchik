@@ -31,6 +31,9 @@ func (s *Server) conversationService(w http.ResponseWriter) (ConversationService
 }
 
 func (s *Server) conversationRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /api/refinement", s.startRefinement)
+	mux.HandleFunc("GET /api/bundles/{hash}", s.bundleCandidate)
+	mux.HandleFunc("POST /api/bundles/rollback", s.rollbackBundle)
 	mux.HandleFunc("GET /api/conversations", s.listConversations)
 	mux.HandleFunc("POST /api/conversations", s.createConversation)
 	mux.HandleFunc("GET /api/conversations/{conversationID}", s.getConversation)

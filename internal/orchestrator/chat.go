@@ -28,6 +28,9 @@ func (w *Worker) executeRun(ctx context.Context, task domain.Task) (err error) {
 			err = errWorkerPanic
 		}
 	}()
+	if handled, err := w.executeRefinement(ctx, task); handled {
+		return err
+	}
 	repo, ok := w.repo.(conversationExecutionRepository)
 	if !ok {
 		return w.execute(ctx, task)

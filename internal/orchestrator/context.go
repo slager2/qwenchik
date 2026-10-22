@@ -118,6 +118,23 @@ func (w *Worker) roleContextWithConstraints(ctx context.Context, taskID, role, g
 	snapshot.OpenQuestions = uniqueContextValues(append(snapshot.OpenQuestions, state.Completion.Missing...))
 	snapshot.FailedAttempts = uniqueContextValues(append(snapshot.FailedAttempts, failures...))
 	snapshot.NextAction = role
+	if reader, ok := w.repo.(interface {
+		GetRunModelSnapshot(context.Context, string) (domain.ModelProfileSnapshot, error)
+	}); ok {
+		model, err := reader.GetRunModelSnapshot(ctx, taskID)
+		if err != nil && !errors.Is(err, sqlite.ErrNotFound) {
+			return ctx, nil, nil, err
+		}
+		snapshot.RoleHint = ""
+		if model.Bundle != nil && model.Bundle.Hints != nil {
+			if role == "actor" {
+				snapshot.RoleHint = model.Bundle.Hints.Actor
+			}
+			if strings.HasPrefix(role, "finalizer_") {
+				snapshot.RoleHint = model.Bundle.Hints.Finalizer
+			}
+		}
+	}
 	if state.PendingTool != "" {
 		snapshot.NextAction += ":" + state.CurrentStep + ":" + state.PendingTool
 	}

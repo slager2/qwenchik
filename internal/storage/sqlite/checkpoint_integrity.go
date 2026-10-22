@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -132,12 +133,32 @@ func prepareContextSnapshotCheckpoint(encoded []byte, prior []domain.Checkpoint)
 	previous := checkpointObject(last)
 	raw, hasSnapshot := previous["context_snapshot"]
 	_, hasPins := previous["role_inputs"]
-	if !hasSnapshot && !hasPins {
+	job, hasJob := previous["refinement_job"]
+	if !hasSnapshot && !hasPins && !hasJob {
 		return encoded, nil
 	}
 	values := checkpointObject(encoded)
 	if values == nil {
 		return nil, ErrCheckpointInvalid
+	}
+	if hasJob {
+		if next, exists := values["refinement_job"]; !exists {
+			values["refinement_job"] = job
+		} else {
+			var before, after domain.RefinementJob
+			if json.Unmarshal(job, &before) != nil || json.Unmarshal(next, &after) != nil {
+				return nil, ErrCheckpointInvalid
+			}
+			if before.CandidateHash != "" && before.CandidateHash != after.CandidateHash {
+				return nil, ErrCheckpointInvalid
+			}
+			before.CandidateHash, after.CandidateHash = "", ""
+			a, _ := json.Marshal(before)
+			b, _ := json.Marshal(after)
+			if !bytes.Equal(a, b) {
+				return nil, ErrCheckpointInvalid
+			}
+		}
 	}
 	if _, exists := values["context_snapshot"]; !exists && hasSnapshot {
 		values["context_snapshot"] = raw

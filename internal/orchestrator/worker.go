@@ -81,6 +81,7 @@ type Repository interface {
 }
 
 type Options struct {
+	OnBundleChanged       func(domain.AgentBundle)
 	RuntimeBundleHash     string
 	MaxSteps              int
 	MaxSearchQueries      int

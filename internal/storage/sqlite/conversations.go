@@ -555,6 +555,11 @@ func (s *Store) SubmitTurn(ctx context.Context, in domain.SubmitTurn, key string
 }
 
 func syncConversationTerminal(ctx context.Context, tx *sql.Tx, id string, status domain.TaskStatus, payload map[string]any) error {
+	if status == domain.StatusFailed || status == domain.StatusCancelled {
+		if _, err := tx.ExecContext(ctx, `UPDATE harness_bundles SET status='rejected',active=0,updated_at=? WHERE task_id=? AND status IN ('candidate','evaluating','ready')`, stamp(time.Now().UTC()), id); err != nil {
+			return err
+		}
+	}
 	r, err := run(ctx, tx, id)
 	if errors.Is(err, ErrNotFound) {
 		return nil

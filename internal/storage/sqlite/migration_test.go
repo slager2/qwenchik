@@ -57,7 +57,7 @@ func researchLegacyDatabase(t *testing.T, path string, last int) *sql.DB {
 
 func researchMigrationDataSnapshot(t *testing.T, db *sql.DB) map[string][]string {
 	t.Helper()
-	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('schema_migrations','research_sessions') ORDER BY name`)
+	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('schema_migrations','research_sessions','harness_bundles') ORDER BY name`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func seedResearchMigrationLegacy(t *testing.T, db *sql.DB) {
 	}
 }
 
-func TestResearchSessionMigrationAddsExactlyOneTableAndPreservesAllData(t *testing.T) {
+func TestResearchAndRefinementMigrationsAddOnlyRequiredTablesAndPreserveAllData(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "migration-009.db")
 	db := researchLegacyDatabase(t, path, 8)
@@ -208,7 +208,8 @@ func TestResearchSessionMigrationAddsExactlyOneTableAndPreservesAllData(t *testi
 			addedTables = append(addedTables, name)
 		}
 	}
-	if !reflect.DeepEqual(addedTables, []string{"table:research_sessions"}) {
+	sort.Strings(addedTables)
+	if !reflect.DeepEqual(addedTables, []string{"table:harness_bundles", "table:research_sessions"}) {
 		t.Fatalf("unexpected added tables: %v", addedTables)
 	}
 	for _, operation := range []func() error{
@@ -234,7 +235,7 @@ func TestResearchSessionMigrationAddsExactlyOneTableAndPreservesAllData(t *testi
 	if !reflect.DeepEqual(researchMigrationSchemaSnapshot(t, s.db), afterSchema) || !reflect.DeepEqual(researchMigrationDataSnapshot(t, s.db), beforeData) {
 		t.Fatal("repeat migration or legacy reads changed persisted data")
 	}
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 10 {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 11 {
 		t.Fatalf("migration ledger: %d %v", count, err)
 	}
 	if ftsSchemaSnapshot(t, s.db) != ftsBefore {
@@ -307,7 +308,7 @@ func TestResearchSessionMigrationUpgradesEveryExistingVersion(t *testing.T) {
 			if err := s.db.QueryRow(`SELECT COUNT(*) FROM research_sessions`).Scan(&count); err != nil || count != 0 {
 				t.Fatalf("legacy session backfill: %d %v", count, err)
 			}
-			if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 10 {
+			if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 11 {
 				t.Fatalf("migration ledger: %d %v", count, err)
 			}
 		})

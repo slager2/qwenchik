@@ -673,6 +673,7 @@ function ApprovalCard({ approval, busy, onApprove, onReject }: { approval: Appro
         <div><dt>Адресат</dt><dd>{approval.target || 'не указан'}</dd></div>
         <div><dt>Почему</dt><dd>{approval.risk_explanation}</dd></div>
         <div><dt>Аргументы действия</dt><dd><pre>{JSON.stringify(approval.arguments, null, 2)}</pre></dd></div>
+        {approval.tool_name === 'harness.promote_bundle' && typeof approval.arguments.bundle_hash === 'string' && /^[a-f0-9]{64}$/.test(approval.arguments.bundle_hash) && <div><dt>Перед подтверждением</dt><dd><a href={`/api/bundles/${approval.arguments.bundle_hash}`} target="_blank" rel="noopener noreferrer">Открыть CandidatePatch, provenance и результаты held-out проверки</a><p>Будут изменены только operational hints для новых запусков. Политики, инструменты и hard budgets остаются под контролем backend.</p></dd></div>}
         <div><dt>Истекает</dt><dd>{timeLabel(approval.expires_at)}</dd></div>
       </dl>
       <div className="approval-actions"><button className="button button-danger-quiet" type="button" onClick={onReject} disabled={busy}>Отклонить</button><button className="button button-primary" type="button" onClick={onApprove} disabled={busy}>{busy ? 'Сохраняем…' : 'Подтвердить действие'}</button></div>

@@ -117,17 +117,32 @@ func (w *Worker) researchExecutor(ctx context.Context, taskID string) (context.C
 	options := w.options
 	options.MaxSteps, options.MaxSearchQueries = session.Budget.MaxSteps, session.Budget.MaxSearchQueries
 	options.MaxFetchBytes = session.Policy.TaskFetchBudgetBytes
-	runner, err := w.modelExecutor(model, &sessionModelClient{inner: newInvocationClient(w.repo, w.client, taskID), repo: repo, runID: taskID, model: model}, options)
+	runner, err := w.modelExecutor(ctx, model, &sessionModelClient{inner: newInvocationClient(w.repo, w.client, taskID), repo: repo, runID: taskID, model: model}, options)
 	if err != nil {
 		return ctx, nil, err
 	}
 	return context.WithValue(ctx, researchExecutionKey{}, session), runner, nil
 }
 
-func (w *Worker) modelExecutor(model domain.ModelProfileSnapshot, client llm.Client, options Options) (*Worker, error) {
+func (w *Worker) modelExecutor(ctx context.Context, model domain.ModelProfileSnapshot, client llm.Client, options Options) (*Worker, error) {
 	if model.Bundle != nil {
-		if model.Bundle.Validate() != nil || model.Bundle.ModelProfile != model.Model || options.RuntimeBundleHash != "" && model.Bundle.BundleHash != options.RuntimeBundleHash {
+		if model.Bundle.Validate() != nil || model.Bundle.ModelProfile != model.Model || options.RuntimeBundleHash != "" && model.Bundle.BaseHash() != options.RuntimeBundleHash {
 			return nil, errResearchRuntimeChanged
+		}
+		if model.Bundle.Version > 1 {
+			reader, ok := w.repo.(interface {
+				BundleCandidate(context.Context, string) (domain.BundleCandidate, error)
+			})
+			if !ok {
+				return nil, errResearchRuntimeChanged
+			}
+			candidate, err := reader.BundleCandidate(ctx, model.Bundle.BundleHash)
+			if err != nil {
+				return nil, err
+			}
+			if candidate.Status != "approved" {
+				return nil, errResearchRuntimeChanged
+			}
 		}
 	}
 	if w.options.RuntimeModelContext > 0 && model.ContextLength > w.options.RuntimeModelContext {
@@ -161,7 +176,7 @@ func (w *Worker) chatModelExecutor(ctx context.Context, taskID string) (context.
 	if err != nil {
 		return ctx, nil, err
 	}
-	runner, err := w.modelExecutor(model, &sessionModelClient{inner: newInvocationClient(w.repo, w.client, taskID), runID: taskID, model: model}, w.options)
+	runner, err := w.modelExecutor(ctx, model, &sessionModelClient{inner: newInvocationClient(w.repo, w.client, taskID), runID: taskID, model: model}, w.options)
 	return ctx, runner, err
 }
 

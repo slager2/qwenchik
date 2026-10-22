@@ -36,6 +36,7 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 	}
 	if raw != "" {
 		var state struct {
+			Refinement  *domain.RefinementJob   `json:"refinement_job"`
 			CurrentStep string                  `json:"current_step"`
 			Completed   []string                `json:"completed_steps"`
 			Completion  domain.CompletionState  `json:"completion"`
@@ -45,6 +46,14 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 			return nil, ErrCheckpointInvalid
 		}
 		result["step"], result["completed_steps"], result["completion"] = state.CurrentStep, len(state.Completed), state.Completion
+		if state.Refinement != nil {
+			if state.Refinement.Base.Validate() != nil || state.Refinement.CandidateHash != "" && !roleContextSlot.MatchString(state.Refinement.CandidateHash) {
+				return nil, ErrCheckpointInvalid
+			}
+			result["refinement_candidate_hash"] = state.Refinement.CandidateHash
+			result["refinement_deadline_at"] = state.Refinement.DeadlineAt
+			result["bundle_hash"], result["bundle_version"] = state.Refinement.Base.BundleHash, state.Refinement.Base.Version
+		}
 		if state.Snapshot != nil {
 			if err := validateSnapshot(*state.Snapshot); err != nil {
 				return nil, err

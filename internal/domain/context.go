@@ -6,6 +6,7 @@ var ErrContextSnapshotTooLarge = errors.New("context snapshot exceeds size limit
 
 type ContextSnapshot struct {
 	BundleHash          string            `json:"bundle_hash,omitempty"`
+	RoleHint            string            `json:"role_hint,omitempty"`
 	Version             int               `json:"version"`
 	PlanAttempt         int               `json:"plan_attempt,omitempty"`
 	ID                  string            `json:"id"`

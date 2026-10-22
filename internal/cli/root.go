@@ -692,7 +692,12 @@ func serve(parent context.Context) error {
 		return err
 	}
 	bundle := orchestrator.ResearchAgentBundle(cfg.LLMModel, registry)
+	activeBundle, err := deps.store.EnsureBaselineBundle(parent, bundle)
+	if err != nil {
+		return err
+	}
 	deps.worker = orchestrator.New(deps.store, model, registry, orchestrator.Options{
+		OnBundleChanged:   func(active domain.AgentBundle) { setResearchRunDefaultsForServe(deps.app, cfg, &active) },
 		RuntimeBundleHash: bundle.BundleHash,
 		ResourceMonitor:   resourceMonitor, ResourcePolicy: cfg.ResourcePolicy,
 		KeepAwake: cfg.KeepAwake, SleepProvider: keepawake.NewProvider(),
@@ -709,7 +714,7 @@ func serve(parent context.Context) error {
 	apiServer.SetWorkerHeartbeat(deps.worker.Heartbeat)
 	apiServer.SetRuntimeStatus(deps.worker.RuntimeStatus)
 	apiServer.SetResearchPolicy(cfg.ResearchLimits(), pdfExtractor.Check)
-	setResearchRunDefaultsForServe(deps.app, cfg, &bundle)
+	setResearchRunDefaultsForServe(deps.app, cfg, &activeBundle)
 	apiServer.SetTavilyConfigured(cfg.TavilyAPIKey != "")
 	apiServer.SetDDGEnabled(cfg.SearchEnableDDG)
 	if diagnostic, ok := searchProvider.(interface {
