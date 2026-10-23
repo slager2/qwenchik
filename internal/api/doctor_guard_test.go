@@ -51,8 +51,18 @@ func TestDoctorUsesSharedGuardAndDoesNotCacheBusyAsFailure(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if event := <-stream; event.Text != "partial" {
-		t.Fatal(event)
+	var firstTextEvent llm.ChatEvent
+	for event := range stream {
+		if event.Err != nil {
+			t.Fatal(event.Err)
+		}
+		if event.Text != "" {
+			firstTextEvent = event
+			break
+		}
+	}
+	if firstTextEvent.Text != "partial" {
+		t.Fatalf("first text event = %#v", firstTextEvent)
 	}
 	response := conversationRequest(t, server.Handler(), "GET", "/api/doctor", "", "", 200)
 	if !strings.Contains(response.Body.String(), "deferred while the inference slot is busy") || requests.Load() != 1 {

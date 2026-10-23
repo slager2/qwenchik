@@ -713,6 +713,11 @@ func serve(parent context.Context) error {
 	apiServer.SetLLMClient(model)
 	apiServer.SetWorkerHeartbeat(deps.worker.Heartbeat)
 	apiServer.SetRuntimeStatus(deps.worker.RuntimeStatus)
+	if telemetryWorker, ok := any(deps.worker).(interface {
+		RunTelemetry(runID string) (domain.Telemetry, uint64, bool)
+	}); ok {
+		apiServer.SetRunTelemetry(telemetryWorker.RunTelemetry)
+	}
 	apiServer.SetResearchPolicy(cfg.ResearchLimits(), pdfExtractor.Check)
 	setResearchRunDefaultsForServe(deps.app, cfg, &activeBundle)
 	apiServer.SetTavilyConfigured(cfg.TavilyAPIKey != "")

@@ -117,7 +117,7 @@ func (w *Worker) researchExecutor(ctx context.Context, taskID string) (context.C
 	options := w.options
 	options.MaxSteps, options.MaxSearchQueries = session.Budget.MaxSteps, session.Budget.MaxSearchQueries
 	options.MaxFetchBytes = session.Policy.TaskFetchBudgetBytes
-	runner, err := w.modelExecutor(ctx, model, &sessionModelClient{inner: newInvocationClient(w.repo, w.client, taskID), repo: repo, runID: taskID, model: model}, options)
+	runner, err := w.modelExecutor(ctx, model, &sessionModelClient{inner: newInvocationClient(w.repo, w.client, taskID, w.recordRunTelemetry(taskID)), repo: repo, runID: taskID, model: model}, options)
 	if err != nil {
 		return ctx, nil, err
 	}
@@ -176,7 +176,7 @@ func (w *Worker) chatModelExecutor(ctx context.Context, taskID string) (context.
 	if err != nil {
 		return ctx, nil, err
 	}
-	runner, err := w.modelExecutor(ctx, model, &sessionModelClient{inner: newInvocationClient(w.repo, w.client, taskID), runID: taskID, model: model}, w.options)
+	runner, err := w.modelExecutor(ctx, model, &sessionModelClient{inner: newInvocationClient(w.repo, w.client, taskID, w.recordRunTelemetry(taskID)), runID: taskID, model: model}, w.options)
 	return ctx, runner, err
 }
 

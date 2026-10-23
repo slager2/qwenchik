@@ -103,17 +103,19 @@ type Options struct {
 }
 
 type Worker struct {
-	repo        Repository
-	client      llm.Client
-	tools       *tools.Registry
-	options     Options
-	wake        chan struct{}
-	activeMu    sync.Mutex
-	active      map[string]context.CancelFunc
-	heartbeat   time.Time
-	runtimeMu   sync.RWMutex
-	sleepStatus keepawake.Status
-	sleepWanted bool
+	repo             Repository
+	client           llm.Client
+	tools            *tools.Registry
+	options          Options
+	wake             chan struct{}
+	activeMu         sync.Mutex
+	active           map[string]context.CancelFunc
+	heartbeat        time.Time
+	runtimeMu        sync.RWMutex
+	sleepStatus      keepawake.Status
+	sleepWanted      bool
+	runTelemetry     *runTelemetrySource
+	telemetryMonitor resources.Monitor
 }
 
 type checkpointState struct {
@@ -202,7 +204,15 @@ func New(repo Repository, client llm.Client, registry *tools.Registry, options O
 	if options.Logger == nil {
 		options.Logger = slog.Default()
 	}
-	return &Worker{repo: repo, client: client, tools: registry, options: options, wake: make(chan struct{}, 1), active: make(map[string]context.CancelFunc)}
+	telemetryMonitor := options.ResourceMonitor
+	if telemetryMonitor != nil {
+		options.ResourceMonitor = legacyResourceStatusMonitor{Monitor: telemetryMonitor}
+	}
+	return &Worker{
+		repo: repo, client: client, tools: registry, options: options,
+		wake: make(chan struct{}, 1), active: make(map[string]context.CancelFunc),
+		runTelemetry: newRunTelemetrySource(), telemetryMonitor: telemetryMonitor,
+	}
 }
 
 func (w *Worker) Wake() {

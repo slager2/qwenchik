@@ -99,3 +99,51 @@ func TestRunResourceFieldsAndTaskLeasePrivacy(t *testing.T) {
 		t.Fatal("projection mutated task")
 	}
 }
+
+func TestSafeTelemetryValidatesAllowlistedMetricsAndBoundsResponse(t *testing.T) {
+	at := time.Now().UTC()
+	input := apiTelemetryFixture(at)
+	input.System.Metadata.Platform = "https://PRIVATE_URL/private/path"
+	input.System.CPUUsage = domain.NewExactMetric(101.0, domain.MetricUnitPercent, at)
+	input.System.PowerWatts = domain.Metric[float64]{Source: domain.MetricSourceUnavailable, Unit: domain.MetricUnitWatts, UpdatedAt: at, Error: "PRIVATE_PROVIDER_ERROR"}
+	input.Inference.Source = "raw provider error PRIVATE_PROMPT /private/path"
+	input.System.GPUs = make([]domain.GPUTelemetry, maxPublicTelemetryGPUs+1)
+	for index := range input.System.GPUs {
+		input.System.GPUs[index] = domain.GPUTelemetry{
+			Name:        domain.NewExactMetric("NVIDIA GPU", domain.MetricUnitName, at),
+			Utilization: domain.NewUnavailableMetric[float64](domain.MetricUnitPercent, at),
+			Temperature: domain.NewUnavailableMetric[float64](domain.MetricUnitCelsius, at),
+			VRAMUsed:    domain.NewUnavailableMetric[int64](domain.MetricUnitBytes, at),
+			VRAMFree:    domain.NewUnavailableMetric[int64](domain.MetricUnitBytes, at),
+			VRAMTotal:   domain.NewUnavailableMetric[int64](domain.MetricUnitBytes, at),
+			PowerWatts:  domain.NewUnavailableMetric[float64](domain.MetricUnitWatts, at),
+		}
+	}
+	input.System.GPUs[0].Name = domain.NewExactMetric("https://PRIVATE_URL/private/path", domain.MetricUnitName, at)
+
+	projected, ok := SafeTelemetry(input)
+	if !ok {
+		t.Fatal("valid snapshot with invalid individual metrics was omitted")
+	}
+	if projected.System.Metadata.Platform != "" || projected.System.CPUUsage.Source != domain.MetricSourceUnavailable || projected.System.PowerWatts.Error != "" {
+		t.Fatalf("invalid metadata or metric survived: %#v", projected.System)
+	}
+	if len(projected.System.GPUs) != maxPublicTelemetryGPUs || projected.System.GPUs[0].Name.Source != domain.MetricSourceUnavailable || projected.Inference.Source != "" {
+		t.Fatalf("GPU/source projection was not bounded: %#v", projected)
+	}
+	encoded, err := json.Marshal(projected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) > maxPublicTelemetryBytes {
+		t.Fatalf("telemetry response exceeded bound: %d", len(encoded))
+	}
+	for _, marker := range []string{"PRIVATE_URL", "PRIVATE_PROVIDER_ERROR", "PRIVATE_PROMPT", "raw provider error", "/private/path"} {
+		if strings.Contains(string(encoded), marker) {
+			t.Fatalf("sanitized telemetry leaked %q: %s", marker, encoded)
+		}
+	}
+	if err := projected.Validate(); err != nil {
+		t.Fatalf("sanitized telemetry is not valid typed telemetry: %v", err)
+	}
+}

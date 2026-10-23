@@ -208,7 +208,7 @@ func (w *Worker) executeRefinement(ctx context.Context, task domain.Task) (handl
 		options := w.options
 		options.MaxInputBytes = min(options.MaxInputBytes, 16384)
 		options.MaxOutputTokens = min(options.MaxOutputTokens, 512)
-		client := &sessionModelClient{inner: newInvocationClient(w.repo, &refinementBudgetClient{inner: w.client, repo: repo, taskID: task.ID}, task.ID), model: job.Model, runID: task.ID}
+		client := &sessionModelClient{inner: newInvocationClient(w.repo, &refinementBudgetClient{inner: w.client, repo: repo, taskID: task.ID}, task.ID, w.recordRunTelemetry(task.ID)), model: job.Model, runID: task.ID}
 		runner, err := w.modelExecutor(modelCtx, job.Model, client, options)
 		if err != nil {
 			return true, err

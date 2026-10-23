@@ -24,19 +24,34 @@ type invocationRepository interface {
 }
 
 type invocationClient struct {
-	repo  invocationRepository
-	inner llm.Client
-	runID string
+	repo        invocationRepository
+	inner       llm.Client
+	runID       string
+	onTelemetry func(domain.InferenceTelemetry)
 }
 
-func newInvocationClient(repo any, inner llm.Client, runID string) llm.Client {
+func newInvocationClient(repo any, inner llm.Client, runID string, callbacks ...func(domain.InferenceTelemetry)) llm.Client {
+	var onTelemetry func(domain.InferenceTelemetry)
+	if len(callbacks) > 0 {
+		onTelemetry = callbacks[0]
+	}
 	if journal, ok := repo.(invocationRepository); ok {
-		return &invocationClient{repo: journal, inner: inner, runID: runID}
+		return &invocationClient{repo: journal, inner: inner, runID: runID, onTelemetry: onTelemetry}
+	}
+	if onTelemetry != nil {
+		return &invocationClient{inner: inner, runID: runID, onTelemetry: onTelemetry}
 	}
 	return inner
 }
 
-func (c *invocationClient) OwnsInvocationReservations() bool { return true }
+func (c *invocationClient) captureTelemetry(telemetry *llm.ChatTelemetry) {
+	if c.onTelemetry == nil || telemetry == nil {
+		return
+	}
+	c.onTelemetry(cloneInferenceTelemetry(telemetry.InferenceTelemetry))
+}
+
+func (c *invocationClient) OwnsInvocationReservations() bool { return c.repo != nil }
 
 func ownsInvocationReservations(client llm.Client) bool {
 	owner, ok := client.(interface{ OwnsInvocationReservations() bool })
@@ -218,6 +233,11 @@ func finishInvocation(ctx context.Context, repo invocationRepository, in domain.
 }
 
 func (c *invocationClient) Complete(ctx context.Context, request llm.ChatRequest) (llm.ChatResponse, error) {
+	if c.repo == nil {
+		response, err := c.inner.Complete(ctx, request)
+		c.captureTelemetry(response.Telemetry)
+		return response, err
+	}
 	inputHash, err := modelInvocationHash(request)
 	if err != nil {
 		return llm.ChatResponse{}, err
@@ -231,9 +251,11 @@ func (c *invocationClient) Complete(ctx context.Context, request llm.ChatRequest
 		if len(in.Output) > 100<<10 || json.Unmarshal(in.Output, &response) != nil || !json.Valid([]byte(response.Content)) {
 			return response, ErrRecoveryRequired
 		}
+		c.captureTelemetry(response.Telemetry)
 		return response, nil
 	}
 	response, err := c.inner.Complete(ctx, request)
+	c.captureTelemetry(response.Telemetry)
 	if err != nil {
 		return response, finishInvocation(ctx, c.repo, in, nil, err)
 	}
@@ -247,12 +269,35 @@ func (c *invocationClient) Complete(ctx context.Context, request llm.ChatRequest
 			}
 			return response, nil
 		}
-		output = response
+		// Invocation outputs are durable for recovery, while live telemetry is
+		// intentionally process-local and must not be persisted with them.
+		persistedResponse := response
+		persistedResponse.Telemetry = nil
+		output = persistedResponse
 	}
 	return response, finishInvocation(ctx, c.repo, in, output, nil)
 }
 
 func (c *invocationClient) Stream(ctx context.Context, request llm.ChatRequest) (<-chan llm.ChatEvent, error) {
+	if c.repo == nil {
+		stream, err := c.inner.Stream(ctx, request)
+		if err != nil || stream == nil || c.onTelemetry == nil {
+			return stream, err
+		}
+		output := make(chan llm.ChatEvent)
+		go func() {
+			defer close(output)
+			for event := range stream {
+				c.captureTelemetry(event.Telemetry)
+				select {
+				case output <- event:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+		return output, nil
+	}
 	inputHash, err := modelInvocationHash(request)
 	if err != nil {
 		return nil, err
@@ -278,6 +323,7 @@ func (c *invocationClient) Stream(ctx context.Context, request llm.ChatRequest) 
 		var digest hash.Hash = sha256.New()
 		var streamErr error
 		for event := range stream {
+			c.captureTelemetry(event.Telemetry)
 			_, _ = digest.Write([]byte(event.Text))
 			if event.Err != nil {
 				streamErr = event.Err

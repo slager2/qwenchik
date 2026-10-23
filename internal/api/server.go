@@ -15,6 +15,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -96,6 +98,8 @@ type Server struct {
 	healthMu          sync.RWMutex
 	workerHeartbeat   func(context.Context) (time.Time, error)
 	runtimeStatus     func() map[string]any
+	telemetryMu       sync.RWMutex
+	runTelemetry      func(runID string) (domain.Telemetry, uint64, bool)
 	researchPolicy    map[string]any
 	pdfCheck          func(context.Context) error
 }
@@ -412,6 +416,10 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	var snapshot map[string]any
 	resync := false
+	var lastTelemetry domain.Telemetry
+	var lastRevision uint64
+	haveTelemetry := false
+	var lastWarnings []string
 	if service, ok := s.service.(runRuntimeService); ok {
 		snapshot, err = service.RunRuntime(r.Context(), taskID)
 		if err != nil {
@@ -427,6 +435,12 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 			resync = len(probe) == 0 || probe[0].Seq != after
 		}
 		snapshot["runtime"] = s.runtimeHealth()
+		lastWarnings = safeRuntimeWarningSet(snapshot["runtime"].(map[string]any))
+		if telemetry, revision, available := s.addRunTelemetry(snapshot, taskID); available {
+			lastTelemetry, lastRevision, haveTelemetry = telemetry, revision, true
+		}
+	} else {
+		lastWarnings = safeRuntimeWarningSet(s.runtimeHealth())
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -471,7 +485,12 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 					if err != nil {
 						return
 					}
-					current["runtime"] = s.runtimeHealth()
+					runtime := s.runtimeHealth()
+					current["runtime"] = runtime
+					lastWarnings = safeRuntimeWarningSet(runtime)
+					if telemetry, revision, available := s.addRunTelemetry(current, taskID); available {
+						lastTelemetry, lastRevision, haveTelemetry = telemetry, revision, true
+					}
 					encoded, _ := json.Marshal(current)
 					if _, err := fmt.Fprintf(w, "event: snapshot\ndata: %s\n\nid: %v\nevent: resync\ndata: {\"reason\":\"cursor_gap\",\"cursor\":%v}\n\n", encoded, current["cursor"], current["cursor"]); err != nil {
 						return
@@ -501,7 +520,37 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 			if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", event.Seq, event.Type, encoded); err != nil {
 				return
 			}
+			if alias := lifecycleEventAlias(event); alias != "" {
+				aliasData, _ := json.Marshal(map[string]string{"status": lifecycleAliasStatus(alias)})
+				if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", event.Seq, alias, aliasData); err != nil {
+					return
+				}
+			}
 			flusher.Flush()
+		}
+		if telemetry, revision, available := s.runTelemetrySnapshot(taskID); available {
+			if !haveTelemetry || !telemetrySystemSampleTimestamp(telemetry).Equal(telemetrySystemSampleTimestamp(lastTelemetry)) {
+				if err := writeSSEData(w, "runtime_snapshot", map[string]any{"telemetry": telemetry, "telemetry_revision": revision}); err != nil {
+					return
+				}
+				flusher.Flush()
+			}
+			if !haveTelemetry || revision != lastRevision && !reflect.DeepEqual(telemetry.Inference, lastTelemetry.Inference) {
+				if err := writeSSEData(w, "inference_progress", map[string]any{"telemetry_revision": revision, "inference": telemetry.Inference}); err != nil {
+					return
+				}
+				flusher.Flush()
+			}
+			lastTelemetry, lastRevision, haveTelemetry = telemetry, revision, true
+		}
+		runtime := s.runtimeHealth()
+		warnings := safeRuntimeWarningSet(runtime)
+		if !sameStringSet(lastWarnings, warnings) {
+			if err := writeSSEData(w, "resource_warning", map[string]any{"warnings": warnings}); err != nil {
+				return
+			}
+			flusher.Flush()
+			lastWarnings = warnings
 		}
 		if len(events) == 0 {
 			task, err := s.service.GetTask(r.Context(), taskID)
@@ -1233,6 +1282,107 @@ func parseAfter(value string) (int64, error) {
 		return 0, errors.New("invalid event cursor")
 	}
 	return parsed, nil
+}
+
+func writeSSEData(w io.Writer, event string, value any) error {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, encoded)
+	return err
+}
+
+func safeRuntimeWarningSet(value any) []string {
+	runtime, _ := value.(map[string]any)
+	warnings := map[string]struct{}{}
+	objects := []map[string]any{runtime}
+	for _, key := range []string{"resources", "last_snapshot", "snapshot"} {
+		if nested, ok := runtime[key].(map[string]any); ok {
+			objects = append(objects, nested)
+		}
+	}
+	for _, object := range objects {
+		for _, key := range []string{"warnings", "active_warnings"} {
+			switch values := object[key].(type) {
+			case []string:
+				for _, text := range values {
+					warnings[text] = struct{}{}
+				}
+			case []any:
+				for _, value := range values {
+					if text, ok := value.(string); ok {
+						warnings[text] = struct{}{}
+					}
+				}
+			}
+		}
+	}
+	result := make([]string, 0, len(warnings))
+	for warning := range warnings {
+		result = append(result, warning)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func sameStringSet(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func lifecycleEventAlias(event domain.Event) string {
+	switch event.Type {
+	case "run.paused":
+		return "task_paused"
+	case "run.resumed":
+		return "task_resumed"
+	case "task.completed":
+		return "task_completed"
+	case "task.failed", "run.failed":
+		return "task_failed"
+	case "task.status_changed":
+		var state struct {
+			From string `json:"from"`
+			To   string `json:"to"`
+		}
+		if json.Unmarshal(event.Payload, &state) != nil {
+			return ""
+		}
+		switch {
+		case state.To == string(domain.StatusPaused):
+			return "task_paused"
+		case state.From == string(domain.StatusPaused) && (state.To == string(domain.StatusQueued) || state.To == string(domain.StatusRunning)):
+			return "task_resumed"
+		case state.To == string(domain.StatusCompleted):
+			return "task_completed"
+		case state.To == string(domain.StatusFailed):
+			return "task_failed"
+		}
+	}
+	return ""
+}
+
+func lifecycleAliasStatus(alias string) string {
+	switch alias {
+	case "task_paused":
+		return "paused"
+	case "task_resumed":
+		return "resumed"
+	case "task_completed":
+		return "completed"
+	case "task_failed":
+		return "failed"
+	default:
+		return ""
+	}
 }
 
 func publicEvent(event domain.Event) bool {

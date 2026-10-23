@@ -5,10 +5,45 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+
+	"github.com/slager2/qwenchik/internal/domain"
 )
 
 type runRuntimeService interface {
 	RunRuntime(context.Context, string) (map[string]any, error)
+}
+
+func (s *Server) SetRunTelemetry(snapshot func(runID string) (domain.Telemetry, uint64, bool)) {
+	s.telemetryMu.Lock()
+	defer s.telemetryMu.Unlock()
+	s.runTelemetry = snapshot
+}
+
+func (s *Server) runTelemetrySnapshot(runID string) (domain.Telemetry, uint64, bool) {
+	s.telemetryMu.RLock()
+	snapshot := s.runTelemetry
+	s.telemetryMu.RUnlock()
+	if snapshot == nil {
+		return domain.Telemetry{}, 0, false
+	}
+	telemetry, revision, available := snapshot(runID)
+	if !available {
+		return domain.Telemetry{}, 0, false
+	}
+	telemetry, ok := SafeTelemetry(telemetry)
+	if !ok {
+		return domain.Telemetry{}, 0, false
+	}
+	return telemetry, revision, true
+}
+
+func (s *Server) addRunTelemetry(result map[string]any, runID string) (domain.Telemetry, uint64, bool) {
+	telemetry, revision, available := s.runTelemetrySnapshot(runID)
+	if available {
+		result["telemetry"] = telemetry
+		result["telemetry_revision"] = revision
+	}
+	return telemetry, revision, available
 }
 
 func (s *Server) runRuntime(w http.ResponseWriter, r *http.Request) {
@@ -23,6 +58,7 @@ func (s *Server) runRuntime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result["runtime"] = s.runtimeHealth()
+	s.addRunTelemetry(result, r.PathValue("runID"))
 	writeJSON(w, 200, result)
 }
 
