@@ -153,7 +153,9 @@ try {
         if (body.research_run_id) researchContextSubmissions.push(body.research_run_id)
         await new Promise((resolve) => setTimeout(resolve, 250))
         if (rejectNext) { rejectNext = false; return json({ error: { code: 'unavailable', message: 'Временный сетевой сбой', retryable: true } }, 503) }
-        return json(submit(id, body.content, body.mode), 202)
+        const result = submit(id, body.content, body.mode)
+        if (body.research_run_id) result.user_message.metadata = { research_run_id: body.research_run_id, research_context: { run_id: body.research_run_id, verification_status: 'supported', sources: [{ evidence_id: 'ev-1', title: 'Реальный источник', canonical_url: 'https://example.org/source' }] } }
+        return json(result, 202)
       }
     }
     if (parts[1] === 'runs') {
@@ -206,7 +208,11 @@ try {
   await page.getByText('Источник не ответил вовремя. Проверьте доступные материалы ниже.', { exact: true }).waitFor()
   assert.ok(!(await page.locator('body').innerText()).includes('PRIVATE-'))
   assert.ok((await page.locator('.chat-research section').filter({ has: page.getByRole('heading', { name: 'План', exact: true }) }).innerText()).includes('Завершено'))
-  assert.equal(await page.locator('.chat-markdown a[href="https://example.org/source"]').count(), 1)
+  assert.equal(await page.locator('.chat-markdown a[href="https://example.org/source"]').count(), 2)
+  const citationSources = page.locator('.chat-citation-sources').first()
+  await citationSources.locator('summary').click()
+  await citationSources.getByRole('link', { name: 'Реальный источник', exact: true }).waitFor()
+  assert.equal(await citationSources.getByText('example.org', { exact: true }).count(), 1)
   assert.equal(await page.getByText('Ответ первого разговора', { exact: true }).count(), 0)
   assert.equal(await page.locator('.chat-markdown table').count(), 1)
   const pdfCard = page.locator('.chat-source-cards > li').filter({ has: page.getByRole('link', { name: 'PDF с превышением лимита', exact: true }) })
@@ -238,7 +244,7 @@ try {
   await page.getByRole('heading', { name: 'Результат', exact: true }).waitFor()
   await page.getByText('План недоступен', { exact: true }).waitFor()
   await page.getByText('Провайдеры недоступны', { exact: true }).waitFor()
-  assert.equal(await page.locator('.chat-markdown a[href="https://example.org/source"]').count(), 1)
+  assert.equal(await page.locator('.chat-markdown a[href="https://example.org/source"]').count(), 2)
   planFail = false
   providersFail = false
   messagesFail = true
@@ -269,6 +275,10 @@ try {
   await page.getByRole('button', { name: 'Отправить', exact: true }).click()
   await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor()
   assert.equal(researchContextSubmissions.at(-1), 'r-b', 'explicit Chat continuation attaches only the selected completed research run')
+  const bridgeCitationSources = page.locator('.chat-citation-sources').last()
+  await bridgeCitationSources.locator('summary').waitFor()
+  await bridgeCitationSources.locator('summary').click()
+  await bridgeCitationSources.getByRole('link', { name: 'Реальный источник', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Очистить research context', exact: true }).click()
   assert.equal(await page.getByText(/Research context: ON/, { exact: false }).count(), 0)
   await page.getByRole('button', { name: 'Детали', exact: true }).click()

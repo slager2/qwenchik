@@ -41,9 +41,14 @@ function evidenceLinks(options: { references: CitationReference[] }) {
 }
 
 export default function MarkdownMessage({ content, references = [] }: { content: string; references?: CitationReference[] }) {
-  return <div className="chat-markdown"><ReactMarkdown skipHtml remarkPlugins={[remarkGfm, [evidenceLinks, { references }]]} urlTransform={(url) => safeURL(url)} components={{
+  const safeReferences = references.filter((reference) => safeURL(reference.url))
+  return <div className="chat-markdown"><ReactMarkdown skipHtml remarkPlugins={[remarkGfm, [evidenceLinks, { references: safeReferences }]]} urlTransform={(url) => safeURL(url)} components={{
     a: ({ href, children, title }) => href ? <a href={href} title={title} target="_blank" rel="noopener noreferrer">{children}</a> : <span>{children}</span>,
     img: ({ alt }) => <span className="chat-image-label">{alt || 'Изображение'}</span>,
     table: ({ children }) => <div className="chat-table-scroll" tabIndex={0} role="region" aria-label="Таблица"><table>{children}</table></div>,
-  }}>{content}</ReactMarkdown></div>
+  }}>{content}</ReactMarkdown>{safeReferences.length > 0 && <details className="chat-citation-sources"><summary>Источники · {safeReferences.length}</summary><ol>{safeReferences.map((reference) => {
+    const url = safeURL(reference.url)
+    const hostname = new URL(url).hostname
+    return <li key={reference.id}><span className="chat-citation-number">[{reference.label}]</span><a href={url} target="_blank" rel="noopener noreferrer">{reference.title || hostname}</a><small>{hostname}</small></li>
+  })}</ol><p>Ссылка показывает источник материала, но не подтверждает автоматически каждое утверждение.</p></details>}</div>
 }
