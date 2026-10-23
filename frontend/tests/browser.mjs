@@ -208,8 +208,9 @@ try {
   planFail = false
   providersFail = false
   messagesFail = true
-  await page.getByText('Сеть недоступна Показаны последние загруженные данные.', { exact: true }).waitFor()
-  assert.equal(await page.getByRole('heading', { name: 'Результат', exact: true }).count(), 1)
+  await page.reload()
+  await page.getByText('Сеть недоступна', { exact: true }).waitFor()
+  assert.equal(await page.locator('.chat-research').count(), 1)
   messagesFail = false
 
   for (const width of [320, 375, 414, 768, 1440]) {
@@ -244,6 +245,18 @@ try {
   await page.getByRole('button', { name: 'Повторить действие' }).click()
   await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor()
   await page.getByText('Начало потока', { exact: true }).waitFor()
+  await page.waitForTimeout(350)
+  const activeRunID = Object.values(runs).at(-1).id
+  const syncCountsBefore = await page.evaluate(() => {
+    const endpoints = window.__qwenchikDebug.snapshot().requests.by_endpoint
+    return Object.fromEntries(['/api/conversations/:id/messages', '/api/runs/:id', '/api/runs/:id/runtime'].map((key) => [key, endpoints[`GET ${key}`]?.count || 0]))
+  })
+  await page.waitForTimeout(3000)
+  const syncCountsAfter = await page.evaluate(() => {
+    const endpoints = window.__qwenchikDebug.snapshot().requests.by_endpoint
+    return Object.fromEntries(['/api/conversations/:id/messages', '/api/runs/:id', '/api/runs/:id/runtime'].map((key) => [key, endpoints[`GET ${key}`]?.count || 0]))
+  })
+  assert.deepEqual(syncCountsAfter, syncCountsBefore, `SSE-active chat issued repeating snapshots for ${activeRunID}`)
   assert.equal(submissionKeys[0], submissionKeys[1])
   await page.getByRole('button', { name: 'Переподключить', exact: true }).click()
   await until(() => streamCursors.some((cursor) => cursor >= 2), 'explicit reconnect cursor')

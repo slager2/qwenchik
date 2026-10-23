@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { api } from './api'
+import { createCoalescedScheduler, nextFallbackDelay, runEventInvalidations, runResyncResources } from './chat-sync.mjs'
 import MarkdownMessage from './MarkdownMessage'
 import { applyRunEvent, citationReferences, createStreamState, mergeMessages, normalizeSources, terminal, type StreamState } from './conversation-state.mjs'
 import ResearchPanel from './ResearchPanel'
-import { recordReload, recordSSE } from './network-debug'
+import { recordReload, recordSSE, type ReloadReason } from './network-debug'
 import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, Evidence, ResearchPlan, Run, RunRuntime, Submission } from './types'
 import './chat.css'
 
@@ -88,7 +89,7 @@ export default function ChatShell() {
   const [query, setQuery] = useState('')
   const [sidebar, setSidebar] = useState(false)
   const [newVersion, setNewVersion] = useState(0)
-  const conversations = useRemote(useCallback((signal) => api.conversations(signal), []), 8000, 'chat.conversations')
+  const conversations = useRemote(useCallback((signal) => api.conversations(signal), []), 30000, 'chat.conversations')
   useEffect(() => {
     const navigate = () => { setSelected(chatID()); setSidebar(false) }
     window.addEventListener('hashchange', navigate)
@@ -115,29 +116,21 @@ function transcriptReducer(state: Transcript, action: TranscriptAction): Transcr
 }
 
 function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; onSelect: (id: string) => void; onChanged: () => Promise<void>; onSidebar: () => void }) {
-  const conversation = useRemote(useCallback((signal) => id ? api.conversation(id, signal) : Promise.resolve<Conversation | null>(null), [id]), id ? 5000 : 0, 'chat.conversation')
-  const snapshots = useRemote(useCallback((signal) => id ? api.conversationMessages(id, signal) : Promise.resolve<ConversationMessage[]>([]), [id]), id ? 2500 : 0, 'chat.messages')
+  const conversation = useRemote(useCallback((signal) => id ? api.conversation(id, signal) : Promise.resolve<Conversation | null>(null), [id]), id ? 30000 : 0, 'chat.conversation')
+  const snapshots = useRemote(useCallback((signal) => id ? api.conversationMessages(id, signal) : Promise.resolve<ConversationMessage[]>([]), [id]), 0, 'chat.messages')
   const [transcript, dispatch] = useReducer(transcriptReducer, { messages: [], stream: createStreamState('') })
   const [runID, setRunID] = useState('')
-  const run = useRemote(useCallback((signal) => runID ? api.conversationRun(runID, signal) : Promise.resolve<Run | null>(null), [runID]), runID ? 2500 : 0, 'chat.run')
-  const runtime = useRemote(useCallback((signal) => runID ? api.runRuntime(runID, signal) : Promise.resolve<RunRuntime | null>(null), [runID]), runID ? 2500 : 0, 'chat.runtime')
-  const replay = useRemote(useCallback(async (signal) => {
-    const history: AgentEvent[] = []
-    if (!runID) return history
-    let after = 0
-    for (let page = 0; page < 100; page++) {
-      const batch = await api.runEvents(runID, after, signal)
-      if (!Array.isArray(batch) || !batch.length) return history
-      const valid = batch.filter((event) => event.task_id === runID && Number.isSafeInteger(event.seq) && event.seq > after)
-      if (!valid.length) return history
-      history.push(...valid)
-      after = Math.max(...valid.map((event) => event.seq))
-    }
-    throw new Error('История слишком велика для одной загрузки. Сохранённые сообщения доступны.')
-  }, [runID]), 0, 'chat.event_replay')
-  const doctor = useRemote(useCallback((signal) => api.doctor(signal), []), 30000, 'chat.doctor')
-  const health = useRemote(useCallback((signal) => api.health(signal), []), 15000, 'chat.health')
+  const run = useRemote(useCallback((signal) => runID ? api.conversationRun(runID, signal) : Promise.resolve<Run | null>(null), [runID]), 0, 'chat.run')
+  const runtime = useRemote(useCallback((signal) => runID ? api.runRuntime(runID, signal) : Promise.resolve<RunRuntime | null>(null), [runID]), 0, 'chat.runtime')
+  const runSetterRef = useRef(run.setData)
+  const runtimeSetterRef = useRef(runtime.setData)
+  runSetterRef.current = run.setData
+  runtimeSetterRef.current = runtime.setData
+  const doctor = useRemote(useCallback((signal) => api.doctor(signal), []), 60000, 'chat.doctor')
+  const health = useRemote(useCallback((signal) => api.health(signal), []), 60000, 'chat.health')
   const [mode, setMode] = useState<ConversationMode>('chat')
+  const modeRef = useRef(mode)
+  modeRef.current = mode
   const [text, setText] = useState('')
   const [title, setTitle] = useState('')
   const [editing, setEditing] = useState(false)
@@ -146,12 +139,21 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const [actionRetry, setActionRetry] = useState<(() => void) | null>(null)
   const [details, setDetails] = useState(false)
   const [connection, setConnection] = useState('idle')
+  const connectionRef = useRef(connection)
+  connectionRef.current = connection
   const [reconnect, setReconnect] = useState(0)
   const [follow, setFollow] = useState(true)
   const [optimistic, setOptimistic] = useState<ConversationMessage[]>([])
   const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 70rem)').matches)
   const listRef = useRef<HTMLDivElement>(null)
   const streamRef = useRef(transcript.stream)
+  const syncSchedulerRef = useRef<(resources: string[], reason: ReloadReason) => void>(() => {})
+  const syncFlushRef = useRef<(resources: string[], reason: ReloadReason) => void>(() => {})
+  const coalescedSyncRef = useRef<ReturnType<typeof createCoalescedScheduler> | null>(null)
+  const fallbackTimerRef = useRef<number | undefined>(undefined)
+  const fallbackDelayRef = useRef(15000)
+  const fallbackSchedulerRef = useRef<() => void>(() => {})
+  const closeEventStreamRef = useRef<() => void>(() => {})
   const alive = useRef(true)
   const submissionKey = useRef<{ content: string; key: string } | null>(null)
   const runActionKey = useRef<{ operation: string; key: string } | null>(null)
@@ -161,6 +163,8 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   streamRef.current = transcript.stream
   const active = !!runID && (!run.data || run.data.id !== runID || !terminal(run.data.status))
   const currentRun = run.data?.id === runID ? run.data : null
+  const currentRunRef = useRef<Run | null>(currentRun)
+  currentRunRef.current = currentRun
   useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
   useEffect(() => {
     const media = window.matchMedia('(max-width: 70rem)')
@@ -178,69 +182,11 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   useEffect(() => { if (!editing && conversation.data) setTitle(conversation.data.title) }, [conversation.data, editing])
   useEffect(() => { if (snapshots.data) dispatch({ type: 'snapshot', messages: snapshots.data }) }, [snapshots.data])
   useEffect(() => { dispatch({ type: 'run', id: runID }) }, [runID])
-  useEffect(() => { for (const event of [...(replay.data ?? [])].sort((a, b) => a.seq - b.seq)) dispatch({ type: 'event', event }) }, [replay.data])
   useEffect(() => { if (currentRun?.mode === 'research') setDetails(true) }, [currentRun?.id, currentRun?.mode])
   useEffect(() => {
     if (!follow || !listRef.current) return
     listRef.current.scrollTop = listRef.current.scrollHeight
   }, [transcript.messages, follow])
-
-  useEffect(() => {
-    if (!runID || (currentRun && terminal(currentRun.status))) { setConnection('idle'); return }
-    let disposed = false
-    let opened = false
-    let reconnecting = false
-    let closed = false
-    const endpoint = `/api/runs/${encodeURIComponent(runID)}/events/stream`
-    const closeStream = () => { if (opened && !closed) { closed = true; recordSSE('close', endpoint) } }
-    const cursor = streamRef.current.runID === runID ? streamRef.current.cursor : 0
-    setConnection('connecting')
-    const source = new EventSource(`${endpoint}?after=${cursor}`)
-    const receive = (raw: Event) => {
-      if (disposed) return
-      try {
-        const event = JSON.parse((raw as MessageEvent<string>).data) as AgentEvent
-        if (event.task_id !== runID) return
-        const isTerminal = ['task.completed', 'task.failed', 'task.cancelled'].includes(event.type)
-        recordReload('chat.transcript', isTerminal ? 'terminal' : 'sse_event')
-        dispatch({ type: 'event', event })
-        if (event.type === 'message.created' || isTerminal) {
-          const reason = isTerminal ? 'terminal' : 'sse_event'
-          void snapshots.reload(reason)
-          void run.reload(reason)
-          void conversation.reload(reason)
-          void runtime.reload(reason)
-        }
-      } catch { setConnection('invalid'); setError('Не удалось прочитать событие. Сохранённые сообщения продолжают обновляться.') }
-    }
-    for (const type of eventTypes) source.addEventListener(type, receive)
-    source.addEventListener('snapshot', (raw) => {
-      if (disposed) return
-      try { const next = JSON.parse((raw as MessageEvent<string>).data) as RunRuntime; if (next.task_id === runID && Number.isSafeInteger(next.cursor)) runtime.setData((previous) => previous?.task_id === runID && previous.cursor > next.cursor ? previous : next) } catch { setConnection('invalid') }
-    })
-    source.addEventListener('resync', (raw) => {
-      if (disposed) return
-      try { const next = JSON.parse((raw as MessageEvent<string>).data) as { cursor: number }; if (Number.isSafeInteger(next.cursor) && next.cursor >= 0) dispatch({ type: 'resync', id: runID, cursor: next.cursor }) } catch { setConnection('invalid') }
-      void snapshots.reload('sse_resync'); void run.reload('sse_resync'); void runtime.reload('sse_resync'); void replay.reload('sse_resync')
-    })
-    source.onopen = () => {
-      if (disposed) return
-      if (!opened) { opened = true; recordSSE('open', endpoint) }
-      else if (reconnecting) reconnecting = false
-      setConnection('live')
-      void snapshots.reload('sse_open')
-      void run.reload('sse_open')
-      void runtime.reload('sse_open')
-      void replay.reload('sse_open')
-    }
-    source.onerror = () => { if (!disposed) { setConnection('reconnecting'); if (!reconnecting) { reconnecting = true; recordSSE('reconnect', endpoint) } } }
-    return () => { disposed = true; source.close(); closeStream() }
-  }, [runID, currentRun?.status, reconnect, snapshots.reload, run.reload, conversation.reload, replay.reload, runtime.reload, runtime.setData])
-
-  useEffect(() => {
-    if (!transcript.stream.needsSync) return
-    void snapshots.reload('sse_resync')
-  }, [transcript.stream.needsSync, snapshots.reload])
 
   async function action(work: () => Promise<void>) {
     if (requestBusy.current) return
@@ -310,16 +256,129 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const content = [...transcript.messages.filter((message) => ['user', 'assistant'].includes(message.role)), ...optimistic]
   const latestAssistant = [...content].reverse().find((message) => message.role === 'assistant')
   const hasPartial = !!latestAssistant?.content.trim()
-  const research = useResearch(runID, details && mode === 'research', active)
+  const research = useResearch(runID, details && mode === 'research')
+  const scheduleFallback = useCallback(() => {
+    if (fallbackTimerRef.current !== undefined) return
+    fallbackTimerRef.current = window.setTimeout(() => {
+      fallbackTimerRef.current = undefined
+      if (!alive.current) return
+      const latestRun = currentRunRef.current
+      if (latestRun && terminal(latestRun.status)) { closeEventStreamRef.current(); setConnection('terminal'); return }
+      setConnection('degraded')
+      const resources = ['messages', 'run', 'runtime', 'conversation']
+      if (details && mode === 'research') resources.push('plan', 'sources', 'evidence')
+      syncSchedulerRef.current(resources, 'fallback_poll')
+      fallbackDelayRef.current = nextFallbackDelay(fallbackDelayRef.current)
+      fallbackSchedulerRef.current()
+    }, fallbackDelayRef.current)
+  }, [details, mode])
+  fallbackSchedulerRef.current = scheduleFallback
+  useEffect(() => {
+    if (!runID) { setConnection('idle'); return }
+    let disposed = false
+    let opened = false
+    let reconnecting = false
+    let closed = false
+    let terminalSeen = false
+    let stableTimer: number | undefined
+    const endpoint = `/api/runs/${encodeURIComponent(runID)}/events/stream`
+    const closeStream = () => { if (opened && !closed) { closed = true; recordSSE('close', endpoint) } }
+    const clearFallback = () => { window.clearTimeout(fallbackTimerRef.current); fallbackTimerRef.current = undefined }
+    const cursor = streamRef.current.runID === runID ? streamRef.current.cursor : 0
+    setConnection('connecting')
+    const source = new EventSource(`${endpoint}?after=${cursor}`)
+    const closeSource = () => { terminalSeen = true; source.close(); closeStream() }
+    closeEventStreamRef.current = closeSource
+    const receive = (raw: Event) => {
+      if (disposed) return
+      try {
+        const event = JSON.parse((raw as MessageEvent<string>).data) as AgentEvent
+        if (event.task_id !== runID) return
+        if (event.type !== 'message.delta') recordReload('chat.transcript', ['task.completed', 'task.failed', 'task.cancelled'].includes(event.type) ? 'terminal' : 'sse_event')
+        dispatch({ type: 'event', event })
+        const invalidation = runEventInvalidations(event, modeRef.current)
+        const isTerminal = invalidation.reason === 'terminal'
+        if (isTerminal) {
+          terminalSeen = true
+          clearFallback()
+          closeSource(); setConnection('terminal')
+        }
+        if (invalidation.resources.length) syncSchedulerRef.current(invalidation.resources, invalidation.reason)
+      } catch { setConnection('invalid'); setError('Не удалось прочитать событие. Сохранённые сообщения продолжают обновляться.') }
+    }
+    for (const type of eventTypes) source.addEventListener(type, receive)
+    source.addEventListener('snapshot', (raw) => {
+      if (disposed) return
+      try {
+        const next = JSON.parse((raw as MessageEvent<string>).data) as RunRuntime
+        if (next.task_id !== runID || !Number.isSafeInteger(next.cursor)) return
+        recordReload('chat.runtime', 'sse_open')
+        runtimeSetterRef.current((previous) => previous?.task_id === runID && previous.cursor > next.cursor ? previous : next)
+        runSetterRef.current((previous) => previous?.id === runID ? { ...previous, status: next.status, stage: next.stage, phase: next.stage, terminal_outcome: next.terminal_outcome, pause_reason: next.pause_reason, resource_reason: next.resource_reason } : previous)
+      } catch { setConnection('invalid') }
+    })
+    source.addEventListener('resync', (raw) => {
+      if (disposed) return
+      try {
+        const next = JSON.parse((raw as MessageEvent<string>).data) as { cursor: number }
+        if (!Number.isSafeInteger(next.cursor) || next.cursor < 0) throw new Error('invalid cursor')
+        dispatch({ type: 'resync', id: runID, cursor: next.cursor })
+        syncSchedulerRef.current(runResyncResources(modeRef.current), 'sse_resync')
+      } catch { setConnection('invalid') }
+    })
+    source.onopen = () => {
+      if (disposed) return
+      if (!opened) { opened = true; recordSSE('open', endpoint) }
+      reconnecting = false
+      if (!terminalSeen) setConnection('live')
+      window.clearTimeout(stableTimer)
+      stableTimer = window.setTimeout(() => {
+        if (connectionRef.current === 'live') { clearFallback(); fallbackDelayRef.current = 15000 }
+      }, 5000)
+    }
+    source.onerror = () => {
+      if (disposed || terminalSeen) return
+      window.clearTimeout(stableTimer)
+      const latestRun = currentRunRef.current
+      if (latestRun && terminal(latestRun.status)) { clearFallback(); closeSource(); setConnection('terminal'); return }
+      setConnection('reconnecting')
+      if (!reconnecting) { reconnecting = true; recordSSE('reconnect', endpoint) }
+      fallbackSchedulerRef.current()
+    }
+    return () => { disposed = true; source.close(); clearFallback(); window.clearTimeout(stableTimer); closeStream(); if (closeEventStreamRef.current === closeSource) closeEventStreamRef.current = () => {} }
+  }, [runID, reconnect])
   const references = useMemo(() => citationReferences(research.evidence.data ?? []), [research.evidence.data])
+  const flushSync = useCallback((resources: string[], syncReason: string) => {
+    for (const resource of resources) {
+      if (resource === 'messages') void snapshots.reload(syncReason as ReloadReason)
+      else if (resource === 'conversation') void conversation.reload(syncReason as ReloadReason)
+      else if (resource === 'run') void run.reload(syncReason as ReloadReason)
+      else if (resource === 'runtime') void runtime.reload(syncReason as ReloadReason)
+      else if (resource === 'plan' && details && mode === 'research') void research.plan.reload(syncReason as ReloadReason)
+      else if (resource === 'sources' && details && mode === 'research') void research.sources.reload(syncReason as ReloadReason)
+      else if (resource === 'evidence' && details && mode === 'research') void research.evidence.reload(syncReason as ReloadReason)
+      else if (resource === 'providers' && details && mode === 'research') void research.providers.reload(syncReason as ReloadReason)
+    }
+  }, [conversation.reload, details, mode, research.evidence.reload, research.plan.reload, research.providers.reload, research.sources.reload, run.reload, runtime.reload, snapshots.reload])
+  syncFlushRef.current = flushSync
+  if (!coalescedSyncRef.current) coalescedSyncRef.current = createCoalescedScheduler((resources, reason) => syncFlushRef.current(resources, reason), 300)
+  const scheduleSync = useCallback((resources: string[], reason: ReloadReason) => coalescedSyncRef.current?.schedule(resources, reason), [])
+  syncSchedulerRef.current = scheduleSync
+  useEffect(() => () => coalescedSyncRef.current?.cancel(), [])
+  useEffect(() => {
+    if (!transcript.stream.needsSync) return
+    const resources = ['messages', 'run', 'runtime']
+    if (mode === 'research') resources.push('plan', 'sources', 'evidence')
+    scheduleSync(resources, 'sse_resync')
+  }, [transcript.stream.needsSync, mode, scheduleSync])
   const backendReady = health.data?.status === 'ok' && health.data.database === 'ok' && !health.error
   const modelReady = doctor.data?.checks.llm?.status === 'ok'
-  const detailsContent = <ResearchPanel resources={{ ...research, runtime }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onPause={() => void action(async () => { await api.pause(runID); await run.reload(); await runtime.reload() })} onResume={() => void action(async () => { await api.resume(runID); await run.reload(); await runtime.reload() })} />
+  const detailsContent = <ResearchPanel resources={{ ...research, runtime }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onPause={() => void action(async () => { await api.pause(runID); await run.reload('user_action'); await runtime.reload('user_action') })} onResume={() => void action(async () => { await api.resume(runID); await run.reload('user_action'); await runtime.reload('user_action') })} />
 
   return <main className={`chat-main ${details ? 'chat-has-details' : ''}`}>
     <header className="chat-header"><button className="chat-mobile-menu" type="button" aria-label="Открыть разговоры" onClick={onSidebar}>☰</button><div className="chat-heading">{editing ? <form onSubmit={(event) => { event.preventDefault(); if (title.trim()) void action(async () => { const next = await api.updateConversation(id, { title: title.trim() }); if (alive.current) { conversation.setData(next); setEditing(false); void onChanged() } }) }}><input aria-label="Название разговора" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} autoFocus /><button type="submit" disabled={busy || !title.trim()}>Сохранить</button><button type="button" onClick={() => setEditing(false)}>Отмена</button></form> : <><h1>{conversation.data?.title || 'Новый разговор'}</h1><p>{mode === 'research' ? 'Deep Research' : 'Локальный чат'}<span aria-hidden="true"> · </span>{status}</p></>}</div><div className="chat-header-actions">{id && <><button type="button" onClick={() => setEditing(true)} disabled={busy} aria-label="Переименовать разговор">Название</button><button type="button" onClick={() => void action(async () => { await api.deleteConversation(id); if (alive.current) { void onChanged(); onSelect('') } })} disabled={busy || active} title={active ? 'Сначала остановите текущую генерацию' : 'Архивировать разговор'}>Удалить</button></>}<button type="button" aria-expanded={details} onClick={() => setDetails((value) => !value)}>Детали</button></div></header>
     <div className="chat-body"><section className="chat-center" aria-label="Текущий разговор"><div className="chat-health" role="status"><span className={backendReady ? 'chat-online' : ''}>Backend: {health.error ? 'нет связи' : backendReady ? 'доступен' : 'не проверен'}</span><span className={modelReady && !doctor.error ? 'chat-online' : ''}>Qwen: {doctor.error ? 'не проверена' : modelReady ? 'доступна' : 'недоступна / не проверена'}</span></div>
-      <ResourceStatus resource={conversation} /><ResourceStatus resource={snapshots} />{runID && <><ResourceStatus resource={run} /><ResourceStatus resource={replay} /></>}
+      <ResourceStatus resource={conversation} /><ResourceStatus resource={snapshots} />{runID && <ResourceStatus resource={run} />}
       <div className="chat-transcript" ref={listRef} onScroll={() => { const el = listRef.current; if (el) setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 100) }}>
         {!content.length && !snapshots.loading && <div className="chat-empty"><span className="chat-empty-mark">Q</span><h2>С чего начнём?</h2><p>Задайте вопрос локальной модели или выберите Deep Research для работы с источниками.</p><div><button type="button" onClick={() => { setMode('chat'); setText('Помоги разобраться в сложной теме') }}>Объяснить тему</button><button type="button" onClick={() => { setMode('research'); setDetails(true); setText('Сравни варианты и приведи проверяемые источники') }}>Исследовать вопрос</button></div></div>}
         {content.map((message) => <article className={`chat-message chat-role-${message.role}`} key={message.id} aria-label={message.role === 'user' ? 'Ваше сообщение' : 'Ответ Qwen'}><header><strong>{message.role === 'user' ? 'Вы' : 'Qwen'}</strong><time dateTime={message.created_at}>{stamp(message.created_at)}</time></header>{message.content ? <MessageContent message={message} runID={runID} references={references} /> : <p className="chat-muted">{active ? 'Готовлю ответ…' : 'Текст ответа отсутствует.'}</p>}{message.status === 'pending' && <p className="chat-muted">{busy ? 'Отправка…' : 'Не отправлено. Повторите действие.'}</p>}{message.role === 'assistant' && <footer className="chat-message-meta">{message.status === 'streaming' && active ? 'Ответ поступает' : ['cancelled', 'stopped', 'partial'].includes(message.status) ? 'Частичный ответ сохранён' : message.status === 'failed' ? 'Ответ не завершён' : ''}</footer>}</article>)}
@@ -331,8 +390,8 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
       {currentRun?.status === 'waiting_approval' && <p role="status">Нужно ваше решение. <a href="#/workspace">Открыть подтверждения в рабочем пространстве</a></p>}
       {error && <div className="chat-action-error" role="alert"><p>{error}</p>{actionRetry && <button type="button" onClick={actionRetry} disabled={busy}>Повторить действие</button>}</div>}
       {currentRun && !active && <div className="chat-answer-actions"><button type="button" disabled={busy} onClick={() => operate('retry')}>Повторить ответ</button><button type="button" disabled={busy || !hasPartial} title={!hasPartial ? 'Нет текста для продолжения' : 'Продолжить ответ новым запуском'} onClick={() => operate('continue')}>Продолжить ответ</button></div>}
-      <form className="chat-composer" onSubmit={send}><label htmlFor="conversation-input" className="sr-only">Сообщение</label><textarea id="conversation-input" rows={3} value={text} maxLength={20000} placeholder={mode === 'research' ? 'Что нужно исследовать?' : 'Напишите сообщение…'} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); send() } }} /><div className="chat-composer-controls"><label>Режим<select aria-label="Режим разговора" value={mode} disabled={busy || active} onChange={(event) => { const next = event.target.value as ConversationMode; if (!id) { setMode(next); setDetails(next === 'research'); return } void action(async () => { const result = await api.updateConversation(id, { mode: next }); if (alive.current) { conversation.setData(result); setMode(next); setDetails(next === 'research'); void onChanged() } }) }}><option value="chat">Chat</option><option value="research">Deep Research</option></select></label>{active ? <button className="chat-primary" type="button" disabled={busy || !currentRun || terminal(currentRun.status)} onClick={() => void action(async () => { const next = await api.cancelRun(runID); if (alive.current) { run.setData(next); void snapshots.reload(); void conversation.reload(); void onChanged() } })}>{busy ? 'Останавливаем…' : 'Остановить'}</button> : <button className="chat-primary" type="submit" disabled={busy || !text.trim() || (!!id && !conversation.data)}>{busy ? 'Отправляем…' : 'Отправить'}</button>}</div></form>
-      <div className="chat-composer-note"><span>{active ? 'Новый запрос доступен после завершения или остановки.' : 'Enter — отправить · Shift+Enter — новая строка'}</span>{runID && <span role="status">{connection === 'live' ? 'Поток подключён' : connection === 'connecting' ? 'Подключение…' : connection === 'reconnecting' ? 'Переподключение…' : connection === 'invalid' ? 'Ошибка потока' : 'Поток завершён'}</span>}{active && <button type="button" onClick={() => { setReconnect((value) => value + 1); void snapshots.reload(); void run.reload() }}>Переподключить</button>}</div>
+       <form className="chat-composer" onSubmit={send}><label htmlFor="conversation-input" className="sr-only">Сообщение</label><textarea id="conversation-input" rows={3} value={text} maxLength={20000} placeholder={mode === 'research' ? 'Что нужно исследовать?' : 'Напишите сообщение…'} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); send() } }} /><div className="chat-composer-controls"><label>Режим<select aria-label="Режим разговора" value={mode} disabled={busy || active} onChange={(event) => { const next = event.target.value as ConversationMode; if (!id) { setMode(next); setDetails(next === 'research'); return } void action(async () => { const result = await api.updateConversation(id, { mode: next }); if (alive.current) { conversation.setData(result); setMode(next); setDetails(next === 'research'); void onChanged() } }) }}><option value="chat">Chat</option><option value="research">Deep Research</option></select></label>{active ? <button className="chat-primary" type="button" disabled={busy || !currentRun || terminal(currentRun.status)} onClick={() => void action(async () => { const next = await api.cancelRun(runID); if (alive.current) { run.setData(next); scheduleSync(['messages', 'conversation', 'run', 'runtime'], 'user_action'); void onChanged() } })}>{busy ? 'Останавливаем…' : 'Остановить'}</button> : <button className="chat-primary" type="submit" disabled={busy || !text.trim() || (!!id && !conversation.data)}>{busy ? 'Отправляем…' : 'Отправить'}</button>}</div></form>
+      <div className="chat-composer-note"><span>{active ? 'Новый запрос доступен после завершения или остановки.' : 'Enter — отправить · Shift+Enter — новая строка'}</span>{runID && <span role="status">{connection === 'live' ? 'Поток подключён' : connection === 'connecting' ? 'Подключение…' : connection === 'reconnecting' ? 'Переподключение…' : connection === 'degraded' ? 'Резервная синхронизация' : connection === 'invalid' ? 'Ошибка потока' : connection === 'terminal' ? 'Поток завершён' : 'Нет активного потока'}</span>}{active && <button type="button" onClick={() => { recordReload('chat.stream', 'manual_retry'); setReconnect((value) => value + 1) }}>Переподключить</button>}</div>
     </section>{details && !mobile && <aside className="chat-research-desktop" aria-label="Детали исследования">{detailsContent}</aside>}</div>{details && mobile && <Drawer title="Детали исследования" onClose={() => setDetails(false)}>{detailsContent}</Drawer>}
   </main>
 }
@@ -343,15 +402,14 @@ function MessageContent({ message, runID, references }: { message: ConversationM
   return <><MarkdownMessage content={message.content} references={message.role === 'assistant' ? refs : []} />{historical.error && <p className="chat-muted">Ссылки этого ответа временно недоступны. <button type="button" onClick={() => void historical.reload()}>Загрузить источники</button></p>}</>
 }
 
-function useResearch(runID: string, enabled: boolean, active: boolean) {
-  const poll = enabled && active ? 5000 : 0
-  const plan = useRemote(useCallback((signal) => enabled && runID ? api.runPlan(runID, signal) : Promise.resolve<ResearchPlan | null>(null), [enabled, runID]), poll, 'research.plan')
-  const sources = useRemote(useCallback(async (signal) => enabled && runID ? normalizeSources(await api.runSources(runID, signal)) : [], [enabled, runID]), poll, 'research.sources')
+function useResearch(runID: string, enabled: boolean) {
+  const plan = useRemote(useCallback((signal) => enabled && runID ? api.runPlan(runID, signal) : Promise.resolve<ResearchPlan | null>(null), [enabled, runID]), 0, 'research.plan')
+  const sources = useRemote(useCallback(async (signal) => enabled && runID ? normalizeSources(await api.runSources(runID, signal)) : [], [enabled, runID]), 0, 'research.sources')
   const evidence = useRemote(useCallback(async (signal) => {
-    if (!runID) return []
+    if (!enabled || !runID) return []
     const result = await api.runEvidence(runID, signal)
     return (Array.isArray(result) ? result : []) as Evidence[]
-  }, [runID]), active ? 5000 : 0, 'research.evidence')
-  const providers = useRemote(useCallback((signal) => enabled ? api.providers(signal) : Promise.resolve(null), [enabled]), poll, 'research.providers')
+  }, [enabled, runID]), 0, 'research.evidence')
+  const providers = useRemote(useCallback((signal) => enabled ? api.providers(signal) : Promise.resolve(null), [enabled]), 0, 'research.providers')
   return { plan, sources, evidence, providers }
 }

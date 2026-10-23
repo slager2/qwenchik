@@ -1,11 +1,12 @@
 import { ProviderCard } from './diagnostic-ui.mjs'
 import RunStatus from './RunStatus'
+import type { ReloadReason } from './network-debug'
 import { safeURL } from './conversation-state.mjs'
 import { diagnosticSummary } from './observability.mjs'
 import { formatSourceBytes, publicResearchEvents, researchError, researchQueries, researchSources, researchSteps } from './research-state.mjs'
 import type { AgentEvent, Evidence, ProvidersResponse, ResearchPlan, Run, RunRuntime, SourceRecord } from './types'
 
-interface Remote<T> { data?: T; error: string; loading: boolean; reload: () => Promise<void> }
+interface Remote<T> { data?: T; error: string; loading: boolean; reload: (reason?: ReloadReason) => Promise<void> }
 interface Resources {
   plan: Remote<ResearchPlan | null>
   sources: Remote<SourceRecord[]>
@@ -85,7 +86,7 @@ export default function ResearchPanel({ resources, events, run, showHeading = tr
       <ul className="chat-source-cards">{(evidence.data ?? []).map((item) => <li key={item.id}><strong>{item.title || 'Сохранённый источник'}</strong><p>{item.excerpt}</p>{safeURL(item.canonical_url) && <a href={safeURL(item.canonical_url)} target="_blank" rel="noopener noreferrer">Открыть источник</a>}<small>{item.provider} · {item.extraction_method}</small></li>)}</ul>
       <p className="chat-muted">Ссылки подтверждают наличие источника, а не проверку каждого утверждения.</p>
     </section>
-    <section><h3>Поисковые провайдеры</h3><Status resource={providers} empty={!providers.data} />{Object.entries(providers.data?.search.providers ?? {}).map(([name, provider]) => <ProviderCard key={name} name={name} provider={provider} checkedLabel={provider.last_checked ? stamp(provider.last_checked) : ''} />)}</section>
+    <section><h3>Поисковые провайдеры</h3><button type="button" disabled={providers.loading} onClick={() => void providers.reload('manual_retry')}>{providers.loading ? 'Обновляем…' : 'Обновить состояние провайдеров'}</button><Status resource={providers} empty={!providers.data} />{Object.entries(providers.data?.search.providers ?? {}).map(([name, provider]) => <ProviderCard key={name} name={name} provider={provider} checkedLabel={provider.last_checked ? stamp(provider.last_checked) : ''} />)}</section>
     <section><h3>Действия</h3>{!activity.length && <p className="chat-muted">События появятся во время работы.</p>}
       <ol>{activity.slice(-30).reverse().map((event) => <li key={event.seq}>
         <strong>{({ 'context.compacted': 'Рабочий контекст сжат', 'continuation.requested': 'Ограниченное продолжение исследования', 'verification.completed': 'Проверка готовности evidence', 'run.paused': 'Запуск на паузе', 'run.resumed': 'Запуск возобновлён', 'run.blocked': 'Запуск заблокирован' } as Record<string, string>)[event.type] || (event.type === 'search.provider' ? 'Результат провайдера' : event.type === 'tool.failed' ? 'Не удалось выполнить действие' : event.type === 'tool.started' ? 'Выполняется действие' : event.type === 'plan.created' ? 'План сохранён' : event.type === 'evidence.created' ? 'Источник сохранён' : labels[String(event.payload.to || event.stage || '')] || 'Состояние обновлено')}</strong>
