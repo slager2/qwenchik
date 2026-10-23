@@ -16,6 +16,8 @@ export function normalizeEndpoint(input: string): string {
   const parts = endpointPath(input)
   if (parts[0] !== 'api' || parts.length < 2 || parts.length > 6 || !staticEndpoints.has(parts[1])) return '/api/:endpoint'
   const root = parts[1]
+  if (root === 'memories' && parts.length === 3 && parts[2] === 'search') return '/api/memories/search'
+  if (root === 'bundles' && parts.length === 3 && parts[2] === 'rollback') return '/api/bundles/rollback'
   if (dynamicRoots.has(root)) {
     if (parts.length < 3) return `/api/${root}`
     const suffix = parts.slice(3)
@@ -49,12 +51,12 @@ function endpointStats(method: string, endpoint: string) {
   return state.requests.by_endpoint[key] ??= { count: 0, aborted: 0, failures: 0, bytes_reported: 0, response_bytes_total: 0, duration_ms_total: 0 }
 }
 
-export function recordRequest(value: { method: string; path: string; status?: number; duration_ms: number; response_bytes?: number; aborted?: boolean }) {
+export function recordRequest(value: { method: string; path: string; status?: number; duration_ms: number; response_bytes?: number; aborted?: boolean; failed?: boolean }) {
   const endpoint = normalizeEndpoint(value.path)
   const method = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(value.method.toUpperCase()) ? value.method.toUpperCase() : 'OTHER'
   const stats = endpointStats(method, endpoint)
   const aborted = value.aborted === true
-  const failed = typeof value.status !== 'number' || value.status >= 400
+  const failed = value.failed === true || typeof value.status !== 'number' || value.status >= 400
   const bytesKnown = Number.isSafeInteger(value.response_bytes) && value.response_bytes! >= 0
   state.requests.count++; stats.count++
   if (aborted) { state.requests.aborted++; stats.aborted++ }

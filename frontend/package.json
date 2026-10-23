@@ -9,6 +9,7 @@
     "typecheck": "tsc -b --pretty false",
     "test": "node --import tsx --test src/*.test.mjs",
     "test:browser": "node tests/browser.mjs",
+    "test:production": "node tests/production-browser.mjs",
     "test:browser:live": "node tests/live-browser.mjs"
   },
   "dependencies": {

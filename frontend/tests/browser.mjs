@@ -43,6 +43,7 @@ let planFail = false
 let providersFail = false
 let messagesFail = false
 let doctorBlocked = true
+let healthMalformed = false
 let sourceRequests = 0
 let evidenceRequests = 0
 let legacyEvidenceDone = false
@@ -98,7 +99,7 @@ try {
     const json = (value, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) })
     if (parts[1] === 'tasks' && parts[2] === activeWorkspaceTask.id && method === 'GET') workspaceEventRequests.push(`${parts.slice(3).join('/') || 'task'}`)
     if (parts[1] === 'doctor') return doctorBlocked ? route.abort('blockedbyclient') : json({ status: 'ok', checks: { app: { status: 'ok' }, database: { status: 'ok' }, worker: { status: 'ok' }, llm: { status: 'ok' } } })
-    if (parts[1] === 'health') return json({ status: 'ok', database: 'ok' })
+    if (parts[1] === 'health') return healthMalformed ? route.fulfill({ status: 200, contentType: 'application/json', body: '{invalid json' }) : json({ status: 'ok', database: 'ok' })
     if (parts[1] === 'providers') return providersFail ? json({ error: { message: 'Провайдеры недоступны' } }, 503) : json({ search: { providers: {} } })
     if (parts[1] === 'memories') return json([])
     if (parts[1] === 'tasks') {
@@ -199,6 +200,14 @@ try {
   assert.equal(initialDebug.marker, 'QWENCHIK_DEV_NETWORK_DIAGNOSTICS_V1')
   await page.getByText('Backend: доступен', { exact: true }).waitFor()
   await page.getByText('Qwen: не проверена', { exact: true }).waitFor()
+  const priorFailures = initialDebug.requests.by_endpoint['GET /api/health']?.failures || 0
+  healthMalformed = true
+  await page.reload()
+  await page.getByText('Backend: нет связи', { exact: true }).waitFor()
+  await page.waitForFunction((before) => (window.__qwenchikDebug?.snapshot().requests.by_endpoint['GET /api/health']?.failures || 0) > before, priorFailures)
+  healthMalformed = false
+  await page.reload()
+  await page.getByText('Backend: доступен', { exact: true }).waitFor()
   doctorBlocked = false
   await page.getByRole('link', { name: /Исследование/ }).click()
   await page.getByRole('heading', { name: 'Результат', exact: true }).waitFor()

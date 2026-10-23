@@ -21,10 +21,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let status: number | undefined
   let responseBytes: number | undefined
   let recorded = false
-  const record = (aborted = false) => {
+  const record = (aborted = false, failed = false) => {
     if (recorded) return
     recorded = true
-    recordHTTP({ method, path, status, duration_ms: performance.now() - started, response_bytes: responseBytes, aborted })
+    recordHTTP({ method, path, status, duration_ms: performance.now() - started, response_bytes: responseBytes, aborted, failed })
   }
   try {
     const response = await fetch(path, {
@@ -49,7 +49,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       throw new ApiError(message, response.status, code, retryable)
     }
     if (response.status === 204) { record(); return undefined as T }
-    const result = await response.json() as T
+    let result: T
+    try { result = await response.json() as T }
+    catch (caught) { record(false, true); throw caught }
     record()
     return result
   } catch (caught) {

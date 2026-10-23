@@ -2,7 +2,7 @@ export type ReloadReason = 'initial' | 'sse_open' | 'sse_event' | 'sse_resync' |
 
 if (import.meta.env.DEV) void import('./network-debug-store').then(({ install }) => install())
 
-export function recordHTTP(value: { method: string; path: string; status?: number; duration_ms: number; response_bytes?: number; aborted?: boolean }) {
+export function recordHTTP(value: { method: string; path: string; status?: number; duration_ms: number; response_bytes?: number; aborted?: boolean; failed?: boolean }) {
   if (import.meta.env.DEV) void import('./network-debug-store').then(({ install, recordRequest }) => { install(); recordRequest(value) })
 }
 
