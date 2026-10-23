@@ -202,11 +202,20 @@ func (w *Worker) probeResourcePauses(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		_, violation, probeErr := w.options.ResourceMonitor.Check(ctx)
+		snapshot, _, probeErr := w.options.ResourceMonitor.Check(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		violation := resources.CheckRecovery(snapshot, w.options.ResourcePolicy, task.ResourceReason)
+		if probeErr != nil {
+			violation = &resources.Violation{Code: "telemetry_unavailable", Message: "resource telemetry probe failed", Snapshot: snapshot}
+		}
 		healthy := probeErr == nil && violation == nil
-		reason := "telemetry_unavailable"
-		if violation != nil {
-			reason = violation.Code
+		reason := task.ResourceReason
+		if !healthy && violation != nil && violation.Code == "telemetry_unavailable" {
+			reason = "telemetry_unavailable"
+		} else if reason == "" {
+			reason = "telemetry_unavailable"
 		}
 		next := time.Now().Add(w.options.ResourcePolicy.Backoff(task.ResourceProbeAttempts + 2))
 		if _, err := repo.ResolveResourceProbe(ctx, task.ID, healthy, reason, next, w.options.ResourcePolicy.MaxResumeAttempts); err == nil && healthy {

@@ -29,6 +29,7 @@ type runtimeGuardMonitor struct {
 	probeErr    error
 	calls       int
 	last        resources.Snapshot
+	sample      *resources.Snapshot
 	beforeCheck func(context.Context)
 }
 
@@ -64,15 +65,22 @@ func (m *runtimeGuardMonitor) Check(ctx context.Context) (resources.Snapshot, *r
 		return resources.Snapshot{}, nil, err
 	}
 	m.calls++
-	ram := int64(2 << 30)
-	if m.lowRAM {
-		ram = 1
-	}
-	s := resources.Snapshot{
-		SnapshotAt: time.Now().UTC(), FreeRAMBytes: &ram,
-		RSSBytes: runtimeGuardPtr(int64(64 << 20)), HeapAllocBytes: runtimeGuardPtr(uint64(32 << 20)),
-		LlamaHealthy: runtimeGuardPtr(true), PowerSource: resources.PowerUnknown,
-		Warnings: []string{"fake GPU telemetry unknown"},
+	var s resources.Snapshot
+	if m.sample != nil {
+		s = runtimeGuardCopySnapshot(*m.sample)
+	} else {
+		ram := int64(2 << 30)
+		staleAfter := int64(time.Minute / time.Millisecond)
+		if m.lowRAM {
+			ram = 1
+		}
+		s = resources.Snapshot{
+			SnapshotAt: time.Now().UTC(), FreeRAMBytes: &ram,
+			RSSBytes: runtimeGuardPtr(int64(64 << 20)), HeapAllocBytes: runtimeGuardPtr(uint64(32 << 20)),
+			LlamaHealthy: runtimeGuardPtr(true), PowerSource: resources.PowerUnknown,
+			StaleAfterMS: &staleAfter,
+			Warnings:     []string{"fake GPU telemetry unknown"},
+		}
 	}
 	m.last = s
 	return runtimeGuardCopySnapshot(s), resources.Check(s, m.policy), m.probeErr
@@ -85,11 +93,23 @@ func runtimeGuardCopySnapshot(s resources.Snapshot) resources.Snapshot {
 	if s.RSSBytes != nil {
 		s.RSSBytes = runtimeGuardPtr(*s.RSSBytes)
 	}
+	if s.GPUFreeVRAMMB != nil {
+		s.GPUFreeVRAMMB = runtimeGuardPtr(*s.GPUFreeVRAMMB)
+	}
+	if s.GPUTempC != nil {
+		s.GPUTempC = runtimeGuardPtr(*s.GPUTempC)
+	}
 	if s.HeapAllocBytes != nil {
 		s.HeapAllocBytes = runtimeGuardPtr(*s.HeapAllocBytes)
 	}
 	if s.LlamaHealthy != nil {
 		s.LlamaHealthy = runtimeGuardPtr(*s.LlamaHealthy)
+	}
+	if s.StaleAfterMS != nil {
+		s.StaleAfterMS = runtimeGuardPtr(*s.StaleAfterMS)
+	}
+	if s.StaleAfterMS != nil {
+		s.StaleAfterMS = runtimeGuardPtr(*s.StaleAfterMS)
 	}
 	s.Warnings = append([]string(nil), s.Warnings...)
 	return s
@@ -103,6 +123,19 @@ func (m *runtimeGuardMonitor) LastSnapshot() resources.Snapshot {
 
 func (m *runtimeGuardMonitor) setLowRAM(low bool) { m.mu.Lock(); m.lowRAM = low; m.mu.Unlock() }
 func (m *runtimeGuardMonitor) count() int         { m.mu.Lock(); defer m.mu.Unlock(); return m.calls }
+func (m *runtimeGuardMonitor) setSample(s resources.Snapshot) {
+	m.mu.Lock()
+	if s.SnapshotAt.IsZero() {
+		s.SnapshotAt = time.Now().UTC()
+	}
+	if s.StaleAfterMS == nil {
+		staleAfter := int64(time.Minute / time.Millisecond)
+		s.StaleAfterMS = &staleAfter
+	}
+	sample := runtimeGuardCopySnapshot(s)
+	m.sample = &sample
+	m.mu.Unlock()
+}
 
 type runtimeGuardSleep struct {
 	mu          sync.Mutex
@@ -191,8 +224,12 @@ func runtimeGuardMakeProbeDue(t *testing.T, f *researchRunFixture) {
 }
 
 func runtimeGuardPauseDue(t *testing.T, f *researchRunFixture) {
+	runtimeGuardPauseForReason(t, f, "low_ram")
+}
+
+func runtimeGuardPauseForReason(t *testing.T, f *researchRunFixture, reason string) {
 	t.Helper()
-	if _, err := f.store.PauseTaskForResource(runtimeGuardLeaseContext(f.task), f.task.ID, "low_ram", time.Now().Add(-time.Second), nil); err != nil {
+	if _, err := f.store.PauseTaskForResource(runtimeGuardLeaseContext(f.task), f.task.ID, reason, time.Now().Add(-time.Second), nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -365,6 +402,81 @@ func TestRuntimeGuardHealthyDueProbeResumesAfterRestartWithoutReset(t *testing.T
 		t.Fatal("queued task was probed or executed again")
 	}
 }
+
+func TestRuntimeGuardResumesOnlyAfterRecoveryMarginClears(t *testing.T) {
+	f := newResearchRunStore(t)
+	f.submit(t, "Hello", nil)
+	runtimeGuardPauseDue(t, f)
+	opts, monitor, _ := runtimeGuardOptions()
+	minimum := opts.ResourcePolicy.MinFreeRAMBytes
+	margin := minimum/100*10 + (minimum%100*10+99)/100
+	monitor.setSample(resources.Snapshot{
+		FreeRAMBytes: ptrForRuntimeGuard(minimum + margin - 1),
+		RSSBytes:     ptrForRuntimeGuard(int64(64 << 20)),
+		LlamaHealthy: ptrForRuntimeGuard(true),
+	})
+	w := New(f.store, &researchRunModel{}, tools.NewRegistry(), opts)
+	w.probeResourcePauses(context.Background())
+	task := runtimeGuardTask(t, f)
+	if task.Status != domain.StatusPaused || task.ResourceProbeAttempts != 1 || task.ResourceReason != "low_ram" {
+		t.Fatalf("task resumed before RAM recovery margin cleared: %+v", task)
+	}
+
+	runtimeGuardMakeProbeDue(t, f)
+	monitor.setSample(resources.Snapshot{
+		FreeRAMBytes: ptrForRuntimeGuard(minimum + margin),
+		RSSBytes:     ptrForRuntimeGuard(int64(64 << 20)),
+		LlamaHealthy: ptrForRuntimeGuard(true),
+	})
+	w.probeResourcePauses(context.Background())
+	task = runtimeGuardTask(t, f)
+	if task.Status != domain.StatusQueued || task.ResourceProbeAttempts != 2 || task.PauseReason != "" {
+		t.Fatalf("task did not resume at RAM recovery boundary: %+v", task)
+	}
+	resumed := 0
+	for _, event := range runtimeGuardEvents(t, f) {
+		if event.Type == "run.resumed" {
+			resumed++
+		}
+	}
+	if resumed != 1 || monitor.count() != 2 {
+		t.Fatalf("resume count=%d probes=%d, want one clearance resume after two probes", resumed, monitor.count())
+	}
+}
+
+func TestRuntimeGuardTelemetryPauseRequiresObservableEnabledMetrics(t *testing.T) {
+	f := newResearchRunStore(t)
+	f.submit(t, "Hello", nil)
+	runtimeGuardPauseForReason(t, f, "telemetry_unavailable")
+	opts, monitor, _ := runtimeGuardOptions()
+	monitor.setSample(resources.Snapshot{
+		FreeRAMBytes: ptrForRuntimeGuard(opts.ResourcePolicy.MinFreeRAMBytes * 2),
+		RSSBytes:     ptrForRuntimeGuard(int64(64 << 20)),
+		GPUTempC:     ptrForRuntimeGuard(70.0),
+		LlamaHealthy: ptrForRuntimeGuard(true),
+	})
+	w := New(f.store, &researchRunModel{}, tools.NewRegistry(), opts)
+	w.probeResourcePauses(context.Background())
+	task := runtimeGuardTask(t, f)
+	if task.Status != domain.StatusPaused || task.ResourceProbeAttempts != 1 || task.ResourceReason != "telemetry_unavailable" {
+		t.Fatalf("telemetry pause resumed without VRAM observation: %+v", task)
+	}
+
+	runtimeGuardMakeProbeDue(t, f)
+	monitor.setSample(resources.Snapshot{
+		FreeRAMBytes:  ptrForRuntimeGuard(opts.ResourcePolicy.MinFreeRAMBytes * 2),
+		RSSBytes:      ptrForRuntimeGuard(int64(64 << 20)),
+		GPUFreeVRAMMB: ptrForRuntimeGuard(opts.ResourcePolicy.MinFreeVRAMMB * 2),
+		GPUTempC:      ptrForRuntimeGuard(70.0),
+		LlamaHealthy:  ptrForRuntimeGuard(true),
+	})
+	w.probeResourcePauses(context.Background())
+	if task = runtimeGuardTask(t, f); task.Status != domain.StatusQueued || task.ResourceProbeAttempts != 2 {
+		t.Fatalf("fully observable healthy telemetry did not resume: %+v", task)
+	}
+}
+
+func ptrForRuntimeGuard[T any](value T) *T { return &value }
 
 func TestRuntimeGuardFailedProbesBackOffAndStopAtFiniteCap(t *testing.T) {
 	f := newResearchRunStore(t)

@@ -35,7 +35,7 @@ func TestPolicyAndBackoff(t *testing.T) {
 	if err := p.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if !p.Enabled || p.MinFreeRAMBytes != 512<<20 || p.MinFreeVRAMMB != 256 || p.GPUTempMaxC != 85 || p.ProcessRSSMaxBytes != 2<<30 || p.LlamaHealthTimeout != 2*time.Second || p.CheckInterval != 5*time.Second || p.MaxResumeAttempts != 5 {
+	if !p.Enabled || p.MinFreeRAMBytes != 512<<20 || p.MinFreeVRAMMB != 256 || p.GPUTempMaxC != 85 || p.ProcessRSSMaxBytes != 2<<30 || p.RecoveryRAMMarginPercent != 10 || p.RecoveryVRAMMarginPercent != 10 || p.RecoveryGPUTempMarginC != 5 || p.RecoveryRSSMarginPercent != 10 || p.LlamaHealthTimeout != 2*time.Second || p.CheckInterval != 5*time.Second || p.MaxResumeAttempts != 5 {
 		t.Fatalf("defaults: %+v", p)
 	}
 	for attempt, want := range map[int]time.Duration{-1: 5 * time.Second, 0: 5 * time.Second, 1: 5 * time.Second, 2: 10 * time.Second, 3: 20 * time.Second, 4: 40 * time.Second, 5: 60 * time.Second, math.MaxInt: 60 * time.Second} {
@@ -50,6 +50,9 @@ func TestPolicyAndBackoff(t *testing.T) {
 	for _, mutate := range []func(*Policy){
 		func(p *Policy) { p.MinFreeRAMBytes = -1 }, func(p *Policy) { p.MinFreeVRAMMB = -1 }, func(p *Policy) { p.ProcessRSSMaxBytes = -1 },
 		func(p *Policy) { p.GPUTempMaxC = math.NaN() }, func(p *Policy) { p.GPUTempMaxC = math.Inf(1) }, func(p *Policy) { p.GPUTempMaxC = -1 },
+		func(p *Policy) { p.RecoveryRAMMarginPercent = -1 }, func(p *Policy) { p.RecoveryRAMMarginPercent = 101 },
+		func(p *Policy) { p.RecoveryVRAMMarginPercent = 101 }, func(p *Policy) { p.RecoveryRSSMarginPercent = 101 },
+		func(p *Policy) { p.RecoveryGPUTempMarginC = math.NaN() }, func(p *Policy) { p.RecoveryGPUTempMarginC = 86 },
 		func(p *Policy) { p.LlamaHealthTimeout = 0 }, func(p *Policy) { p.CheckInterval = -1 }, func(p *Policy) { p.MaxResumeAttempts = 0 },
 		func(p *Policy) { p.BackoffBase = -1 }, func(p *Policy) { p.BackoffMax = 1 },
 	} {
@@ -92,6 +95,128 @@ func TestCheckThresholdsAndUnknown(t *testing.T) {
 	b, err := json.Marshal(Snapshot{})
 	if err != nil || !strings.Contains(string(b), `"gpu_temp_c":null`) || !strings.Contains(string(b), `"llama_healthy":null`) || strings.Contains(string(b), `"system"`) || strings.Contains(string(b), `"capabilities"`) || strings.Contains(string(b), `"stale_after_ms"`) {
 		t.Fatalf("unknown JSON %s %v", b, err)
+	}
+}
+
+func TestRecoveryHysteresisBoundaries(t *testing.T) {
+	p := DefaultPolicy()
+	p.MinFreeRAMBytes = 100
+	p.MinFreeVRAMMB = 100
+	p.ProcessRSSMaxBytes = 100
+	p.GPUTempMaxC = 85
+	p.RecoveryRAMMarginPercent = 10
+	p.RecoveryVRAMMarginPercent = 10
+	p.RecoveryRSSMarginPercent = 10
+	p.RecoveryGPUTempMarginC = 5
+	good := Snapshot{
+		SnapshotAt:    time.Now().UTC(),
+		StaleAfterMS:  ptr(int64(60_000)),
+		FreeRAMBytes:  ptr(int64(110)),
+		RSSBytes:      ptr(int64(90)),
+		GPUFreeVRAMMB: ptr(int64(110)),
+		GPUTempC:      ptr(80.0),
+		LlamaHealthy:  ptr(true),
+	}
+	if violation := CheckRecovery(good, p, "low_ram"); violation != nil {
+		t.Fatalf("recovery thresholds should be inclusive at clearance: %+v", violation)
+	}
+	if violation := CheckRecovery(good, p, "unknown_pause_reason"); violation == nil || violation.Code != "telemetry_unavailable" {
+		t.Fatalf("unknown pause reason was considered recoverable: %+v", violation)
+	}
+	for _, tc := range []struct {
+		name   string
+		code   string
+		mutate func(*Snapshot)
+	}{
+		{"RAM", "low_ram", func(s *Snapshot) { s.FreeRAMBytes = ptr(int64(109)) }},
+		{"RSS", "high_rss", func(s *Snapshot) { s.RSSBytes = ptr(int64(91)) }},
+		{"VRAM", "low_vram", func(s *Snapshot) { s.GPUFreeVRAMMB = ptr(int64(109)) }},
+		{"GPU temperature", "gpu_temperature", func(s *Snapshot) { s.GPUTempC = ptr(80.01) }},
+		{"llama health", "llama_unhealthy", func(s *Snapshot) { s.LlamaHealthy = ptr(false) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := clone(good)
+			tc.mutate(&s)
+			if violation := CheckRecovery(s, p, "low_ram"); violation == nil || violation.Code != tc.code {
+				t.Fatalf("recovery violation = %+v, want %s", violation, tc.code)
+			}
+		})
+	}
+}
+
+func TestRecoveryRequiresReasonTelemetryAndStrictTelemetryRecovery(t *testing.T) {
+	p := DefaultPolicy()
+	complete := Snapshot{
+		SnapshotAt:    time.Now().UTC(),
+		StaleAfterMS:  ptr(int64(60_000)),
+		FreeRAMBytes:  ptr(p.MinFreeRAMBytes * 2),
+		RSSBytes:      ptr(p.ProcessRSSMaxBytes / 2),
+		GPUFreeVRAMMB: ptr(p.MinFreeVRAMMB * 2),
+		GPUTempC:      ptr(p.GPUTempMaxC - p.RecoveryGPUTempMarginC),
+		LlamaHealthy:  ptr(true),
+	}
+
+	for _, tc := range []struct {
+		reason string
+		remove func(*Snapshot)
+	}{
+		{"low_ram", func(s *Snapshot) { s.FreeRAMBytes = nil }},
+		{"high_rss", func(s *Snapshot) { s.RSSBytes = nil }},
+		{"low_vram", func(s *Snapshot) { s.GPUFreeVRAMMB = nil }},
+		{"gpu_temperature", func(s *Snapshot) { s.GPUTempC = nil }},
+		{"llama_unhealthy", func(s *Snapshot) { s.LlamaHealthy = nil }},
+	} {
+		s := clone(complete)
+		tc.remove(&s)
+		if violation := CheckRecovery(s, p, tc.reason); violation == nil || violation.Code != "telemetry_unavailable" {
+			t.Errorf("missing metric for %s pause = %+v, want telemetry_unavailable", tc.reason, violation)
+		}
+	}
+
+	// Unknown unrelated GPU/system telemetry is not a violation during a RAM
+	// recovery probe. Only an unknown metric tied to the pause blocks recovery.
+	unrelatedUnknown := clone(complete)
+	unrelatedUnknown.GPUFreeVRAMMB = nil
+	unrelatedUnknown.GPUTempC = nil
+	unrelatedUnknown.System = &domain.SystemTelemetry{}
+	if violation := CheckRecovery(unrelatedUnknown, p, "low_ram"); violation != nil {
+		t.Fatalf("unrelated unknown telemetry blocked RAM recovery: %+v", violation)
+	}
+	llamaUnknown := clone(complete)
+	llamaUnknown.LlamaHealthy = nil
+	if violation := CheckRecovery(llamaUnknown, p, "low_ram"); violation == nil || violation.Code != "telemetry_unavailable" {
+		t.Fatalf("missing llama health was accepted for recovery: %+v", violation)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*Snapshot)
+	}{
+		{"RAM", func(s *Snapshot) { s.FreeRAMBytes = nil }},
+		{"RSS", func(s *Snapshot) { s.RSSBytes = nil }},
+		{"VRAM", func(s *Snapshot) { s.GPUFreeVRAMMB = nil }},
+		{"GPU temperature", func(s *Snapshot) { s.GPUTempC = nil }},
+		{"llama health", func(s *Snapshot) { s.LlamaHealthy = nil }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := clone(complete)
+			tc.mutate(&s)
+			if violation := CheckRecovery(s, p, "telemetry_unavailable"); violation == nil || violation.Code != "telemetry_unavailable" {
+				t.Fatalf("missing telemetry recovery metric = %+v", violation)
+			}
+		})
+	}
+	if violation := CheckRecovery(complete, p, "telemetry_unavailable"); violation != nil {
+		t.Fatalf("fully observable healthy recovery was blocked: %+v", violation)
+	}
+	stale := clone(complete)
+	stale.SnapshotAt = time.Now().Add(-time.Minute - time.Second)
+	if violation := CheckRecovery(stale, p, "telemetry_unavailable"); violation == nil || violation.Code != "telemetry_unavailable" {
+		t.Fatalf("stale recovery snapshot was accepted: %+v", violation)
+	}
+	complete.LlamaHealthy = ptr(false)
+	if violation := CheckRecovery(complete, p, "telemetry_unavailable"); violation == nil || violation.Code != "llama_unhealthy" {
+		t.Fatalf("unhealthy llama recovery = %+v", violation)
 	}
 }
 

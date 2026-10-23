@@ -33,6 +33,21 @@ func loadResourcePolicy(c *Config) error {
 		return err
 	}
 	for _, item := range []struct {
+		name   string
+		target *int
+	}{
+		{"RESOURCE_RECOVERY_RAM_MARGIN_PERCENT", &p.RecoveryRAMMarginPercent},
+		{"RESOURCE_RECOVERY_VRAM_MARGIN_PERCENT", &p.RecoveryVRAMMarginPercent},
+		{"RESOURCE_RECOVERY_RSS_MARGIN_PERCENT", &p.RecoveryRSSMarginPercent},
+	} {
+		if *item.target, err = intEnv(item.name, 10); err != nil {
+			return err
+		}
+	}
+	if p.RecoveryGPUTempMarginC, err = floatEnv("RESOURCE_RECOVERY_GPU_TEMP_MARGIN_C", 5); err != nil {
+		return err
+	}
+	for _, item := range []struct {
 		name              string
 		target            *time.Duration
 		fallback, maximum int
@@ -67,7 +82,7 @@ func (c Config) validateResourcePolicy() error {
 	if err := p.Validate(); err != nil {
 		return err
 	}
-	if p.MinFreeRAMBytes > 1<<50 || p.ProcessRSSMaxBytes > 1<<50 || p.MinFreeVRAMMB > 1<<30 || p.GPUTempMaxC > 150 {
+	if p.MinFreeRAMBytes > 1<<50 || p.ProcessRSSMaxBytes > 1<<50 || p.MinFreeVRAMMB > 1<<30 || p.GPUTempMaxC > 150 || p.RecoveryGPUTempMarginC > 150 {
 		return fmt.Errorf("resource thresholds exceed supported bounds")
 	}
 	if p.LlamaHealthTimeout > time.Minute || p.CheckInterval > time.Hour || p.BackoffBase > time.Hour || p.BackoffMax > 24*time.Hour || p.MaxResumeAttempts > 1000 {
