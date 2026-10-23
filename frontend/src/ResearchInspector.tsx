@@ -1,5 +1,6 @@
 import { ProviderCard } from './diagnostic-ui.mjs'
 import RunStatus from './RunStatus'
+import TelemetryPanel from './TelemetryPanel'
 import type { ReloadReason } from './network-debug'
 import { safeURL } from './conversation-state.mjs'
 import { diagnosticSummary } from './observability.mjs'
@@ -25,6 +26,7 @@ function Status({ resource, empty }: { resource: Remote<unknown>; empty?: boolea
 
 export default function ResearchInspector({ resources, events, run, showHeading = true, busy, onPause, onResume }: { resources: Resources; events: AgentEvent[]; run: Run | null; showHeading?: boolean; busy?: boolean; onPause?: () => void; onResume?: () => void }) {
   const { plan, sources, evidence, providers } = resources
+  const currentRuntime = run && resources.runtime?.data?.task_id === run.id ? resources.runtime?.data ?? null : null
   const steps = researchSteps(plan.data, events)
   const sourceList = researchSources(sources.data ?? [], events)
   const queries = researchQueries(events)
@@ -37,8 +39,9 @@ export default function ResearchInspector({ resources, events, run, showHeading 
   const fallback = verification?.payload.status === 'fallback_excerpts'
   return <div className="chat-research">
     <header>{showHeading && <h2>Детали исследования</h2>}<p>{labels[state] || 'Исследование ещё не запущено'}</p></header>
-    <RunStatus run={run} data={resources.runtime?.data} busy={busy} onPause={onPause} onResume={onResume} />
+    <RunStatus run={run} data={currentRuntime} busy={busy} onPause={onPause} onResume={onResume} />
     {resources.runtime?.error && <Status resource={resources.runtime} />}
+    <TelemetryPanel runtime={currentRuntime} showWarnings={false} />
     <nav className="chat-research-shortcuts" aria-label="Разделы исследования">
       <button type="button" onClick={(event) => event.currentTarget.closest('.chat-research')?.querySelector('[data-research-section="sources"]')?.scrollIntoView({ block: 'start', inline: 'nearest' })}>Источники · {sourceList.length}</button>
       <button type="button" onClick={(event) => event.currentTarget.closest('.chat-research')?.querySelector('[data-research-section="evidence"]')?.scrollIntoView({ block: 'start', inline: 'nearest' })}>Evidence · {evidence.data?.length ?? 0}</button>

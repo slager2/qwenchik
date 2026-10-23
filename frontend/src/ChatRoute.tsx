@@ -2,13 +2,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, u
 import { api } from './api'
 import { createCoalescedScheduler, nextFallbackDelay, runEventInvalidations, runResyncResources } from './chat-sync.mjs'
 import { createRunEvidenceCache } from './evidence-cache.mjs'
+import { mergeRuntimeSnapshot } from './telemetry-state.mjs'
 import ChatComposer from './ChatComposer'
 import ChatTranscript from './ChatTranscript'
 import { applyRunEvent, citationReferences, explicitResearchContextReferences, createStreamState, mergeMessages, normalizeSources, terminal, type StreamState } from './conversation-state.mjs'
 import ResearchInspector from './ResearchInspector'
 import ChatSidebar from './ChatSidebar'
 import { recordReload, recordSSE, type ReloadReason } from './network-debug'
-import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, Evidence, ResearchPlan, Run, RunRuntime, Submission } from './types'
+import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, Evidence, InferenceTelemetry, ResearchPlan, Run, RunRuntime, RuntimeTelemetry, Submission } from './types'
 import './chat.css'
 
 const failure = (error: unknown) => error instanceof Error ? error.message : 'Не удалось выполнить запрос. Попробуйте ещё раз.'
@@ -16,7 +17,7 @@ const terminalLabels: Record<string, string> = { partial: 'Частичный р
 const labels: Record<string, string> = { queued: 'В очереди', planning: 'Планирование', running: 'В работе', verifying: 'Проверка', completed: 'Готово', failed: 'Не удалось завершить', cancelled: 'Остановлено', paused: 'На паузе', waiting_approval: 'Нужно решение', search: 'Поиск источников', searching: 'Поиск источников', fetch: 'Чтение источников', fetching: 'Чтение источников', extract: 'Извлечение текста', synthesis: 'Подготовка ответа', synthesizing: 'Подготовка ответа', verification: 'Сверка источников', finalization: 'Завершение', discovered: 'Найден', validated: 'Проверен', rejected: 'Отклонён', extracted: 'Текст извлечён', cited: 'Использован в ответе' }
 const eventTypes = ['context.compacted', 'continuation.requested', 'verification.completed', 'run.paused', 'run.resumed', 'run.resource_probe', 'run.blocked', 'run.failed', 'task.created', 'task.status_changed', 'task.recovered', 'message.created', 'message.delta', 'plan.created', 'step.started', 'step.completed', 'step.skipped', 'tool.started', 'tool.completed', 'tool.failed', 'source.updated', 'source.fetch.started', 'source.fetch.failed', 'source.failed', 'source.extracted', 'research.warning', 'search.provider', 'search.hit', 'query.updated', 'verification.updated', 'evidence.created', 'artifact.created', 'approval.requested', 'approval.approved', 'approval.rejected', 'approval.expired', 'task.completed', 'task.failed', 'task.cancelled']
 
-function useRemote<T>(load: (signal: AbortSignal) => Promise<T>, interval = 0, resource = 'chat.resource') {
+function useRemote<T>(load: (signal: AbortSignal) => Promise<T>, interval = 0, resource = 'chat.resource', merge?: (previous: T | undefined, next: T) => T) {
   const [data, setData] = useState<T>()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -32,19 +33,20 @@ function useRemote<T>(load: (signal: AbortSignal) => Promise<T>, interval = 0, r
     try {
       const result = await load(next.signal)
       if (next.signal.aborted || request !== sequence.current) return
-      setData(result)
+      setData(merge ? (previous) => merge(previous, result) : result)
       setError('')
     } catch (caught) {
       if (!next.signal.aborted && request === sequence.current) setError(failure(caught))
     } finally {
       if (!next.signal.aborted && request === sequence.current) setLoading(false)
     }
-  }, [load, resource])
+  }, [load, merge, resource])
   const updateData = useCallback<typeof setData>((value) => {
     controller.current?.abort()
     sequence.current++
     setData(value)
     setLoading(false)
+    setError('')
   }, [])
   useEffect(() => {
     setData(undefined)
@@ -123,7 +125,8 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const [evidenceCache] = useState(() => createRunEvidenceCache((sourceRunID: string) => api.runEvidence(sourceRunID)))
   const [runID, setRunID] = useState('')
   const run = useRemote(useCallback((signal) => runID ? api.conversationRun(runID, signal) : Promise.resolve<Run | null>(null), [runID]), 0, 'chat.run')
-  const runtime = useRemote(useCallback((signal) => runID ? api.runRuntime(runID, signal) : Promise.resolve<RunRuntime | null>(null), [runID]), 0, 'chat.runtime')
+  const mergeRunRuntime = useCallback((previous: RunRuntime | null | undefined, next: RunRuntime | null) => previous && next ? mergeRuntimeSnapshot(previous, next) : next, [])
+  const runtime = useRemote(useCallback((signal) => runID ? api.runRuntime(runID, signal) : Promise.resolve<RunRuntime | null>(null), [runID]), 0, 'chat.runtime', mergeRunRuntime)
   const runSetterRef = useRef(run.setData)
   const runtimeSetterRef = useRef(runtime.setData)
   runSetterRef.current = run.setData
@@ -344,8 +347,38 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
         const next = JSON.parse((raw as MessageEvent<string>).data) as RunRuntime
         if (next.task_id !== runID || !Number.isSafeInteger(next.cursor)) return
         recordReload('chat.runtime', 'sse_open')
-        runtimeSetterRef.current((previous) => previous?.task_id === runID && previous.cursor > next.cursor ? previous : next)
+        runtimeSetterRef.current((previous) => mergeRuntimeSnapshot(previous, next, { replaceWarnings: true }))
         runSetterRef.current((previous) => previous?.id === runID ? { ...previous, status: next.status, stage: next.stage, phase: next.stage, terminal_outcome: next.terminal_outcome, pause_reason: next.pause_reason, resource_reason: next.resource_reason } : previous)
+      } catch { setConnection('invalid') }
+    })
+    source.addEventListener('runtime_snapshot', (raw) => {
+      if (disposed) return
+      try {
+        const update = JSON.parse((raw as MessageEvent<string>).data) as { telemetry?: RuntimeTelemetry; telemetry_revision?: number }
+        if (!update.telemetry || !Number.isSafeInteger(update.telemetry_revision) || update.telemetry_revision! < 0) return
+        runtimeSetterRef.current((previous) => {
+          if (previous?.task_id !== runID || (previous.telemetry_revision ?? -1) > update.telemetry_revision!) return previous
+          return { ...previous, telemetry: update.telemetry, telemetry_revision: update.telemetry_revision }
+        })
+      } catch { setConnection('invalid') }
+    })
+    source.addEventListener('inference_progress', (raw) => {
+      if (disposed) return
+      try {
+        const update = JSON.parse((raw as MessageEvent<string>).data) as { inference?: InferenceTelemetry; telemetry_revision?: number }
+        if (!update.inference || !Number.isSafeInteger(update.telemetry_revision) || update.telemetry_revision! < 0) return
+        runtimeSetterRef.current((previous) => {
+          if (previous?.task_id !== runID || !previous.telemetry || (previous.telemetry_revision ?? -1) > update.telemetry_revision!) return previous
+          return { ...previous, telemetry_revision: update.telemetry_revision, telemetry: { ...previous.telemetry, inference: update.inference! } }
+        })
+      } catch { setConnection('invalid') }
+    })
+    source.addEventListener('resource_warning', (raw) => {
+      if (disposed) return
+      try {
+        const update = JSON.parse((raw as MessageEvent<string>).data) as { warnings?: unknown }
+        const warnings = Array.isArray(update.warnings) ? update.warnings.filter((item): item is string => typeof item === 'string').slice(0, 16) : []
+        runtimeSetterRef.current((previous) => previous?.task_id === runID ? { ...previous, runtime_warnings: warnings } : previous)
       } catch { setConnection('invalid') }
     })
     source.addEventListener('resync', (raw) => {

@@ -268,9 +268,102 @@ export interface Run {
   retry_count: number
 }
 
+export type MetricSource = 'exact' | 'estimated' | 'unavailable'
+export type TelemetryMetricValue = string | number | boolean
+
+export interface TelemetryMetric<T extends TelemetryMetricValue> {
+  value: T | null
+  source: MetricSource
+  unit: string
+  updated_at: string
+  error?: string
+}
+
+export interface TelemetryCapabilities {
+  cpu: boolean
+  ram: boolean
+  gpu: boolean
+  gpu_temperature: boolean
+  gpu_utilization: boolean
+  power: boolean
+  battery: boolean
+  process_rss: boolean
+  llama_health: boolean
+  llama_timings: boolean
+  llama_metrics: boolean
+  llama_slots: boolean
+}
+
+export interface SystemMetadata {
+  os?: string
+  platform?: string
+  platform_version?: string
+  kernel_version?: string
+  kernel_arch?: string
+  uptime_seconds: TelemetryMetric<number>
+}
+
+export interface GPUTelemetry {
+  name: TelemetryMetric<string>
+  utilization: TelemetryMetric<number>
+  temperature: TelemetryMetric<number>
+  vram_used: TelemetryMetric<number>
+  vram_free: TelemetryMetric<number>
+  vram_total: TelemetryMetric<number>
+  power_watts: TelemetryMetric<number>
+}
+
+export interface SystemTelemetry {
+  metadata: SystemMetadata
+  cpu_usage: TelemetryMetric<number>
+  cpu_temperature: TelemetryMetric<number>
+  ram_used: TelemetryMetric<number>
+  ram_free: TelemetryMetric<number>
+  ram_total: TelemetryMetric<number>
+  gpus: GPUTelemetry[]
+  agent_rss: TelemetryMetric<number>
+  llama_server_rss: TelemetryMetric<number>
+  power_source: TelemetryMetric<string>
+  power_watts: TelemetryMetric<number>
+  battery_percent: TelemetryMetric<number>
+  battery_charging: TelemetryMetric<boolean>
+  llama_health: TelemetryMetric<string>
+  llama_slots_active: TelemetryMetric<number>
+  llama_slots_total: TelemetryMetric<number>
+}
+
+export interface InferenceTelemetry {
+  status: 'queued' | 'loading' | 'prefilling' | 'generating' | 'completed' | 'failed' | 'cancelled'
+  source?: string
+  updated_at: string
+  requested_tokens: TelemetryMetric<number>
+  prompt_tokens: TelemetryMetric<number>
+  output_tokens: TelemetryMetric<number>
+  total_tokens: TelemetryMetric<number>
+  cached_prompt_tokens: TelemetryMetric<number>
+  prompt_tokens_per_second: TelemetryMetric<number>
+  output_tokens_per_second: TelemetryMetric<number>
+  ttft_ms: TelemetryMetric<number>
+  prompt_ms: TelemetryMetric<number>
+  generation_ms: TelemetryMetric<number>
+  context_tokens: TelemetryMetric<number>
+  context_window: TelemetryMetric<number>
+}
+
+export interface RuntimeTelemetry {
+  timestamp: string
+  stale_after_ms: number
+  capabilities: TelemetryCapabilities
+  system: SystemTelemetry
+  inference: InferenceTelemetry
+}
+
 export interface RunRuntime {
-	bundle_hash?: string
-	bundle_version?: number
+  bundle_hash?: string
+  bundle_version?: number
+  telemetry?: RuntimeTelemetry
+  telemetry_revision?: number
+  runtime_warnings?: string[]
   task_id: string
   cursor: number
   status: TaskStatus
@@ -300,8 +393,11 @@ export interface RunRuntime {
   keep_awake_requested?: boolean
   runtime?: {
 	 enabled?: boolean
+    keep_awake?: boolean
     sleep_policy?: string
-    resources?: { free_ram_bytes?: number | null; rss_bytes?: number | null; gpu_free_vram_mb?: number | null; gpu_temp_c?: number | null; snapshot_at?: string; power_source?: string; warnings?: string[] }
+    warnings?: string[]
+    active_warnings?: string[]
+    resources?: { free_ram_bytes?: number | null; rss_bytes?: number | null; gpu_free_vram_mb?: number | null; gpu_temp_c?: number | null; snapshot_at?: string; power_source?: string; warnings?: string[]; active_warnings?: string[] }
     sleep?: { active?: boolean; available?: boolean; provider?: string; failure_reason?: string }
   }
 }

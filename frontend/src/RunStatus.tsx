@@ -11,6 +11,8 @@ export default function RunStatus({ run, data, busy, onPause, onResume }: { run:
   const current = data?.task_id === run.id ? data : null
   const resources = current?.runtime?.resources
   const sleep = current?.runtime?.sleep
+  const keepAwakeRequested = current?.keep_awake_requested ?? current?.runtime?.keep_awake
+  const warnings = current?.runtime_warnings ?? resources?.warnings ?? []
   const reason = current?.resource_reason || current?.pause_reason || run.resource_reason || run.pause_reason || ''
   const outcome = current?.terminal_outcome || run.terminal_outcome || ''
   const paused = run.status === 'paused'
@@ -36,11 +38,11 @@ export default function RunStatus({ run, data, busy, onPause, onResume }: { run:
         <dt>Продолжения / compaction</dt><dd>{current.completion?.continuations ?? 0} / {current.max_continuations ?? 0} · {current.compactions ?? 0} сжатий</dd>
         <dt>Свободная RAM / RSS</dt><dd>{bytes(resources?.free_ram_bytes)} / {bytes(resources?.rss_bytes)}</dd>
         <dt>VRAM / температура GPU</dt><dd>{resources?.gpu_free_vram_mb == null ? 'неизвестно' : `${resources.gpu_free_vram_mb} MiB`} / {resources?.gpu_temp_c == null ? 'неизвестно' : `${resources.gpu_temp_c} °C`}</dd>
-        <dt>Удержание от сна</dt><dd>{sleep?.active ? 'Активно' : current.keep_awake_requested ? 'Запрошено, не активно' : 'Не запрошено'} · {sleep?.provider || 'провайдер неизвестен'}</dd>
+        <dt>Удержание от сна</dt><dd>{sleep?.active ? 'Активно' : keepAwakeRequested == null ? 'Неизвестно' : keepAwakeRequested ? 'Запрошено, не активно' : 'Не запрошено'} · {sleep?.provider || 'провайдер неизвестен'}</dd>
         <dt>Питание</dt><dd>{resources?.power_source === 'AC' ? 'От сети' : resources?.power_source === 'battery' ? 'От батареи' : 'неизвестно'}</dd>
       </dl>
-      {current.keep_awake_requested && !sleep?.active && <p className="chat-partial-note" role="status">Блокировка сна не подтверждена{sleep?.available === false || sleep?.failure_reason ? ': провайдер недоступен' : ''}. Закрытие крышки регулируется системой.</p>}
-      {resources?.warnings?.map((warning) => <p className="chat-muted" key={warning}>{warning}</p>)}
+      {keepAwakeRequested && !sleep?.active && <p className="chat-partial-note" role="status">Блокировка сна не подтверждена{sleep?.available === false || sleep?.failure_reason ? ': провайдер недоступен' : ''}. Закрытие крышки регулируется системой.</p>}
+      {warnings.map((warning) => <p className="chat-muted" key={warning}>{warning}</p>)}
       {current.verdict && <p>Проверка готовности: {verdicts[current.verdict] || 'Статус неизвестен'}</p>}
       {!!current.contradictions?.length && <div className="chat-partial-note" role="status"><h4>Неразрешённые противоречия</h4><ul>{current.contradictions.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
       {current.context_snapshot_hash && <details><summary>Durable context · версия {current.context_snapshot_number}</summary><code>{current.context_snapshot_hash}</code></details>}

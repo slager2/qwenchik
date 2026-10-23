@@ -9,7 +9,9 @@ import WorkspaceBoard from './WorkspaceBoard'
 import { diagnosticSummary, failureSummary, streamLabel } from './observability.mjs'
 import { ProviderCard, TaskFailureCard, SourceList } from './diagnostic-ui.mjs'
 import type { ProvidersResponse } from './types'
-import type { AgentEvent, Approval, Artifact, Checkpoint, DraftMessage, Evidence, Memory, MemoryMatch, MemoryStatus, Message, MessageDeltaPayload, Task, TaskStatus, TaskStep } from './types'
+import type { AgentEvent, Approval, Artifact, Checkpoint, DraftMessage, Evidence, InferenceTelemetry, Memory, MemoryMatch, MemoryStatus, Message, MessageDeltaPayload, RunRuntime, RuntimeTelemetry, Task, TaskStatus, TaskStep } from './types'
+import { mergeRuntimeSnapshot } from './telemetry-state.mjs'
+import TelemetryPanel from './TelemetryPanel'
 
 const columns: { id: string; title: string; statuses: TaskStatus[] }[] = [
   { id: 'inbox', title: 'Входящие', statuses: ['inbox'] },
@@ -47,7 +49,7 @@ const stageLabels: Record<string, string> = {
   finalization: 'Финализация',
 }
 
-type DetailResource = 'task' | 'messages' | 'events' | 'checkpoints' | 'steps' | 'artifacts' | 'evidence' | 'approvals'
+type DetailResource = 'task' | 'messages' | 'events' | 'checkpoints' | 'steps' | 'artifacts' | 'evidence' | 'approvals' | 'runtime'
 type DetailSelection = Partial<Record<DetailResource, boolean>>
 
 const eventLabels: Record<string, string> = {
@@ -124,6 +126,7 @@ export default function WorkspaceRoute() {
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const [evidence, setEvidence] = useState<Evidence[]>([])
   const [approvals, setApprovals] = useState<Approval[]>([])
+  const [runtime, setRuntime] = useState<RunRuntime | null>(null)
   const [doctor, setDoctor] = useState<DoctorResponse | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createTitle, setCreateTitle] = useState('')
@@ -135,6 +138,9 @@ export default function WorkspaceRoute() {
   const [providers, setProviders] = useState<ProvidersResponse | null>(null)
   const [providersError, setProvidersError] = useState('')
   const [error, setError] = useState('')
+  const [runtimeError, setRuntimeError] = useState('')
+  const [detailError, setDetailError] = useState('')
+  const detailFailures = useRef(new Set<DetailResource>())
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [memoryOpen, setMemoryOpen] = useState(false)
   const [pageHidden, setPageHidden] = useState(document.hidden)
@@ -171,11 +177,18 @@ export default function WorkspaceRoute() {
     if (!requested.length) return
     recordReload('workspace.detail', reason)
     const jobs: Promise<void>[] = []
-    let failed = false
-    const completeFull = requested.length === 8 ? detailTracker.beginRequest(id, 'detail-ready') : () => false
-    const load = <T,>(resource: DetailResource, request: Promise<T>, apply: (value: T) => void) => {
+    const completeFull = requested.length === 9 ? detailTracker.beginRequest(id, 'detail-ready') : () => false
+    const load = <T,>(resource: DetailResource, request: Promise<T>, apply: (value: T) => void, onError?: () => void) => {
       const isCurrent = detailTracker.beginRequest(id, resource)
-      jobs.push(request.then((value) => { if (isCurrent()) apply(value) }).catch(() => { if (isCurrent()) failed = true }))
+      jobs.push(request.then((value) => {
+        if (!isCurrent()) return
+        detailFailures.current.delete(resource)
+        apply(value)
+      }).catch(() => {
+        if (!isCurrent()) return
+        if (resource === 'runtime') onError?.()
+        else detailFailures.current.add(resource)
+      }))
     }
     if (selection.task) load('task', api.task(id), (task) => setTasks((current) => current.map((item) => item.id === task.id ? task : item)))
     if (selection.messages) load('messages', api.messages(id), (items) => {
@@ -196,8 +209,12 @@ export default function WorkspaceRoute() {
     if (selection.artifacts) load('artifacts', api.artifacts(id), setArtifacts)
     if (selection.evidence) load('evidence', api.evidence(id), setEvidence)
     if (selection.approvals) load('approvals', api.approvals(id), setApprovals)
+    if (selection.runtime) load('runtime', api.runRuntime(id), (item) => {
+      setRuntime((current) => mergeRuntimeSnapshot(current, item))
+      setRuntimeError('')
+    }, () => setRuntimeError('Снимок runtime временно недоступен.'))
     await Promise.all(jobs)
-    if (failed) setError('Часть сведений задачи недоступна. Загруженные данные сохранены; обновите задачу для повтора.')
+    setDetailError([...detailFailures.current].some((resource) => resource !== 'runtime') ? 'Часть сведений задачи недоступна. Загруженные данные сохранены; обновите задачу для повтора.' : '')
     if (completeFull()) setDetailLoadedID(id)
   }, [detailTracker])
 
@@ -205,7 +222,7 @@ export default function WorkspaceRoute() {
     if (resources.includes('tasks')) void refreshTasks(true, reason)
     if (!selectedID) return
     const selection: DetailSelection = {}
-    for (const resource of resources) if (resource !== 'tasks' && ['task', 'messages', 'events', 'checkpoints', 'steps', 'artifacts', 'evidence', 'approvals'].includes(resource)) selection[resource as DetailResource] = true
+    for (const resource of resources) if (resource !== 'tasks' && ['task', 'messages', 'events', 'checkpoints', 'steps', 'artifacts', 'evidence', 'approvals', 'runtime'].includes(resource)) selection[resource as DetailResource] = true
     if (Object.keys(selection).length) void refreshDetail(selectedID, selection, reason)
   }, [refreshDetail, refreshTasks, selectedID])
   workspaceFlushRef.current = flushWorkspace
@@ -235,6 +252,7 @@ export default function WorkspaceRoute() {
 
   useLayoutEffect(() => {
     detailTracker.select(selectedID)
+    detailFailures.current.clear()
     setMessages([])
     savedMessageIDs.current = []
     setDraft(null)
@@ -247,6 +265,9 @@ export default function WorkspaceRoute() {
     setArtifacts([])
     setEvidence([])
     setApprovals([])
+    setRuntime(null)
+    setRuntimeError('')
+    setDetailError('')
     return () => detailTracker.select('')
   }, [selectedID, detailTracker])
 
@@ -261,6 +282,9 @@ export default function WorkspaceRoute() {
       setArtifacts([])
       setEvidence([])
       setApprovals([])
+      setRuntime(null)
+      setRuntimeError('')
+      setDetailError('')
       return
     }
     if (detailTracker.observe(selectedID, selectedTask?.status)) void refreshDetail(selectedID, undefined, connectionRef.current === 'live' ? 'sse_event' : 'initial')
@@ -292,9 +316,11 @@ export default function WorkspaceRoute() {
     let reconnecting = false
     let closed = false
     const closeStream = () => { if (opened && !closed) { closed = true; recordSSE('close', endpoint) } }
+    let disposed = false
     const eventTypes = [...new Set([...Object.keys(eventLabels), 'message.delta', 'task.recovered', 'source.updated', 'source.fetch.started', 'source.fetch.failed', 'source.failed', 'source.extracted', 'run.paused', 'run.resumed', 'run.resource_probe', 'run.blocked', 'run.failed'])]
     const listeners: [string, EventListener][] = eventTypes.map((type) => {
       const listener: EventListener = (rawEvent) => {
+        if (disposed) return
         const event = rawEvent as MessageEvent<string>
         let parsed: AgentEvent
         try {
@@ -347,6 +373,52 @@ export default function WorkspaceRoute() {
       source.addEventListener(type, listener)
       return [type, listener]
     })
+    source.addEventListener('snapshot', (rawEvent) => {
+      if (disposed) return
+      try {
+        const next = JSON.parse((rawEvent as MessageEvent<string>).data) as RunRuntime
+        if (next.task_id !== selectedID || !Number.isSafeInteger(next.cursor)) return
+        detailTracker.beginRequest(selectedID, 'runtime')
+        setRuntime((previous) => mergeRuntimeSnapshot(previous, next, { replaceWarnings: true }))
+        setRuntimeError('')
+      } catch { setError('Не удалось прочитать снимок состояния задачи') }
+    })
+    source.addEventListener('runtime_snapshot', (rawEvent) => {
+      if (disposed) return
+      try {
+        const update = JSON.parse((rawEvent as MessageEvent<string>).data) as { telemetry?: RuntimeTelemetry; telemetry_revision?: number }
+        if (!update.telemetry || !Number.isSafeInteger(update.telemetry_revision) || update.telemetry_revision! < 0) return
+        detailTracker.beginRequest(selectedID, 'runtime')
+        setRuntime((previous) => {
+          if (previous?.task_id !== selectedID || (previous.telemetry_revision ?? -1) > update.telemetry_revision!) return previous
+          return { ...previous, telemetry: update.telemetry, telemetry_revision: update.telemetry_revision }
+        })
+        setRuntimeError('')
+      } catch { setError('Не удалось прочитать снимок телеметрии') }
+    })
+    source.addEventListener('inference_progress', (rawEvent) => {
+      if (disposed) return
+      try {
+        const update = JSON.parse((rawEvent as MessageEvent<string>).data) as { inference?: InferenceTelemetry; telemetry_revision?: number }
+        if (!update.inference || !Number.isSafeInteger(update.telemetry_revision) || update.telemetry_revision! < 0) return
+        detailTracker.beginRequest(selectedID, 'runtime')
+        setRuntime((previous) => {
+          if (previous?.task_id !== selectedID || !previous.telemetry || (previous.telemetry_revision ?? -1) > update.telemetry_revision!) return previous
+          return { ...previous, telemetry_revision: update.telemetry_revision, telemetry: { ...previous.telemetry, inference: update.inference! } }
+        })
+        setRuntimeError('')
+      } catch { setError('Не удалось прочитать прогресс инференса') }
+    })
+    source.addEventListener('resource_warning', (rawEvent) => {
+      if (disposed) return
+      try {
+        const update = JSON.parse((rawEvent as MessageEvent<string>).data) as { warnings?: unknown }
+        const warnings = Array.isArray(update.warnings) ? update.warnings.filter((item): item is string => typeof item === 'string').slice(0, 16) : []
+        detailTracker.beginRequest(selectedID, 'runtime')
+        setRuntime((previous) => previous?.task_id === selectedID ? { ...previous, runtime_warnings: warnings } : previous)
+        setRuntimeError('')
+      } catch { setError('Не удалось прочитать предупреждения runtime') }
+    })
     source.addEventListener('resync', (event) => {
       try {
         const payload = JSON.parse((event as MessageEvent<string>).data) as { cursor?: number }
@@ -358,6 +430,7 @@ export default function WorkspaceRoute() {
     source.onopen = () => { if (!opened) { opened = true; recordSSE('open', endpoint) }; reconnecting = false; setConnection('live') }
     source.onerror = () => { setConnection('reconnecting'); if (!reconnecting) { reconnecting = true; recordSSE('reconnect', endpoint) } }
     return () => {
+      disposed = true
       for (const [type, listener] of listeners) source.removeEventListener(type, listener)
       source.close()
       closeStream()
@@ -554,7 +627,7 @@ export default function WorkspaceRoute() {
           </div>
         </section>
 
-        {error && <div className="notice notice-error" role="alert"><span className="notice-marker">!</span><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Закрыть сообщение">×</button></div>}
+        {(error || detailError) && <div className="notice notice-error" role="alert"><span className="notice-marker">!</span><span>{error || detailError}</span><button type="button" onClick={() => { setError(''); setDetailError('') }} aria-label="Закрыть сообщение">×</button></div>}
 
         <section className="provider-panel" aria-label="Поисковые провайдеры">
           <h2>Поисковые провайдеры</h2>
@@ -599,6 +672,8 @@ export default function WorkspaceRoute() {
               artifacts={artifacts}
               evidence={evidence}
               approvals={approvals}
+              runtime={runtime}
+              runtimeError={runtimeError}
               connection={connection}
               busy={busy}
               chatText={chatText}
@@ -636,6 +711,8 @@ interface InspectorProps {
   artifacts: Artifact[]
   evidence: Evidence[]
   approvals: Approval[]
+  runtime: RunRuntime | null
+  runtimeError: string
   connection: string
   busy: boolean
   chatText: string
@@ -651,7 +728,7 @@ interface InspectorProps {
 }
 
 function TaskInspector(props: InspectorProps) {
-  const { task, messages, draft, events, checkpoints, steps, artifacts, evidence, approvals, connection, busy } = props
+  const { task, messages, draft, events, checkpoints, steps, artifacts, evidence, approvals, runtime, runtimeError, connection, busy } = props
   const canSend = ['inbox', 'queued', 'paused', 'failed'].includes(task.status)
   const canPause = ['queued', 'planning', 'running', 'verifying'].includes(task.status)
   const canCancel = !['completed', 'failed', 'cancelled'].includes(task.status)
@@ -682,6 +759,11 @@ function TaskInspector(props: InspectorProps) {
         <div className="section-kicker">ЦЕЛЬ</div>
         <p className="goal-copy">{task.description}</p>
         <div className="stage-row"><span>Текущий этап</span><strong>{task.stage ? stageLabels[task.stage] ?? task.stage : 'Ожидает запуска'}</strong></div>
+      </div>
+
+      <div className="inspector-section">
+        {runtimeError && <p className="chat-muted" role="status">{runtimeError}</p>}
+        <TelemetryPanel runtime={runtime?.task_id === task.id ? runtime : null} />
       </div>
 
       <div className="inspector-section">

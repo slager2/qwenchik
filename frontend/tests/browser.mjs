@@ -12,6 +12,33 @@ server.stderr.on('data', (data) => { serverOutput += data })
 let browser
 const failures = []
 const now = '2026-10-19T10:00:00Z'
+const telemetryFixture = () => {
+  const at = new Date().toISOString()
+  const metric = (value, unit, source = 'exact') => ({ value, unit, source, updated_at: at })
+  return {
+    timestamp: at, stale_after_ms: 30000,
+    capabilities: { cpu: true, ram: true, gpu: false, gpu_temperature: false, gpu_utilization: false, power: false, battery: false, process_rss: true, llama_health: false, llama_timings: true, llama_metrics: false, llama_slots: false },
+    system: {
+      metadata: { os: 'linux', platform: 'linux', uptime_seconds: metric(3600, 'seconds') },
+      cpu_usage: metric(24, 'percent'), cpu_temperature: metric(null, 'celsius', 'unavailable'),
+      ram_used: metric(4096, 'bytes'), ram_free: metric(8192, 'bytes'), ram_total: metric(12288, 'bytes'),
+      gpus: [], agent_rss: metric(1024, 'bytes'), llama_server_rss: metric(null, 'bytes', 'unavailable'),
+      power_source: metric('unknown', 'status'), power_watts: metric(null, 'watts', 'unavailable'),
+      battery_percent: metric(null, 'percent', 'unavailable'), battery_charging: metric(null, 'boolean', 'unavailable'),
+      llama_health: metric(null, 'status', 'unavailable'), llama_slots_active: metric(null, 'slots', 'unavailable'), llama_slots_total: metric(null, 'slots', 'unavailable'),
+    },
+    inference: {
+      status: 'generating', source: 'llama.cpp', updated_at: at,
+      requested_tokens: metric(128, 'tokens'), prompt_tokens: metric(32, 'tokens'), output_tokens: metric(8, 'tokens'), total_tokens: metric(40, 'tokens'),
+      cached_prompt_tokens: metric(null, 'tokens', 'unavailable'), prompt_tokens_per_second: metric(220, 'tokens/s'), output_tokens_per_second: metric(18, 'tokens/s'),
+      ttft_ms: metric(120, 'ms'), prompt_ms: metric(145, 'ms'), generation_ms: metric(444, 'ms'), context_tokens: metric(40, 'tokens'), context_window: metric(32768, 'tokens'),
+    },
+  }
+}
+const runtimeFixture = (task_id, cursor = 0) => ({
+  task_id, cursor, status: 'running', telemetry: telemetryFixture(), telemetry_revision: 1,
+  runtime: { enabled: true, keep_awake: true, resources: { free_ram_bytes: 8192, rss_bytes: 1024, gpu_free_vram_mb: null, gpu_temp_c: null, power_source: 'unknown', snapshot_at: new Date().toISOString(), warnings: [] }, sleep: { active: false, available: false, provider: 'unavailable' } },
+})
 const conversation = (id, mode) => ({ id, title: id === 'a' ? 'Первый разговор' : 'Исследование', mode, created_at: now, updated_at: now, latest_run_id: `r-${id}` })
 const conversations = [conversation('a', 'chat'), conversation('b', 'research')]
 const message = (id, conversation_id, run_id, role, content, status = 'completed', seq = 0) => ({ id, conversation_id, run_id, role, content, status, created_at: now, updated_at: now, last_event_seq: seq })
@@ -42,6 +69,8 @@ let sourcesFail = true
 let planFail = false
 let providersFail = false
 let messagesFail = false
+let runtimeGetUnavailable = false
+let workspaceRuntimeGetUnavailable = false
 let doctorBlocked = true
 let healthMalformed = false
 let sourceRequests = 0
@@ -106,12 +135,22 @@ try {
       if (!parts[2]) return json([legacyTask, activeWorkspaceTask])
       if (parts[2] === activeWorkspaceTask.id) {
         if (!parts[3]) return json(activeWorkspaceTask)
+        if (parts[3] === 'runtime') return json(runtimeFixture(activeWorkspaceTask.id))
         if (parts[3] === 'messages') return json([])
         if (parts[3] === 'events' && parts[4] === 'stream') {
+          if (workspaceRuntimeGetUnavailable) await new Promise((resolve) => setTimeout(resolve, 250))
           activeWorkspaceTask.status = 'verifying'
           const after = Number(url.searchParams.get('after') || request.headers()['last-event-id'] || 0)
           const selected = workspaceSSEEvents.filter((event) => event.seq > after)
-          const body = 'retry: 10000\n\n' + selected.map((event) => `id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('')
+          const runtime = runtimeFixture(activeWorkspaceTask.id, 1)
+          runtime.telemetry.system.cpu_usage.value = 31
+          runtime.telemetry.inference.output_tokens.value = 6
+          const inference = { ...runtime.telemetry.inference, output_tokens: { ...runtime.telemetry.inference.output_tokens, value: 12 } }
+          const telemetryFrames = `event: snapshot\ndata: ${JSON.stringify(runtime)}\n\n` +
+            `event: runtime_snapshot\ndata: ${JSON.stringify({ telemetry: runtime.telemetry, telemetry_revision: 2 })}\n\n` +
+            `event: inference_progress\ndata: ${JSON.stringify({ inference, telemetry_revision: 3 })}\n\n` +
+            `event: resource_warning\ndata: ${JSON.stringify({ warnings: ['runtime warning fixture'] })}\n\n`
+          const body = 'retry: 10000\n\n' + telemetryFrames + selected.map((event) => `id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('')
           return route.fulfill({ contentType: 'text/event-stream', body })
         }
         if (parts[3] === 'events') return json(workspaceSSEEvents.slice(0, 1).filter((event) => event.seq > Number(url.searchParams.get('after') || 0)))
@@ -160,10 +199,14 @@ try {
       }
     }
     if (parts[1] === 'runs') {
+      if (parts[3] === 'runtime' && [legacyTask.id, activeWorkspaceTask.id].includes(parts[2])) {
+        if (parts[2] === activeWorkspaceTask.id && workspaceRuntimeGetUnavailable) return json({ error: { message: 'Workspace runtime unavailable' } }, 503)
+        return json(runtimeFixture(parts[2]))
+      }
       const run = runs[parts[2]]
       if (!run) return json({ error: { message: 'Run not found' } }, 404)
       if (!parts[3]) return json(run)
-      if (parts[3] === 'runtime') return json({ task_id: run.id, cursor: events[run.id]?.at(-1)?.seq || 0, status: run.status, terminal_outcome: run.terminal_outcome, pause_reason: run.status === 'paused' ? 'manual' : '', completed_steps: 1, compactions: 1, max_continuations: 1, completion: { continuations: 0 }, runtime: { resources: { free_ram_bytes: null, gpu_free_vram_mb: null, gpu_temp_c: null, power_source: 'unknown' }, sleep: { active: false, available: false } } })
+      if (parts[3] === 'runtime') return runtimeGetUnavailable && run.id === 'r-b' ? json({ error: { message: 'Runtime snapshot unavailable' } }, 503) : json({ ...runtimeFixture(run.id, events[run.id]?.at(-1)?.seq || 0), status: run.status, terminal_outcome: run.terminal_outcome, pause_reason: run.status === 'paused' ? 'manual' : '', completed_steps: 1, compactions: 1, max_continuations: 1, completion: { continuations: 0 } })
       if (parts[3] === 'cancel') {
         run.status = 'cancelled'
         const conv = conversations.find((item) => item.id === run.conversation_id)
@@ -177,7 +220,20 @@ try {
         const after = Number(url.searchParams.get('after') || 0)
         streamCursors.push(after)
         const selected = (events[run.id] || []).filter((item) => item.seq > Math.max(after, Number(request.headers()['last-event-id'] || 0)))
-        const body = 'retry: 10000\n\n' + selected.map((event) => `id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('')
+        let telemetryFrames = ''
+        if (run.id === 'r-b') {
+          if (runtimeGetUnavailable) await new Promise((resolve) => setTimeout(resolve, 250))
+          const runtime = runtimeFixture(run.id, events[run.id]?.at(-1)?.seq || 0)
+          runtime.status = run.status
+          runtime.telemetry.system.cpu_usage.value = 37
+          runtime.telemetry.inference.output_tokens.value = 5
+          const inference = { ...runtime.telemetry.inference, output_tokens: { ...runtime.telemetry.inference.output_tokens, value: 9 } }
+          telemetryFrames = `event: snapshot\ndata: ${JSON.stringify(runtime)}\n\n` +
+            `event: runtime_snapshot\ndata: ${JSON.stringify({ telemetry: runtime.telemetry, telemetry_revision: 2 })}\n\n` +
+            `event: inference_progress\ndata: ${JSON.stringify({ inference, telemetry_revision: 3 })}\n\n` +
+            `event: resource_warning\ndata: ${JSON.stringify({ warnings: ['chat warning fixture'] })}\n\n`
+        }
+        const body = 'retry: 10000\n\n' + telemetryFrames + selected.map((event) => `id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('')
         const assistant = messages[run.conversation_id].find((item) => item.id === run.assistant_message_id)
         if (assistant && selected.length && run.status === 'running' && assistant.last_event_seq <= 2) { assistant.content = 'Начало потока'; assistant.last_event_seq = 2 }
         return route.fulfill({ contentType: 'text/event-stream', body })
@@ -232,6 +288,15 @@ try {
   assert.match(await pdfCard.innerText(), /32 MB; 30,518 MiB/)
   assert.equal(await page.locator('.chat-markdown a[href="https://example.org/report.pdf"]').count(), 0)
   await page.getByText('Проверенный фрагмент', { exact: true }).waitFor()
+  const chatTelemetry = page.locator('.telemetry-panel').first()
+  await chatTelemetry.getByRole('heading', { name: 'Телеметрия' }).waitFor()
+  await chatTelemetry.locator('details').first().locator('summary').click()
+  await until(() => chatTelemetry.locator('details').first().evaluate((element) => element.open), 'Chat telemetry System details')
+  assert.ok(await chatTelemetry.evaluate((panel) => panel.innerText.includes('Загрузка CPU') && panel.innerText.includes('37%')))
+  await chatTelemetry.locator('details').nth(1).locator('summary').click()
+  await until(() => chatTelemetry.locator('details').nth(1).evaluate((element) => element.open), 'Chat telemetry Inference details')
+  assert.ok(await chatTelemetry.evaluate((panel) => panel.innerText.includes('9 токенов')))
+  await until(() => page.locator('.chat-run-status').evaluate((element) => element.innerText.includes('chat warning fixture')), 'Chat resource warning SSE update')
   for (const [type, payload] of [
     ['source.updated', { ...events['r-b'].at(-1).payload, fallback_attempted: true }],
     ['tool.started', { tool: 'fetch_url', step_id: 'step2', target_url: 'https://example.org/source' }],
@@ -256,14 +321,21 @@ try {
   assert.equal(await page.locator('.chat-markdown a[href="https://example.org/source"]').count(), 2)
   planFail = false
   providersFail = false
+  runtimeGetUnavailable = true
+  await page.reload()
+  await page.getByText('Runtime snapshot unavailable', { exact: true }).waitFor()
+  await page.waitForFunction(() => !document.body.innerText.includes('Runtime snapshot unavailable'))
+  runtimeGetUnavailable = false
   messagesFail = true
   await page.reload()
   await page.getByText('Сеть недоступна', { exact: true }).waitFor()
   messagesFail = false
 
+  const detailsToggle = page.getByRole('button', { name: 'Детали', exact: true })
+  if (await detailsToggle.getAttribute('aria-expanded') === 'false') await detailsToggle.click()
   for (const width of [320, 375, 414, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 })
-    await until(async () => width > 1120 || await page.locator('dialog[open]').count() > 0, 'responsive details drawer')
+    await until(async () => width > 1120 || await page.locator('dialog[open]').count() > 0, `responsive details drawer at ${width}`)
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `page overflow at ${width}`)
     if (width <= 1120) {
       const dialog = page.getByRole('dialog', { name: 'Детали исследования', exact: true })
@@ -285,8 +357,9 @@ try {
   await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor()
   assert.equal(researchContextSubmissions.at(-1), 'r-b', 'explicit Chat continuation attaches only the selected completed research run')
   const bridgeCitationSources = page.locator('.chat-citation-sources').last()
-  await bridgeCitationSources.locator('summary').waitFor()
-  await bridgeCitationSources.locator('summary').click()
+  const bridgeCitationSummary = bridgeCitationSources.locator('summary')
+  await bridgeCitationSummary.evaluate((element) => element.scrollIntoView({ block: 'center' }))
+  await bridgeCitationSummary.click()
   await bridgeCitationSources.getByRole('link', { name: 'Реальный источник', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Очистить research context', exact: true }).click()
   assert.equal(await page.getByText(/Research context: ON/, { exact: false }).count(), 0)
@@ -356,9 +429,24 @@ try {
   await page.getByText('Часть сведений задачи недоступна. Загруженные данные сохранены; обновите задачу для повтора.', { exact: true }).waitFor()
   assert.equal(await page.getByText('Сохранённое уточнение задачи', { exact: true }).count(), 1)
   assert.equal(await page.getByText('Частичный ответ старой задачи', { exact: true }).count(), 1)
+  workspaceRuntimeGetUnavailable = true
   await page.locator('.task-card').filter({ hasText: 'Активный поток Workspace' }).click()
+  await page.getByText('Снимок runtime временно недоступен.', { exact: true }).waitFor()
+  await page.waitForFunction(() => !document.body.innerText.includes('Снимок runtime временно недоступен.'))
+  workspaceRuntimeGetUnavailable = false
   await page.getByText('Workspace live draft', { exact: true }).waitFor()
   await page.locator('.inspector-header .status-tag').getByText('Проверка', { exact: true }).waitFor()
+  const workspaceTelemetry = page.locator('.telemetry-panel').last()
+  await workspaceTelemetry.getByRole('heading', { name: 'Телеметрия' }).waitFor()
+  await workspaceTelemetry.locator('details').first().locator('summary').click()
+  await until(() => workspaceTelemetry.locator('details').first().evaluate((element) => element.open), 'Workspace telemetry System details')
+  assert.ok(await workspaceTelemetry.evaluate((panel) => panel.innerText.includes('Загрузка CPU') && panel.innerText.includes('31%')))
+  await workspaceTelemetry.locator('details').nth(1).locator('summary').click()
+  await until(() => workspaceTelemetry.locator('details').nth(1).evaluate((element) => element.open), 'Workspace telemetry Inference details')
+  assert.ok(await workspaceTelemetry.evaluate((panel) => panel.innerText.includes('12 токенов')))
+  await workspaceTelemetry.locator('details').last().locator('summary').click()
+  await until(() => workspaceTelemetry.locator('details').last().evaluate((element) => element.open), 'Workspace telemetry Guard details')
+  assert.ok(await workspaceTelemetry.evaluate((panel) => panel.innerText.includes('runtime warning fixture')))
   await page.waitForTimeout(650)
   for (const endpoint of ['messages', 'events', 'checkpoints']) assert.equal(workspaceEventRequests.filter((item) => item === endpoint).length, 1, `${endpoint} should not refresh for unrelated SSE events`)
   for (const endpoint of ['steps', 'evidence', 'artifacts', 'approvals']) assert.equal(workspaceEventRequests.filter((item) => item === endpoint).length, 2, `${endpoint} should be coalesced to initial + one selective refresh`)

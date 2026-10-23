@@ -5,6 +5,7 @@ import '@fontsource-variable/space-grotesk'
 import '@fontsource/jetbrains-mono/400.css'
 import '@fontsource/jetbrains-mono/500.css'
 import './style.css'
+import './TelemetryPanel.css'
 import App from './App'
 
 createRoot(document.getElementById('root')!).render(

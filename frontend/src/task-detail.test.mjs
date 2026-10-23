@@ -103,3 +103,13 @@ test('selective refresh invalidates stale responses only for the same resource',
   assert.equal(steps(), true)
   assert.equal(newMessages(), true)
 })
+
+test('a live runtime snapshot supersedes an in-flight runtime GET without invalidating other details', () => {
+  const tracker = createTaskDetailTracker()
+  tracker.select('task')
+  const runtimeGet = tracker.beginRequest('task', 'runtime')
+  const messagesGet = tracker.beginRequest('task', 'messages')
+  tracker.beginRequest('task', 'runtime')
+  assert.equal(runtimeGet(), false)
+  assert.equal(messagesGet(), true)
+})
