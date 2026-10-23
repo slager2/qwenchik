@@ -97,7 +97,7 @@ func (s *Store) ReleaseTaskLease(ctx context.Context, id string) error {
 }
 
 func executionEvent(kind string) bool {
-	for _, prefix := range []string{"tool.", "step.", "invocation.", "source.", "research.", "verification.", "context.", "llm.", "plan.", "chat.", "search.", "query."} {
+	for _, prefix := range []string{"tool.", "step.", "invocation.", "inference.", "source.", "research.", "verification.", "context.", "llm.", "plan.", "chat.", "search.", "query."} {
 		if strings.HasPrefix(kind, prefix) {
 			return true
 		}

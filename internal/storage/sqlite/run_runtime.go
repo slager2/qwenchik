@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"strings"
 	"time"
 
 	"github.com/slager2/qwenchik/internal/domain"
@@ -26,6 +29,16 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 		return nil, err
 	}
 	result["cursor"] = cursor
+	var summaryRaw string
+	if err := tx.QueryRowContext(ctx, `SELECT payload_json FROM events WHERE task_id=? AND type='inference.summary' AND visibility='internal' ORDER BY seq DESC LIMIT 1`, taskID).Scan(&summaryRaw); err == nil {
+		summary, err := decodeInferenceSummary(summaryRaw)
+		if err != nil {
+			return nil, err
+		}
+		result["inference_summary"] = summary
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
 	var raw string
 	err = tx.QueryRowContext(ctx, `SELECT state_json FROM checkpoints WHERE task_id=? ORDER BY last_event_seq DESC,rowid DESC LIMIT 1`, taskID).Scan(&raw)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -124,4 +137,23 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 		}
 	}
 	return result, nil
+}
+
+func decodeInferenceSummary(raw string) (domain.InferenceSummary, error) {
+	invalid := func() (domain.InferenceSummary, error) {
+		return domain.InferenceSummary{}, fmt.Errorf("%w: inference summary", ErrCheckpointInvalid)
+	}
+	if len(raw) > domain.InferenceSummaryMaxBytes {
+		return invalid()
+	}
+	var summary domain.InferenceSummary
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&summary); err != nil {
+		return invalid()
+	}
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) || summary.Validate() != nil {
+		return invalid()
+	}
+	return summary, nil
 }

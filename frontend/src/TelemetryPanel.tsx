@@ -34,6 +34,10 @@ const inferenceStatusLabels: Record<string, string> = {
   generating: 'Генерация', completed: 'Завершено', failed: 'Ошибка', cancelled: 'Остановлено',
 }
 
+const invocationStatusLabels: Record<string, string> = {
+  completed: 'Завершён', failed: 'Завершился с ошибкой', unknown: 'Исход неизвестен',
+}
+
 const reasonLabels: Record<string, string> = {
   resource_guard: 'Защита ресурсов',
   low_ram: 'Недостаточно свободной RAM', low_vram: 'Недостаточно свободной VRAM',
@@ -239,8 +243,9 @@ export default function TelemetryPanel({ runtime, telemetry: telemetryOverride, 
   const generatedId = useId()
   const headingId = `telemetry-panel-${generatedId}`
   const telemetry = telemetryOverride === undefined ? runtime?.telemetry : telemetryOverride
+  const inferenceSummary = telemetry ? undefined : runtime?.inference_summary
   const system = telemetry?.system
-  const inference = telemetry?.inference
+  const inference = telemetry?.inference ?? inferenceSummary?.inference
   const [now, setNow] = useState(() => Date.now())
   const staleAfterMs = telemetry?.stale_after_ms ?? 30_000
   useEffect(() => {
@@ -249,8 +254,9 @@ export default function TelemetryPanel({ runtime, telemetry: telemetryOverride, 
     const timer = window.setTimeout(() => setNow(Date.now()), Math.max(0, expiry - now))
     return () => window.clearTimeout(timer)
   }, [now, runtime, telemetry])
-  const sampleStale = telemetry ? isStale(telemetry.timestamp, staleAfterMs, now) : false
-  const sampleTimestampValid = !!telemetry?.timestamp && Number.isFinite(Date.parse(telemetry.timestamp))
+  const snapshotTimestamp = telemetry?.timestamp ?? inferenceSummary?.snapshot_at
+  const sampleStale = snapshotTimestamp ? isStale(snapshotTimestamp, staleAfterMs, now) : false
+  const sampleTimestampValid = !!snapshotTimestamp && Number.isFinite(Date.parse(snapshotTimestamp))
   const gpuList = Array.isArray(system?.gpus) ? system.gpus : []
   const inferenceStatus = statusPresentation(inference?.status, inference?.updated_at, staleAfterMs, now)
   const panelClass = ['telemetry-panel', className].filter(Boolean).join(' ')
@@ -262,10 +268,10 @@ export default function TelemetryPanel({ runtime, telemetry: telemetryOverride, 
         <h2 id={headingId}>Телеметрия</h2>
       </div>
       <div className="telemetry-panel__snapshot">
-        <span className={`telemetry-panel__quality is-${!telemetry || !sampleTimestampValid ? 'unavailable' : sampleStale ? 'stale' : 'reported'}`}>
-          {!telemetry ? 'Нет данных' : !sampleTimestampValid ? 'Время снимка неизвестно' : sampleStale ? 'Снимок устарел' : 'Снимок получен'}
+        <span className={`telemetry-panel__quality is-${!sampleTimestampValid ? 'unavailable' : sampleStale ? 'stale' : 'reported'}`}>
+          {!telemetry && !inferenceSummary ? 'Нет данных' : !sampleTimestampValid ? 'Время снимка неизвестно' : !telemetry ? sampleStale ? 'Итог инференса устарел' : 'Итог инференса сохранён' : sampleStale ? 'Снимок устарел' : 'Снимок получен'}
         </span>
-        {telemetry?.timestamp && Number.isFinite(Date.parse(telemetry.timestamp)) && <time dateTime={telemetry.timestamp}>{new Date(telemetry.timestamp).toLocaleTimeString()}</time>}
+        {snapshotTimestamp && Number.isFinite(Date.parse(snapshotTimestamp)) && <time dateTime={snapshotTimestamp}>{new Date(snapshotTimestamp).toLocaleTimeString()}</time>}
       </div>
     </header>
 
@@ -310,6 +316,7 @@ export default function TelemetryPanel({ runtime, telemetry: telemetryOverride, 
           <h3 id={`${headingId}-inference`}>Инференс</h3>
           <span className={`telemetry-panel__quality is-${inferenceStatus.quality}`} aria-label={`Состояние инференса: ${inferenceStatus.detail}`} title={inferenceStatus.detail}>{inferenceStatus.value}</span>
         </summary>
+        {inferenceSummary && <p className="telemetry-panel__note">Сохранённый вызов: {invocationStatusLabels[inferenceSummary.invocation_status] || 'Статус неизвестен'}</p>}
         {inference?.source && <p className="telemetry-panel__note">Источник данных: {inference.source}</p>}
         <MetricRows staleAfterMs={staleAfterMs} now={now} rows={[
           { label: 'Запрошено токенов', metric: inference?.requested_tokens },

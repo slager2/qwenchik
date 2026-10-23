@@ -439,6 +439,7 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 		if telemetry, revision, available := s.addRunTelemetry(snapshot, taskID); available {
 			lastTelemetry, lastRevision, haveTelemetry = telemetry, revision, true
 		}
+		s.sanitizeRunInferenceSummary(snapshot)
 	} else {
 		lastWarnings = safeRuntimeWarningSet(s.runtimeHealth())
 	}
@@ -491,6 +492,7 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 					if telemetry, revision, available := s.addRunTelemetry(current, taskID); available {
 						lastTelemetry, lastRevision, haveTelemetry = telemetry, revision, true
 					}
+					s.sanitizeRunInferenceSummary(current)
 					encoded, _ := json.Marshal(current)
 					if _, err := fmt.Fprintf(w, "event: snapshot\ndata: %s\n\nid: %v\nevent: resync\ndata: {\"reason\":\"cursor_gap\",\"cursor\":%v}\n\n", encoded, current["cursor"], current["cursor"]); err != nil {
 						return

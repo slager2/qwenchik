@@ -7,6 +7,7 @@ import (
 	"math"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 var ErrInvalidTelemetry = errors.New("invalid telemetry")
@@ -243,6 +244,85 @@ type InferenceTelemetry struct {
 	ContextTokens         Metric[int64]   `json:"context_tokens"`
 	ContextWindow         Metric[int64]   `json:"context_window"`
 }
+
+type InvocationStatus string
+
+const (
+	InvocationStatusCompleted InvocationStatus = "completed"
+	InvocationStatusFailed    InvocationStatus = "failed"
+	InvocationStatusUnknown   InvocationStatus = "unknown"
+)
+
+const InferenceSummaryMaxBytes = 8 << 10
+
+// InferenceSummary is the bounded final inference snapshot associated with a
+// completed invocation. It intentionally contains no invocation result data.
+type InferenceSummary struct {
+	InvocationID     string             `json:"invocation_id"`
+	InvocationStatus InvocationStatus   `json:"invocation_status"`
+	SnapshotAt       time.Time          `json:"snapshot_at"`
+	Inference        InferenceTelemetry `json:"inference"`
+}
+
+func (status InvocationStatus) Valid() bool {
+	switch status {
+	case InvocationStatusCompleted, InvocationStatusFailed, InvocationStatusUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Sanitized returns a copy whose inference source is restricted to the one
+// explicitly supported provider identifier.
+func (summary InferenceSummary) Sanitized() InferenceSummary {
+	if summary.Inference.Source != "llama.cpp" {
+		summary.Inference.Source = ""
+	}
+	return summary
+}
+
+func (summary InferenceSummary) Validate() error {
+	if summary.InvocationID == "" || len(summary.InvocationID) > 128 ||
+		strings.TrimSpace(summary.InvocationID) != summary.InvocationID ||
+		!utf8.ValidString(summary.InvocationID) || strings.ContainsAny(summary.InvocationID, " \t\x00\r\n") {
+		return fmt.Errorf("%w: invalid invocation_id", ErrInvalidInferenceSummary)
+	}
+	if !summary.InvocationStatus.Valid() {
+		return fmt.Errorf("%w: invalid invocation_status", ErrInvalidInferenceSummary)
+	}
+	if summary.SnapshotAt.IsZero() {
+		return fmt.Errorf("%w: snapshot_at is required", ErrInvalidInferenceSummary)
+	}
+	if summary.Inference.Source != "" && summary.Inference.Source != "llama.cpp" {
+		return fmt.Errorf("%w: invalid inference source", ErrInvalidInferenceSummary)
+	}
+	if err := summary.Inference.validate(summary.SnapshotAt); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidInferenceSummary, err)
+	}
+	if err := validateMetric(summary.Inference.CachedPromptTokens, MetricUnitTokens, summary.SnapshotAt, validateNonnegative); err != nil {
+		return fmt.Errorf("%w: cached_prompt_tokens: %v", ErrInvalidInferenceSummary, err)
+	}
+	encoded, err := json.Marshal(inferenceSummaryJSON(summary))
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidInferenceSummary, err)
+	}
+	if len(encoded) > InferenceSummaryMaxBytes {
+		return fmt.Errorf("%w: payload exceeds %d bytes", ErrInvalidInferenceSummary, InferenceSummaryMaxBytes)
+	}
+	return nil
+}
+
+func (summary InferenceSummary) MarshalJSON() ([]byte, error) {
+	if err := summary.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(inferenceSummaryJSON(summary))
+}
+
+type inferenceSummaryJSON InferenceSummary
+
+var ErrInvalidInferenceSummary = errors.New("invalid inference summary")
 
 func (inference InferenceTelemetry) Validate() error {
 	if !inference.Status.Valid() {

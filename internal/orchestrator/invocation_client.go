@@ -23,6 +23,10 @@ type invocationRepository interface {
 	InvocationsForOperation(context.Context, string, string) ([]domain.Invocation, error)
 }
 
+type invocationTelemetryRepository interface {
+	FinishInvocationWithTelemetry(context.Context, domain.Invocation, any, *domain.InferenceSummary) error
+}
+
 type invocationClient struct {
 	repo        invocationRepository
 	inner       llm.Client
@@ -44,11 +48,15 @@ func newInvocationClient(repo any, inner llm.Client, runID string, callbacks ...
 	return inner
 }
 
-func (c *invocationClient) captureTelemetry(telemetry *llm.ChatTelemetry) {
-	if c.onTelemetry == nil || telemetry == nil {
-		return
+func (c *invocationClient) captureTelemetry(telemetry *llm.ChatTelemetry) *domain.InferenceTelemetry {
+	if telemetry == nil {
+		return nil
 	}
-	c.onTelemetry(cloneInferenceTelemetry(telemetry.InferenceTelemetry))
+	inference := cloneInferenceTelemetry(telemetry.InferenceTelemetry)
+	if c.onTelemetry != nil {
+		c.onTelemetry(cloneInferenceTelemetry(inference))
+	}
+	return &inference
 }
 
 func (c *invocationClient) OwnsInvocationReservations() bool { return c.repo != nil }
@@ -191,7 +199,7 @@ func retryableInvocationFailure(code string) bool {
 	return false
 }
 
-func finishInvocation(ctx context.Context, repo invocationRepository, in domain.Invocation, result any, callErr error) error {
+func finishInvocation(ctx context.Context, repo invocationRepository, in domain.Invocation, result any, callErr error, telemetry ...*domain.InferenceTelemetry) error {
 	if callErr != nil {
 		if ctx.Err() != nil && !errors.Is(context.Cause(ctx), errResourcePause) && modelResourceReason(callErr) == "" {
 			return callErr
@@ -223,6 +231,29 @@ func finishInvocation(ctx context.Context, repo invocationRepository, in domain.
 	}
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
+	var finalTelemetry *domain.InferenceTelemetry
+	if len(telemetry) > 0 {
+		finalTelemetry = telemetry[len(telemetry)-1]
+	}
+	if finalTelemetry != nil {
+		if telemetryRepo, ok := repo.(invocationTelemetryRepository); ok {
+			inference := cloneInferenceTelemetry(*finalTelemetry)
+			summary := &domain.InferenceSummary{
+				InvocationID:     in.ID,
+				InvocationStatus: domain.InvocationStatus(in.Status),
+				SnapshotAt:       inferenceTelemetryTimestamp(time.Time{}, inference),
+				Inference:        inference,
+			}
+			returnErr := telemetryRepo.FinishInvocationWithTelemetry(writeCtx, in, result, summary)
+			if returnErr != nil {
+				if ctx.Err() != nil {
+					return callErr
+				}
+				return returnErr
+			}
+			return callErr
+		}
+	}
 	if err := repo.FinishInvocation(writeCtx, in, result); err != nil {
 		if ctx.Err() != nil {
 			return callErr
@@ -255,15 +286,15 @@ func (c *invocationClient) Complete(ctx context.Context, request llm.ChatRequest
 		return response, nil
 	}
 	response, err := c.inner.Complete(ctx, request)
-	c.captureTelemetry(response.Telemetry)
+	finalTelemetry := c.captureTelemetry(response.Telemetry)
 	if err != nil {
-		return response, finishInvocation(ctx, c.repo, in, nil, err)
+		return response, finishInvocation(ctx, c.repo, in, nil, err, finalTelemetry)
 	}
 	var output any
 	if len(request.JSONSchema) > 0 || request.JSONMode {
 		encoded, encodeErr := json.Marshal(response)
 		if encodeErr != nil || len(encoded) > 100<<10 || !json.Valid([]byte(response.Content)) || len(request.JSONSchema) > 0 && tools.ValidateJSONSchema(request.JSONSchema, []byte(response.Content)) != nil {
-			persistErr := finishInvocation(ctx, c.repo, in, nil, llm.ErrInvalidModelOutput)
+			persistErr := finishInvocation(ctx, c.repo, in, nil, llm.ErrInvalidModelOutput, finalTelemetry)
 			if persistErr != nil && !errors.Is(persistErr, llm.ErrInvalidModelOutput) {
 				return response, persistErr
 			}
@@ -275,7 +306,7 @@ func (c *invocationClient) Complete(ctx context.Context, request llm.ChatRequest
 		persistedResponse.Telemetry = nil
 		output = persistedResponse
 	}
-	return response, finishInvocation(ctx, c.repo, in, output, nil)
+	return response, finishInvocation(ctx, c.repo, in, output, nil, finalTelemetry)
 }
 
 func (c *invocationClient) Stream(ctx context.Context, request llm.ChatRequest) (<-chan llm.ChatEvent, error) {
@@ -322,8 +353,11 @@ func (c *invocationClient) Stream(ctx context.Context, request llm.ChatRequest) 
 		defer cancel()
 		var digest hash.Hash = sha256.New()
 		var streamErr error
+		var finalTelemetry *domain.InferenceTelemetry
 		for event := range stream {
-			c.captureTelemetry(event.Telemetry)
+			if captured := c.captureTelemetry(event.Telemetry); captured != nil {
+				finalTelemetry = captured
+			}
 			_, _ = digest.Write([]byte(event.Text))
 			if event.Err != nil {
 				streamErr = event.Err
@@ -338,7 +372,7 @@ func (c *invocationClient) Stream(ctx context.Context, request llm.ChatRequest) 
 			streamErr = ctx.Err()
 		}
 		result := map[string]string{"output_sha256": hex.EncodeToString(digest.Sum(nil))}
-		persistErr := finishInvocation(ctx, c.repo, in, result, streamErr)
+		persistErr := finishInvocation(ctx, c.repo, in, result, streamErr, finalTelemetry)
 		if persistErr != nil && streamErr == nil {
 			select {
 			case output <- llm.ChatEvent{Err: persistErr}:

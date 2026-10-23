@@ -65,3 +65,22 @@ test('fresh warning frames suppress stale warning copies from the last resource 
   })
   assert.doesNotMatch(html, /warning already cleared/)
 })
+
+test('persisted inference summaries remain visible when the live telemetry cache is gone', () => {
+  const at = new Date().toISOString()
+  const html = render({
+    runtime: {
+      task_id: 'run-summary', status: 'completed', cursor: 4,
+      inference_summary: {
+        invocation_id: 'invocation-abc', invocation_status: 'completed', snapshot_at: at,
+        inference: {
+          status: 'completed', source: 'llama.cpp', updated_at: at,
+          output_tokens: metric(42, 'exact', at, 'tokens'),
+        },
+      },
+    },
+  })
+  assert.match(html, /Итог инференса сохранён/)
+  assert.match(html, /Сохранённый вызов: Завершён/)
+  assert.match(html, /42 токенов/)
+})

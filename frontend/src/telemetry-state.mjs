@@ -8,10 +8,12 @@ export function mergeRuntimeSnapshot(current, incoming, { replaceWarnings = fals
 
   const snapshotWarnings = incoming.runtime_warnings ?? runtimeWarningSnapshot(incoming.runtime)
   const runtimeWarnings = snapshotWarnings ?? (replaceWarnings ? [] : current.runtime_warnings)
+  const inferenceSummary = incoming.inference_summary ?? current.inference_summary
 
   return {
     ...incoming,
     telemetry: preserveTelemetry ? current.telemetry : incoming.telemetry ?? current.telemetry,
+    ...(inferenceSummary ? { inference_summary: inferenceSummary } : {}),
     telemetry_revision: Math.max(currentRevision, incomingRevision) >= 0 ? Math.max(currentRevision, incomingRevision) : undefined,
     runtime_warnings: runtimeWarnings,
   }
@@ -57,5 +59,6 @@ export function nextTelemetryExpiry(telemetry, runtime, now) {
 
   visit(telemetry)
   visit(runtime?.runtime?.resources)
+  visit(runtime?.inference_summary)
   return earliest
 }

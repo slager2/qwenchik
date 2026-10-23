@@ -189,11 +189,63 @@ func SafeTelemetry(input domain.Telemetry) (domain.Telemetry, bool) {
 			PowerWatts:  safeTelemetryMetric(gpu.PowerWatts, domain.MetricUnitWatts, at, func(value float64) bool { return finiteBetween(value, 0, 1e6) }),
 		})
 	}
-	inference := input.Inference
-	if !inference.Status.Valid() || inference.UpdatedAt.IsZero() || inference.UpdatedAt.After(at) {
+	var inferenceOK bool
+	out.Inference, inferenceOK = safeInferenceTelemetry(input.Inference, at)
+	if !inferenceOK {
 		return domain.Telemetry{}, false
 	}
-	out.Inference = domain.InferenceTelemetry{
+	if err := out.Validate(); err != nil {
+		return domain.Telemetry{}, false
+	}
+	encoded, err := json.Marshal(out)
+	if err != nil || len(encoded) > maxPublicTelemetryBytes {
+		return domain.Telemetry{}, false
+	}
+	return out, true
+}
+
+// SafeInferenceSummary validates a durable inference summary and returns only
+// bounded scalar metrics suitable for the public runtime response.
+func SafeInferenceSummary(input domain.InferenceSummary) (domain.InferenceSummary, bool) {
+	if input.Validate() != nil || input.SnapshotAt.Year() < 2000 || input.SnapshotAt.After(time.Now().Add(5*time.Minute)) || !safeInvocationSummaryID(input.InvocationID) {
+		return domain.InferenceSummary{}, false
+	}
+	at := input.SnapshotAt.UTC()
+	inference, ok := safeInferenceTelemetry(input.Inference, at)
+	if !ok {
+		return domain.InferenceSummary{}, false
+	}
+	out := domain.InferenceSummary{
+		InvocationID:     input.InvocationID,
+		InvocationStatus: input.InvocationStatus,
+		SnapshotAt:       at,
+		Inference:        inference,
+	}
+	encoded, err := json.Marshal(out)
+	if err != nil || len(encoded) > domain.InferenceSummaryMaxBytes || out.Validate() != nil {
+		return domain.InferenceSummary{}, false
+	}
+	return out, true
+}
+
+func safeInvocationSummaryID(value string) bool {
+	if value == "" || len(value) > 128 {
+		return false
+	}
+	for _, char := range value {
+		if char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || strings.ContainsRune("_.-", char) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func safeInferenceTelemetry(inference domain.InferenceTelemetry, at time.Time) (domain.InferenceTelemetry, bool) {
+	if !inference.Status.Valid() || inference.UpdatedAt.IsZero() || inference.UpdatedAt.After(at) {
+		return domain.InferenceTelemetry{}, false
+	}
+	out := domain.InferenceTelemetry{
 		Status:                inference.Status,
 		UpdatedAt:             inference.UpdatedAt.UTC(),
 		RequestedTokens:       safeTelemetryMetric(inference.RequestedTokens, domain.MetricUnitTokens, at, telemetryNonnegativeTokens),
@@ -210,14 +262,10 @@ func SafeTelemetry(input domain.Telemetry) (domain.Telemetry, bool) {
 		ContextWindow:         safeTelemetryMetric(inference.ContextWindow, domain.MetricUnitTokens, at, telemetryPositiveTokens),
 	}
 	if inference.Source == "llama.cpp" {
-		out.Inference.Source = inference.Source
+		out.Source = inference.Source
 	}
-	if err := out.Validate(); err != nil {
-		return domain.Telemetry{}, false
-	}
-	encoded, err := json.Marshal(out)
-	if err != nil || len(encoded) > maxPublicTelemetryBytes {
-		return domain.Telemetry{}, false
+	if err := (domain.InferenceSummary{InvocationID: "summary-validation", InvocationStatus: domain.InvocationStatusCompleted, SnapshotAt: at, Inference: out}).Validate(); err != nil {
+		return domain.InferenceTelemetry{}, false
 	}
 	return out, true
 }

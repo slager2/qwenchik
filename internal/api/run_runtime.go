@@ -46,6 +46,29 @@ func (s *Server) addRunTelemetry(result map[string]any, runID string) (domain.Te
 	return telemetry, revision, available
 }
 
+func (s *Server) sanitizeRunInferenceSummary(result map[string]any) {
+	var summary domain.InferenceSummary
+	switch value := result["inference_summary"].(type) {
+	case domain.InferenceSummary:
+		summary = value
+	case *domain.InferenceSummary:
+		if value == nil {
+			delete(result, "inference_summary")
+			return
+		}
+		summary = *value
+	default:
+		delete(result, "inference_summary")
+		return
+	}
+	safe, ok := SafeInferenceSummary(summary)
+	if !ok {
+		delete(result, "inference_summary")
+		return
+	}
+	result["inference_summary"] = safe
+}
+
 func (s *Server) runRuntime(w http.ResponseWriter, r *http.Request) {
 	service, ok := s.service.(runRuntimeService)
 	if !ok {
@@ -59,6 +82,7 @@ func (s *Server) runRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	result["runtime"] = s.runtimeHealth()
 	s.addRunTelemetry(result, r.PathValue("runID"))
+	s.sanitizeRunInferenceSummary(result)
 	writeJSON(w, 200, result)
 }
 

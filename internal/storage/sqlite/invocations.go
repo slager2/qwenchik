@@ -253,6 +253,10 @@ func (s *Store) BeginInvocation(ctx context.Context, in domain.Invocation) (doma
 }
 
 func (s *Store) FinishInvocation(ctx context.Context, in domain.Invocation, result any) error {
+	return s.FinishInvocationWithTelemetry(ctx, in, result, nil)
+}
+
+func (s *Store) FinishInvocationWithTelemetry(ctx context.Context, in domain.Invocation, result any, summary *domain.InferenceSummary) error {
 	if err := validateInvocation(in); err != nil {
 		return err
 	}
@@ -278,7 +282,7 @@ func (s *Store) FinishInvocation(ctx context.Context, in domain.Invocation, resu
 		return err
 	}
 	defer tx.Rollback()
-	if err := finishInvocationTx(ctx, tx, in, encoded); err != nil {
+	if err := finishInvocationTx(ctx, tx, in, encoded, summary); err != nil {
 		return err
 	}
 	if err := invocationAllowed(ctx, tx, in.TaskID, false); err != nil {
@@ -287,7 +291,7 @@ func (s *Store) FinishInvocation(ctx context.Context, in domain.Invocation, resu
 	return tx.Commit()
 }
 
-func finishInvocationTx(ctx context.Context, tx *sql.Tx, in domain.Invocation, encoded json.RawMessage) error {
+func finishInvocationTx(ctx context.Context, tx *sql.Tx, in domain.Invocation, encoded json.RawMessage, summary *domain.InferenceSummary) error {
 	if err := invocationAllowed(ctx, tx, in.TaskID, false); err != nil {
 		return err
 	}
@@ -332,6 +336,7 @@ func finishInvocationTx(ctx context.Context, tx *sql.Tx, in domain.Invocation, e
 	if strings.HasPrefix(in.Kind, "tool.") {
 		payload["tool"] = strings.TrimPrefix(in.Kind, "tool.")
 	}
+	appendInferenceSummaryBestEffort(ctx, tx, in, summary)
 	seq, err := appendEvent(ctx, tx, in.TaskID, eventType, nil, "internal", payload)
 	if err != nil {
 		return err
@@ -341,6 +346,34 @@ func finishInvocationTx(ctx context.Context, tx *sql.Tx, in domain.Invocation, e
 		delete(state, "pending_invocation")
 	}
 	return insertCheckpoint(ctx, tx, in.TaskID, version, seq, state)
+}
+
+func appendInferenceSummaryBestEffort(ctx context.Context, tx *sql.Tx, in domain.Invocation, summary *domain.InferenceSummary) {
+	if summary == nil {
+		return
+	}
+	safe := summary.Sanitized()
+	if safe.InvocationID != in.ID || safe.InvocationStatus != domain.InvocationStatus(in.Status) {
+		return
+	}
+	encoded, err := json.Marshal(safe)
+	if err != nil || len(encoded) > domain.InferenceSummaryMaxBytes {
+		return
+	}
+	if _, err := tx.ExecContext(ctx, `SAVEPOINT inference_summary_insert`); err != nil {
+		return
+	}
+	if _, err := appendEvent(ctx, tx, in.TaskID, "inference.summary", nil, "internal", json.RawMessage(encoded)); err != nil {
+		rollbackCtx := context.WithoutCancel(ctx)
+		_, _ = tx.ExecContext(rollbackCtx, `ROLLBACK TO inference_summary_insert`)
+		_, _ = tx.ExecContext(rollbackCtx, `RELEASE inference_summary_insert`)
+		return
+	}
+	if _, err := tx.ExecContext(ctx, `RELEASE inference_summary_insert`); err != nil {
+		rollbackCtx := context.WithoutCancel(ctx)
+		_, _ = tx.ExecContext(rollbackCtx, `ROLLBACK TO inference_summary_insert`)
+		_, _ = tx.ExecContext(rollbackCtx, `RELEASE inference_summary_insert`)
+	}
 }
 
 func decodeInvocationEvent(eventType, raw string) (domain.Invocation, error) {
@@ -511,7 +544,7 @@ func completePendingStepInvocationTx(ctx context.Context, tx *sql.Tx, taskID, st
 		return nil, ErrInvocationInvalid
 	}
 	in.Status = "completed"
-	if err := finishInvocationTx(ctx, tx, in, encoded); err != nil {
+	if err := finishInvocationTx(ctx, tx, in, encoded, nil); err != nil {
 		return nil, err
 	}
 	raw, err = json.Marshal(state)

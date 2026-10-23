@@ -350,6 +350,13 @@ export interface InferenceTelemetry {
   context_window: TelemetryMetric<number>
 }
 
+export interface InferenceSummary {
+  invocation_id: string
+  invocation_status: 'completed' | 'failed' | 'unknown'
+  snapshot_at: string
+  inference: InferenceTelemetry
+}
+
 export interface RuntimeTelemetry {
   timestamp: string
   stale_after_ms: number
@@ -364,6 +371,7 @@ export interface RunRuntime {
   telemetry?: RuntimeTelemetry
   telemetry_revision?: number
   runtime_warnings?: string[]
+  inference_summary?: InferenceSummary
   task_id: string
   cursor: number
   status: TaskStatus

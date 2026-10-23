@@ -16,6 +16,35 @@ func invocationFixture(taskID, kind string, attempt int) domain.Invocation {
 	return domain.Invocation{TaskID: taskID, StepID: "step_1", Role: "collector", Kind: kind, OperationID: "stable-operation", InputHash: strings.Repeat("a", 64), IdempotencyKey: "attempt-" + string(rune('0'+attempt)), Attempt: attempt}
 }
 
+func inferenceSummaryFixture(invocation domain.Invocation, source string) *domain.InferenceSummary {
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	status := domain.InferenceStatusCompleted
+	switch invocation.Status {
+	case "failed":
+		status = domain.InferenceStatusFailed
+	case "unknown":
+		status = domain.InferenceStatusCancelled
+	}
+	unavailableInt := func(unit string) domain.Metric[int64] { return domain.NewUnavailableMetric[int64](unit, at) }
+	unavailableFloat := func(unit string) domain.Metric[float64] { return domain.NewUnavailableMetric[float64](unit, at) }
+	return &domain.InferenceSummary{
+		InvocationID:     invocation.ID,
+		InvocationStatus: domain.InvocationStatus(invocation.Status),
+		SnapshotAt:       at,
+		Inference: domain.InferenceTelemetry{
+			Status: status, Source: source, UpdatedAt: at,
+			RequestedTokens: unavailableInt(domain.MetricUnitTokens), PromptTokens: unavailableInt(domain.MetricUnitTokens),
+			OutputTokens: unavailableInt(domain.MetricUnitTokens), TotalTokens: unavailableInt(domain.MetricUnitTokens),
+			CachedPromptTokens:    unavailableInt(domain.MetricUnitTokens),
+			PromptTokensPerSecond: unavailableFloat(domain.MetricUnitTokensPerSecond),
+			OutputTokensPerSecond: unavailableFloat(domain.MetricUnitTokensPerSecond),
+			TTFTMS:                unavailableFloat(domain.MetricUnitMilliseconds), PromptMS: unavailableFloat(domain.MetricUnitMilliseconds),
+			GenerationMS:  unavailableFloat(domain.MetricUnitMilliseconds),
+			ContextTokens: unavailableInt(domain.MetricUnitTokens), ContextWindow: unavailableInt(domain.MetricUnitTokens),
+		},
+	}
+}
+
 func TestInvocationIntentReservationAndCheckpointRollback(t *testing.T) {
 	ctx := context.Background()
 	s, turn, _ := researchConversationFixture(t, nil)
@@ -165,6 +194,17 @@ func TestInvocationFinishRollbackCachedReopenAndConflicts(t *testing.T) {
 	if err := s.FinishInvocation(ctx, done, result); err != nil {
 		t.Fatalf("duplicate finish: %v", err)
 	}
+	var summaries int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM events WHERE task_id=? AND type='inference.summary'`, turn.Run.ID).Scan(&summaries); err != nil || summaries != 0 {
+		t.Fatalf("nil summary appended %d events: %v", summaries, err)
+	}
+	runtime, err := s.RunRuntime(ctx, turn.Run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, present := runtime["inference_summary"]; present {
+		t.Fatalf("runtime exposed absent inference summary: %#v", runtime["inference_summary"])
+	}
 	if err := s.FinishInvocation(ctx, done, map[string]any{"answer": "changed"}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("changed result: %v", err)
 	}
@@ -224,6 +264,143 @@ func TestInvocationFinishRollbackCachedReopenAndConflicts(t *testing.T) {
 	}
 }
 
+func TestInvocationInferenceSummaryPersistsSeparatelyAndOnlyOncePerAttempt(t *testing.T) {
+	ctx := context.Background()
+	s, turn, path := researchConversationFixture(t, nil)
+	claimResearchFixture(t, s)
+	first, err := s.BeginInvocation(ctx, invocationFixture(turn.Run.ID, "llm.complete", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.Status, first.ErrorCode = "failed", "model_timeout"
+	firstSummary := inferenceSummaryFixture(first, "untrusted-provider-value")
+	if err := s.FinishInvocationWithTelemetry(ctx, first, nil, firstSummary); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishInvocationWithTelemetry(ctx, first, nil, firstSummary); err != nil {
+		t.Fatalf("duplicate finish: %v", err)
+	}
+
+	second, err := s.BeginInvocation(ctx, invocationFixture(turn.Run.ID, "llm.complete", 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second.Status = "completed"
+	result := map[string]any{"answer": "retry result"}
+	secondSummary := inferenceSummaryFixture(second, "llama.cpp")
+	if err := s.FinishInvocationWithTelemetry(ctx, second, result, secondSummary); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishInvocationWithTelemetry(ctx, second, result, secondSummary); err != nil {
+		t.Fatalf("duplicate retry finish: %v", err)
+	}
+
+	var count int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM events WHERE task_id=? AND type='inference.summary' AND visibility='internal'`, turn.Run.ID).Scan(&count); err != nil || count != 2 {
+		t.Fatalf("internal summary event count = %d, want 2: %v", count, err)
+	}
+	for _, item := range []struct {
+		invocation domain.Invocation
+		wantSource string
+	}{{first, ""}, {second, "llama.cpp"}} {
+		var summarySeq, finishSeq int64
+		var raw, visibility string
+		if err := s.db.QueryRow(`SELECT seq,payload_json,visibility FROM events WHERE task_id=? AND type='inference.summary' AND json_extract(payload_json,'$.invocation_id')=?`, turn.Run.ID, item.invocation.ID).Scan(&summarySeq, &raw, &visibility); err != nil {
+			t.Fatal(err)
+		}
+		finishType := "invocation.failed"
+		if item.invocation.Status == "completed" {
+			finishType = "invocation.completed"
+		}
+		if err := s.db.QueryRow(`SELECT seq FROM events WHERE task_id=? AND type=? AND json_extract(payload_json,'$.invocation.id')=?`, turn.Run.ID, finishType, item.invocation.ID).Scan(&finishSeq); err != nil {
+			t.Fatal(err)
+		}
+		if visibility != "internal" || summarySeq >= finishSeq || len(raw) > domain.InferenceSummaryMaxBytes {
+			t.Fatalf("summary order/visibility/size invalid: seq=%d finish=%d visibility=%q bytes=%d", summarySeq, finishSeq, visibility, len(raw))
+		}
+		var persisted domain.InferenceSummary
+		if err := json.Unmarshal([]byte(raw), &persisted); err != nil || persisted.Validate() != nil || persisted.Inference.Source != item.wantSource {
+			t.Fatalf("persisted summary = %#v, unmarshal error=%v, validation=%v", persisted, err, persisted.Validate())
+		}
+		var payload map[string]json.RawMessage
+		if err := s.db.QueryRow(`SELECT payload_json FROM events WHERE task_id=? AND type=? AND json_extract(payload_json,'$.invocation.id')=?`, turn.Run.ID, finishType, item.invocation.ID).Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if _, present := payload["inference"]; present {
+			t.Fatalf("telemetry was copied into invocation event: %s", raw)
+		}
+	}
+	items, err := s.InvocationsForOperation(ctx, turn.Run.ID, first.OperationID)
+	if err != nil || len(items) != 2 || string(items[1].Output) != `{"answer":"retry result"}` {
+		t.Fatalf("invocation output contains telemetry or changed: %#v %v", items, err)
+	}
+	if _, err := s.RecordEvent(ctx, turn.Run.ID, "inference.summary", nil, "user", map[string]any{"malformed": true}); err != nil {
+		t.Fatalf("append non-internal fixture event: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := s.RunRuntime(ctx, turn.Run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	persisted, ok := runtime["inference_summary"].(domain.InferenceSummary)
+	if !ok || persisted.InvocationID != second.ID || persisted.Inference.Source != "llama.cpp" {
+		t.Fatalf("reopened runtime summary = %#v", runtime["inference_summary"])
+	}
+	if _, err := s.db.Exec(`UPDATE events SET payload_json='{}' WHERE task_id=? AND type='inference.summary' AND visibility='internal' AND json_extract(payload_json,'$.invocation_id')=?`, turn.Run.ID, second.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RunRuntime(ctx, turn.Run.ID); !errors.Is(err, ErrCheckpointInvalid) {
+		t.Fatalf("malformed persisted summary did not fail closed: %v", err)
+	}
+}
+
+func TestInvocationInferenceSummaryAppendFailureIsBestEffort(t *testing.T) {
+	ctx := context.Background()
+	s, turn, _ := researchConversationFixture(t, nil)
+	claimResearchFixture(t, s)
+	first, err := s.BeginInvocation(ctx, invocationFixture(turn.Run.ID, "llm.complete", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`CREATE TRIGGER reject_inference_summary BEFORE INSERT ON events WHEN NEW.type='inference.summary' BEGIN SELECT RAISE(ABORT,'injected summary failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	first.Status, first.ErrorCode = "failed", "model_timeout"
+	if err := s.FinishInvocationWithTelemetry(ctx, first, nil, inferenceSummaryFixture(first, "llama.cpp")); err != nil {
+		t.Fatalf("summary append failure failed invocation finish: %v", err)
+	}
+	if _, err := s.db.Exec(`DROP TRIGGER reject_inference_summary`); err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.BeginInvocation(ctx, invocationFixture(turn.Run.ID, "llm.complete", 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second.Status = "completed"
+	invalid := inferenceSummaryFixture(second, "llama.cpp")
+	invalid.InvocationID = "different-invocation"
+	if err := s.FinishInvocationWithTelemetry(ctx, second, map[string]bool{"ok": true}, invalid); err != nil {
+		t.Fatalf("invalid optional summary failed invocation finish: %v", err)
+	}
+	items, err := s.InvocationsForOperation(ctx, turn.Run.ID, first.OperationID)
+	if err != nil || len(items) != 2 || items[0].Status != "failed" || items[1].Status != "completed" {
+		t.Fatalf("invocation finish did not persist: %#v %v", items, err)
+	}
+	var summaries int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM events WHERE task_id=? AND type='inference.summary'`, turn.Run.ID).Scan(&summaries); err != nil || summaries != 0 {
+		t.Fatalf("failed/invalid summary append left %d events: %v", summaries, err)
+	}
+}
+
 func TestInvocationCheckpointCorruptionAndLeaseLoss(t *testing.T) {
 	ctx := context.Background()
 	s, turn, _ := researchConversationFixture(t, nil)
@@ -232,6 +409,9 @@ func TestInvocationCheckpointCorruptionAndLeaseLoss(t *testing.T) {
 	}
 	task := claimResearchFixture(t, s)
 	leased := domain.WithExecutionLease(ctx, *task.Lease)
+	if _, err := s.RecordEvent(ctx, turn.Run.ID, "inference.summary", nil, "internal", map[string]any{}); !errors.Is(err, ErrLeaseLost) {
+		t.Fatalf("unleased inference summary event: %v", err)
+	}
 	in, err := s.BeginInvocation(leased, invocationFixture(turn.Run.ID, "llm.complete", 1))
 	if err != nil {
 		t.Fatal(err)

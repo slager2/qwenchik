@@ -280,6 +280,76 @@ func TestTelemetryValidateAcceptsInferenceStatuses(t *testing.T) {
 	}
 }
 
+func TestInferenceSummaryValidationAndSourceSanitization(t *testing.T) {
+	summary := InferenceSummary{
+		InvocationID:     "invocation-test",
+		InvocationStatus: InvocationStatusCompleted,
+		SnapshotAt:       telemetryTestTime,
+		Inference:        validTelemetry().Inference,
+	}
+	summary.Inference.Source = "llama.cpp"
+	if err := summary.Validate(); err != nil {
+		t.Fatalf("valid inference summary rejected: %v", err)
+	}
+	encoded, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatalf("marshal inference summary: %v", err)
+	}
+	if len(encoded) == 0 || len(encoded) > InferenceSummaryMaxBytes {
+		t.Fatalf("serialized summary size = %d, limit = %d", len(encoded), InferenceSummaryMaxBytes)
+	}
+
+	unsafeSource := summary
+	unsafeSource.Inference.Source = "untrusted provider diagnostic"
+	if err := unsafeSource.Validate(); !errors.Is(err, ErrInvalidInferenceSummary) {
+		t.Fatalf("unsafe source validation = %v, want ErrInvalidInferenceSummary", err)
+	}
+	sanitized := unsafeSource.Sanitized()
+	if sanitized.Inference.Source != "" {
+		t.Fatalf("unsafe source survived sanitization: %q", sanitized.Inference.Source)
+	}
+	if err := sanitized.Validate(); err != nil {
+		t.Fatalf("sanitized summary rejected: %v", err)
+	}
+	if got := summary.Sanitized().Inference.Source; got != "llama.cpp" {
+		t.Errorf("allowlisted source changed: %q", got)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*InferenceSummary)
+	}{
+		{"missing id", func(value *InferenceSummary) { value.InvocationID = "" }},
+		{"unbounded id", func(value *InferenceSummary) { value.InvocationID = strings.Repeat("i", 129) }},
+		{"invalid status", func(value *InferenceSummary) { value.InvocationStatus = "running" }},
+		{"missing snapshot", func(value *InferenceSummary) { value.SnapshotAt = time.Time{} }},
+		{"inference after snapshot", func(value *InferenceSummary) { value.Inference.UpdatedAt = telemetryTestTime.Add(time.Second) }},
+		{"invalid unit", func(value *InferenceSummary) {
+			value.Inference.OutputTokens = NewUnavailableMetric[int64](MetricUnitBytes, telemetryTestTime)
+		}},
+		{"invalid cached token metric", func(value *InferenceSummary) {
+			value.Inference.CachedPromptTokens = NewExactMetric(int64(-1), MetricUnitTokens, telemetryTestTime)
+		}},
+		{"invalid range", func(value *InferenceSummary) {
+			value.Inference.OutputTokens = NewExactMetric(int64(-1), MetricUnitTokens, telemetryTestTime)
+		}},
+		{"token invariant", func(value *InferenceSummary) {
+			value.Inference.PromptTokens = NewExactMetric(int64(2), MetricUnitTokens, telemetryTestTime)
+			value.Inference.OutputTokens = NewExactMetric(int64(3), MetricUnitTokens, telemetryTestTime)
+			value.Inference.TotalTokens = NewExactMetric(int64(4), MetricUnitTokens, telemetryTestTime)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := summary
+			test.mutate(&candidate)
+			if err := candidate.Validate(); !errors.Is(err, ErrInvalidInferenceSummary) {
+				t.Errorf("Validate() error = %v, want ErrInvalidInferenceSummary", err)
+			}
+		})
+	}
+}
+
 func validTelemetry() Telemetry {
 	timestamp := telemetryTestTime
 	unavailableFloat := func(unit string) Metric[float64] {

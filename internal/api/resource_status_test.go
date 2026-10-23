@@ -147,3 +147,42 @@ func TestSafeTelemetryValidatesAllowlistedMetricsAndBoundsResponse(t *testing.T)
 		t.Fatalf("sanitized telemetry is not valid typed telemetry: %v", err)
 	}
 }
+
+func TestSafeInferenceSummaryBoundsMetricsAndInvocationIdentity(t *testing.T) {
+	at := time.Now().UTC()
+	telemetry := apiTelemetryFixture(at).Inference
+	telemetry.RequestedTokens = domain.NewExactMetric[int64](1<<45, domain.MetricUnitTokens, at)
+	summary := domain.InferenceSummary{
+		InvocationID:     "invocation-" + strings.Repeat("a", 64),
+		InvocationStatus: domain.InvocationStatusCompleted,
+		SnapshotAt:       at,
+		Inference:        telemetry,
+	}
+	projected, ok := SafeInferenceSummary(summary)
+	if !ok {
+		t.Fatal("valid durable inference summary was omitted")
+	}
+	if projected.Inference.RequestedTokens.Source != domain.MetricSourceUnavailable || projected.Inference.Source != "llama.cpp" {
+		t.Fatalf("unsafe metric/source survived projection: %+v", projected.Inference)
+	}
+
+	summary.InvocationID = "https://PRIVATE_URL/private/path"
+	if _, ok := SafeInferenceSummary(summary); ok {
+		t.Fatal("unsafe invocation identity survived projection")
+	}
+
+	runtime := map[string]any{"inference_summary": domain.InferenceSummary{
+		InvocationID: "invocation-" + strings.Repeat("b", 64), InvocationStatus: domain.InvocationStatusCompleted,
+		SnapshotAt: at, Inference: telemetry,
+	}}
+	(&Server{}).sanitizeRunInferenceSummary(runtime)
+	projectedSummary, ok := runtime["inference_summary"].(domain.InferenceSummary)
+	if !ok || projectedSummary.Inference.RequestedTokens.Source != domain.MetricSourceUnavailable {
+		t.Fatalf("runtime summary was not sanitized: %#v", runtime["inference_summary"])
+	}
+	malformed := map[string]any{"inference_summary": map[string]string{"private": "value"}}
+	(&Server{}).sanitizeRunInferenceSummary(malformed)
+	if _, present := malformed["inference_summary"]; present {
+		t.Fatal("untyped summary survived runtime projection")
+	}
+}

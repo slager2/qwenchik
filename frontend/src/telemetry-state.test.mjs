@@ -48,4 +48,7 @@ test('freshness timer advances through metric expiry boundaries with a fake cloc
   assert.equal(nextTelemetryExpiry(telemetry, null, now), now + 5_001)
   assert.equal(nextTelemetryExpiry(telemetry, null, now + 5_001), now + 7_001)
   assert.equal(nextTelemetryExpiry(telemetry, null, now + 7_001), undefined)
+
+  const savedRuntime = { inference_summary: { snapshot_at: new Date(now - 5_000).toISOString() } }
+  assert.equal(nextTelemetryExpiry(null, savedRuntime, now), now + 25_001)
 })

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -292,11 +291,9 @@ func TestInvocationTelemetryCallbackReceivesResponseAndEveryEventWithoutDatabase
 	if err != nil {
 		t.Fatal(err)
 	}
-	invocationStarted, invocationFinished := 0, 0
+	invocationStarted, invocationFinished, inferenceSummaries := 0, 0, 0
+	finalOutputTokens := make([]int64, 0, 2)
 	for _, event := range events {
-		if strings.Contains(strings.ToLower(event.Type), "telemetry") {
-			t.Fatalf("telemetry tick was written to SQLite: %s", event.Type)
-		}
 		switch event.Type {
 		case "invocation.started":
 			invocationStarted++
@@ -318,9 +315,28 @@ func TestInvocationTelemetryCallbackReceivesResponseAndEveryEventWithoutDatabase
 					t.Fatal("completion telemetry was persisted with the invocation result")
 				}
 			}
+		case "inference.summary":
+			inferenceSummaries++
+			var summary domain.InferenceSummary
+			if err := json.Unmarshal(event.Payload, &summary); err != nil {
+				t.Fatal(err)
+			}
+			if event.Visibility != "internal" || summary.Validate() != nil {
+				t.Fatalf("invalid or public inference summary: visibility=%s summary=%+v", event.Visibility, summary)
+			}
+			if summary.InvocationStatus != domain.InvocationStatusCompleted || summary.Inference.Status != domain.InferenceStatusCompleted || summary.Inference.OutputTokens.Value == nil {
+				t.Fatalf("unexpected persisted invocation outcome/telemetry: %+v", summary)
+			}
+			finalOutputTokens = append(finalOutputTokens, *summary.Inference.OutputTokens.Value)
 		}
 	}
 	if invocationStarted != 2 || invocationFinished != 2 {
 		t.Fatalf("expected only one start/finish pair per model call, got started=%d finished=%d", invocationStarted, invocationFinished)
+	}
+	if inferenceSummaries != 2 {
+		t.Fatalf("persisted %d inference summaries for two finished invocations; periodic samples must not be written", inferenceSummaries)
+	}
+	if len(finalOutputTokens) != 2 || finalOutputTokens[0] != 2 || finalOutputTokens[1] != 5 {
+		t.Fatalf("persisted summaries must contain only each invocation's final reading: %#v", finalOutputTokens)
 	}
 }
