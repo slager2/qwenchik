@@ -12,20 +12,34 @@ Construct `NewHostProvider(llamaBaseURL, policy)` and
 `NewMonitor(provider, policy)`; both return a value and an error. `Provider`
 has `Snapshot(ctx) (Snapshot, error)`. `Monitor` has
 `Check(ctx) (Snapshot, *Violation, error)` and `LastSnapshot() Snapshot`.
-`ResourceMonitor` satisfies `Monitor`. Every check probes afresh; the worker
-owns the periodic loop, invocation gates, cancellation, lease and persistence.
+`ResourceMonitor` satisfies `Monitor`. Every check requests a new overall
+snapshot; individual power-source readings are cached for 30 s and Linux
+llama-server RSS is cached for up to the check interval (capped at 5 s). The
+worker owns the periodic loop, invocation gates, cancellation, lease and
+persistence.
 `LastSnapshot` returns a synchronized deep copy; its zero value means no check.
 
-All numeric telemetry and health fields are nullable JSON pointers. RAM uses
-Linux `MemAvailable`, RSS uses `/proc/self/status`, and heap is Go `HeapAlloc`.
-`SnapshotAt` is the UTC collection start. GPU collection uses a fixed
-`nvidia-smi` command, capped output and a 2 s timeout. Telemetry executables
-are resolved only under `/usr/bin` and `/bin`, not the caller's PATH. Multiple GPUs are
-conservatively represented by minimum free memory and maximum temperature;
-an unavailable reading on any device leaves that metric unknown. No OOM or
-restart history is inferred. UPower `OnBattery` uses a fixed `busctl` call
-and a 30 s cache, including unavailable results. Power is `unknown`, `AC`, or
-`battery` and does not override resource thresholds.
+All numeric telemetry and health fields are nullable JSON pointers.
+`SnapshotAt` is the UTC time at the end of host collection. On Linux, RAM uses
+`MemAvailable`,
+agent RSS uses `/proc/self/status`, CPU utilization uses aggregate `/proc/stat`
+deltas, and CPU temperature uses supported hwmon/thermal sensors. UPower
+`OnBattery` uses a fixed `busctl` call and a 30 s cache, including unavailable
+results; battery percentage/charging are not collected. On Windows, bounded
+gopsutil/Win32 calls supply CPU, RAM, process and system metadata, while
+`GetSystemPowerStatus` supplies AC/battery and battery percentage/charging.
+CPU temperature remains unavailable on Windows.
+
+GPU collection uses a fixed `nvidia-smi` query, capped output and a 2 s
+timeout; its per-device `power.draw` field is reported when supported. Host-level
+power-draw watts are unavailable on both platforms. On Linux, telemetry
+executables are resolved only under `/usr/bin` and `/bin`, not the caller's PATH;
+Windows checks fixed NVIDIA system
+locations. Multiple GPU devices retain per-device metrics. Missing NVIDIA
+tooling and unavailable readings remain unknown. No OOM or restart history is
+inferred. Power source is `unknown`, `AC`, or `battery` and does not override
+resource thresholds. Go heap allocation is separately reported and is not
+process RSS.
 
 Only numeric loopback addresses and `localhost` are accepted. `localhost` is
 normalized to `127.0.0.1`, without DNS. Empty, root and `/v1[/]` base paths

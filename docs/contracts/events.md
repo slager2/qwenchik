@@ -20,16 +20,21 @@
 
 Public event types include `task.created`, `task.status_changed`, `task.recovered`, `message.created`, `message.delta`, `plan.created`, `step.started`, `step.completed`, `step.skipped`, `tool.started`, `tool.completed`, `tool.failed`, `search.provider`, `evidence.created`, `artifact.created`, `approval.requested`, `approval.approved`, `approval.rejected`, `approval.expired`, `task.completed`, `task.failed`, and `task.cancelled`. `step.skipped` records a conditional plan step that was intentionally not executed. `checkpoint.saved`, `policy.decision`, `approval.consumed`, and `memory.retrieved` remain internal/audit. This list is additive; existing event types and payloads retain their meanings.
 
+`inference.summary` is an internal event written at most once per finished LLM invocation when bounded final inference telemetry is available. It contains only invocation identity/status and validated token/timing metrics; prompt and response text, system/GPU samples, streaming ticks, and provider error bodies are excluded. It uses the existing event journal and adds no SQL migration.
+
 `message.delta` is emitted only for the final user-facing synthesis and only with `visibility: "user"`. Its payload is `{ "stream_id": string, "message_id": string, "chunk_index": number, "delta": string }`. Chunk indexes start at zero and increase consecutively for a stream. Each persisted delta is bounded; stream IDs are fresh for each synthesis attempt, including citation corrections. Deltas are provisional text, not a finalized assistant message or lifecycle authority. Only after citation validation succeeds does `CompleteTask` persist the canonical assistant message and its `message.created` event, using the final stream's `message_id`.
 
 ## SSE
 
 - `GET /api/tasks/{task_id}/events/stream`
+- `GET /api/runs/{run_id}/events/stream` aliases the conversation run ID to its task event journal.
 - `id:` equals durable task `seq`; `event:` is an allowlisted event type; `data:` is the envelope JSON.
 - `Last-Event-ID` replays events after the supplied sequence in ascending order.
 - Heartbeat comments are emitted while waiting; stream buffering and replay are bounded.
 - A newly connected client can fetch events with `GET /api/tasks/{task_id}/events?after=N` before subscribing.
 - Terminal task events are persisted and delivered like all other events.
+
+The durable envelope/cursor rules above apply to committed journal events. Runtime streams additionally send non-durable `snapshot`, `runtime_snapshot`, `inference_progress`, and `resource_warning` frames without an event ID or sequence number. They are coalesced status snapshots, do not advance the durable cursor, and are not replayed from event history. `GET /api/runs/{run_id}/runtime` includes the latest persisted inference summary when one is available.
 
 No model-generated token or progress event is trusted as lifecycle state. Streamed model text is exposed only as provisional `message.delta` events and is not an event authority.
 

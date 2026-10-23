@@ -20,7 +20,10 @@ The current implementation includes:
 - persisted conversation/message/run APIs, explicit `chat` and `research` modes, stop, retry, and answer continuation;
 - Phase 1 research sessions with immutable profile/policy/model snapshots, persisted absolute deadlines, and durable pre-call budget reservations on the existing fixed-plan execution path;
 - SSE replay using `Last-Event-ID` or an initial `after` cursor, with canonical persisted message snapshots;
+- typed host/inference telemetry in Chat Details and Workspace, with provenance/freshness labels, live SSE updates, and bounded final inference summaries;
 - conversation sidebar, safe Markdown/GFM and evidence links, independent research details, mobile drawers, plus the retained Kanban, inspector, approvals, memories, and command palette.
+
+See [runtime telemetry](docs/runtime-telemetry.md) for metric provenance, platform limitations, persistence boundaries, and the local smoke procedure.
 
 Search adapters are configured separately from live health. DuckDuckGo is enabled by default for convenience and sends queries to an external service; set `SEARCH_ENABLE_DDG=false` for privacy-first operation. It can be blocked or change its markup, so enabled does not mean healthy. SearXNG and Tavily are optional additions. Results, valid empty responses, challenge pages, malformed responses, rate limits, invalid credentials, and policy filtering have separate diagnostic outcomes. Discovery is never simulated with `text.inspect`, and every result URL still passes through allowlist/SSRF checks and must be fetched before it becomes evidence. The sandbox tool fails with `sandbox_unavailable` unless rootless Docker and its configured image are available; it never falls back to host execution. The PDF repair policy requires isolated Poppler by default; the process-bounded pure-Go helper is available only with explicit permission and is not an OS sandbox. JS/browser research tools, OCR, cloud LLM fallback and semantic/embedding memory search are not registered.
 
