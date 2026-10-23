@@ -3,6 +3,7 @@ import { api } from './api'
 import MarkdownMessage from './MarkdownMessage'
 import { applyRunEvent, citationReferences, createStreamState, mergeMessages, normalizeSources, terminal, type StreamState } from './conversation-state.mjs'
 import ResearchPanel from './ResearchPanel'
+import { recordReload, recordSSE } from './network-debug'
 import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, Evidence, ResearchPlan, Run, RunRuntime, Submission } from './types'
 import './chat.css'
 
@@ -12,13 +13,14 @@ const stamp = (value: string) => new Date(value).toLocaleString('ru-RU', { day: 
 const labels: Record<string, string> = { queued: 'В очереди', planning: 'Планирование', running: 'В работе', verifying: 'Проверка', completed: 'Готово', failed: 'Не удалось завершить', cancelled: 'Остановлено', paused: 'На паузе', waiting_approval: 'Нужно решение', search: 'Поиск источников', searching: 'Поиск источников', fetch: 'Чтение источников', fetching: 'Чтение источников', extract: 'Извлечение текста', synthesis: 'Подготовка ответа', synthesizing: 'Подготовка ответа', verification: 'Сверка источников', finalization: 'Завершение', discovered: 'Найден', validated: 'Проверен', rejected: 'Отклонён', extracted: 'Текст извлечён', cited: 'Использован в ответе' }
 const eventTypes = ['context.compacted', 'continuation.requested', 'verification.completed', 'run.paused', 'run.resumed', 'run.resource_probe', 'run.blocked', 'run.failed', 'task.created', 'task.status_changed', 'task.recovered', 'message.created', 'message.delta', 'plan.created', 'step.started', 'step.completed', 'step.skipped', 'tool.started', 'tool.completed', 'tool.failed', 'source.updated', 'source.fetch.started', 'source.fetch.failed', 'source.failed', 'source.extracted', 'research.warning', 'search.provider', 'search.hit', 'query.updated', 'verification.updated', 'evidence.created', 'artifact.created', 'approval.requested', 'approval.approved', 'approval.rejected', 'approval.expired', 'task.completed', 'task.failed', 'task.cancelled']
 
-function useRemote<T>(load: (signal: AbortSignal) => Promise<T>, interval = 0) {
+function useRemote<T>(load: (signal: AbortSignal) => Promise<T>, interval = 0, resource = 'chat.resource') {
   const [data, setData] = useState<T>()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const controller = useRef<AbortController | null>(null)
   const sequence = useRef(0)
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (reason: 'initial' | 'sse_open' | 'sse_event' | 'sse_resync' | 'terminal' | 'fallback_poll' | 'manual_retry' | 'user_action' = 'manual_retry') => {
+    recordReload(resource, reason)
     const request = ++sequence.current
     controller.current?.abort()
     const next = new AbortController()
@@ -34,7 +36,7 @@ function useRemote<T>(load: (signal: AbortSignal) => Promise<T>, interval = 0) {
     } finally {
       if (!next.signal.aborted && request === sequence.current) setLoading(false)
     }
-  }, [load])
+  }, [load, resource])
   const updateData = useCallback<typeof setData>((value) => {
     controller.current?.abort()
     sequence.current++
@@ -44,8 +46,8 @@ function useRemote<T>(load: (signal: AbortSignal) => Promise<T>, interval = 0) {
   useEffect(() => {
     setData(undefined)
     setError('')
-    void reload()
-    const timer = interval ? window.setInterval(() => void reload(), interval) : undefined
+    void reload('initial')
+    const timer = interval ? window.setInterval(() => void reload('fallback_poll'), interval) : undefined
     return () => { window.clearInterval(timer); controller.current?.abort(); sequence.current++ }
   }, [reload, interval])
   return { data, setData: updateData, error, loading, reload }
@@ -86,7 +88,7 @@ export default function ChatShell() {
   const [query, setQuery] = useState('')
   const [sidebar, setSidebar] = useState(false)
   const [newVersion, setNewVersion] = useState(0)
-  const conversations = useRemote(useCallback((signal) => api.conversations(signal), []), 8000)
+  const conversations = useRemote(useCallback((signal) => api.conversations(signal), []), 8000, 'chat.conversations')
   useEffect(() => {
     const navigate = () => { setSelected(chatID()); setSidebar(false) }
     window.addEventListener('hashchange', navigate)
@@ -113,12 +115,12 @@ function transcriptReducer(state: Transcript, action: TranscriptAction): Transcr
 }
 
 function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; onSelect: (id: string) => void; onChanged: () => Promise<void>; onSidebar: () => void }) {
-  const conversation = useRemote(useCallback((signal) => id ? api.conversation(id, signal) : Promise.resolve<Conversation | null>(null), [id]), id ? 5000 : 0)
-  const snapshots = useRemote(useCallback((signal) => id ? api.conversationMessages(id, signal) : Promise.resolve<ConversationMessage[]>([]), [id]), id ? 2500 : 0)
+  const conversation = useRemote(useCallback((signal) => id ? api.conversation(id, signal) : Promise.resolve<Conversation | null>(null), [id]), id ? 5000 : 0, 'chat.conversation')
+  const snapshots = useRemote(useCallback((signal) => id ? api.conversationMessages(id, signal) : Promise.resolve<ConversationMessage[]>([]), [id]), id ? 2500 : 0, 'chat.messages')
   const [transcript, dispatch] = useReducer(transcriptReducer, { messages: [], stream: createStreamState('') })
   const [runID, setRunID] = useState('')
-  const run = useRemote(useCallback((signal) => runID ? api.conversationRun(runID, signal) : Promise.resolve<Run | null>(null), [runID]), runID ? 2500 : 0)
-  const runtime = useRemote(useCallback((signal) => runID ? api.runRuntime(runID, signal) : Promise.resolve<RunRuntime | null>(null), [runID]), runID ? 2500 : 0)
+  const run = useRemote(useCallback((signal) => runID ? api.conversationRun(runID, signal) : Promise.resolve<Run | null>(null), [runID]), runID ? 2500 : 0, 'chat.run')
+  const runtime = useRemote(useCallback((signal) => runID ? api.runRuntime(runID, signal) : Promise.resolve<RunRuntime | null>(null), [runID]), runID ? 2500 : 0, 'chat.runtime')
   const replay = useRemote(useCallback(async (signal) => {
     const history: AgentEvent[] = []
     if (!runID) return history
@@ -132,9 +134,9 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
       after = Math.max(...valid.map((event) => event.seq))
     }
     throw new Error('История слишком велика для одной загрузки. Сохранённые сообщения доступны.')
-  }, [runID]))
-  const doctor = useRemote(useCallback((signal) => api.doctor(signal), []), 30000)
-  const health = useRemote(useCallback((signal) => api.health(signal), []), 15000)
+  }, [runID]), 0, 'chat.event_replay')
+  const doctor = useRemote(useCallback((signal) => api.doctor(signal), []), 30000, 'chat.doctor')
+  const health = useRemote(useCallback((signal) => api.health(signal), []), 15000, 'chat.health')
   const [mode, setMode] = useState<ConversationMode>('chat')
   const [text, setText] = useState('')
   const [title, setTitle] = useState('')
@@ -186,19 +188,28 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   useEffect(() => {
     if (!runID || (currentRun && terminal(currentRun.status))) { setConnection('idle'); return }
     let disposed = false
+    let opened = false
+    let reconnecting = false
+    let closed = false
+    const endpoint = `/api/runs/${encodeURIComponent(runID)}/events/stream`
+    const closeStream = () => { if (opened && !closed) { closed = true; recordSSE('close', endpoint) } }
     const cursor = streamRef.current.runID === runID ? streamRef.current.cursor : 0
     setConnection('connecting')
-    const source = new EventSource(`/api/runs/${encodeURIComponent(runID)}/events/stream?after=${cursor}`)
+    const source = new EventSource(`${endpoint}?after=${cursor}`)
     const receive = (raw: Event) => {
       if (disposed) return
       try {
         const event = JSON.parse((raw as MessageEvent<string>).data) as AgentEvent
         if (event.task_id !== runID) return
+        const isTerminal = ['task.completed', 'task.failed', 'task.cancelled'].includes(event.type)
+        recordReload('chat.transcript', isTerminal ? 'terminal' : 'sse_event')
         dispatch({ type: 'event', event })
-        if (event.type === 'message.created' || ['task.completed', 'task.failed', 'task.cancelled'].includes(event.type)) {
-          void snapshots.reload()
-          void run.reload()
-          void conversation.reload()
+        if (event.type === 'message.created' || isTerminal) {
+          const reason = isTerminal ? 'terminal' : 'sse_event'
+          void snapshots.reload(reason)
+          void run.reload(reason)
+          void conversation.reload(reason)
+          void runtime.reload(reason)
         }
       } catch { setConnection('invalid'); setError('Не удалось прочитать событие. Сохранённые сообщения продолжают обновляться.') }
     }
@@ -210,22 +221,25 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
     source.addEventListener('resync', (raw) => {
       if (disposed) return
       try { const next = JSON.parse((raw as MessageEvent<string>).data) as { cursor: number }; if (Number.isSafeInteger(next.cursor) && next.cursor >= 0) dispatch({ type: 'resync', id: runID, cursor: next.cursor }) } catch { setConnection('invalid') }
-      void snapshots.reload(); void run.reload(); void runtime.reload(); void replay.reload()
+      void snapshots.reload('sse_resync'); void run.reload('sse_resync'); void runtime.reload('sse_resync'); void replay.reload('sse_resync')
     })
     source.onopen = () => {
       if (disposed) return
+      if (!opened) { opened = true; recordSSE('open', endpoint) }
+      else if (reconnecting) reconnecting = false
       setConnection('live')
-      void snapshots.reload()
-      void run.reload()
-      void replay.reload()
+      void snapshots.reload('sse_open')
+      void run.reload('sse_open')
+      void runtime.reload('sse_open')
+      void replay.reload('sse_open')
     }
-    source.onerror = () => { if (!disposed) setConnection('reconnecting') }
-    return () => { disposed = true; source.close() }
+    source.onerror = () => { if (!disposed) { setConnection('reconnecting'); if (!reconnecting) { reconnecting = true; recordSSE('reconnect', endpoint) } } }
+    return () => { disposed = true; source.close(); closeStream() }
   }, [runID, currentRun?.status, reconnect, snapshots.reload, run.reload, conversation.reload, replay.reload, runtime.reload, runtime.setData])
 
   useEffect(() => {
     if (!transcript.stream.needsSync) return
-    void snapshots.reload()
+    void snapshots.reload('sse_resync')
   }, [transcript.stream.needsSync, snapshots.reload])
 
   async function action(work: () => Promise<void>) {
@@ -331,13 +345,13 @@ function MessageContent({ message, runID, references }: { message: ConversationM
 
 function useResearch(runID: string, enabled: boolean, active: boolean) {
   const poll = enabled && active ? 5000 : 0
-  const plan = useRemote(useCallback((signal) => enabled && runID ? api.runPlan(runID, signal) : Promise.resolve<ResearchPlan | null>(null), [enabled, runID]), poll)
-  const sources = useRemote(useCallback(async (signal) => enabled && runID ? normalizeSources(await api.runSources(runID, signal)) : [], [enabled, runID]), poll)
+  const plan = useRemote(useCallback((signal) => enabled && runID ? api.runPlan(runID, signal) : Promise.resolve<ResearchPlan | null>(null), [enabled, runID]), poll, 'research.plan')
+  const sources = useRemote(useCallback(async (signal) => enabled && runID ? normalizeSources(await api.runSources(runID, signal)) : [], [enabled, runID]), poll, 'research.sources')
   const evidence = useRemote(useCallback(async (signal) => {
     if (!runID) return []
     const result = await api.runEvidence(runID, signal)
     return (Array.isArray(result) ? result : []) as Evidence[]
-  }, [runID]), active ? 5000 : 0)
-  const providers = useRemote(useCallback((signal) => enabled ? api.providers(signal) : Promise.resolve(null), [enabled]), poll)
+  }, [runID]), active ? 5000 : 0, 'research.evidence')
+  const providers = useRemote(useCallback((signal) => enabled ? api.providers(signal) : Promise.resolve(null), [enabled]), poll, 'research.providers')
   return { plan, sources, evidence, providers }
 }

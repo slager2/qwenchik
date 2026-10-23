@@ -1,5 +1,6 @@
 import type { AgentEvent, Approval, Artifact, Checkpoint, Evidence, Memory, MemoryMatch, MemoryStatus, Message, ProvidersResponse, Task, TaskStep } from './types'
 import type { Conversation, ConversationMessage, ConversationMode, DoctorResponse, ResearchPlan, Run, RunRuntime, SourceRecord, Submission } from './types'
+import { recordHTTP } from './network-debug'
 
 export class ApiError extends Error {
   status: number
@@ -15,25 +16,46 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-  })
-  if (!response.ok) {
-    let message = `Запрос завершился с кодом ${response.status}`
-    let code = ''
-    let retryable = false
-    try {
-      const body = await response.json()
-      message = body.error?.message ?? message
-      code = body.error?.code ?? ''
-      retryable = body.error?.retryable === true
-    } catch {
-    }
-    throw new ApiError(message, response.status, code, retryable)
+  const started = performance.now()
+  const method = init?.method || 'GET'
+  let status: number | undefined
+  let responseBytes: number | undefined
+  let recorded = false
+  const record = (aborted = false) => {
+    if (recorded) return
+    recorded = true
+    recordHTTP({ method, path, status, duration_ms: performance.now() - started, response_bytes: responseBytes, aborted })
   }
-  if (response.status === 204) return undefined as T
-  return response.json() as Promise<T>
+  try {
+    const response = await fetch(path, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+    })
+    status = response.status
+    const length = response.headers.get('content-length')
+    if (length && /^\d{1,15}$/.test(length)) responseBytes = Number(length)
+    if (!response.ok) {
+      let message = `Запрос завершился с кодом ${response.status}`
+      let code = ''
+      let retryable = false
+      try {
+        const body = await response.json()
+        message = body.error?.message ?? message
+        code = body.error?.code ?? ''
+        retryable = body.error?.retryable === true
+      } catch {
+      }
+      record()
+      throw new ApiError(message, response.status, code, retryable)
+    }
+    if (response.status === 204) { record(); return undefined as T }
+    const result = await response.json() as T
+    record()
+    return result
+  } catch (caught) {
+    record(init?.signal?.aborted === true || caught instanceof DOMException && caught.name === 'AbortError')
+    throw caught
+  }
 }
 
 export const api = {

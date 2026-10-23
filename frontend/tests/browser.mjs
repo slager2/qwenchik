@@ -155,6 +155,12 @@ try {
 
   await page.goto(`${base}/#/chat/a`)
   await page.getByText('Ответ первого разговора', { exact: true }).waitFor()
+  await page.waitForFunction(() => typeof window.__qwenchikDebug?.snapshot === 'function')
+  const initialDebug = await page.evaluate(() => window.__qwenchikDebug.snapshot())
+  assert.ok(initialDebug.requests.count > 0, 'development diagnostics should observe initial API requests')
+  assert.ok(Object.keys(initialDebug.requests.by_endpoint).every((endpoint) => endpoint.startsWith('GET /api/')), 'HTTP endpoint aggregation should use normalized paths')
+  assert.ok(!JSON.stringify(initialDebug).includes('PRIVATE-'), 'debug snapshot must not include request payloads')
+  assert.equal(initialDebug.marker, 'QWENCHIK_DEV_NETWORK_DIAGNOSTICS_V1')
   await page.getByText('Backend: доступен', { exact: true }).waitFor()
   await page.getByText('Qwen: не проверена', { exact: true }).waitFor()
   doctorBlocked = false

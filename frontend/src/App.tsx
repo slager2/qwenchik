@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { api } from './api'
+import { recordReload, recordSSE, type ReloadReason } from './network-debug'
 import ChatShell from './ChatShell'
 import { legacyDraft } from './conversation-state.mjs'
 import { createTaskDetailTracker } from './task-detail.mjs'
@@ -128,8 +129,11 @@ function Workspace() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [memoryOpen, setMemoryOpen] = useState(false)
   const selectedTask = tasks.find((task) => task.id === selectedID)
+  const connectionRef = useRef(connection)
+  connectionRef.current = connection
 
-  const refreshTasks = useCallback(async (quiet = false) => {
+  const refreshTasks = useCallback(async (quiet = false, reason: ReloadReason = quiet ? 'fallback_poll' : 'user_action') => {
+    recordReload('workspace.tasks', reason)
     if (!quiet) setRefreshing(true)
     try {
       const items = await api.tasks()
@@ -143,7 +147,8 @@ function Workspace() {
     }
   }, [])
 
-  const refreshDetail = useCallback(async (id: string) => {
+  const refreshDetail = useCallback(async (id: string, reason: ReloadReason = 'user_action') => {
+    recordReload('workspace.detail', reason)
     const isCurrent = detailTracker.beginRequest(id)
     let savedIDs: string[] = []
     async function load<T>(request: Promise<T>, apply: (value: T) => void) {
@@ -173,8 +178,8 @@ function Workspace() {
   }, [detailTracker])
 
   useEffect(() => {
-    void refreshTasks()
-    const timer = window.setInterval(() => void refreshTasks(true), 4000)
+    void refreshTasks(false, 'initial')
+    const timer = window.setInterval(() => void refreshTasks(true, 'fallback_poll'), 4000)
     return () => window.clearInterval(timer)
   }, [refreshTasks])
 
@@ -204,7 +209,7 @@ function Workspace() {
       setApprovals([])
       return
     }
-    if (detailTracker.observe(selectedID, selectedTask?.status)) void refreshDetail(selectedID)
+    if (detailTracker.observe(selectedID, selectedTask?.status)) void refreshDetail(selectedID, connectionRef.current === 'live' ? 'sse_event' : 'initial')
   }, [selectedID, selectedTask?.status, refreshDetail, detailTracker])
 
   useEffect(() => {
@@ -213,7 +218,8 @@ function Workspace() {
 
   useEffect(() => {
     let active = true
-    const refresh = async () => {
+    const refresh = async (reason: ReloadReason) => {
+      recordReload('workspace.providers', reason)
       try {
         const result = await api.providers()
         if (active) { setProviders(result); setProvidersError('') }
@@ -221,8 +227,8 @@ function Workspace() {
         if (active) setProvidersError('Состояние провайдеров недоступно; показанные данные могут быть устаревшими.')
       }
     }
-    void refresh()
-    const timer = window.setInterval(() => void refresh(), 4000)
+    void refresh('initial')
+    const timer = window.setInterval(() => void refresh('fallback_poll'), 4000)
     return () => { active = false; window.clearInterval(timer) }
   }, [])
 
@@ -233,7 +239,12 @@ function Workspace() {
       return
     }
     setConnection('connecting')
-    const source = new EventSource(`/api/tasks/${encodeURIComponent(selectedID)}/events/stream`)
+    const endpoint = `/api/tasks/${encodeURIComponent(selectedID)}/events/stream`
+    const source = new EventSource(endpoint)
+    let opened = false
+    let reconnecting = false
+    let closed = false
+    const closeStream = () => { if (opened && !closed) { closed = true; recordSSE('close', endpoint) } }
     const eventTypes = [...Object.keys(eventLabels), 'message.delta']
     const listeners: [string, EventListener][] = eventTypes.map((type) => {
       const listener: EventListener = (rawEvent) => {
@@ -246,6 +257,7 @@ function Workspace() {
           return
         }
         if (parsed.type === 'message.delta') {
+          recordReload('workspace.draft', 'sse_event')
           const payload = parsed.payload as Partial<MessageDeltaPayload>
           if (typeof payload.stream_id !== 'string' || typeof payload.message_id !== 'string' || typeof payload.delta !== 'string' || !Number.isInteger(payload.chunk_index)) {
             setError('Получен некорректный фрагмент ответа')
@@ -268,37 +280,40 @@ function Workspace() {
           return
         }
         setEvents((current) => current.some((item) => item.seq === parsed.seq) ? current : [...current, parsed].slice(-200))
+        const terminal = ['task.completed', 'task.failed', 'task.cancelled'].includes(parsed.type)
         if (['task.completed', 'task.failed', 'task.cancelled'].includes(parsed.type)) {
           source.close()
+          closeStream()
           setConnection('idle')
         }
-        void refreshTasks(true)
-        void refreshDetail(selectedID)
+        void refreshTasks(true, terminal ? 'terminal' : 'sse_event')
+        void refreshDetail(selectedID, terminal ? 'terminal' : 'sse_event')
       }
       source.addEventListener(type, listener)
       return [type, listener]
     })
-    source.onopen = () => setConnection('live')
-    source.onerror = () => setConnection('reconnecting')
+    source.onopen = () => { if (!opened) { opened = true; recordSSE('open', endpoint) }; reconnecting = false; setConnection('live') }
+    source.onerror = () => { setConnection('reconnecting'); if (!reconnecting) { reconnecting = true; recordSSE('reconnect', endpoint) } }
     return () => {
       for (const [type, listener] of listeners) source.removeEventListener(type, listener)
       source.close()
+      closeStream()
     }
   }, [selectedID, selectedTask?.status, refreshDetail, refreshTasks])
 
   useEffect(() => {
     let active = true
-    const check = async () => {
+    const check = async (reason: ReloadReason) => {
       try {
-        const response = await fetch('/api/doctor')
-        const result = await response.json() as DoctorResponse
+        recordReload('workspace.doctor', reason)
+        const result = await api.doctor()
         if (active) setDoctor(result)
       } catch {
         if (active) setDoctor(null)
       }
     }
-    void check()
-    const timer = window.setInterval(() => void check(), 30000)
+    void check('initial')
+    const timer = window.setInterval(() => void check('fallback_poll'), 30000)
     return () => { active = false; window.clearInterval(timer) }
   }, [])
 
@@ -332,7 +347,7 @@ function Workspace() {
       setCreateDescription('')
       setCreateOpen(false)
       setSelectedID(task.id)
-      await refreshTasks(true)
+      await refreshTasks(true, 'user_action')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось создать задачу')
     } finally {
@@ -345,7 +360,7 @@ function Workspace() {
     setError('')
     try {
       await api.run(taskID)
-      await refreshTasks(true)
+      await refreshTasks(true, 'user_action')
       setSelectedID(taskID)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось запустить задачу')
@@ -359,8 +374,8 @@ function Workspace() {
     setError('')
     try {
       await api[action](taskID)
-      await refreshTasks(true)
-      await refreshDetail(taskID)
+      await refreshTasks(true, 'user_action')
+      await refreshDetail(taskID, 'user_action')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось изменить задачу')
     } finally {
@@ -373,8 +388,8 @@ function Workspace() {
     setError('')
     try {
       await api[action](approvalID)
-      if (selectedID) await refreshDetail(selectedID)
-      await refreshTasks(true)
+      if (selectedID) await refreshDetail(selectedID, 'user_action')
+      await refreshTasks(true, 'user_action')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось записать решение')
     } finally {
@@ -390,8 +405,8 @@ function Workspace() {
     try {
       await api.sendMessage(selectedID, chatText.trim())
       setChatText('')
-      await refreshDetail(selectedID)
-      await refreshTasks(true)
+      await refreshDetail(selectedID, 'user_action')
+      await refreshTasks(true, 'user_action')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось отправить сообщение')
     } finally {
