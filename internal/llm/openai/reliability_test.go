@@ -167,6 +167,7 @@ func TestStreamCancellationKeepsPartialEstimates(t *testing.T) {
 	defer server.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	client := New(server.URL, "", "local", time.Second, 128, 0, 1, false)
 	stream, err := client.Stream(ctx, llm.ChatRequest{})
 	if err != nil {
