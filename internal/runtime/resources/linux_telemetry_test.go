@@ -149,9 +149,33 @@ func TestParseLinuxCPUTemperatureFiltersAndValidates(t *testing.T) {
 	}
 }
 
+func TestParseLinuxUptime(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		data   string
+		want   float64
+		wantOK bool
+	}{
+		{name: "valid", data: "12345.67 98765.43\n", want: 12345.67, wantOK: true},
+		{name: "zero uptime", data: "0 0\n", want: 0, wantOK: true},
+		{name: "missing idle field", data: "123.4\n"},
+		{name: "invalid uptime", data: "not-a-number 10\n"},
+		{name: "negative uptime", data: "-1 10\n"},
+		{name: "nonfinite uptime", data: "NaN 10\n"},
+		{name: "extra fields", data: "1 2 3\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := parseLinuxUptime([]byte(tc.data))
+			if ok != tc.wantOK || ok && got != tc.want {
+				t.Fatalf("uptime = %v, %v, want %v, %v", got, ok, tc.want, tc.wantOK)
+			}
+		})
+	}
+}
+
 func TestParseLinuxGPUTelemetryMultipleDevicesAndUnits(t *testing.T) {
 	data := "NVIDIA A, 37, 52, 1024, 3072, 4096, 75.5\n\"NVIDIA, B\", 0, 0, N/A, 8192, 8192, N/A\n"
-	gpus, err := parseLinuxGPUTelemetry([]byte(data), linuxTelemetryTestTime)
+	gpus, err := parseNVIDIAGPUTelemetry([]byte(data), linuxTelemetryTestTime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +202,7 @@ func TestParseLinuxGPUTelemetryMultipleDevicesAndUnits(t *testing.T) {
 }
 
 func TestParseLinuxGPUAllNAAreExplicitUnavailable(t *testing.T) {
-	gpus, err := parseLinuxGPUTelemetry([]byte("N/A, N/A, N/A, N/A, N/A, N/A, N/A\n"), linuxTelemetryTestTime)
+	gpus, err := parseNVIDIAGPUTelemetry([]byte("N/A, N/A, N/A, N/A, N/A, N/A, N/A\n"), linuxTelemetryTestTime)
 	if err != nil || len(gpus) != 1 {
 		t.Fatalf("parse result: %v, %v", gpus, err)
 	}
@@ -227,11 +251,11 @@ func TestParseLinuxGPURejectsMalformedWholeResult(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			input := "GPU sensitive marker, 10, 50, 1, 2, 3, 4\n" + tc.row + "\n"
-			gpus, err := parseLinuxGPUTelemetry([]byte(input), linuxTelemetryTestTime)
+			gpus, err := parseNVIDIAGPUTelemetry([]byte(input), linuxTelemetryTestTime)
 			if err == nil || gpus != nil {
 				t.Fatalf("accepted malformed result: %+v, %v", gpus, err)
 			}
-			if errors.Is(err, errInvalidLinuxGPUCSV) == false || strings.Contains(err.Error(), "sensitive marker") || strings.Contains(err.Error(), tc.row) {
+			if errors.Is(err, errInvalidNVIDIAGPUCSV) == false || strings.Contains(err.Error(), "sensitive marker") || strings.Contains(err.Error(), tc.row) {
 				t.Fatalf("parser error was not sanitized: %v", err)
 			}
 		})
@@ -240,15 +264,15 @@ func TestParseLinuxGPURejectsMalformedWholeResult(t *testing.T) {
 
 func TestParseLinuxGPUEmptyAndCSVErrors(t *testing.T) {
 	for _, data := range []string{"", " \n\t"} {
-		gpus, err := parseLinuxGPUTelemetry([]byte(data), linuxTelemetryTestTime)
+		gpus, err := parseNVIDIAGPUTelemetry([]byte(data), linuxTelemetryTestTime)
 		if err != nil || gpus == nil || len(gpus) != 0 {
 			t.Fatalf("empty input %q: %#v, %v", data, gpus, err)
 		}
 	}
-	if _, err := parseLinuxGPUTelemetry([]byte("\"unterminated, 1, 2, 3, 4, 5, 6"), linuxTelemetryTestTime); err == nil || err != errInvalidLinuxGPUCSV {
+	if _, err := parseNVIDIAGPUTelemetry([]byte("\"unterminated, 1, 2, 3, 4, 5, 6"), linuxTelemetryTestTime); err == nil || err != errInvalidNVIDIAGPUCSV {
 		t.Fatalf("CSV parse error was not sanitized: %v", err)
 	}
-	if _, err := parseLinuxGPUTelemetry([]byte("GPU, 10, 50, 1, 2, 3, 4"), time.Time{}); err == nil {
+	if _, err := parseNVIDIAGPUTelemetry([]byte("GPU, 10, 50, 1, 2, 3, 4"), time.Time{}); err == nil {
 		t.Fatal("accepted zero timestamp")
 	}
 }

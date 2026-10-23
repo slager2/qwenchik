@@ -100,6 +100,7 @@ func cloneSystemTelemetry(system *domain.SystemTelemetry) *domain.SystemTelemetr
 		return nil
 	}
 	copy := *system
+	copy.Metadata.UptimeSeconds = cloneMetric(system.Metadata.UptimeSeconds)
 	copy.CPUUsage = cloneMetric(system.CPUUsage)
 	copy.CPUTemperature = cloneMetric(system.CPUTemperature)
 	copy.RAMUsed = cloneMetric(system.RAMUsed)

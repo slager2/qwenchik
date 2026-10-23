@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -111,6 +112,9 @@ func (e *Extractor) Check(ctx context.Context) error {
 	if e == nil || e.image == "" {
 		return ErrUnavailable
 	}
+	if runtime.GOOS == "windows" {
+		return fmt.Errorf("%w: isolated PDF extraction is unsupported on windows", ErrUnavailable)
+	}
 	if err := e.checkRuntime(ctx); err != nil {
 		return err
 	}
@@ -119,6 +123,9 @@ func (e *Extractor) Check(ctx context.Context) error {
 
 func (e *Extractor) Extract(ctx context.Context, document []byte) (Result, error) {
 	if e == nil {
+		return Result{}, ErrUnavailable
+	}
+	if runtime.GOOS == "windows" {
 		return Result{}, ErrUnavailable
 	}
 	if err := ctx.Err(); err != nil {
@@ -146,12 +153,18 @@ func (e *Extractor) ExtractFile(ctx context.Context, file *os.File) (Result, err
 	if e == nil {
 		return Result{}, ErrUnavailable
 	}
+	if runtime.GOOS == "windows" {
+		return Result{}, ErrUnavailable
+	}
 	runCtx, cancel := context.WithTimeout(ctx, e.policy.ExtractionTimeout)
 	defer cancel()
 	return e.extractFile(ctx, runCtx, file)
 }
 
 func (e *Extractor) extractFile(parent, ctx context.Context, file *os.File) (Result, error) {
+	if runtime.GOOS == "windows" {
+		return Result{}, ErrUnavailable
+	}
 	if err := parent.Err(); err != nil {
 		return Result{}, err
 	}
@@ -325,6 +338,9 @@ func stripPDFControls(value string) (string, error) {
 }
 
 func (e *Extractor) checkRuntime(ctx context.Context) error {
+	if runtime.GOOS == "windows" {
+		return fmt.Errorf("%w: isolated PDF extraction is unsupported on windows", ErrUnavailable)
+	}
 	checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	if err := checkCtx.Err(); err != nil {

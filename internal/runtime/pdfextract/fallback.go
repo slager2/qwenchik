@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -19,6 +20,9 @@ import (
 )
 
 func init() {
+	if runtime.GOOS == "windows" {
+		return
+	}
 	if os.Getenv(workerModeEnv) != workerMode {
 		return
 	}
@@ -36,6 +40,9 @@ func init() {
 // worker that CommandContext can kill. This is a wall-clock deadline, not CPU
 // time accounting.
 func extractPureGoFile(ctx context.Context, file *os.File, size int64, policy Policy) (Result, error) {
+	if runtime.GOOS == "windows" {
+		return Result{}, ErrUnavailable
+	}
 	if !policy.AllowUnsandboxedFallback {
 		return Result{}, ErrUnavailable
 	}
@@ -105,6 +112,9 @@ func workerEnvironment(token string) []string {
 }
 
 func runPureGoWorker() int {
+	if runtime.GOOS == "windows" {
+		return 1
+	}
 	var policy Policy
 	if json.Unmarshal([]byte(os.Getenv("QAGENT_PDFEXTRACT_POLICY")), &policy) != nil || policy.Validate() != nil || !policy.AllowUnsandboxedFallback {
 		return 1

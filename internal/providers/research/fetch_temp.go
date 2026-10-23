@@ -1,3 +1,5 @@
+//go:build !windows
+
 package research
 
 import (
@@ -7,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -17,6 +20,8 @@ import (
 )
 
 var ownedFetchName = regexp.MustCompile(`^[a-f0-9]{16}-[a-f0-9]{32}$`)
+
+const maxFetchTempEntries = 16384
 
 type fetchTemp struct {
 	file *os.File
@@ -96,7 +101,7 @@ func createFetchTemp(ctx context.Context, p FetchPolicy, task string, reserve in
 	if !info.Mode().IsRegular() || info.Sys().(*syscall.Stat_t).Uid != uint32(os.Geteuid()) {
 		return nil, errors.New("invalid fetch quota lock")
 	}
-	if err := lockFetchQuota(ctx,lockFD); err != nil {
+	if err := lockFetchQuota(ctx, lockFD); err != nil {
 		return nil, err
 	}
 	defer syscall.Flock(lockFD, syscall.LOCK_UN)
@@ -106,9 +111,12 @@ func createFetchTemp(ctx context.Context, p FetchPolicy, task string, reserve in
 	digest := sha256.Sum256([]byte(task))
 	prefix := fmt.Sprintf("fetch-%d-", os.Geteuid())
 	taskPrefix := prefix + hex.EncodeToString(digest[:8]) + "-"
-	names, err := root.Readdirnames(-1)
-	if err != nil {
+	names, err := root.Readdirnames(maxFetchTempEntries + 1)
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
+	}
+	if len(names) > maxFetchTempEntries {
+		return nil, errors.New("fetch temporary directory exceeds entry limit")
 	}
 	var global, local int64
 	for _, name := range names {
@@ -175,13 +183,24 @@ func createFetchTemp(ctx context.Context, p FetchPolicy, task string, reserve in
 	return lease, nil
 }
 
-func lockFetchQuota(ctx context.Context,fd int) error {
+func lockFetchQuota(ctx context.Context, fd int) error {
 	for {
-		if err:=ctx.Err(); err!=nil { return err }
-		err:=syscall.Flock(fd,syscall.LOCK_EX|syscall.LOCK_NB)
-		if err==nil { return nil }
-		if err!=syscall.EWOULDBLOCK && err!=syscall.EAGAIN && err!=syscall.EINTR { return err }
-		timer:=time.NewTimer(5*time.Millisecond)
-		select { case <-ctx.Done(): timer.Stop(); return ctx.Err(); case <-timer.C: }
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return nil
+		}
+		if err != syscall.EWOULDBLOCK && err != syscall.EAGAIN && err != syscall.EINTR {
+			return err
+		}
+		timer := time.NewTimer(5 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
 }

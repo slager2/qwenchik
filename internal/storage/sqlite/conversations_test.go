@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -227,7 +226,7 @@ func TestConversationDeleteCancelsAndPreservesData(t *testing.T) {
 func TestConversationMigrationPreservesLegacy(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "legacy.db")
-	db, e := sql.Open("sqlite3", path)
+	db, e := openSQLite(sqliteDSN(path))
 	if e != nil {
 		t.Fatal(e)
 	}

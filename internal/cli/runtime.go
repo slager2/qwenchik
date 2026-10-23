@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -33,6 +34,15 @@ func newRuntimeCommand() *cobra.Command {
 	install := &cobra.Command{
 		Use: "install", Short: "Install model and app user units without starting them", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := unsupportedRuntimeManagement(); err != nil {
+				return err
+			}
+			if options.ModelBin == "" {
+				return errors.New(`required flag(s) "model-bin" not set`)
+			}
+			if options.ModelPath == "" {
+				return errors.New(`required flag(s) "model-path" not set`)
+			}
 			cfg, err := config.Load()
 			if err != nil {
 				return err
@@ -76,14 +86,15 @@ func newRuntimeCommand() *cobra.Command {
 	install.Flags().StringVar(&options.Device, "device", "Vulkan1", "llama-server GPU device")
 	install.Flags().IntVar(&options.Context, "context", 32768, "Model and app context length")
 	install.Flags().BoolVar(&enable, "enable", false, "Reload units and enable login autostart without starting services")
-	_ = install.MarkFlagRequired("model-bin")
-	_ = install.MarkFlagRequired("model-path")
 	command.AddCommand(install)
 	for _, action := range []string{"start", "status"} {
 		action := action
 		command.AddCommand(&cobra.Command{
 			Use: action, Short: action + " model and app user services", Args: cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error {
+				if err := unsupportedRuntimeManagement(); err != nil {
+					return err
+				}
 				if action == "start" {
 					if err := runtimeSystemctl(cmd, "daemon-reload"); err != nil {
 						return err
@@ -96,7 +107,17 @@ func newRuntimeCommand() *cobra.Command {
 	return command
 }
 
+func unsupportedRuntimeManagement() error {
+	if runtime.GOOS != "linux" {
+		return fmt.Errorf("runtime service management is unsupported on %s", runtime.GOOS)
+	}
+	return nil
+}
+
 func runtimeSystemctl(cmd *cobra.Command, args ...string) error {
+	if err := unsupportedRuntimeManagement(); err != nil {
+		return err
+	}
 	process := exec.CommandContext(cmd.Context(), "systemctl", append([]string{"--user"}, args...)...)
 	process.Stdin = cmd.InOrStdin()
 	process.Stdout = cmd.OutOrStdout()
@@ -152,6 +173,9 @@ func renderRuntimeUnits(options runtimeOptions) (map[string][]byte, error) {
 }
 
 func installRuntime(configDir string, options runtimeOptions) error {
+	if err := unsupportedRuntimeManagement(); err != nil {
+		return err
+	}
 	for _, path := range []*string{&options.ModelBin, &options.ModelPath, &options.Workspace, &options.AppBin} {
 		if *path == "" || strings.ContainsAny(*path, "\r\n\x00") {
 			return errors.New("runtime paths must be nonempty and contain no newline or NUL")

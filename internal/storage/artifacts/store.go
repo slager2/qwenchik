@@ -1,3 +1,5 @@
+//go:build !windows
+
 package artifacts
 
 import (
@@ -146,7 +148,7 @@ func (s *Store) PutReader(ctx context.Context, taskID, name, mimeType string, co
 		return domain.Artifact{}, "", err
 	}
 	defer syscall.Close(lockFD)
-	if err := lockArtifact(ctx,lockFD); err != nil {
+	if err := lockArtifact(ctx, lockFD); err != nil {
 		return domain.Artifact{}, "", err
 	}
 	defer syscall.Flock(lockFD, syscall.LOCK_UN)
@@ -183,14 +185,25 @@ func (s *Store) PutReader(ctx context.Context, taskID, name, mimeType string, co
 	return record, filepath.Join(taskID, id), nil
 }
 
-func lockArtifact(ctx context.Context,fd int) error {
+func lockArtifact(ctx context.Context, fd int) error {
 	for {
-		if err:=ctx.Err(); err!=nil { return err }
-		err:=syscall.Flock(fd,syscall.LOCK_EX|syscall.LOCK_NB)
-		if err==nil { return nil }
-		if err!=syscall.EWOULDBLOCK && err!=syscall.EAGAIN && err!=syscall.EINTR { return err }
-		timer:=time.NewTimer(5*time.Millisecond)
-		select { case <-ctx.Done(): timer.Stop(); return ctx.Err(); case <-timer.C: }
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return nil
+		}
+		if err != syscall.EWOULDBLOCK && err != syscall.EAGAIN && err != syscall.EINTR {
+			return err
+		}
+		timer := time.NewTimer(5 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
 }
 

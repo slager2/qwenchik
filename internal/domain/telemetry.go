@@ -133,6 +133,7 @@ const (
 	MetricUnitTokens          = "tokens"
 	MetricUnitTokensPerSecond = "tokens/s"
 	MetricUnitMilliseconds    = "ms"
+	MetricUnitSeconds         = "seconds"
 	MetricUnitSlots           = "slots"
 	LlamaHealthHealthy        = "healthy"
 	LlamaHealthUnhealthy      = "unhealthy"
@@ -165,6 +166,7 @@ type Telemetry struct {
 }
 
 type SystemTelemetry struct {
+	Metadata         SystemMetadata  `json:"metadata"`
 	CPUUsage         Metric[float64] `json:"cpu_usage"`
 	CPUTemperature   Metric[float64] `json:"cpu_temperature"`
 	RAMUsed          Metric[int64]   `json:"ram_used"`
@@ -180,6 +182,15 @@ type SystemTelemetry struct {
 	LlamaHealth      Metric[string]  `json:"llama_health"`
 	LlamaSlotsActive Metric[int64]   `json:"llama_slots_active"`
 	LlamaSlotsTotal  Metric[int64]   `json:"llama_slots_total"`
+}
+
+type SystemMetadata struct {
+	OS              string          `json:"os,omitempty"`
+	Platform        string          `json:"platform,omitempty"`
+	PlatformVersion string          `json:"platform_version,omitempty"`
+	KernelVersion   string          `json:"kernel_version,omitempty"`
+	KernelArch      string          `json:"kernel_arch,omitempty"`
+	UptimeSeconds   Metric[float64] `json:"uptime_seconds"`
 }
 
 type GPUTelemetry struct {
@@ -250,10 +261,28 @@ func (telemetry Telemetry) Validate() error {
 	}
 
 	system := telemetry.System
+	for _, item := range []struct {
+		name  string
+		value string
+		limit int
+	}{
+		{"os", system.Metadata.OS, 32},
+		{"platform", system.Metadata.Platform, 128},
+		{"platform_version", system.Metadata.PlatformVersion, 128},
+		{"kernel_version", system.Metadata.KernelVersion, 128},
+		{"kernel_arch", system.Metadata.KernelArch, 32},
+	} {
+		if len(item.value) > item.limit || strings.ContainsRune(item.value, '\x00') {
+			return invalidTelemetry("system metadata " + item.name + " exceeds bounds")
+		}
+	}
 	metrics := []struct {
 		name  string
 		check func() error
 	}{
+		{"system.uptime_seconds", func() error {
+			return validateMetric(system.Metadata.UptimeSeconds, MetricUnitSeconds, telemetry.Timestamp, validateNonnegativeFloat)
+		}},
 		{"system.cpu_usage", func() error {
 			return validateMetric(system.CPUUsage, MetricUnitPercent, telemetry.Timestamp, validatePercent)
 		}},

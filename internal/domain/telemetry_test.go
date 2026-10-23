@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"strings"
 	"testing"
 	"time"
 )
@@ -126,6 +127,20 @@ func TestTelemetryJSONKeepsCapabilityFlagsAndExplicitUnits(t *testing.T) {
 			t.Errorf("inference JSON is missing requested field %q", field)
 		}
 	}
+	var system map[string]json.RawMessage
+	if err := json.Unmarshal(payload["system"], &system); err != nil {
+		t.Fatalf("unmarshal system fields: %v", err)
+	}
+	var metadata map[string]json.RawMessage
+	if err := json.Unmarshal(system["metadata"], &metadata); err != nil {
+		t.Fatalf("unmarshal system metadata: %v", err)
+	}
+	if rawString(t, metadata["os"]) != "linux" {
+		t.Errorf("system OS metadata = %s, want linux", metadata["os"])
+	}
+	if _, ok := metadata["uptime_seconds"]; !ok {
+		t.Error("system metadata omitted uptime_seconds metric")
+	}
 }
 
 func TestTelemetryValidateRequiresCompleteSnapshotAndValidMetrics(t *testing.T) {
@@ -164,6 +179,12 @@ func TestTelemetryValidateRequiresCompleteSnapshotAndValidMetrics(t *testing.T) 
 		}},
 		{"negative RAM", func(value *Telemetry) {
 			value.System.RAMUsed = NewExactMetric(int64(-1), MetricUnitBytes, telemetryTestTime)
+		}},
+		{"negative uptime", func(value *Telemetry) {
+			value.System.Metadata.UptimeSeconds = NewExactMetric(-1.0, MetricUnitSeconds, telemetryTestTime)
+		}},
+		{"unbounded platform version", func(value *Telemetry) {
+			value.System.Metadata.PlatformVersion = strings.Repeat("x", 129)
 		}},
 		{"RAM used exceeds total", func(value *Telemetry) {
 			value.System.RAMUsed = NewExactMetric(int64(11), MetricUnitBytes, telemetryTestTime)
@@ -281,6 +302,7 @@ func validTelemetry() Telemetry {
 			LlamaTimings: true, LlamaMetrics: true, LlamaSlots: true,
 		},
 		System: SystemTelemetry{
+			Metadata:       SystemMetadata{OS: "linux", UptimeSeconds: unavailableFloat(MetricUnitSeconds)},
 			CPUUsage:       unavailableFloat(MetricUnitPercent),
 			CPUTemperature: unavailableFloat(MetricUnitCelsius),
 			RAMUsed:        unavailableInt(MetricUnitBytes),

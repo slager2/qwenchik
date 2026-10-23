@@ -24,10 +24,13 @@ import (
 
 const (
 	maxProcEntries       = 16384
+	maxWindowsProcesses  = 1024
 	maxHwmonEntries      = 128
 	maxHwmonSensorFiles  = 256
 	maxThermalZoneFiles  = 128
 	maxTelemetryDirLimit = 1 << 16
+	gpuProbeTimeout      = 2 * time.Second
+	windowsProbeTimeout  = 2 * time.Second
 )
 
 var (
@@ -36,21 +39,72 @@ var (
 )
 
 type HostProvider struct {
-	policy    Policy
-	healthURL string
-	client    *http.Client
-	readFile  func(string, int) ([]byte, error)
-	readDir   func(string, int) ([]string, error)
-	procPIDs  func(int) ([]string, error)
-	run       func(context.Context, string, ...string) ([]byte, error)
-	powerMu   sync.Mutex
-	powerAt   time.Time
-	power     PowerSource
-	cpuMu     sync.Mutex
-	cpuBase   *linuxCPUCounters
-	procRSSMu sync.Mutex
-	procRSSAt time.Time
-	procRSS   domain.Metric[int64]
+	policy             Policy
+	healthURL          string
+	client             *http.Client
+	readFile           func(string, int) ([]byte, error)
+	readDir            func(string, int) ([]string, error)
+	procPIDs           func(int) ([]string, error)
+	run                func(context.Context, string, ...string) ([]byte, error)
+	powerMu            sync.Mutex
+	powerAt            time.Time
+	power              PowerSource
+	cpuMu              sync.Mutex
+	cpuBase            *linuxCPUCounters
+	procRSSMu          sync.Mutex
+	procRSSAt          time.Time
+	procRSS            domain.Metric[int64]
+	windows            windowsTelemetrySource
+	windowsMetadataMu  sync.RWMutex
+	windowsMetadata    windowsSystemMetadata
+	windowsPowerStatus windowsPowerStatus
+	windowsPowerError  domain.MetricErrorCode
+}
+
+type windowsMemorySample struct {
+	Total     uint64
+	Available uint64
+}
+
+type windowsCPUSample struct {
+	CountersAvailable bool
+	LoadAvailable     bool
+	LoadPercent       float64
+	LoadError         domain.MetricErrorCode
+}
+
+type windowsProcessSample struct {
+	Name      string
+	NameKnown bool
+	RSS       uint64
+	RSSKnown  bool
+	Stable    bool
+	Error     domain.MetricErrorCode
+}
+
+// Windows host metadata supplements the typed uptime metric with platform context.
+type windowsSystemMetadata struct {
+	OS              string
+	Platform        string
+	PlatformVersion string
+	KernelVersion   string
+	KernelArch      string
+	UptimeSeconds   uint64
+}
+
+type windowsPowerStatus struct {
+	ACLineStatus       byte
+	BatteryFlag        byte
+	BatteryLifePercent byte
+}
+
+type windowsTelemetrySource struct {
+	memory      func(context.Context) (windowsMemorySample, error)
+	cpu         func(context.Context) (windowsCPUSample, error)
+	currentRSS  func(context.Context) (uint64, error)
+	processes   func(context.Context) ([]windowsProcessSample, error)
+	metadata    func(context.Context) (windowsSystemMetadata, error)
+	powerStatus func() (windowsPowerStatus, error)
 }
 
 func NewHostProvider(llamaBaseURL string, policy Policy) (*HostProvider, error) {
@@ -94,7 +148,8 @@ func NewHostProvider(llamaBaseURL string, policy Policy) (*HostProvider, error) 
 	client := &http.Client{Transport: transport, Timeout: policy.LlamaHealthTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	return &HostProvider{
 		policy: policy, healthURL: u.String(), client: client, readFile: readBounded,
-		readDir: readDirBounded, procPIDs: readProcPIDs, run: runBounded, power: PowerUnknown,
+		readDir: readDirBounded, procPIDs: readProcPIDs, run: platformTelemetryRunner(), power: PowerUnknown,
+		windows: newWindowsTelemetrySource(),
 	}, nil
 }
 
@@ -110,10 +165,14 @@ func (p *HostProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 	metricError := domain.MetricErrorUnsupported
 	if runtime.GOOS == "linux" {
 		metricError = domain.MetricErrorTemporarilyUnavailable
+	} else if runtime.GOOS == "windows" {
+		metricError = domain.MetricErrorTemporarilyUnavailable
 	}
 	system := unavailableSystemTelemetry(updatedAt, metricError)
+	system.Metadata.OS = runtime.GOOS
 	capabilities := domain.TelemetryCapabilities{}
 	if runtime.GOOS == "linux" {
+		p.collectLinuxSystemMetadata(&system, updatedAt)
 		p.collectMemory(&s, &system, &capabilities, updatedAt)
 		p.collectAgentRSS(&s, &system, updatedAt)
 		var cpuUsageSupported bool
@@ -136,11 +195,21 @@ func (p *HostProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 		if !capabilities.ProcessRSS {
 			appendWarning(&s, "llama-server RSS unavailable")
 		}
+	} else if runtime.GOOS == "windows" {
+		p.collectWindowsTelemetry(ctx, &s, &system, &capabilities, updatedAt)
+		if ctx.Err() != nil {
+			return s, ctx.Err()
+		}
+		capabilities.ProcessRSS = system.AgentRSS.Value != nil || system.LlamaServerRSS.Value != nil
+		if !capabilities.ProcessRSS {
+			appendWarning(&s, "llama-server RSS unavailable")
+		}
 	}
 	system.LlamaSlotsActive = unavailableMetric[int64](domain.MetricUnitSlots, updatedAt, metricError)
 	system.LlamaSlotsTotal = unavailableMetric[int64](domain.MetricUnitSlots, updatedAt, metricError)
 	system.LlamaHealth = unavailableMetric[string](domain.MetricUnitStatus, updatedAt, metricError)
-	staleAfter := int64(p.policy.CheckInterval.Milliseconds()) + int64((30 * time.Second).Milliseconds())
+	stalenessWindow := p.policy.CheckInterval + 30*time.Second + p.policy.LlamaHealthTimeout + gpuProbeTimeout + 2*windowsProbeTimeout
+	staleAfter := stalenessWindow.Milliseconds()
 	s.StaleAfterMS = &staleAfter
 	s.System = &system
 	s.Capabilities = &capabilities
@@ -151,7 +220,20 @@ func (p *HostProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 	if ctx.Err() != nil {
 		return s, ctx.Err()
 	}
-	if s.PowerSource == PowerAC || s.PowerSource == PowerBattery {
+	if runtime.GOOS == "windows" {
+		p.powerMu.Lock()
+		status, statusError, statusAt := p.windowsPowerStatus, p.windowsPowerError, p.powerAt
+		p.powerMu.Unlock()
+		mapped := mapWindowsPowerTelemetry(status, statusError, statusAt)
+		system.PowerSource = mapped.source
+		system.BatteryPercent = mapped.batteryPercent
+		system.BatteryCharging = mapped.batteryCharging
+		capabilities.Power = mapped.powerAvailable
+		capabilities.Battery = mapped.batteryAvailable
+		if !mapped.powerAvailable {
+			appendWarning(&s, "power source unavailable")
+		}
+	} else if s.PowerSource == PowerAC || s.PowerSource == PowerBattery {
 		value := string(s.PowerSource)
 		if powerUpdatedAt.IsZero() {
 			powerUpdatedAt = updatedAt
@@ -169,9 +251,11 @@ func (p *HostProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 		}
 	}
 	system.PowerWatts = unavailableMetric[float64](domain.MetricUnitWatts, updatedAt, domain.MetricErrorUnsupported)
-	system.BatteryPercent = unavailableMetric[float64](domain.MetricUnitPercent, updatedAt, domain.MetricErrorUnsupported)
-	system.BatteryCharging = unavailableMetric[bool](domain.MetricUnitBoolean, updatedAt, domain.MetricErrorUnsupported)
-	capabilities.Battery = false
+	if runtime.GOOS != "windows" {
+		system.BatteryPercent = unavailableMetric[float64](domain.MetricUnitPercent, updatedAt, domain.MetricErrorUnsupported)
+		system.BatteryCharging = unavailableMetric[bool](domain.MetricUnitBoolean, updatedAt, domain.MetricErrorUnsupported)
+		capabilities.Battery = false
+	}
 	capabilities.LlamaMetrics = false
 	capabilities.LlamaTimings = false
 	capabilities.LlamaSlots = false
@@ -199,6 +283,7 @@ func (p *HostProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 
 func unavailableSystemTelemetry(updatedAt time.Time, code domain.MetricErrorCode) domain.SystemTelemetry {
 	return domain.SystemTelemetry{
+		Metadata:         domain.SystemMetadata{UptimeSeconds: unavailableMetric[float64](domain.MetricUnitSeconds, updatedAt, code)},
 		CPUUsage:         unavailableMetric[float64](domain.MetricUnitPercent, updatedAt, code),
 		CPUTemperature:   unavailableMetric[float64](domain.MetricUnitCelsius, updatedAt, code),
 		RAMUsed:          unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, code),
@@ -217,8 +302,308 @@ func unavailableSystemTelemetry(updatedAt time.Time, code domain.MetricErrorCode
 	}
 }
 
+func (p *HostProvider) collectLinuxSystemMetadata(system *domain.SystemTelemetry, updatedAt time.Time) {
+	data, err := p.readFile("/proc/uptime", 128)
+	if err != nil {
+		system.Metadata.UptimeSeconds = unavailableMetric[float64](domain.MetricUnitSeconds, updatedAt, metricErrorCode(err))
+		return
+	}
+	if uptime, ok := parseLinuxUptime(data); ok {
+		system.Metadata.UptimeSeconds = domain.NewExactMetric(uptime, domain.MetricUnitSeconds, updatedAt)
+		return
+	}
+	system.Metadata.UptimeSeconds = unavailableMetric[float64](domain.MetricUnitSeconds, updatedAt, domain.MetricErrorCollectionFailed)
+}
+
 func unavailableMetric[T domain.MetricValue](unit string, updatedAt time.Time, code domain.MetricErrorCode) domain.Metric[T] {
 	return domain.NewUnavailableMetricWithError[T](unit, updatedAt, code)
+}
+
+func (p *HostProvider) collectWindowsTelemetry(ctx context.Context, snapshot *Snapshot, system *domain.SystemTelemetry, capabilities *domain.TelemetryCapabilities, updatedAt time.Time) {
+	if p.windows.memory == nil {
+		system.RAMUsed = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, domain.MetricErrorUnsupported)
+		system.RAMFree = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, domain.MetricErrorUnsupported)
+		system.RAMTotal = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, domain.MetricErrorUnsupported)
+		appendWarning(snapshot, "RAM telemetry unavailable")
+	} else if memory, err := p.windows.memory(ctx); err != nil {
+		code := metricErrorCode(err)
+		system.RAMUsed = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, code)
+		system.RAMFree = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, code)
+		system.RAMTotal = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, code)
+		appendWarning(snapshot, "RAM telemetry unavailable")
+	} else {
+		mapWindowsMemory(memory, snapshot, system, capabilities, updatedAt)
+	}
+
+	system.CPUTemperature = unavailableMetric[float64](domain.MetricUnitCelsius, updatedAt, domain.MetricErrorUnsupported)
+	appendWarning(snapshot, "CPU temperature unavailable")
+	if p.windows.cpu == nil {
+		system.CPUUsage = unavailableMetric[float64](domain.MetricUnitPercent, updatedAt, domain.MetricErrorUnsupported)
+		appendWarning(snapshot, "CPU telemetry unavailable")
+	} else if sample, err := p.windows.cpu(ctx); err != nil {
+		system.CPUUsage = unavailableMetric[float64](domain.MetricUnitPercent, updatedAt, metricErrorCode(err))
+		appendWarning(snapshot, "CPU telemetry unavailable")
+	} else {
+		system.CPUUsage, capabilities.CPU = mapWindowsCPU(sample, updatedAt)
+		if !capabilities.CPU {
+			appendWarning(snapshot, "CPU telemetry unavailable")
+		}
+	}
+
+	if p.windows.currentRSS == nil {
+		system.AgentRSS = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, domain.MetricErrorUnsupported)
+		appendWarning(snapshot, "agent RSS unavailable")
+	} else if rss, err := p.windows.currentRSS(ctx); err != nil {
+		system.AgentRSS = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, metricErrorCode(err))
+		appendWarning(snapshot, "agent RSS unavailable")
+	} else if rss > math.MaxInt64 {
+		system.AgentRSS = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, domain.MetricErrorCollectionFailed)
+		appendWarning(snapshot, "agent RSS unavailable")
+	} else {
+		value := int64(rss)
+		snapshot.RSSBytes = copyPtr(&value)
+		system.AgentRSS = domain.NewExactMetric(value, domain.MetricUnitBytes, updatedAt)
+	}
+
+	p.collectGPUs(ctx, snapshot, system, capabilities, updatedAt)
+
+	system.LlamaServerRSS = p.windowsLlamaServerRSS(ctx, updatedAt)
+	if p.windows.metadata != nil {
+		metadataCtx, cancel := context.WithTimeout(ctx, windowsProbeTimeout)
+		metadata, err := p.windows.metadata(metadataCtx)
+		cancel()
+		if err == nil {
+			p.windowsMetadataMu.Lock()
+			p.windowsMetadata = metadata
+			p.windowsMetadataMu.Unlock()
+			system.Metadata.OS = boundedTelemetryText(metadata.OS, 32)
+			system.Metadata.Platform = boundedTelemetryText(metadata.Platform, 128)
+			system.Metadata.PlatformVersion = boundedTelemetryText(metadata.PlatformVersion, 128)
+			system.Metadata.KernelVersion = boundedTelemetryText(metadata.KernelVersion, 128)
+			system.Metadata.KernelArch = boundedTelemetryText(metadata.KernelArch, 32)
+			if metadata.UptimeSeconds <= math.MaxInt64 {
+				system.Metadata.UptimeSeconds = domain.NewExactMetric(float64(metadata.UptimeSeconds), domain.MetricUnitSeconds, updatedAt)
+			} else {
+				system.Metadata.UptimeSeconds = unavailableMetric[float64](domain.MetricUnitSeconds, updatedAt, domain.MetricErrorCollectionFailed)
+			}
+		} else {
+			system.Metadata.UptimeSeconds = unavailableMetric[float64](domain.MetricUnitSeconds, updatedAt, metricErrorCode(err))
+		}
+	} else {
+		system.Metadata.UptimeSeconds = unavailableMetric[float64](domain.MetricUnitSeconds, updatedAt, domain.MetricErrorUnsupported)
+	}
+}
+
+func boundedTelemetryText(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if len(value) > limit || strings.ContainsRune(value, '\x00') {
+		return ""
+	}
+	return value
+}
+
+func mapWindowsMemory(memory windowsMemorySample, snapshot *Snapshot, system *domain.SystemTelemetry, capabilities *domain.TelemetryCapabilities, updatedAt time.Time) {
+	if memory.Total == 0 || memory.Total > math.MaxInt64 {
+		code := domain.MetricErrorCollectionFailed
+		if memory.Total == 0 {
+			code = domain.MetricErrorTemporarilyUnavailable
+		}
+		system.RAMUsed = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, code)
+		system.RAMFree = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, code)
+		system.RAMTotal = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, code)
+		appendWarning(snapshot, "RAM telemetry unavailable")
+		return
+	}
+	total := int64(memory.Total)
+	system.RAMTotal = domain.NewExactMetric(total, domain.MetricUnitBytes, updatedAt)
+	if memory.Available > memory.Total || memory.Available > math.MaxInt64 {
+		system.RAMFree = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, domain.MetricErrorCollectionFailed)
+		system.RAMUsed = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, domain.MetricErrorCollectionFailed)
+		appendWarning(snapshot, "RAM telemetry unavailable")
+		return
+	}
+	free := int64(memory.Available)
+	used := total - free
+	snapshot.FreeRAMBytes = copyPtr(&free)
+	system.RAMFree = domain.NewExactMetric(free, domain.MetricUnitBytes, updatedAt)
+	system.RAMUsed = domain.NewExactMetric(used, domain.MetricUnitBytes, updatedAt)
+	capabilities.RAM = true
+}
+
+func mapWindowsCPU(sample windowsCPUSample, updatedAt time.Time) (domain.Metric[float64], bool) {
+	if !sample.CountersAvailable {
+		return unavailableMetric[float64](domain.MetricUnitPercent, updatedAt, windowsCPUError(sample)), false
+	}
+	if !sample.LoadAvailable {
+		return unavailableMetric[float64](domain.MetricUnitPercent, updatedAt, windowsCPUError(sample)), true
+	}
+	if math.IsNaN(sample.LoadPercent) || math.IsInf(sample.LoadPercent, 0) || sample.LoadPercent < 0 || sample.LoadPercent > 100 {
+		return unavailableMetric[float64](domain.MetricUnitPercent, updatedAt, domain.MetricErrorCollectionFailed), true
+	}
+	return domain.NewEstimatedMetric(sample.LoadPercent, domain.MetricUnitPercent, updatedAt), true
+}
+
+func windowsCPUError(sample windowsCPUSample) domain.MetricErrorCode {
+	if sample.LoadError.Valid() {
+		return sample.LoadError
+	}
+	return domain.MetricErrorTemporarilyUnavailable
+}
+
+func (p *HostProvider) windowsLlamaServerRSS(ctx context.Context, updatedAt time.Time) domain.Metric[int64] {
+	if p.windows.processes == nil {
+		return unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, domain.MetricErrorUnsupported)
+	}
+	ttl := p.policy.CheckInterval
+	if ttl <= 0 || ttl > 5*time.Second {
+		ttl = 5 * time.Second
+	}
+	p.procRSSMu.Lock()
+	defer p.procRSSMu.Unlock()
+	if !p.procRSSAt.IsZero() && time.Since(p.procRSSAt) < ttl {
+		return cloneMetric(p.procRSS)
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, windowsProbeTimeout)
+	processes, err := p.windows.processes(probeCtx)
+	cancel()
+	if ctx.Err() != nil {
+		return unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, domain.MetricErrorTemporarilyUnavailable)
+	}
+	var metric domain.Metric[int64]
+	if err != nil {
+		metric = unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, metricErrorCode(err))
+	} else {
+		metric = mapWindowsLlamaServerRSS(processes, updatedAt)
+	}
+	p.procRSS = cloneMetric(metric)
+	p.procRSSAt = time.Now()
+	return metric
+}
+
+func mapWindowsLlamaServerRSS(processes []windowsProcessSample, updatedAt time.Time) domain.Metric[int64] {
+	var match *windowsProcessSample
+	for i := range processes {
+		process := &processes[i]
+		if !process.NameKnown {
+			code := process.Error
+			if !code.Valid() {
+				code = domain.MetricErrorTemporarilyUnavailable
+			}
+			return unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, code)
+		}
+		if !isWindowsLlamaServerName(process.Name) {
+			continue
+		}
+		if match != nil {
+			return unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, domain.MetricErrorTemporarilyUnavailable)
+		}
+		match = process
+	}
+	if match == nil {
+		return unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, domain.MetricErrorTemporarilyUnavailable)
+	}
+	if match.Error.Valid() {
+		return unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, match.Error)
+	}
+	if !match.Stable || !match.RSSKnown {
+		code := domain.MetricErrorTemporarilyUnavailable
+		if match.Stable && !match.RSSKnown {
+			code = domain.MetricErrorCollectionFailed
+		}
+		return unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, code)
+	}
+	if match.RSS > math.MaxInt64 {
+		return unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, domain.MetricErrorCollectionFailed)
+	}
+	return domain.NewExactMetric(int64(match.RSS), domain.MetricUnitBytes, updatedAt)
+}
+
+func isWindowsLlamaServerName(name string) bool {
+	base := name
+	if index := strings.LastIndexAny(base, `/\\`); index >= 0 {
+		base = base[index+1:]
+	}
+	return strings.EqualFold(base, "llama-server.exe") || strings.EqualFold(base, "llama-server")
+}
+
+type windowsPowerTelemetry struct {
+	source           domain.Metric[string]
+	batteryPercent   domain.Metric[float64]
+	batteryCharging  domain.Metric[bool]
+	powerAvailable   bool
+	batteryAvailable bool
+}
+
+func mapWindowsPowerTelemetry(status windowsPowerStatus, errorCode domain.MetricErrorCode, updatedAt time.Time) windowsPowerTelemetry {
+	statusAvailable := errorCode == ""
+	if !statusAvailable && !errorCode.Valid() {
+		errorCode = domain.MetricErrorTemporarilyUnavailable
+	}
+	result := windowsPowerTelemetry{
+		source:          unavailableMetric[string](domain.MetricUnitStatus, updatedAt, errorCode),
+		batteryPercent:  unavailableMetric[float64](domain.MetricUnitPercent, updatedAt, errorCode),
+		batteryCharging: unavailableMetric[bool](domain.MetricUnitBoolean, updatedAt, errorCode),
+	}
+	if !statusAvailable {
+		return result
+	}
+	errorCode = domain.MetricErrorTemporarilyUnavailable
+	result.source = unavailableMetric[string](domain.MetricUnitStatus, updatedAt, errorCode)
+	result.batteryPercent = unavailableMetric[float64](domain.MetricUnitPercent, updatedAt, errorCode)
+	result.batteryCharging = unavailableMetric[bool](domain.MetricUnitBoolean, updatedAt, errorCode)
+	switch status.ACLineStatus {
+	case 0:
+		if windowsBatteryPresent(status.BatteryFlag) {
+			result.source = domain.NewExactMetric(string(PowerBattery), domain.MetricUnitStatus, updatedAt)
+			result.powerAvailable = true
+		}
+	case 1:
+		result.source = domain.NewExactMetric(string(PowerAC), domain.MetricUnitStatus, updatedAt)
+		result.powerAvailable = true
+	}
+	if status.BatteryFlag == 128 {
+		result.batteryPercent = unavailableMetric[float64](domain.MetricUnitPercent, updatedAt, domain.MetricErrorUnsupported)
+		result.batteryCharging = unavailableMetric[bool](domain.MetricUnitBoolean, updatedAt, domain.MetricErrorUnsupported)
+		return result
+	}
+	if windowsBatteryPresent(status.BatteryFlag) {
+		if status.BatteryLifePercent <= 100 {
+			result.batteryPercent = domain.NewExactMetric(float64(status.BatteryLifePercent), domain.MetricUnitPercent, updatedAt)
+			result.batteryAvailable = true
+		}
+		result.batteryCharging = domain.NewExactMetric(status.BatteryFlag&8 != 0, domain.MetricUnitBoolean, updatedAt)
+		result.batteryAvailable = true
+	}
+	return result
+}
+
+func windowsPowerSourceFromStatus(status windowsPowerStatus) PowerSource {
+	switch status.ACLineStatus {
+	case 0:
+		if windowsBatteryPresent(status.BatteryFlag) {
+			return PowerBattery
+		}
+		return PowerUnknown
+	case 1:
+		return PowerAC
+	default:
+		return PowerUnknown
+	}
+}
+
+func windowsBatteryPresent(flag byte) bool {
+	return flag != 0 && flag != 255 && flag != 128 && flag&^byte(15) == 0
+}
+
+func sampleWindowsPowerStatus(read func() (windowsPowerStatus, error)) (windowsPowerStatus, domain.MetricErrorCode, PowerSource) {
+	if read == nil {
+		return windowsPowerStatus{}, domain.MetricErrorUnsupported, PowerUnknown
+	}
+	status, err := read()
+	if err != nil {
+		return windowsPowerStatus{}, metricErrorCode(err), PowerUnknown
+	}
+	return status, "", windowsPowerSourceFromStatus(status)
 }
 
 func (p *HostProvider) collectMemory(snapshot *Snapshot, system *domain.SystemTelemetry, capabilities *domain.TelemetryCapabilities, updatedAt time.Time) {
@@ -297,7 +682,7 @@ func (p *HostProvider) cpuUsage(updatedAt time.Time) (domain.Metric[float64], bo
 }
 
 func (p *HostProvider) collectGPUs(ctx context.Context, snapshot *Snapshot, system *domain.SystemTelemetry, capabilities *domain.TelemetryCapabilities, updatedAt time.Time) {
-	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	probeCtx, cancel := context.WithTimeout(ctx, gpuProbeTimeout)
 	data, err := p.run(probeCtx, "nvidia-smi", "--query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.free,memory.total,power.draw", "--format=csv,noheader,nounits")
 	cancel()
 	if ctx.Err() != nil {
@@ -308,7 +693,7 @@ func (p *HostProvider) collectGPUs(ctx context.Context, snapshot *Snapshot, syst
 		appendWarning(snapshot, "GPU telemetry unavailable")
 		return
 	}
-	gpus, err := parseLinuxGPUTelemetry(data, updatedAt)
+	gpus, err := parseNVIDIAGPUTelemetry(data, updatedAt)
 	if err != nil {
 		system.GPUs = []domain.GPUTelemetry{}
 		appendWarning(snapshot, "GPU telemetry unavailable")
@@ -755,18 +1140,55 @@ func runBounded(ctx context.Context, name string, args ...string) ([]byte, error
 	return out.data, err
 }
 
+var windowsNVIDIASMILocations = [...]string{
+	`C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe`,
+	`C:\Program Files (x86)\NVIDIA Corporation\NVSMI\nvidia-smi.exe`,
+	`C:\Windows\System32\nvidia-smi.exe`,
+}
+
+func findWindowsNVIDIASMI(stat func(string) (fs.FileInfo, error)) (string, error) {
+	if stat == nil {
+		return "", exec.ErrNotFound
+	}
+	permissionDenied := false
+	for _, path := range windowsNVIDIASMILocations {
+		info, err := stat(path)
+		if err != nil {
+			if errors.Is(err, fs.ErrPermission) {
+				permissionDenied = true
+			}
+			continue
+		}
+		if info != nil && info.Mode().IsRegular() {
+			return path, nil
+		}
+	}
+	if permissionDenied {
+		return "", fs.ErrPermission
+	}
+	return "", exec.ErrNotFound
+}
+
 func (p *HostProvider) powerSource(ctx context.Context) PowerSource {
 	source, _ := p.powerSourceAt(ctx)
 	return source
 }
 
 func (p *HostProvider) powerSourceAt(ctx context.Context) (PowerSource, time.Time) {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != "linux" && runtime.GOOS != "windows" {
 		return PowerUnknown, time.Time{}
 	}
 	p.powerMu.Lock()
 	defer p.powerMu.Unlock()
 	if time.Since(p.powerAt) < 30*time.Second {
+		return p.power, p.powerAt
+	}
+	if runtime.GOOS == "windows" {
+		p.power = PowerUnknown
+		p.windowsPowerStatus = windowsPowerStatus{}
+		p.windowsPowerError = domain.MetricErrorUnsupported
+		p.windowsPowerStatus, p.windowsPowerError, p.power = sampleWindowsPowerStatus(p.windows.powerStatus)
+		p.powerAt = time.Now()
 		return p.power, p.powerAt
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)

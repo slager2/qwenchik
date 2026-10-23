@@ -398,6 +398,8 @@ func fakeHost(t *testing.T, base string) *HostProvider {
 			return []byte("VmRSS: 100 kB\n"), nil
 		case "/proc/stat":
 			return []byte("cpu 100 10 20 200 5 2 3 1 0 0\n"), nil
+		case "/proc/uptime":
+			return []byte("12345.67 98765.43\n"), nil
 		case "/proc/4242/comm":
 			return []byte("llama-server\n"), nil
 		case "/proc/4242/status":
@@ -464,8 +466,8 @@ func TestHostHealthLocalOnly(t *testing.T) {
 	if len(s.Warnings) != 0 || s.System == nil || s.Capabilities == nil || s.StaleAfterMS == nil {
 		t.Fatalf("warnings: %v", s.Warnings)
 	}
-	if *s.StaleAfterMS != 35000 {
-		t.Fatalf("stale_after_ms = %d, want configured interval + 30s cache", *s.StaleAfterMS)
+	if *s.StaleAfterMS != 43000 {
+		t.Fatalf("stale_after_ms = %d, want configured interval + cache and bounded probe windows", *s.StaleAfterMS)
 	}
 	if s.System.RAMTotal.Value == nil || *s.System.RAMTotal.Value != 8388608<<10 || s.System.RAMFree.Value == nil || *s.System.RAMFree.Value != 999999<<10 || s.System.RAMUsed.Value == nil || *s.System.RAMUsed.Value != (8388608-999999)<<10 {
 		t.Fatalf("RAM system metrics: %+v", s.System)
@@ -481,6 +483,9 @@ func TestHostHealthLocalOnly(t *testing.T) {
 	}
 	if s.System.CPUTemperature.Value == nil || *s.System.CPUTemperature.Value != 42 || s.System.LlamaSlotsActive.Value != nil || s.System.LlamaSlotsTotal.Value != nil {
 		t.Fatalf("CPU temperature or later-phase metrics: %+v", s.System)
+	}
+	if s.System.Metadata.OS != "linux" || s.System.Metadata.UptimeSeconds.Value == nil || *s.System.Metadata.UptimeSeconds.Value != 12345.67 {
+		t.Fatalf("system metadata: %+v", s.System.Metadata)
 	}
 	if s.System.PowerSource.Source != domain.MetricSourceExact || !s.System.PowerSource.UpdatedAt.Equal(p.powerAt) {
 		t.Fatalf("power timestamp was refreshed instead of retained: %+v cache_at=%s", s.System.PowerSource, p.powerAt)
@@ -617,6 +622,7 @@ func (f providerFunc) Snapshot(ctx context.Context) (Snapshot, error) { return f
 func TestMonitorCopiesAndConcurrency(t *testing.T) {
 	updatedAt := time.Now().UTC()
 	system := unavailableSystemTelemetry(updatedAt, domain.MetricErrorUnsupported)
+	system.Metadata.UptimeSeconds = domain.NewExactMetric(123.0, domain.MetricUnitSeconds, updatedAt)
 	system.RAMTotal = domain.NewExactMetric(int64(10), domain.MetricUnitBytes, updatedAt)
 	system.GPUs = []domain.GPUTelemetry{{Name: domain.NewExactMetric("gpu", domain.MetricUnitName, updatedAt)}}
 	capabilities := domain.TelemetryCapabilities{GPU: true}
@@ -633,6 +639,7 @@ func TestMonitorCopiesAndConcurrency(t *testing.T) {
 	*got.FreeRAMBytes = 42
 	got.Warnings[0] = "mutated"
 	*got.System.RAMTotal.Value = 11
+	*got.System.Metadata.UptimeSeconds.Value = 999
 	*got.System.GPUs[0].Name.Value = "mutated"
 	got.Capabilities.GPU = false
 	*got.StaleAfterMS = 2000
@@ -640,7 +647,7 @@ func TestMonitorCopiesAndConcurrency(t *testing.T) {
 	last := m.LastSnapshot()
 	*last.FreeRAMBytes = 44
 	last = m.LastSnapshot()
-	if *last.FreeRAMBytes != 1 || s.Warnings[0] != "test" || *last.System.RAMTotal.Value != 10 || *last.System.GPUs[0].Name.Value != "gpu" || !last.Capabilities.GPU || *last.StaleAfterMS != 1000 {
+	if *last.FreeRAMBytes != 1 || s.Warnings[0] != "test" || *last.System.RAMTotal.Value != 10 || *last.System.Metadata.UptimeSeconds.Value != 123 || *last.System.GPUs[0].Name.Value != "gpu" || !last.Capabilities.GPU || *last.StaleAfterMS != 1000 {
 		t.Fatal("snapshot aliases mutable data")
 	}
 	var wg sync.WaitGroup

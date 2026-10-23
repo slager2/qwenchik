@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -104,6 +105,12 @@ type Result struct {
 }
 
 func New(image, workspaceRoot string, runner CommandRunner, configuredLimits ...Limits) (*Runtime, error) {
+	if runtime.GOOS == "windows" {
+		if runner == nil {
+			runner = ExecRunner{}
+		}
+		return &Runtime{image: image, workspaceRoot: workspaceRoot, runner: runner}, nil
+	}
 	if image == "" {
 		image = "golang:1.23-alpine"
 	}
@@ -156,6 +163,9 @@ func (d *Runtime) Doctor(ctx context.Context) DoctorStatus {
 }
 
 func (d *Runtime) check(ctx context.Context, smoke bool) DoctorStatus {
+	if runtime.GOOS == "windows" {
+		return DoctorStatus{Message: "sandbox runtime is unsupported on windows"}
+	}
 	checkTimeout := 10 * time.Second
 	if smoke {
 		checkTimeout = 20 * time.Second
@@ -213,6 +223,9 @@ func isLocalUnixEndpoint(endpoint string) bool {
 }
 
 func (d *Runtime) Workspace(taskID string) (string, error) {
+	if runtime.GOOS == "windows" {
+		return "", ErrSandboxUnavailable
+	}
 	if !validTask.MatchString(taskID) {
 		return "", errors.New("invalid task ID for sandbox workspace")
 	}
@@ -246,6 +259,9 @@ func (d *Runtime) Workspace(taskID string) (string, error) {
 }
 
 func (d *Runtime) CleanupTask(taskID string) error {
+	if runtime.GOOS == "windows" {
+		return ErrSandboxUnavailable
+	}
 	if !validTask.MatchString(taskID) {
 		return errors.New("invalid task ID for sandbox cleanup")
 	}
@@ -316,6 +332,9 @@ func (d *Runtime) ReadGeneratedFile(taskID, relativePath string) ([]byte, error)
 }
 
 func (d *Runtime) Run(ctx context.Context, request Request) (Result, error) {
+	if runtime.GOOS == "windows" {
+		return Result{}, ErrSandboxUnavailable
+	}
 	if len(request.Command) == 0 || len(request.Command) > 64 {
 		return Result{}, ErrInvalidRequest
 	}

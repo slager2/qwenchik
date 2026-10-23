@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -168,7 +167,7 @@ func TestMemoryFTS5FreshSchemaTriggerSynchronizationAndSafeQueries(t *testing.T)
 func TestMemoryFTS5MigrationBackfillsExistingMemories(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "legacy-memory.db")
-	legacyDB, err := sql.Open("sqlite3", path)
+	legacyDB, err := openSQLite(sqliteDSN(path))
 	if err != nil {
 		t.Fatal(err)
 	}

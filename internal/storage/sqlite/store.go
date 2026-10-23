@@ -12,14 +12,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/slager2/qwenchik/internal/domain"
 )
 
@@ -55,14 +53,9 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		if err := os.MkdirAll(filepath.Dir(abs), 0o700); err != nil {
 			return nil, fmt.Errorf("create database directory: %w", err)
 		}
-		path = (&url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}).String()
+		path = sqliteFileURI(abs)
 	}
-	separator := "?"
-	if strings.Contains(path, "?") {
-		separator = "&"
-	}
-	dsn := path + separator + "_busy_timeout=10000&_foreign_keys=on&_journal_mode=WAL&_synchronous=NORMAL&_txlock=immediate"
-	db, err := sql.Open("sqlite3", dsn)
+	db, err := openSQLite(sqliteDSN(path))
 	if err != nil {
 		return nil, fmt.Errorf("open SQLite database: %w", err)
 	}

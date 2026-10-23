@@ -16,7 +16,7 @@ import (
 
 func researchLegacyDatabase(t *testing.T, path string, last int) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on")
+	db, err := openSQLite(sqliteDSN(path + "?_foreign_keys=on"))
 	if err != nil {
 		t.Fatal(err)
 	}

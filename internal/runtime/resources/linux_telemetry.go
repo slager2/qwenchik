@@ -13,7 +13,7 @@ import (
 
 var (
 	errInvalidLinuxCPUStat = errors.New("invalid Linux aggregate CPU counters")
-	errInvalidLinuxGPUCSV  = errors.New("invalid nvidia-smi GPU telemetry CSV")
+	errInvalidNVIDIAGPUCSV = errors.New("invalid nvidia-smi GPU telemetry CSV")
 )
 
 const linuxCPUCounterCount = 10
@@ -128,6 +128,21 @@ func parseLinuxMemoryInfo(data []byte) (total, available *int64) {
 	return total, available
 }
 
+func parseLinuxUptime(data []byte) (float64, bool) {
+	fields := strings.Fields(string(data))
+	if len(fields) != 2 {
+		return 0, false
+	}
+	seconds, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil || math.IsNaN(seconds) || math.IsInf(seconds, 0) || seconds < 0 {
+		return 0, false
+	}
+	if _, err := strconv.ParseFloat(fields[1], 64); err != nil {
+		return 0, false
+	}
+	return seconds, true
+}
+
 // parseLinuxProcessComm removes only procfs's record terminator. Trimming other
 // whitespace would turn a non-exact process name into a possible match.
 func parseLinuxProcessComm(data []byte) string {
@@ -226,12 +241,12 @@ func classifyLinuxCPUSensor(value string, isType bool) int {
 	return 0
 }
 
-// parseLinuxGPUTelemetry parses the pinned nvidia-smi CSV query in device-row
+// parseNVIDIAGPUTelemetry parses the pinned nvidia-smi CSV query in device-row
 // order. Any malformed row rejects the complete result, and parser details are
 // deliberately replaced by a fixed error.
-func parseLinuxGPUTelemetry(data []byte, updatedAt time.Time) ([]domain.GPUTelemetry, error) {
+func parseNVIDIAGPUTelemetry(data []byte, updatedAt time.Time) ([]domain.GPUTelemetry, error) {
 	if updatedAt.IsZero() {
-		return nil, errInvalidLinuxGPUCSV
+		return nil, errInvalidNVIDIAGPUCSV
 	}
 	if len(strings.TrimSpace(string(data))) == 0 {
 		return []domain.GPUTelemetry{}, nil
@@ -241,13 +256,13 @@ func parseLinuxGPUTelemetry(data []byte, updatedAt time.Time) ([]domain.GPUTelem
 	reader.TrimLeadingSpace = true
 	rows, err := reader.ReadAll()
 	if err != nil {
-		return nil, errInvalidLinuxGPUCSV
+		return nil, errInvalidNVIDIAGPUCSV
 	}
 	gpus := make([]domain.GPUTelemetry, 0, len(rows))
 	for _, row := range rows {
 		gpu, ok := parseLinuxGPURecord(row, updatedAt)
 		if !ok {
-			return nil, errInvalidLinuxGPUCSV
+			return nil, errInvalidNVIDIAGPUCSV
 		}
 		gpus = append(gpus, gpu)
 	}

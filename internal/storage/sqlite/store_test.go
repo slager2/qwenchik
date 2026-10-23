@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"path/filepath"
@@ -16,7 +15,7 @@ import (
 func TestSkippedStepStatusMigrationPreservesExistingSteps(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "legacy-steps.db")
-	legacyDB, err := sql.Open("sqlite3", path)
+	legacyDB, err := openSQLite(sqliteDSN(path))
 	if err != nil {
 		t.Fatal(err)
 	}
