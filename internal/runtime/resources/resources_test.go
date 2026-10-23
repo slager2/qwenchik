@@ -5,17 +5,30 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/slager2/qwenchik/internal/domain"
 )
 
 func ptr[T any](v T) *T { return &v }
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
 
 func TestPolicyAndBackoff(t *testing.T) {
 	p := DefaultPolicy()
@@ -77,7 +90,7 @@ func TestCheckThresholdsAndUnknown(t *testing.T) {
 		p.Enabled = true
 	}
 	b, err := json.Marshal(Snapshot{})
-	if err != nil || !strings.Contains(string(b), `"gpu_temp_c":null`) || !strings.Contains(string(b), `"llama_healthy":null`) {
+	if err != nil || !strings.Contains(string(b), `"gpu_temp_c":null`) || !strings.Contains(string(b), `"llama_healthy":null`) || strings.Contains(string(b), `"system"`) || strings.Contains(string(b), `"capabilities"`) || strings.Contains(string(b), `"stale_after_ms"`) {
 		t.Fatalf("unknown JSON %s %v", b, err)
 	}
 }
@@ -107,6 +120,29 @@ func TestProcParsingAndBounds(t *testing.T) {
 	}
 }
 
+func TestLinuxMemoryInfoRequiresValidUniqueFields(t *testing.T) {
+	total, available := parseLinuxMemoryInfo([]byte("MemTotal: 1024 kB\nMemAvailable: 256 kB\n"))
+	if total == nil || *total != 1024<<10 || available == nil || *available != 256<<10 {
+		t.Fatalf("memory info = %v, %v", total, available)
+	}
+	for _, input := range []string{
+		"MemTotal: 0 kB\nMemAvailable: 10 kB\n",
+		"MemTotal: 10 kB\nMemTotal: 11 kB\nMemAvailable: 5 kB\n",
+		"MemTotal: 10 kB\nMemAvailable: 5 MB\n",
+	} {
+		total, available = parseLinuxMemoryInfo([]byte(input))
+		if total != nil && strings.Contains(input, "MemTotal: 0") {
+			t.Errorf("accepted zero total from %q", input)
+		}
+		if strings.Contains(input, "MemTotal: 10 kB\nMemTotal") && total != nil {
+			t.Errorf("accepted duplicate total from %q", input)
+		}
+		if strings.Contains(input, "MemAvailable: 5 MB") && available != nil {
+			t.Errorf("accepted invalid available unit from %q", input)
+		}
+	}
+}
+
 func TestGPUParsing(t *testing.T) {
 	for _, tc := range []struct {
 		data string
@@ -127,6 +163,227 @@ func TestGPUParsing(t *testing.T) {
 	}
 }
 
+func TestHostCPUUsageUsesLockedBaseline(t *testing.T) {
+	samples := [][]byte{
+		[]byte("cpu 100 100 100 100 100 100 100 100 100 100\n"),
+		[]byte("cpu 130 100 110 150 110 100 100 100 200 300\n"),
+	}
+	reads := 0
+	p := &HostProvider{readFile: func(path string, _ int) ([]byte, error) {
+		if path != "/proc/stat" {
+			t.Fatalf("unexpected path %q", path)
+		}
+		data := samples[reads]
+		reads++
+		return data, nil
+	}}
+	first, supported := p.cpuUsage(linuxTelemetryTestTime)
+	if !supported || first.Source != domain.MetricSourceUnavailable || first.Error != domain.MetricErrorTemporarilyUnavailable {
+		t.Fatalf("first CPU sample: %+v supported=%v", first, supported)
+	}
+	second, supported := p.cpuUsage(linuxTelemetryTestTime.Add(time.Second))
+	if !supported || second.Source != domain.MetricSourceExact || second.Value == nil || *second.Value != 40 {
+		t.Fatalf("CPU delta sample: %+v supported=%v", second, supported)
+	}
+}
+
+func TestLlamaServerRSSRequiresOneStableExactProcess(t *testing.T) {
+	tests := []struct {
+		name      string
+		pids      []string
+		comm      map[string][]byte
+		status    map[string][]byte
+		commReads map[string]int
+		readError map[string]error
+		wantRSS   *int64
+		wantError domain.MetricErrorCode
+	}{
+		{
+			name:      "unique match",
+			pids:      []string{"100"},
+			comm:      map[string][]byte{"/proc/100/comm": []byte("llama-server\n")},
+			status:    map[string][]byte{"/proc/100/status": []byte("VmRSS: 567 kB\n")},
+			commReads: map[string]int{"/proc/100/comm": 2},
+			wantRSS:   ptr(int64(567 << 10)),
+		},
+		{
+			name:      "multiple matches",
+			pids:      []string{"100", "200"},
+			comm:      map[string][]byte{"/proc/100/comm": []byte("llama-server\n"), "/proc/200/comm": []byte("llama-server\n")},
+			commReads: map[string]int{"/proc/100/comm": 1, "/proc/200/comm": 1},
+			wantError: domain.MetricErrorTemporarilyUnavailable,
+		},
+		{
+			name:      "missing exact name",
+			pids:      []string{"100", "200"},
+			comm:      map[string][]byte{"/proc/100/comm": []byte("llama-server-helper\n"), "/proc/200/comm": []byte(" llama-server\n")},
+			commReads: map[string]int{"/proc/100/comm": 1, "/proc/200/comm": 1},
+			wantError: domain.MetricErrorTemporarilyUnavailable,
+		},
+		{
+			name:      "permission denied while scanning",
+			pids:      []string{"100"},
+			readError: map[string]error{"/proc/100/comm": fs.ErrPermission},
+			wantError: domain.MetricErrorPermissionDenied,
+		},
+		{
+			name:      "process disappeared during scan",
+			pids:      []string{"100"},
+			readError: map[string]error{"/proc/100/comm": fs.ErrNotExist},
+			wantError: domain.MetricErrorTemporarilyUnavailable,
+		},
+		{
+			name:      "identity changed before recheck",
+			pids:      []string{"100"},
+			comm:      map[string][]byte{"/proc/100/comm": []byte("llama-server\n")},
+			status:    map[string][]byte{"/proc/100/status": []byte("VmRSS: 567 kB\n")},
+			commReads: map[string]int{"/proc/100/comm": 2},
+			wantError: domain.MetricErrorTemporarilyUnavailable,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			readCounts := map[string]int{}
+			p := &HostProvider{
+				procPIDs: func(_ int) ([]string, error) { return tc.pids, nil },
+				readFile: func(path string, _ int) ([]byte, error) {
+					readCounts[path]++
+					if err := tc.readError[path]; err != nil {
+						return nil, err
+					}
+					if path == "/proc/100/comm" && tc.name == "identity changed before recheck" && readCounts[path] == 2 {
+						return []byte("other-process\n"), nil
+					}
+					if data, ok := tc.comm[path]; ok {
+						return data, nil
+					}
+					if data, ok := tc.status[path]; ok {
+						return data, nil
+					}
+					return nil, fs.ErrNotExist
+				},
+			}
+			got := p.llamaServerRSS(linuxTelemetryTestTime)
+			if tc.wantRSS != nil {
+				if got.Value == nil || *got.Value != *tc.wantRSS || got.Source != domain.MetricSourceExact {
+					t.Fatalf("RSS metric: %+v", got)
+				}
+			} else if got.Value != nil || got.Source != domain.MetricSourceUnavailable || got.Error != tc.wantError {
+				t.Fatalf("unknown RSS metric: %+v, want error %q", got, tc.wantError)
+			}
+			for path, want := range tc.commReads {
+				if readCounts[path] != want {
+					t.Errorf("%s reads = %d, want %d", path, readCounts[path], want)
+				}
+			}
+		})
+	}
+}
+
+func TestLlamaServerRSSScanIsCachedAndReturnedValuesAreIndependent(t *testing.T) {
+	pidScans := 0
+	p := &HostProvider{
+		policy: DefaultPolicy(),
+		procPIDs: func(_ int) ([]string, error) {
+			pidScans++
+			return []string{"4242"}, nil
+		},
+		readFile: func(path string, _ int) ([]byte, error) {
+			switch path {
+			case "/proc/4242/comm":
+				return []byte("llama-server\n"), nil
+			case "/proc/4242/status":
+				return []byte("VmRSS: 400 kB\n"), nil
+			default:
+				return nil, fs.ErrNotExist
+			}
+		},
+	}
+	first := p.llamaServerRSS(linuxTelemetryTestTime)
+	second := p.llamaServerRSS(linuxTelemetryTestTime.Add(time.Second))
+	if pidScans != 1 {
+		t.Fatalf("process scans = %d, want cached single scan", pidScans)
+	}
+	if first.Value == nil || second.Value == nil || *first.Value != 400<<10 || *second.Value != 400<<10 || !first.UpdatedAt.Equal(second.UpdatedAt) {
+		t.Fatalf("cached RSS metrics differ: first=%+v second=%+v", first, second)
+	}
+	*first.Value = 1
+	if *second.Value != 400<<10 {
+		t.Fatalf("cached metric aliases first return: %+v", second)
+	}
+}
+
+func TestPowerSourceCachePreservesOriginalSampleTime(t *testing.T) {
+	calls := 0
+	p := &HostProvider{run: func(context.Context, string, ...string) ([]byte, error) {
+		calls++
+		return []byte("b false\n"), nil
+	}}
+	first, firstAt := p.powerSourceAt(context.Background())
+	second, secondAt := p.powerSourceAt(context.Background())
+	if calls != 1 || first != PowerAC || second != PowerAC || firstAt.IsZero() || !firstAt.Equal(secondAt) {
+		t.Fatalf("power cache result=%q/%q timestamp=%s/%s calls=%d", first, second, firstAt, secondAt, calls)
+	}
+}
+
+func TestCPUTemperatureSelectsExplicitCPUOnly(t *testing.T) {
+	readDirs := map[string][]string{
+		"/sys/class/hwmon":        {"hwmon0"},
+		"/sys/class/hwmon/hwmon0": {"temp1_input", "temp2_input", "temp3_input"},
+		"/sys/class/thermal":      {"thermal_zone0"},
+	}
+	files := map[string]string{
+		"/sys/class/hwmon/hwmon0/name":          "nvidia",
+		"/sys/class/hwmon/hwmon0/temp1_label":   "GPU Core",
+		"/sys/class/hwmon/hwmon0/temp1_type":    "3",
+		"/sys/class/hwmon/hwmon0/temp1_input":   "99000",
+		"/sys/class/hwmon/hwmon0/temp2_label":   "Package id 0",
+		"/sys/class/hwmon/hwmon0/temp2_type":    "1",
+		"/sys/class/hwmon/hwmon0/temp2_input":   "46000",
+		"/sys/class/hwmon/hwmon0/temp3_label":   "System",
+		"/sys/class/hwmon/hwmon0/temp3_type":    "2",
+		"/sys/class/hwmon/hwmon0/temp3_input":   "80000",
+		"/sys/class/thermal/thermal_zone0/type": "cpu-thermal",
+		"/sys/class/thermal/thermal_zone0/temp": "55000",
+	}
+	p := &HostProvider{
+		readDir: func(path string, _ int) ([]string, error) {
+			if entries, ok := readDirs[path]; ok {
+				return entries, nil
+			}
+			return nil, fs.ErrNotExist
+		},
+		readFile: func(path string, _ int) ([]byte, error) {
+			if value, ok := files[path]; ok {
+				return []byte(value), nil
+			}
+			return nil, fs.ErrNotExist
+		},
+	}
+	got, supported := p.cpuTemperature(linuxTelemetryTestTime)
+	if !supported || got.Source != domain.MetricSourceExact || got.Value == nil || *got.Value != 55 {
+		t.Fatalf("CPU temperature = %+v supported=%v", got, supported)
+	}
+}
+
+func TestNonLinuxTelemetryIsExplicitlyUnknownAndLegacySnapshotStillMarshals(t *testing.T) {
+	at := linuxTelemetryTestTime
+	system := unavailableSystemTelemetry(at, domain.MetricErrorUnsupported)
+	if system.CPUUsage.Source != domain.MetricSourceUnavailable || system.CPUUsage.Error != domain.MetricErrorUnsupported || system.RAMTotal.Value != nil || system.LlamaServerRSS.Value != nil || len(system.GPUs) != 0 {
+		t.Fatalf("non-Linux unknown telemetry: %+v", system)
+	}
+	policy := DefaultPolicy()
+	legacy := Snapshot{FreeRAMBytes: ptr(policy.MinFreeRAMBytes), RSSBytes: ptr(int64(200)), GPUFreeVRAMMB: ptr(int64(300)), GPUTempC: ptr(float64(70))}
+	encoded, err := json.Marshal(legacy)
+	if err != nil || strings.Contains(string(encoded), `"system"`) {
+		t.Fatalf("legacy snapshot compatibility: %s, %v", encoded, err)
+	}
+	legacy.GPUFreeVRAMMB = ptr(policy.MinFreeVRAMMB - 1)
+	if violation := Check(legacy, policy); violation == nil || violation.Code != "low_vram" {
+		t.Fatalf("legacy guard semantics changed: %+v", violation)
+	}
+}
+
 func fakeHost(t *testing.T, base string) *HostProvider {
 	t.Helper()
 	p, err := NewHostProvider(base, DefaultPolicy())
@@ -136,19 +393,39 @@ func fakeHost(t *testing.T, base string) *HostProvider {
 	p.readFile = func(path string, limit int) ([]byte, error) {
 		switch path {
 		case "/proc/meminfo":
-			return []byte("MemAvailable: 999999 kB\n"), nil
+			return []byte("MemTotal: 8388608 kB\nMemAvailable: 999999 kB\n"), nil
 		case "/proc/self/status":
 			return []byte("VmRSS: 100 kB\n"), nil
+		case "/proc/stat":
+			return []byte("cpu 100 10 20 200 5 2 3 1 0 0\n"), nil
+		case "/proc/4242/comm":
+			return []byte("llama-server\n"), nil
+		case "/proc/4242/status":
+			return []byte("Name:\tllama-server\nVmRSS: 400 kB\n"), nil
+		case "/sys/class/thermal/thermal_zone0/type":
+			return []byte("x86_pkg_temp\n"), nil
+		case "/sys/class/thermal/thermal_zone0/temp":
+			return []byte("42000\n"), nil
 		}
-		return nil, errors.New("unknown path")
+		return nil, fs.ErrNotExist
 	}
+	p.readDir = func(path string, _ int) ([]string, error) {
+		switch path {
+		case "/sys/class/hwmon":
+			return nil, fs.ErrNotExist
+		case "/sys/class/thermal":
+			return []string{"thermal_zone0"}, nil
+		}
+		return nil, fs.ErrNotExist
+	}
+	p.procPIDs = func(_ int) ([]string, error) { return []string{"4242"}, nil }
 	p.run = func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		switch name {
 		case "nvidia-smi":
-			if !reflect.DeepEqual(args, []string{"--query-gpu=memory.free,temperature.gpu", "--format=csv,noheader,nounits"}) {
+			if !reflect.DeepEqual(args, []string{"--query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.free,memory.total,power.draw", "--format=csv,noheader,nounits"}) {
 				t.Errorf("unexpected argv: %v", args)
 			}
-			return []byte("2000, 50\n"), nil
+			return []byte("NVIDIA Test A, 20, 50, 1024, 2000, 4096, 75.5\nNVIDIA Test B, 40, 62, 1024, 1024, 4096, 90\n"), nil
 		case "busctl":
 			if !reflect.DeepEqual(args, []string{"--system", "get-property", "org.freedesktop.UPower", "/org/freedesktop/UPower", "org.freedesktop.UPower", "OnBattery"}) {
 				t.Errorf("unexpected argv: %v", args)
@@ -184,8 +461,35 @@ func TestHostHealthLocalOnly(t *testing.T) {
 	if err != nil || s.LlamaHealthy == nil || !*s.LlamaHealthy || s.HeapAllocBytes == nil || s.SnapshotAt.Location() != time.UTC {
 		t.Fatalf("snapshot %+v %v", s, err)
 	}
-	if len(s.Warnings) != 0 {
+	if len(s.Warnings) != 0 || s.System == nil || s.Capabilities == nil || s.StaleAfterMS == nil {
 		t.Fatalf("warnings: %v", s.Warnings)
+	}
+	if *s.StaleAfterMS != 35000 {
+		t.Fatalf("stale_after_ms = %d, want configured interval + 30s cache", *s.StaleAfterMS)
+	}
+	if s.System.RAMTotal.Value == nil || *s.System.RAMTotal.Value != 8388608<<10 || s.System.RAMFree.Value == nil || *s.System.RAMFree.Value != 999999<<10 || s.System.RAMUsed.Value == nil || *s.System.RAMUsed.Value != (8388608-999999)<<10 {
+		t.Fatalf("RAM system metrics: %+v", s.System)
+	}
+	if s.System.AgentRSS.Value == nil || *s.System.AgentRSS.Value != 100<<10 || s.RSSBytes == nil || *s.RSSBytes != 100<<10 || s.System.LlamaServerRSS.Value == nil || *s.System.LlamaServerRSS.Value != 400<<10 {
+		t.Fatalf("process RSS metrics: %+v", s.System)
+	}
+	if !s.Capabilities.CPU || !s.Capabilities.RAM || !s.Capabilities.GPU || !s.Capabilities.GPUUtilization || !s.Capabilities.GPUTemperature || !s.Capabilities.ProcessRSS || !s.Capabilities.Power || !s.Capabilities.LlamaHealth || s.Capabilities.LlamaMetrics || s.Capabilities.LlamaTimings || s.Capabilities.LlamaSlots {
+		t.Fatalf("capabilities: %+v", s.Capabilities)
+	}
+	if len(s.System.GPUs) != 2 || s.System.GPUs[0].Name.Value == nil || *s.System.GPUs[0].Name.Value != "NVIDIA Test A" || s.GPUFreeVRAMMB == nil || *s.GPUFreeVRAMMB != 1024 || s.GPUTempC == nil || *s.GPUTempC != 62 {
+		t.Fatalf("GPU metrics and legacy guards: %+v / %+v", s.System.GPUs, s)
+	}
+	if s.System.CPUTemperature.Value == nil || *s.System.CPUTemperature.Value != 42 || s.System.LlamaSlotsActive.Value != nil || s.System.LlamaSlotsTotal.Value != nil {
+		t.Fatalf("CPU temperature or later-phase metrics: %+v", s.System)
+	}
+	if s.System.PowerSource.Source != domain.MetricSourceExact || !s.System.PowerSource.UpdatedAt.Equal(p.powerAt) {
+		t.Fatalf("power timestamp was refreshed instead of retained: %+v cache_at=%s", s.System.PowerSource, p.powerAt)
+	}
+	if s.System.PowerSource.UpdatedAt.After(s.SnapshotAt) {
+		t.Fatalf("snapshot timestamp predates cached power sample: snapshot=%s power=%s", s.SnapshotAt, s.System.PowerSource.UpdatedAt)
+	}
+	if _, err := json.Marshal(s); err != nil {
+		t.Fatalf("snapshot with optional telemetry is not marshable: %v", err)
 	}
 }
 
@@ -240,8 +544,18 @@ func TestUnknownTelemetryAndPowerCache(t *testing.T) {
 	}
 	for i := 0; i < 2; i++ {
 		s, err := p.Snapshot(context.Background())
-		if err != nil || s.FreeRAMBytes != nil || s.RSSBytes != nil || s.GPUTempC != nil || s.GPUFreeVRAMMB != nil || s.PowerSource != PowerUnknown || len(s.Warnings) != 4 {
+		if err != nil || s.FreeRAMBytes != nil || s.RSSBytes != nil || s.GPUTempC != nil || s.GPUFreeVRAMMB != nil || s.PowerSource != PowerUnknown || s.System == nil || s.System.RAMTotal.Error != domain.MetricErrorCollectionFailed {
 			t.Fatalf("unknown %+v %v", s, err)
+		}
+		for _, warning := range []string{
+			"RAM unknown; configured guard cannot evaluate this metric",
+			"process RSS unknown; configured guard cannot evaluate this metric",
+			"GPU VRAM unknown; configured guard cannot evaluate this metric",
+			"GPU temperature unknown; configured guard cannot evaluate this metric",
+		} {
+			if !containsString(s.Warnings, warning) {
+				t.Errorf("missing static warning %q in %v", warning, s.Warnings)
+			}
 		}
 	}
 	if calls != 1 {
@@ -301,7 +615,13 @@ type providerFunc func(context.Context) (Snapshot, error)
 func (f providerFunc) Snapshot(ctx context.Context) (Snapshot, error) { return f(ctx) }
 
 func TestMonitorCopiesAndConcurrency(t *testing.T) {
-	s := Snapshot{FreeRAMBytes: ptr(int64(1)), Warnings: []string{"test"}}
+	updatedAt := time.Now().UTC()
+	system := unavailableSystemTelemetry(updatedAt, domain.MetricErrorUnsupported)
+	system.RAMTotal = domain.NewExactMetric(int64(10), domain.MetricUnitBytes, updatedAt)
+	system.GPUs = []domain.GPUTelemetry{{Name: domain.NewExactMetric("gpu", domain.MetricUnitName, updatedAt)}}
+	capabilities := domain.TelemetryCapabilities{GPU: true}
+	staleAfter := int64(1000)
+	s := Snapshot{FreeRAMBytes: ptr(int64(1)), Warnings: []string{"test"}, System: &system, Capabilities: &capabilities, StaleAfterMS: &staleAfter}
 	m, err := NewMonitor(providerFunc(func(context.Context) (Snapshot, error) { return s, nil }), DefaultPolicy())
 	if err != nil {
 		t.Fatal(err)
@@ -312,10 +632,15 @@ func TestMonitorCopiesAndConcurrency(t *testing.T) {
 	}
 	*got.FreeRAMBytes = 42
 	got.Warnings[0] = "mutated"
+	*got.System.RAMTotal.Value = 11
+	*got.System.GPUs[0].Name.Value = "mutated"
+	got.Capabilities.GPU = false
+	*got.StaleAfterMS = 2000
 	*v.Snapshot.FreeRAMBytes = 43
 	last := m.LastSnapshot()
 	*last.FreeRAMBytes = 44
-	if *m.LastSnapshot().FreeRAMBytes != 1 || s.Warnings[0] != "test" {
+	last = m.LastSnapshot()
+	if *last.FreeRAMBytes != 1 || s.Warnings[0] != "test" || *last.System.RAMTotal.Value != 10 || *last.System.GPUs[0].Name.Value != "gpu" || !last.Capabilities.GPU || *last.StaleAfterMS != 1000 {
 		t.Fatal("snapshot aliases mutable data")
 	}
 	var wg sync.WaitGroup
@@ -334,6 +659,64 @@ func TestMonitorCopiesAndConcurrency(t *testing.T) {
 	m, _ = NewMonitor(providerFunc(func(context.Context) (Snapshot, error) { return Snapshot{}, errBoom }), DefaultPolicy())
 	if _, v, err := m.Check(context.Background()); v != nil || !errors.Is(err, errBoom) {
 		t.Fatalf("provider error: %v %v", v, err)
+	}
+}
+
+func TestMonitorSerializesSnapshotCollectionAndCancelsWaiters(t *testing.T) {
+	var calls atomic.Int32
+	firstStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	monitor, err := NewMonitor(providerFunc(func(context.Context) (Snapshot, error) {
+		if calls.Add(1) == 1 {
+			close(firstStarted)
+			<-releaseFirst
+		}
+		return Snapshot{}, nil
+	}), DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstDone := make(chan error, 1)
+	go func() {
+		_, _, checkErr := monitor.Check(context.Background())
+		firstDone <- checkErr
+	}()
+	select {
+	case <-firstStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first provider check did not start")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	secondStarted := make(chan struct{})
+	secondDone := make(chan error, 1)
+	go func() {
+		close(secondStarted)
+		_, _, checkErr := monitor.Check(ctx)
+		secondDone <- checkErr
+	}()
+	<-secondStarted
+	cancel()
+	select {
+	case checkErr := <-secondDone:
+		if !errors.Is(checkErr, context.Canceled) {
+			t.Fatalf("waiting check error = %v, want context.Canceled", checkErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancelled check remained blocked behind the active snapshot")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("provider calls while first check blocked = %d, want 1", got)
+	}
+	close(releaseFirst)
+	if checkErr := <-firstDone; checkErr != nil {
+		t.Fatalf("first check: %v", checkErr)
+	}
+	if _, _, err := monitor.Check(context.Background()); err != nil {
+		t.Fatalf("subsequent check: %v", err)
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("total provider calls = %d, want 2", got)
 	}
 }
 

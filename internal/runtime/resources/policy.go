@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"github.com/slager2/qwenchik/internal/domain"
 )
 
 type Policy struct {
@@ -63,17 +65,20 @@ const (
 )
 
 type Snapshot struct {
-	SnapshotAt         time.Time      `json:"snapshot_at"`
-	FreeRAMBytes       *int64         `json:"free_ram_bytes"`
-	RSSBytes           *int64         `json:"rss_bytes"`
-	HeapAllocBytes     *uint64        `json:"heap_alloc_bytes"`
-	GPUFreeVRAMMB      *int64         `json:"gpu_free_vram_mb"`
-	GPUTempC           *float64       `json:"gpu_temp_c"`
-	LlamaHealthy       *bool          `json:"llama_healthy"`
-	LlamaHealthLatency *time.Duration `json:"llama_health_latency"`
-	LlamaHealthReason  string         `json:"llama_health_reason,omitempty"`
-	Warnings           []string       `json:"warnings"`
-	PowerSource        PowerSource    `json:"power_source"`
+	SnapshotAt         time.Time                     `json:"snapshot_at"`
+	FreeRAMBytes       *int64                        `json:"free_ram_bytes"`
+	RSSBytes           *int64                        `json:"rss_bytes"`
+	HeapAllocBytes     *uint64                       `json:"heap_alloc_bytes"`
+	GPUFreeVRAMMB      *int64                        `json:"gpu_free_vram_mb"`
+	GPUTempC           *float64                      `json:"gpu_temp_c"`
+	LlamaHealthy       *bool                         `json:"llama_healthy"`
+	LlamaHealthLatency *time.Duration                `json:"llama_health_latency"`
+	LlamaHealthReason  string                        `json:"llama_health_reason,omitempty"`
+	Warnings           []string                      `json:"warnings"`
+	PowerSource        PowerSource                   `json:"power_source"`
+	System             *domain.SystemTelemetry       `json:"system,omitempty"`
+	Capabilities       *domain.TelemetryCapabilities `json:"capabilities,omitempty"`
+	StaleAfterMS       *int64                        `json:"stale_after_ms,omitempty"`
 }
 
 type Violation struct {
