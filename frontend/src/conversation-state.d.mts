@@ -15,4 +15,5 @@ export function normalizeSources(value: unknown): SourceRecord[]
 export function sourceErrorCode(code: string): string
 export interface CitationReference { id: string; label: string; title: string; url: string }
 export function citationReferences(evidence: (Evidence | SourceRecord)[]): CitationReference[]
+export function explicitResearchContextReferences(userMessage: ConversationMessage | null | undefined, conversationID: string): CitationReference[]
 export function legacyDraft(events: AgentEvent[], savedIDs?: string[]): DraftMessage | null

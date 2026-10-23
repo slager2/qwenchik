@@ -35,6 +35,7 @@ events['r-b'] = [
 ].map((event, index) => ({ ...event, id: `research-event-${index}`, task_id: 'r-b', seq: index + 1, visibility: 'user', schema_version: 1, created_at: now }))
 const streamCursors = []
 const submissionKeys = []
+const researchContextSubmissions = []
 let counter = 0
 let rejectNext = false
 let sourcesFail = true
@@ -147,10 +148,11 @@ try {
       if (!parts[3] && method === 'DELETE') { conv.archived_at = now; return route.fulfill({ status: 204 }) }
       if (parts[3] === 'messages' && method === 'GET') return messagesFail ? json({ error: { message: 'Сеть недоступна' } }, 503) : json(messages[id])
       if (parts[3] === 'messages' && method === 'POST') {
+        const body = request.postDataJSON()
         submissionKeys.push(request.headers()['idempotency-key'])
+        if (body.research_run_id) researchContextSubmissions.push(body.research_run_id)
         await new Promise((resolve) => setTimeout(resolve, 250))
         if (rejectNext) { rejectNext = false; return json({ error: { code: 'unavailable', message: 'Временный сетевой сбой', retryable: true } }, 503) }
-        const body = request.postDataJSON()
         return json(submit(id, body.content, body.mode), 202)
       }
     }
@@ -260,13 +262,23 @@ try {
       await page.getByRole('button', { name: 'Детали', exact: true }).click()
     }
   }
+  await page.getByRole('button', { name: 'Продолжить с контекстом исследования', exact: true }).click()
+  await page.getByText(/Research context: ON/, { exact: false }).waitFor()
+  const bridgeInput = page.getByRole('textbox', { name: 'Сообщение', exact: true })
+  await bridgeInput.fill('Explain the checked findings, briefly.')
+  await page.getByRole('button', { name: 'Отправить', exact: true }).click()
+  await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor()
+  assert.equal(researchContextSubmissions.at(-1), 'r-b', 'explicit Chat continuation attaches only the selected completed research run')
+  await page.getByRole('button', { name: 'Очистить research context', exact: true }).click()
+  assert.equal(await page.getByText(/Research context: ON/, { exact: false }).count(), 0)
   await page.getByRole('button', { name: 'Детали', exact: true }).click()
   await page.getByRole('link', { name: /Первый разговор/ }).click()
   await page.getByText('Ответ первого разговора', { exact: true }).waitFor()
   const input = page.getByRole('textbox', { name: 'Сообщение', exact: true })
   await input.fill('Новый вопрос')
   await input.evaluate((element) => element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, isComposing: true })))
-  assert.equal(submissionKeys.length, 0)
+  const firstChatSubmission = submissionKeys.length
+  assert.equal(firstChatSubmission, researchContextSubmissions.length + 0)
   await input.press('Shift+Enter')
   assert.equal(await input.inputValue(), 'Новый вопрос\n')
   rejectNext = true
@@ -288,7 +300,7 @@ try {
     return Object.fromEntries(['/api/conversations/:id/messages', '/api/runs/:id', '/api/runs/:id/runtime'].map((key) => [key, endpoints[`GET ${key}`]?.count || 0]))
   })
   assert.deepEqual(syncCountsAfter, syncCountsBefore, `SSE-active chat issued repeating snapshots for ${activeRunID}`)
-  assert.equal(submissionKeys[0], submissionKeys[1])
+  assert.equal(submissionKeys[firstChatSubmission], submissionKeys[firstChatSubmission + 1])
   await page.getByRole('button', { name: 'Переподключить', exact: true }).click()
   await until(() => streamCursors.some((cursor) => cursor >= 2), 'explicit reconnect cursor')
   assert.equal(await page.getByText('Начало потока', { exact: true }).count(), 1)

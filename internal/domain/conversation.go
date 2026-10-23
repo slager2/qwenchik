@@ -68,6 +68,8 @@ type SubmitTurn struct {
 	Content         string                `json:"content"`
 	Mode            string                `json:"mode"`
 	ParentMessageID string                `json:"parent_message_id,omitempty"`
+	ResearchRunID   string                `json:"research_run_id,omitempty"`
+	ResearchContext *ResearchContext      `json:"-"`
 	Operation       string                `json:"operation,omitempty"`
 	SourceRunID     string                `json:"source_run_id,omitempty"`
 	DeadlineSeconds int                   `json:"-"`

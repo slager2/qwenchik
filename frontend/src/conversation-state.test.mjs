@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyRunEvent, createStreamState, mergeMessages, normalizeSources, safeURL, citationReferences, terminal, legacyDraft } from './conversation-state.mjs'
+import { applyRunEvent, createStreamState, mergeMessages, normalizeSources, safeURL, citationReferences, explicitResearchContextReferences, terminal, legacyDraft } from './conversation-state.mjs'
 
 const message = { id: 'm', run_id: 'r', conversation_id: 'c', role: 'assistant', content: '', status: 'streaming', last_event_seq: 0, created_at: '2026-10-19T10:00:00Z' }
 const delta = (seq, index, text, stream = 's') => ({ task_id: 'r', seq, type: 'message.delta', payload: { message_id: 'm', stream_id: stream, chunk_index: index, delta: text } })
@@ -65,6 +65,13 @@ test('source normalization and citation references reject unsafe or rejected tar
   assert.equal(sources[1].canonical_url, '')
   assert.equal(safeURL('https://user:password@example.org'), '')
   assert.deepEqual(citationReferences([{ id: 'good', canonical_url: 'https://example.org' }, { id: 'bad', status: 'rejected', canonical_url: 'https://bad.org' }]).map((item) => item.id), ['good'])
+})
+
+test('explicit research bridge references are scoped to its conversation and selected run metadata', () => {
+  const bridgeMessage = { role: 'user', conversation_id: 'conversation-a', metadata: { research_run_id: 'run-a', research_context: { run_id: 'run-a', verification_status: 'supported', summary: 'Verified statement', sources: [{ evidence_id: 'evidence-a', canonical_url: 'https://example.org/source', title: 'Source title' }] } } }
+  assert.deepEqual(explicitResearchContextReferences(bridgeMessage, 'conversation-a'), [{ id: 'evidence-a', label: '1', title: 'Source title', url: 'https://example.org/source' }])
+  assert.deepEqual(explicitResearchContextReferences(bridgeMessage, 'conversation-b'), [])
+  assert.deepEqual(explicitResearchContextReferences({ ...bridgeMessage, metadata: { ...bridgeMessage.metadata, research_context: { ...bridgeMessage.metadata.research_context, run_id: 'foreign-run' } } }, 'conversation-a'), [])
 })
 
 test('legacy terminal tasks reconstruct persisted partial deltas without duplicating saved messages', () => {

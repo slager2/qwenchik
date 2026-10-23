@@ -160,12 +160,13 @@ func (s *Server) submitConversationMessage(w http.ResponseWriter, r *http.Reques
 		Content         string `json:"content"`
 		Mode            string `json:"mode"`
 		ParentMessageID string `json:"parent_message_id"`
+		ResearchRunID   string `json:"research_run_id,omitempty"`
 	}
 	if decodeRequest(w, r, &in) != nil {
 		writeError(w, 400, "invalid_request", "Некорректное сообщение.", false)
 		return
 	}
-	s.submitRun(w, r, domain.SubmitTurn{ConversationID: r.PathValue("conversationID"), Content: in.Content, Mode: in.Mode, ParentMessageID: in.ParentMessageID})
+	s.submitRun(w, r, domain.SubmitTurn{ConversationID: r.PathValue("conversationID"), Content: in.Content, Mode: in.Mode, ParentMessageID: in.ParentMessageID, ResearchRunID: in.ResearchRunID})
 }
 func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 	var in struct {

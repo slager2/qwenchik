@@ -81,6 +81,14 @@ export function citationReferences(evidence) {
   return evidence.filter((item) => item && typeof item.id === 'string' && !['rejected', 'failed', 'empty'].includes(item.status) && !(Array.isArray(item.quality_flags) ? item.quality_flags : []).some((flag) => /rejected|challenge|empty/.test(String(flag)))).map((item, index) => ({ id: item.id, label: String(index + 1), title: typeof item.title === 'string' && item.title ? item.title : 'Источник', url: safeURL(item.canonical_url || item.url || item.original_url) })).filter((item) => item.url)
 }
 
+export function explicitResearchContextReferences(userMessage, conversationID) {
+  if (!userMessage || userMessage.role !== 'user' || userMessage.conversation_id !== conversationID || !userMessage.metadata || typeof userMessage.metadata !== 'object') return []
+  const runID = userMessage.metadata.research_run_id
+  const context = userMessage.metadata.research_context
+  if (typeof runID !== 'string' || !context || typeof context !== 'object' || context.run_id !== runID || !['supported', 'fallback_excerpts'].includes(context.verification_status) || !Array.isArray(context.sources)) return []
+  return citationReferences(context.sources.map((source) => source && typeof source === 'object' ? ({ id: source.evidence_id, title: source.title, canonical_url: source.canonical_url, status: 'verified', quality_flags: [] }) : null))
+}
+
 export function legacyDraft(events, savedIDs = []) {
   let draft = null
   for (const event of [...events].sort((a, b) => a.seq - b.seq)) {

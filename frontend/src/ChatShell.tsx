@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { api } from './api'
 import { createCoalescedScheduler, nextFallbackDelay, runEventInvalidations, runResyncResources } from './chat-sync.mjs'
+import { createRunEvidenceCache, type RunEvidenceCache } from './evidence-cache.mjs'
 import MarkdownMessage from './MarkdownMessage'
-import { applyRunEvent, citationReferences, createStreamState, mergeMessages, normalizeSources, terminal, type StreamState } from './conversation-state.mjs'
+import { applyRunEvent, citationReferences, explicitResearchContextReferences, createStreamState, mergeMessages, normalizeSources, terminal, type StreamState } from './conversation-state.mjs'
 import ResearchPanel from './ResearchPanel'
 import { recordReload, recordSSE, type ReloadReason } from './network-debug'
 import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, Evidence, ResearchPlan, Run, RunRuntime, Submission } from './types'
@@ -119,6 +120,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const conversation = useRemote(useCallback((signal) => id ? api.conversation(id, signal) : Promise.resolve<Conversation | null>(null), [id]), id ? 30000 : 0, 'chat.conversation')
   const snapshots = useRemote(useCallback((signal) => id ? api.conversationMessages(id, signal) : Promise.resolve<ConversationMessage[]>([]), [id]), 0, 'chat.messages')
   const [transcript, dispatch] = useReducer(transcriptReducer, { messages: [], stream: createStreamState('') })
+  const [evidenceCache] = useState(() => createRunEvidenceCache((sourceRunID: string) => api.runEvidence(sourceRunID)))
   const [runID, setRunID] = useState('')
   const run = useRemote(useCallback((signal) => runID ? api.conversationRun(runID, signal) : Promise.resolve<Run | null>(null), [runID]), 0, 'chat.run')
   const runtime = useRemote(useCallback((signal) => runID ? api.runRuntime(runID, signal) : Promise.resolve<RunRuntime | null>(null), [runID]), 0, 'chat.runtime')
@@ -129,6 +131,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const doctor = useRemote(useCallback((signal) => api.doctor(signal), []), 60000, 'chat.doctor')
   const health = useRemote(useCallback((signal) => api.health(signal), []), 60000, 'chat.health')
   const [mode, setMode] = useState<ConversationMode>('chat')
+  const [researchContextRunID, setResearchContextRunID] = useState('')
   const modeRef = useRef(mode)
   modeRef.current = mode
   const [text, setText] = useState('')
@@ -229,7 +232,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
         target = item.id
         createdID.current = target
       }
-      const result = await api.submitMessage(target, content, selectedMode, key)
+      const result = await api.submitMessage(target, content, selectedMode, key, selectedMode === 'chat' ? researchContextRunID : '')
       submissionKey.current = null
       if (!alive.current) return
       if (!id) { void onChanged(); onSelect(target); return }
@@ -347,7 +350,9 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
     }
     return () => { disposed = true; source.close(); clearFallback(); window.clearTimeout(stableTimer); closeStream(); if (closeEventStreamRef.current === closeSource) closeEventStreamRef.current = () => {} }
   }, [runID, reconnect])
-  const references = useMemo(() => citationReferences(research.evidence.data ?? []), [research.evidence.data])
+  const bridgeMessage = transcript.messages.find((message) => message.id === currentRun?.user_message_id) ?? null
+  const bridgeReferences = explicitResearchContextReferences(bridgeMessage, id)
+  const references = useMemo(() => currentRun?.mode === 'chat' && bridgeReferences.length ? bridgeReferences : citationReferences(research.evidence.data ?? []), [currentRun?.mode, bridgeReferences.length, bridgeMessage, research.evidence.data])
   const flushSync = useCallback((resources: string[], syncReason: string) => {
     for (const resource of resources) {
       if (resource === 'messages') void snapshots.reload(syncReason as ReloadReason)
@@ -381,7 +386,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
       <ResourceStatus resource={conversation} /><ResourceStatus resource={snapshots} />{runID && <ResourceStatus resource={run} />}
       <div className="chat-transcript" ref={listRef} onScroll={() => { const el = listRef.current; if (el) setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 100) }}>
         {!content.length && !snapshots.loading && <div className="chat-empty"><span className="chat-empty-mark">Q</span><h2>С чего начнём?</h2><p>Задайте вопрос локальной модели или выберите Deep Research для работы с источниками.</p><div><button type="button" onClick={() => { setMode('chat'); setText('Помоги разобраться в сложной теме') }}>Объяснить тему</button><button type="button" onClick={() => { setMode('research'); setDetails(true); setText('Сравни варианты и приведи проверяемые источники') }}>Исследовать вопрос</button></div></div>}
-        {content.map((message) => <article className={`chat-message chat-role-${message.role}`} key={message.id} aria-label={message.role === 'user' ? 'Ваше сообщение' : 'Ответ Qwen'}><header><strong>{message.role === 'user' ? 'Вы' : 'Qwen'}</strong><time dateTime={message.created_at}>{stamp(message.created_at)}</time></header>{message.content ? <MessageContent message={message} runID={runID} references={references} /> : <p className="chat-muted">{active ? 'Готовлю ответ…' : 'Текст ответа отсутствует.'}</p>}{message.status === 'pending' && <p className="chat-muted">{busy ? 'Отправка…' : 'Не отправлено. Повторите действие.'}</p>}{message.role === 'assistant' && <footer className="chat-message-meta">{message.status === 'streaming' && active ? 'Ответ поступает' : ['cancelled', 'stopped', 'partial'].includes(message.status) ? 'Частичный ответ сохранён' : message.status === 'failed' ? 'Ответ не завершён' : ''}</footer>}</article>)}
+         {content.map((message) => <article className={`chat-message chat-role-${message.role}`} key={message.id} aria-label={message.role === 'user' ? 'Ваше сообщение' : 'Ответ Qwen'}><header><strong>{message.role === 'user' ? 'Вы' : 'Qwen'}</strong><time dateTime={message.created_at}>{stamp(message.created_at)}</time></header>{message.content ? <MessageContent message={message} runID={runID} references={references} evidenceCache={evidenceCache} /> : <p className="chat-muted">{active ? 'Готовлю ответ…' : 'Текст ответа отсутствует.'}</p>}{message.status === 'pending' && <p className="chat-muted">{busy ? 'Отправка…' : 'Не отправлено. Повторите действие.'}</p>}{message.role === 'assistant' && <footer className="chat-message-meta">{message.status === 'streaming' && active ? 'Ответ поступает' : ['cancelled', 'stopped', 'partial'].includes(message.status) ? 'Частичный ответ сохранён' : message.status === 'failed' ? 'Ответ не завершён' : ''}</footer>}</article>)}
         {busy && optimistic.length > 0 && <p className="chat-muted" role="status">Готовлю ответ…</p>}
       </div>
       {!follow && <button type="button" className="chat-to-bottom" onClick={() => setFollow(true)}>К последнему сообщению ↓</button>}
@@ -390,16 +395,33 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
       {currentRun?.status === 'waiting_approval' && <p role="status">Нужно ваше решение. <a href="#/workspace">Открыть подтверждения в рабочем пространстве</a></p>}
       {error && <div className="chat-action-error" role="alert"><p>{error}</p>{actionRetry && <button type="button" onClick={actionRetry} disabled={busy}>Повторить действие</button>}</div>}
       {currentRun && !active && <div className="chat-answer-actions"><button type="button" disabled={busy} onClick={() => operate('retry')}>Повторить ответ</button><button type="button" disabled={busy || !hasPartial} title={!hasPartial ? 'Нет текста для продолжения' : 'Продолжить ответ новым запуском'} onClick={() => operate('continue')}>Продолжить ответ</button></div>}
-       <form className="chat-composer" onSubmit={send}><label htmlFor="conversation-input" className="sr-only">Сообщение</label><textarea id="conversation-input" rows={3} value={text} maxLength={20000} placeholder={mode === 'research' ? 'Что нужно исследовать?' : 'Напишите сообщение…'} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); send() } }} /><div className="chat-composer-controls"><label>Режим<select aria-label="Режим разговора" value={mode} disabled={busy || active} onChange={(event) => { const next = event.target.value as ConversationMode; if (!id) { setMode(next); setDetails(next === 'research'); return } void action(async () => { const result = await api.updateConversation(id, { mode: next }); if (alive.current) { conversation.setData(result); setMode(next); setDetails(next === 'research'); void onChanged() } }) }}><option value="chat">Chat</option><option value="research">Deep Research</option></select></label>{active ? <button className="chat-primary" type="button" disabled={busy || !currentRun || terminal(currentRun.status)} onClick={() => void action(async () => { const next = await api.cancelRun(runID); if (alive.current) { run.setData(next); scheduleSync(['messages', 'conversation', 'run', 'runtime'], 'user_action'); void onChanged() } })}>{busy ? 'Останавливаем…' : 'Остановить'}</button> : <button className="chat-primary" type="submit" disabled={busy || !text.trim() || (!!id && !conversation.data)}>{busy ? 'Отправляем…' : 'Отправить'}</button>}</div></form>
+       {currentRun?.mode === 'research' && terminal(currentRun.status) && !researchContextRunID && <button className="chat-context-enable" type="button" disabled={busy} onClick={() => void action(async () => { if (id) { const updated = await api.updateConversation(id, { mode: 'chat' }); if (alive.current) conversation.setData(updated); void onChanged() } setMode('chat'); setDetails(false); setResearchContextRunID(currentRun.id); submissionKey.current = null })}>Продолжить с контекстом исследования</button>}
+       {researchContextRunID && <div className="chat-context-chip" role="status"><span>Research context: ON · run {researchContextRunID.slice(0, 8)}</span><button type="button" onClick={() => { setResearchContextRunID(''); submissionKey.current = null }}>Очистить research context</button></div>}
+       <form className="chat-composer" onSubmit={send}><label htmlFor="conversation-input" className="sr-only">Сообщение</label><textarea id="conversation-input" rows={3} value={text} maxLength={20000} placeholder={mode === 'research' ? 'Что нужно исследовать?' : 'Напишите сообщение…'} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); send() } }} /><div className="chat-composer-controls"><label>Режим<select aria-label="Режим разговора" value={mode} disabled={busy || active} onChange={(event) => { const next = event.target.value as ConversationMode; if (!id) { setMode(next); setDetails(next === 'research'); if (next === 'research') { setResearchContextRunID(''); submissionKey.current = null } return } void action(async () => { const result = await api.updateConversation(id, { mode: next }); if (alive.current) { conversation.setData(result); setMode(next); setDetails(next === 'research'); if (next === 'research') { setResearchContextRunID(''); submissionKey.current = null } void onChanged() } }) }}><option value="chat">Chat</option><option value="research">Deep Research</option></select></label>{active ? <button className="chat-primary" type="button" disabled={busy || !currentRun || terminal(currentRun.status)} onClick={() => void action(async () => { const next = await api.cancelRun(runID); if (alive.current) { run.setData(next); scheduleSync(['messages', 'conversation', 'run', 'runtime'], 'user_action'); void onChanged() } })}>{busy ? 'Останавливаем…' : 'Остановить'}</button> : <button className="chat-primary" type="submit" disabled={busy || !text.trim() || (!!id && !conversation.data)}>{busy ? 'Отправляем…' : 'Отправить'}</button>}</div></form>
       <div className="chat-composer-note"><span>{active ? 'Новый запрос доступен после завершения или остановки.' : 'Enter — отправить · Shift+Enter — новая строка'}</span>{runID && <span role="status">{connection === 'live' ? 'Поток подключён' : connection === 'connecting' ? 'Подключение…' : connection === 'reconnecting' ? 'Переподключение…' : connection === 'degraded' ? 'Резервная синхронизация' : connection === 'invalid' ? 'Ошибка потока' : connection === 'terminal' ? 'Поток завершён' : 'Нет активного потока'}</span>}{active && <button type="button" onClick={() => { recordReload('chat.stream', 'manual_retry'); setReconnect((value) => value + 1) }}>Переподключить</button>}</div>
     </section>{details && !mobile && <aside className="chat-research-desktop" aria-label="Детали исследования">{detailsContent}</aside>}</div>{details && mobile && <Drawer title="Детали исследования" onClose={() => setDetails(false)}>{detailsContent}</Drawer>}
   </main>
 }
 
-function MessageContent({ message, runID, references }: { message: ConversationMessage; runID: string; references: ReturnType<typeof citationReferences> }) {
-  const historical = useRemote(useCallback((signal) => message.role === 'assistant' && message.run_id && message.run_id !== runID ? api.runEvidence(message.run_id, signal) : Promise.resolve<Evidence[]>([]), [message.role, message.run_id, runID]))
+function MessageContent({ message, runID, references, evidenceCache }: { message: ConversationMessage; runID: string; references: ReturnType<typeof citationReferences>; evidenceCache: RunEvidenceCache }) {
+  const historicalRunID = message.role === 'assistant' && message.run_id && message.run_id !== runID ? message.run_id : ''
+  const historical = useRunEvidence(evidenceCache, historicalRunID)
   const refs = message.run_id === runID ? references : citationReferences(historical.data ?? [])
-  return <><MarkdownMessage content={message.content} references={message.role === 'assistant' ? refs : []} />{historical.error && <p className="chat-muted">Ссылки этого ответа временно недоступны. <button type="button" onClick={() => void historical.reload()}>Загрузить источники</button></p>}</>
+  return <><MarkdownMessage content={message.content} references={message.role === 'assistant' ? refs : []} />{historicalRunID && historical.error && <p className="chat-muted">{historical.error} <button type="button" onClick={() => void historical.retry()}>Загрузить источники</button></p>}</>
+}
+
+function useRunEvidence(cache: RunEvidenceCache, runID: string) {
+  const [observed, setObserved] = useState(() => ({ runID, entry: cache.get(runID) }))
+  useEffect(() => {
+    if (!runID) { setObserved({ runID: '', entry: { loading: false, error: '', data: undefined } }); return }
+    setObserved({ runID, entry: cache.get(runID) })
+    const update = () => setObserved({ runID, entry: cache.get(runID) })
+    const unsubscribe = cache.subscribe(runID, update)
+    void cache.load(runID)
+    return unsubscribe
+  }, [cache, runID])
+  const entry = observed.runID === runID ? observed.entry : cache.get(runID)
+  return { ...entry, retry: () => cache.load(runID, true) }
 }
 
 function useResearch(runID: string, enabled: boolean) {

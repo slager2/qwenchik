@@ -66,7 +66,7 @@ export const api = {
   updateConversation: (id: string, patch: { title?: string; mode?: ConversationMode }) => request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteConversation: (id: string) => request<void>(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   conversationMessages: (id: string, signal?: AbortSignal) => request<ConversationMessage[]>(`/api/conversations/${encodeURIComponent(id)}/messages`, { signal }),
-  submitMessage: (id: string, content: string, mode: ConversationMode, key: string) => request<Submission>(`/api/conversations/${encodeURIComponent(id)}/messages`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ content, mode }) }),
+  submitMessage: (id: string, content: string, mode: ConversationMode, key: string, researchRunID = '') => request<Submission>(`/api/conversations/${encodeURIComponent(id)}/messages`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ content, mode, ...(mode === 'chat' && researchRunID ? { research_run_id: researchRunID } : {}) }) }),
   conversationRun: (id: string, signal?: AbortSignal) => request<Run>(`/api/runs/${encodeURIComponent(id)}`, { signal }),
   runRuntime: (id: string, signal?: AbortSignal) => request<RunRuntime>(`/api/runs/${encodeURIComponent(id)}/runtime`, { signal }),
   cancelRun: (id: string) => request<Run>(`/api/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),

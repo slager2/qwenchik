@@ -444,6 +444,32 @@ func (s *Store) SubmitTurn(ctx context.Context, in domain.SubmitTurn, key string
 	if enabled, specified := c.ResearchSettings["web_enabled"].(bool); mode == "research" && specified && !enabled {
 		return domain.SubmitResponse{}, ErrWebDisabled
 	}
+	userMetadata := "{}"
+	if in.ResearchRunID != "" {
+		if operation != "send" || mode != "chat" || in.ResearchContext == nil || in.ResearchContext.RunID != in.ResearchRunID || in.ResearchContext.Validate() != nil {
+			return domain.SubmitResponse{}, domain.ErrInvalidConversation
+		}
+		prior, e := run(ctx, tx, in.ResearchRunID)
+		if e != nil {
+			return domain.SubmitResponse{}, e
+		}
+		if prior.ConversationID != c.ID || prior.Mode != "research" || !prior.Status.Terminal() {
+			return domain.SubmitResponse{}, ErrConflict
+		}
+		if err := validateResearchContextEvidenceTx(ctx, tx, in.ResearchRunID, *in.ResearchContext); err != nil {
+			return domain.SubmitResponse{}, err
+		}
+		encoded, e := json.Marshal(map[string]any{"research_run_id": in.ResearchRunID, "research_context": in.ResearchContext})
+		if e != nil {
+			return domain.SubmitResponse{}, e
+		}
+		if len(encoded) > domain.MaxResearchContextBytes+256 {
+			return domain.SubmitResponse{}, domain.ErrInvalidConversation
+		}
+		userMetadata = string(encoded)
+	} else if in.ResearchContext != nil {
+		return domain.SubmitResponse{}, domain.ErrInvalidConversation
+	}
 	if mode == "chat" && chatSnapshot == nil && in.ModelSnapshot != nil {
 		model := *in.ModelSnapshot
 		if model.StopSequences != nil {
@@ -483,7 +509,7 @@ func (s *Store) SubmitTurn(ctx context.Context, in domain.SubmitTurn, key string
 	}
 	if operation == "send" {
 		position++
-		_, err = tx.ExecContext(ctx, `INSERT INTO conversation_messages(id,conversation_id,run_id,role,content,status,parent_message_id,position,created_at,updated_at) VALUES(?,?,?,'user',?,'completed',?,?,?,?)`, userID, c.ID, id, content, nullableKey(parent), position, stamp(now), stamp(now))
+		_, err = tx.ExecContext(ctx, `INSERT INTO conversation_messages(id,conversation_id,run_id,role,content,status,parent_message_id,position,created_at,updated_at,metadata_json) VALUES(?,?,?,'user',?,'completed',?,?,?,?,?)`, userID, c.ID, id, content, nullableKey(parent), position, stamp(now), stamp(now), userMetadata)
 		if err != nil {
 			return domain.SubmitResponse{}, err
 		}

@@ -287,6 +287,19 @@ func (s *Service) SubmitTurn(ctx context.Context, in domain.SubmitTurn, key stri
 			in.ModelSnapshot = &model
 		}
 	}
+	in.Mode = mode
+	if in.ResearchRunID != "" {
+		if in.Operation != "send" || mode != "chat" || len(in.ResearchRunID) > 128 {
+			return domain.SubmitResponse{}, domain.ErrInvalidConversation
+		}
+		researchContext, err := s.researchContextForRun(ctx, in.ConversationID, in.ResearchRunID)
+		if err != nil {
+			return domain.SubmitResponse{}, err
+		}
+		in.ResearchContext = &researchContext
+	} else if in.ResearchContext != nil {
+		return domain.SubmitResponse{}, domain.ErrInvalidConversation
+	}
 	return r.SubmitTurn(ctx, in, key)
 }
 
