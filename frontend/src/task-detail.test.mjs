@@ -92,3 +92,14 @@ test('selection changes invalidate responses even when switching back to the sam
   tracker.select('')
   assert.equal(isNewCurrent(), false)
 })
+
+test('selective refresh invalidates stale responses only for the same resource', () => {
+  const tracker = createTaskDetailTracker()
+  tracker.select('task')
+  const oldMessages = tracker.beginRequest('task', 'messages')
+  const steps = tracker.beginRequest('task', 'steps')
+  const newMessages = tracker.beginRequest('task', 'messages')
+  assert.equal(oldMessages(), false)
+  assert.equal(steps(), true)
+  assert.equal(newMessages(), true)
+})

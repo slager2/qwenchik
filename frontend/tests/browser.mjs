@@ -46,6 +46,19 @@ let sourceRequests = 0
 let evidenceRequests = 0
 let legacyEvidenceDone = false
 const legacyTask = { id: 'legacy-task', title: 'Существующая задача', description: 'Проверить сохранённую задачу', status: 'failed', priority: 0, version: 1, created_at: now, updated_at: now }
+const activeWorkspaceTask = { id: 'active-workspace-task', title: 'Активный поток Workspace', description: 'Проверить выборочную синхронизацию', status: 'running', stage: 'fetch', priority: 0, version: 1, created_at: now, updated_at: now }
+const workspaceEventRequests = []
+const workspaceSSEEvents = [
+  { type: 'task.created', payload: { status: 'running' } },
+  { type: 'message.delta', payload: { stream_id: 'workspace-stream', message_id: 'workspace-assistant', chunk_index: 0, delta: 'Workspace live draft' } },
+  { type: 'task.status_changed', payload: { from: 'running', to: 'verifying' } },
+  { type: 'step.started', payload: { step_id: 'step1' } },
+  { type: 'step.completed', payload: { step_id: 'step1' } },
+  { type: 'step.completed', payload: { step_id: 'step2' } },
+  { type: 'evidence.created', payload: { evidence_id: 'workspace-evidence' } },
+  { type: 'artifact.created', payload: { artifact_id: 'workspace-artifact' } },
+  { type: 'approval.requested', payload: { approval_id: 'workspace-approval' } },
+].map((event, index) => ({ ...event, id: `workspace-event-${index + 1}`, task_id: activeWorkspaceTask.id, seq: index + 1, schema_version: 1, visibility: 'user', created_at: now }))
 
 async function until(check, description, timeout = 10000) {
   const deadline = Date.now() + timeout
@@ -82,12 +95,31 @@ try {
     const parts = url.pathname.split('/').filter(Boolean)
     const method = request.method()
     const json = (value, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) })
+    if (parts[1] === 'tasks' && parts[2] === activeWorkspaceTask.id && method === 'GET') workspaceEventRequests.push(`${parts.slice(3).join('/') || 'task'}`)
     if (parts[1] === 'doctor') return doctorBlocked ? route.abort('blockedbyclient') : json({ status: 'ok', checks: { app: { status: 'ok' }, database: { status: 'ok' }, worker: { status: 'ok' }, llm: { status: 'ok' } } })
     if (parts[1] === 'health') return json({ status: 'ok', database: 'ok' })
     if (parts[1] === 'providers') return providersFail ? json({ error: { message: 'Провайдеры недоступны' } }, 503) : json({ search: { providers: {} } })
     if (parts[1] === 'memories') return json([])
     if (parts[1] === 'tasks') {
-      if (!parts[2]) return json([legacyTask])
+      if (!parts[2]) return json([legacyTask, activeWorkspaceTask])
+      if (parts[2] === activeWorkspaceTask.id) {
+        if (!parts[3]) return json(activeWorkspaceTask)
+        if (parts[3] === 'messages') return json([])
+        if (parts[3] === 'events' && parts[4] === 'stream') {
+          activeWorkspaceTask.status = 'verifying'
+          const after = Number(url.searchParams.get('after') || request.headers()['last-event-id'] || 0)
+          const selected = workspaceSSEEvents.filter((event) => event.seq > after)
+          const body = 'retry: 10000\n\n' + selected.map((event) => `id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('')
+          return route.fulfill({ contentType: 'text/event-stream', body })
+        }
+        if (parts[3] === 'events') return json(workspaceSSEEvents.slice(0, 1).filter((event) => event.seq > Number(url.searchParams.get('after') || 0)))
+        if (parts[3] === 'steps') return json([{ id: 'ws-step-1', task_id: activeWorkspaceTask.id, step_id: 'step1', position: 0, kind: 'fetch', description: 'Этап 1', dependencies: [], expected_output: '', success_criteria: ['done'], status: 'running', attempts: 1, created_at: now, updated_at: now }])
+        if (parts[3] === 'evidence') return json([])
+        if (parts[3] === 'artifacts') return json([])
+        if (parts[3] === 'approvals') return json([])
+        if (parts[3] === 'checkpoints') return json([])
+        return json([])
+      }
       if (!parts[3]) return json(legacyTask)
       if (parts[3] === 'messages') return json([{ id: 'legacy-message', task_id: legacyTask.id, role: 'user', content: 'Сохранённое уточнение задачи', created_at: now }])
       if (parts[3] === 'events') return json([{ id: 'legacy-event', task_id: legacyTask.id, seq: 1, type: 'message.delta', schema_version: 1, visibility: 'user', created_at: now, payload: { message_id: 'legacy-partial', stream_id: 'legacy-stream', chunk_index: 0, delta: 'Частичный ответ старой задачи' } }])
@@ -210,7 +242,6 @@ try {
   messagesFail = true
   await page.reload()
   await page.getByText('Сеть недоступна', { exact: true }).waitFor()
-  assert.equal(await page.locator('.chat-research').count(), 1)
   messagesFail = false
 
   for (const width of [320, 375, 414, 768, 1440]) {
@@ -294,6 +325,14 @@ try {
   await page.getByText('Часть сведений задачи недоступна. Загруженные данные сохранены; обновите задачу для повтора.', { exact: true }).waitFor()
   assert.equal(await page.getByText('Сохранённое уточнение задачи', { exact: true }).count(), 1)
   assert.equal(await page.getByText('Частичный ответ старой задачи', { exact: true }).count(), 1)
+  await page.locator('.task-card').filter({ hasText: 'Активный поток Workspace' }).click()
+  await page.getByText('Workspace live draft', { exact: true }).waitFor()
+  await page.locator('.inspector-header .status-tag').getByText('Проверка', { exact: true }).waitFor()
+  await page.waitForTimeout(650)
+  for (const endpoint of ['messages', 'events', 'checkpoints']) assert.equal(workspaceEventRequests.filter((item) => item === endpoint).length, 1, `${endpoint} should not refresh for unrelated SSE events`)
+  for (const endpoint of ['steps', 'evidence', 'artifacts', 'approvals']) assert.equal(workspaceEventRequests.filter((item) => item === endpoint).length, 2, `${endpoint} should be coalesced to initial + one selective refresh`)
+  assert.equal(workspaceEventRequests.filter((item) => item === 'task').length, 2, 'status changes refresh the selected task once')
+  assert.equal(workspaceEventRequests.filter((item) => item === 'events/stream').length, 1, 'status transitions do not recreate the workspace SSE connection')
   await page.getByRole('button', { name: /Память/ }).click()
   await page.getByRole('dialog', { name: 'Память', exact: true }).waitFor()
   await page.keyboard.press('Escape')

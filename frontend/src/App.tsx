@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { api } from './api'
+import { createCoalescedScheduler } from './chat-sync.mjs'
 import { recordReload, recordSSE, type ReloadReason } from './network-debug'
 import ChatShell from './ChatShell'
 import { legacyDraft } from './conversation-state.mjs'
 import { createTaskDetailTracker } from './task-detail.mjs'
+import { fullWorkspaceResources, workspaceEventResources } from './workspace-sync.mjs'
 import { diagnosticSummary, failureSummary, streamLabel } from './observability.mjs'
 import { ProviderCard, TaskFailureCard, SourceList } from './diagnostic-ui.mjs'
 import type { ProvidersResponse } from './types'
@@ -44,6 +46,9 @@ const stageLabels: Record<string, string> = {
   verification: 'Проверка',
   finalization: 'Финализация',
 }
+
+type DetailResource = 'task' | 'messages' | 'events' | 'checkpoints' | 'steps' | 'artifacts' | 'evidence' | 'approvals'
+type DetailSelection = Partial<Record<DetailResource, boolean>>
 
 const eventLabels: Record<string, string> = {
   'task.created': 'Задача создана',
@@ -108,8 +113,12 @@ function Workspace() {
   const [selectedID, setSelectedID] = useState('')
   const [detailTracker] = useState(createTaskDetailTracker)
   const [messages, setMessages] = useState<Message[]>([])
+  const savedMessageIDs = useRef<string[]>([])
   const [draft, setDraft] = useState<DraftMessage | null>(null)
   const [events, setEvents] = useState<AgentEvent[]>([])
+  const seenEventSeq = useRef(new Set<number>())
+  const lastEventSeq = useRef(0)
+  const [detailLoadedID, setDetailLoadedID] = useState('')
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([])
   const [steps, setSteps] = useState<TaskStep[]>([])
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
@@ -128,9 +137,15 @@ function Workspace() {
   const [error, setError] = useState('')
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [memoryOpen, setMemoryOpen] = useState(false)
+  const [pageHidden, setPageHidden] = useState(document.hidden)
   const selectedTask = tasks.find((task) => task.id === selectedID)
+  const selectedTaskRef = useRef(selectedTask)
+  selectedTaskRef.current = selectedTask
   const connectionRef = useRef(connection)
   connectionRef.current = connection
+  const workspaceQueueRef = useRef<(resources: string[], reason: ReloadReason) => void>(() => {})
+  const workspaceFlushRef = useRef<(resources: string[], reason: ReloadReason) => void>(() => {})
+  const workspaceCoalescerRef = useRef<ReturnType<typeof createCoalescedScheduler> | null>(null)
 
   const refreshTasks = useCallback(async (quiet = false, reason: ReloadReason = quiet ? 'fallback_poll' : 'user_action') => {
     recordReload('workspace.tasks', reason)
@@ -147,47 +162,86 @@ function Workspace() {
     }
   }, [])
 
-  const refreshDetail = useCallback(async (id: string, reason: ReloadReason = 'user_action') => {
+  const refreshDetail = useCallback(async (
+    id: string,
+    selection: DetailSelection = Object.fromEntries(fullWorkspaceResources().filter((resource) => resource !== 'tasks').map((resource) => [resource, true])) as DetailSelection,
+    reason: ReloadReason = 'user_action',
+  ) => {
+    const requested = (Object.entries(selection) as [DetailResource, boolean][]).filter(([, enabled]) => enabled).map(([resource]) => resource)
+    if (!requested.length) return
     recordReload('workspace.detail', reason)
-    const isCurrent = detailTracker.beginRequest(id)
-    let savedIDs: string[] = []
-    async function load<T>(request: Promise<T>, apply: (value: T) => void) {
-      const value = await request
-      if (isCurrent()) apply(value)
+    const jobs: Promise<void>[] = []
+    let failed = false
+    const completeFull = requested.length === 8 ? detailTracker.beginRequest(id, 'detail-ready') : () => false
+    const load = <T,>(resource: DetailResource, request: Promise<T>, apply: (value: T) => void) => {
+      const isCurrent = detailTracker.beginRequest(id, resource)
+      jobs.push(request.then((value) => { if (isCurrent()) apply(value) }).catch(() => { if (isCurrent()) failed = true }))
     }
-    const results = await Promise.allSettled([
-      load(api.task(id), (task) => setTasks((current) => current.map((item) => item.id === task.id ? task : item))),
-      load(api.messages(id), (items) => {
-        savedIDs = items.map((message) => message.id)
-        setMessages(items)
-        setDraft((current) => current && savedIDs.includes(current.message_id) ? null : current)
-      }),
-      load(api.events(id), (items) => {
-        setEvents(items.filter((event) => event.type !== 'message.delta'))
-        const restored = legacyDraft(items, savedIDs)
-        if (restored) setDraft((current) => current && current.seq > restored.seq ? current : restored)
-      }),
-      load(api.checkpoints(id), setCheckpoints),
-      load(api.steps(id), setSteps),
-      load(api.artifacts(id), setArtifacts),
-      load(api.evidence(id), setEvidence),
-      load(api.approvals(id), setApprovals),
-    ])
-    if (!isCurrent()) return
-    if (results.some((result) => result.status === 'rejected')) setError('Часть сведений задачи недоступна. Загруженные данные сохранены; обновите задачу для повтора.')
+    if (selection.task) load('task', api.task(id), (task) => setTasks((current) => current.map((item) => item.id === task.id ? task : item)))
+    if (selection.messages) load('messages', api.messages(id), (items) => {
+      savedMessageIDs.current = items.map((message) => message.id)
+      setMessages(items)
+      setDraft((current) => current && savedMessageIDs.current.includes(current.message_id) ? null : current)
+    })
+    if (selection.events) load('events', api.events(id), (items) => {
+      const visible = items.filter((event) => event.type !== 'message.delta')
+      setEvents(visible)
+      seenEventSeq.current = new Set(visible.map((event) => event.seq))
+      lastEventSeq.current = visible.reduce((maximum, event) => Math.max(maximum, event.seq), 0)
+      const restored = legacyDraft(items, savedMessageIDs.current)
+      if (restored) setDraft((current) => current && current.seq > restored.seq ? current : restored)
+    })
+    if (selection.checkpoints) load('checkpoints', api.checkpoints(id), setCheckpoints)
+    if (selection.steps) load('steps', api.steps(id), setSteps)
+    if (selection.artifacts) load('artifacts', api.artifacts(id), setArtifacts)
+    if (selection.evidence) load('evidence', api.evidence(id), setEvidence)
+    if (selection.approvals) load('approvals', api.approvals(id), setApprovals)
+    await Promise.all(jobs)
+    if (failed) setError('Часть сведений задачи недоступна. Загруженные данные сохранены; обновите задачу для повтора.')
+    if (completeFull()) setDetailLoadedID(id)
   }, [detailTracker])
+
+  const flushWorkspace = useCallback((resources: string[], reason: ReloadReason) => {
+    if (resources.includes('tasks')) void refreshTasks(true, reason)
+    if (!selectedID) return
+    const selection: DetailSelection = {}
+    for (const resource of resources) if (resource !== 'tasks' && ['task', 'messages', 'events', 'checkpoints', 'steps', 'artifacts', 'evidence', 'approvals'].includes(resource)) selection[resource as DetailResource] = true
+    if (Object.keys(selection).length) void refreshDetail(selectedID, selection, reason)
+  }, [refreshDetail, refreshTasks, selectedID])
+  workspaceFlushRef.current = flushWorkspace
+  if (!workspaceCoalescerRef.current) workspaceCoalescerRef.current = createCoalescedScheduler((resources, reason) => workspaceFlushRef.current(resources, reason), 300)
+  const queueWorkspaceRefresh = useCallback((resources: string[], reason: ReloadReason) => workspaceCoalescerRef.current?.schedule(resources, reason), [])
+  workspaceQueueRef.current = queueWorkspaceRefresh
+  useEffect(() => () => workspaceCoalescerRef.current?.cancel(), [])
 
   useEffect(() => {
     void refreshTasks(false, 'initial')
-    const timer = window.setInterval(() => void refreshTasks(true, 'fallback_poll'), 4000)
-    return () => window.clearInterval(timer)
   }, [refreshTasks])
+
+  useEffect(() => {
+    const update = () => setPageHidden(document.hidden)
+    document.addEventListener('visibilitychange', update)
+    return () => document.removeEventListener('visibilitychange', update)
+  }, [])
+
+  useEffect(() => {
+    if (pageHidden) return
+    const hasActiveWork = tasks.some((task) => ['queued', 'planning', 'running', 'verifying'].includes(task.status))
+    const selectedHasLiveStream = !!selectedTask && ['queued', 'planning', 'running', 'verifying'].includes(selectedTask.status) && connection === 'live'
+    if (!hasActiveWork || selectedHasLiveStream) return
+    const timer = window.setInterval(() => void refreshTasks(true, 'fallback_poll'), 30000)
+    return () => window.clearInterval(timer)
+  }, [connection, pageHidden, refreshTasks, selectedTask?.id, selectedTask?.status, tasks])
 
   useLayoutEffect(() => {
     detailTracker.select(selectedID)
     setMessages([])
+    savedMessageIDs.current = []
     setDraft(null)
     setEvents([])
+    seenEventSeq.current = new Set()
+    lastEventSeq.current = 0
+    setDetailLoadedID('')
     setCheckpoints([])
     setSteps([])
     setArtifacts([])
@@ -209,43 +263,36 @@ function Workspace() {
       setApprovals([])
       return
     }
-    if (detailTracker.observe(selectedID, selectedTask?.status)) void refreshDetail(selectedID, connectionRef.current === 'live' ? 'sse_event' : 'initial')
+    if (detailTracker.observe(selectedID, selectedTask?.status)) void refreshDetail(selectedID, undefined, connectionRef.current === 'live' ? 'sse_event' : 'initial')
   }, [selectedID, selectedTask?.status, refreshDetail, detailTracker])
 
   useEffect(() => {
     setDraft(null)
   }, [selectedID])
 
-  useEffect(() => {
-    let active = true
-    const refresh = async (reason: ReloadReason) => {
-      recordReload('workspace.providers', reason)
-      try {
-        const result = await api.providers()
-        if (active) { setProviders(result); setProvidersError('') }
-      } catch {
-        if (active) setProvidersError('Состояние провайдеров недоступно; показанные данные могут быть устаревшими.')
-      }
-    }
-    void refresh('initial')
-    const timer = window.setInterval(() => void refresh('fallback_poll'), 4000)
-    return () => { active = false; window.clearInterval(timer) }
+  const refreshProviders = useCallback(async (reason: ReloadReason = 'manual_retry') => {
+    recordReload('workspace.providers', reason)
+    try { setProviders(await api.providers()); setProvidersError('') }
+    catch { setProvidersError('Состояние провайдеров недоступно; показанные данные могут быть устаревшими.') }
   }, [])
+  useEffect(() => { void refreshProviders('initial') }, [refreshProviders])
 
   useEffect(() => {
-    if (!selectedID) return
-    if (selectedTask && ['completed', 'failed', 'cancelled'].includes(selectedTask.status)) {
+    if (!selectedID || detailLoadedID !== selectedID) return
+    const task = selectedTaskRef.current
+    if (task && ['completed', 'failed', 'cancelled'].includes(task.status)) {
       setConnection('idle')
       return
     }
     setConnection('connecting')
     const endpoint = `/api/tasks/${encodeURIComponent(selectedID)}/events/stream`
-    const source = new EventSource(endpoint)
+    const cursor = lastEventSeq.current
+    const source = new EventSource(`${endpoint}?after=${cursor}`)
     let opened = false
     let reconnecting = false
     let closed = false
     const closeStream = () => { if (opened && !closed) { closed = true; recordSSE('close', endpoint) } }
-    const eventTypes = [...Object.keys(eventLabels), 'message.delta']
+    const eventTypes = [...new Set([...Object.keys(eventLabels), 'message.delta', 'task.recovered', 'source.updated', 'source.fetch.started', 'source.fetch.failed', 'source.failed', 'source.extracted', 'run.paused', 'run.resumed', 'run.resource_probe', 'run.blocked', 'run.failed'])]
     const listeners: [string, EventListener][] = eventTypes.map((type) => {
       const listener: EventListener = (rawEvent) => {
         const event = rawEvent as MessageEvent<string>
@@ -256,6 +303,10 @@ function Workspace() {
           setError('Получено событие в неизвестном формате')
           return
         }
+        if (parsed.task_id !== selectedID) return
+        if (!Number.isSafeInteger(parsed.seq) || parsed.seq <= 0 || seenEventSeq.current.has(parsed.seq)) return
+        seenEventSeq.current.add(parsed.seq)
+        lastEventSeq.current = Math.max(lastEventSeq.current, parsed.seq)
         if (parsed.type === 'message.delta') {
           recordReload('workspace.draft', 'sse_event')
           const payload = parsed.payload as Partial<MessageDeltaPayload>
@@ -281,16 +332,28 @@ function Workspace() {
         }
         setEvents((current) => current.some((item) => item.seq === parsed.seq) ? current : [...current, parsed].slice(-200))
         const terminal = ['task.completed', 'task.failed', 'task.cancelled'].includes(parsed.type)
-        if (['task.completed', 'task.failed', 'task.cancelled'].includes(parsed.type)) {
+        const payloadStatus = typeof parsed.payload.to === 'string' && ['inbox', 'queued', 'planning', 'running', 'waiting_approval', 'paused', 'verifying', 'completed', 'failed', 'cancelled'].includes(parsed.payload.to) ? parsed.payload.to as TaskStatus : undefined
+        const terminalStatus: TaskStatus | undefined = parsed.type === 'task.completed' ? 'completed' : parsed.type === 'task.failed' ? 'failed' : parsed.type === 'task.cancelled' ? 'cancelled' : undefined
+        const status = terminalStatus || payloadStatus
+        if (status) detailTracker.observe(selectedID, status)
+        const resources = workspaceEventResources(parsed)
+        if (resources.length) workspaceQueueRef.current(resources, terminal ? 'terminal' : 'sse_event')
+        if (terminal) {
           source.close()
           closeStream()
           setConnection('idle')
         }
-        void refreshTasks(true, terminal ? 'terminal' : 'sse_event')
-        void refreshDetail(selectedID, terminal ? 'terminal' : 'sse_event')
       }
       source.addEventListener(type, listener)
       return [type, listener]
+    })
+    source.addEventListener('resync', (event) => {
+      try {
+        const payload = JSON.parse((event as MessageEvent<string>).data) as { cursor?: number }
+        if (!Number.isSafeInteger(payload.cursor) || !payload.cursor) throw new Error('invalid cursor')
+        lastEventSeq.current = Math.max(lastEventSeq.current, payload.cursor)
+        workspaceQueueRef.current(fullWorkspaceResources(), 'sse_resync')
+      } catch { setError('Потерян фрагмент истории. Перезагрузите выбранную задачу.') }
     })
     source.onopen = () => { if (!opened) { opened = true; recordSSE('open', endpoint) }; reconnecting = false; setConnection('live') }
     source.onerror = () => { setConnection('reconnecting'); if (!reconnecting) { reconnecting = true; recordSSE('reconnect', endpoint) } }
@@ -299,7 +362,7 @@ function Workspace() {
       source.close()
       closeStream()
     }
-  }, [selectedID, selectedTask?.status, refreshDetail, refreshTasks])
+  }, [selectedID, detailLoadedID, detailTracker])
 
   useEffect(() => {
     let active = true
@@ -375,7 +438,7 @@ function Workspace() {
     try {
       await api[action](taskID)
       await refreshTasks(true, 'user_action')
-      await refreshDetail(taskID, 'user_action')
+      await refreshDetail(taskID, undefined, 'user_action')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось изменить задачу')
     } finally {
@@ -388,7 +451,7 @@ function Workspace() {
     setError('')
     try {
       await api[action](approvalID)
-      if (selectedID) await refreshDetail(selectedID, 'user_action')
+      if (selectedID) await refreshDetail(selectedID, undefined, 'user_action')
       await refreshTasks(true, 'user_action')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось записать решение')
@@ -405,7 +468,7 @@ function Workspace() {
     try {
       await api.sendMessage(selectedID, chatText.trim())
       setChatText('')
-      await refreshDetail(selectedID, 'user_action')
+      await refreshDetail(selectedID, undefined, 'user_action')
       await refreshTasks(true, 'user_action')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось отправить сообщение')
@@ -497,6 +560,7 @@ function Workspace() {
           <h2>Поисковые провайдеры</h2>
           <p>Конфигурация и последнее реальное обращение. До первого запроса здоровье неизвестно.</p>
           <p>Поисковые запросы передаются включённым внешним сервисам. DuckDuckGo можно отключить через SEARCH_ENABLE_DDG=false; локальный SearXNG также обращается к публичным поисковикам.</p>
+          <button className="button button-secondary" type="button" onClick={() => void refreshProviders('manual_retry')}>Обновить состояние провайдеров</button>
           {providersError && <p role="status">{providersError}</p>}
           {!providers && !providersError && <p>Загрузка состояния…</p>}
           <div className="provider-grid">{Object.entries(providers?.search.providers ?? {}).map(([name, provider]) => <ProviderCard key={name} name={name} provider={provider} checkedLabel={provider.last_checked ? timeLabel(provider.last_checked) : ''} />)}</div>
@@ -568,6 +632,7 @@ function Workspace() {
               onCancel={() => void controlTask('cancel', selectedTask.id)}
               onApprove={(id) => void decideApproval('approve', id)}
               onReject={(id) => void decideApproval('reject', id)}
+              onRefresh={() => void refreshDetail(selectedTask.id, undefined, 'manual_retry')}
               onSend={sendMessage}
             />
           ) : (
@@ -604,6 +669,7 @@ interface InspectorProps {
   onCancel: () => void
   onApprove: (approvalID: string) => void
   onReject: (approvalID: string) => void
+  onRefresh: () => void
   onSend: (event: FormEvent<HTMLFormElement>) => void
 }
 
@@ -627,6 +693,7 @@ function TaskInspector(props: InspectorProps) {
         {canPause && <button className="button button-secondary" type="button" onClick={props.onPause} disabled={busy}>Пауза</button>}
         {task.status === 'paused' && <button className="button button-primary" type="button" onClick={props.onResume} disabled={busy}>Продолжить</button>}
         {canCancel && <button className="button button-danger-quiet" type="button" onClick={props.onCancel} disabled={busy}>Отменить</button>}
+        <button className="button button-quiet" type="button" onClick={props.onRefresh} disabled={busy}>Обновить данные</button>
         {busy && <span className="action-feedback" role="status">Сохраняем…</span>}
       </div>
 
