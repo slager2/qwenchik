@@ -4,7 +4,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { formatSourceBytes, researchError, researchSources, researchQueries, researchSteps } from './research-state.mjs'
 import { citationReferences, normalizeSources } from './conversation-state.mjs'
-import ResearchPanel from './ResearchPanel.tsx'
+import ResearchPanel from './ResearchInspector.tsx'
 
 const event = (seq, type, payload, visibility = 'user') => ({ seq, type, payload, visibility, created_at: '2026-10-19T10:00:00Z' })
 const hit = (seq, status, extra = {}) => event(seq, 'search.hit', { step_id: 's1', hit: { id: 'h1', url: 'https://example.org/source', title: 'Источник', provider: 'searxng', status, ...extra } })

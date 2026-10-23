@@ -345,6 +345,13 @@ try {
   for (const endpoint of ['steps', 'evidence', 'artifacts', 'approvals']) assert.equal(workspaceEventRequests.filter((item) => item === endpoint).length, 2, `${endpoint} should be coalesced to initial + one selective refresh`)
   assert.equal(workspaceEventRequests.filter((item) => item === 'task').length, 2, 'status changes refresh the selected task once')
   assert.equal(workspaceEventRequests.filter((item) => item === 'events/stream').length, 1, 'status transitions do not recreate the workspace SSE connection')
+  for (const width of [320, 375, 414, 680, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `workspace page overflow at ${width}`)
+    await page.getByRole('heading', { name: 'Задачи', exact: true }).waitFor()
+    await page.locator('.task-card').filter({ hasText: 'Активный поток Workspace' }).waitFor()
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 })
   await page.getByRole('button', { name: /Память/ }).click()
   await page.getByRole('dialog', { name: 'Память', exact: true }).waitFor()
   await page.keyboard.press('Escape')

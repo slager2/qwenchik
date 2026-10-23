@@ -23,7 +23,7 @@ function Status({ resource, empty }: { resource: Remote<unknown>; empty?: boolea
   return empty ? <p className="chat-muted">Пока нет данных.</p> : null
 }
 
-export default function ResearchPanel({ resources, events, run, showHeading = true, busy, onPause, onResume }: { resources: Resources; events: AgentEvent[]; run: Run | null; showHeading?: boolean; busy?: boolean; onPause?: () => void; onResume?: () => void }) {
+export default function ResearchInspector({ resources, events, run, showHeading = true, busy, onPause, onResume }: { resources: Resources; events: AgentEvent[]; run: Run | null; showHeading?: boolean; busy?: boolean; onPause?: () => void; onResume?: () => void }) {
   const { plan, sources, evidence, providers } = resources
   const steps = researchSteps(plan.data, events)
   const sourceList = researchSources(sources.data ?? [], events)

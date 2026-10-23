@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { api } from './api'
 import { createCoalescedScheduler, nextFallbackDelay, runEventInvalidations, runResyncResources } from './chat-sync.mjs'
-import { createRunEvidenceCache, type RunEvidenceCache } from './evidence-cache.mjs'
-import MarkdownMessage from './MarkdownMessage'
+import { createRunEvidenceCache } from './evidence-cache.mjs'
+import ChatComposer from './ChatComposer'
+import ChatTranscript from './ChatTranscript'
 import { applyRunEvent, citationReferences, explicitResearchContextReferences, createStreamState, mergeMessages, normalizeSources, terminal, type StreamState } from './conversation-state.mjs'
-import ResearchPanel from './ResearchPanel'
+import ResearchInspector from './ResearchInspector'
+import ChatSidebar from './ChatSidebar'
 import { recordReload, recordSSE, type ReloadReason } from './network-debug'
 import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, Evidence, ResearchPlan, Run, RunRuntime, Submission } from './types'
 import './chat.css'
 
 const failure = (error: unknown) => error instanceof Error ? error.message : 'Не удалось выполнить запрос. Попробуйте ещё раз.'
 const terminalLabels: Record<string, string> = { partial: 'Частичный результат', blocked: 'Заблокировано проверкой', budget_exhausted: 'Бюджет исчерпан' }
-const stamp = (value: string) => new Date(value).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 const labels: Record<string, string> = { queued: 'В очереди', planning: 'Планирование', running: 'В работе', verifying: 'Проверка', completed: 'Готово', failed: 'Не удалось завершить', cancelled: 'Остановлено', paused: 'На паузе', waiting_approval: 'Нужно решение', search: 'Поиск источников', searching: 'Поиск источников', fetch: 'Чтение источников', fetching: 'Чтение источников', extract: 'Извлечение текста', synthesis: 'Подготовка ответа', synthesizing: 'Подготовка ответа', verification: 'Сверка источников', finalization: 'Завершение', discovered: 'Найден', validated: 'Проверен', rejected: 'Отклонён', extracted: 'Текст извлечён', cited: 'Использован в ответе' }
 const eventTypes = ['context.compacted', 'continuation.requested', 'verification.completed', 'run.paused', 'run.resumed', 'run.resource_probe', 'run.blocked', 'run.failed', 'task.created', 'task.status_changed', 'task.recovered', 'message.created', 'message.delta', 'plan.created', 'step.started', 'step.completed', 'step.skipped', 'tool.started', 'tool.completed', 'tool.failed', 'source.updated', 'source.fetch.started', 'source.fetch.failed', 'source.failed', 'source.extracted', 'research.warning', 'search.provider', 'search.hit', 'query.updated', 'verification.updated', 'evidence.created', 'artifact.created', 'approval.requested', 'approval.approved', 'approval.rejected', 'approval.expired', 'task.completed', 'task.failed', 'task.cancelled']
 
@@ -85,9 +86,8 @@ function chatID() {
   try { return match ? decodeURIComponent(match[1]) : '' } catch { return '' }
 }
 
-export default function ChatShell() {
+export default function ChatRoute() {
   const [selected, setSelected] = useState(chatID)
-  const [query, setQuery] = useState('')
   const [sidebar, setSidebar] = useState(false)
   const [newVersion, setNewVersion] = useState(0)
   const conversations = useRemote(useCallback((signal) => api.conversations(signal), []), 30000, 'chat.conversations')
@@ -102,7 +102,7 @@ export default function ChatShell() {
     setSelected(id)
     setSidebar(false)
   }
-  const navigation = <><a className="chat-wordmark" href="#/chat" onClick={() => select('')}>Q<span>qwenchik</span></a><button className="chat-new" type="button" onClick={() => select('')}>+ Новый чат</button><label className="chat-search">Найти разговор<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="По названию" /></label><ResourceStatus resource={conversations} /><nav aria-label="Разговоры" className="chat-conversations">{(conversations.data ?? []).filter((item) => !item.archived_at && item.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())).map((item) => <a href={`#/chat/${encodeURIComponent(item.id)}`} key={item.id} aria-current={selected === item.id ? 'page' : undefined} onClick={() => select(item.id)}><span>{item.title || 'Новый разговор'}</span><small>{item.mode === 'research' ? 'Исследование' : 'Чат'}</small></a>)}{conversations.data && !conversations.data.some((item) => !item.archived_at && item.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())) && <p className="chat-muted">{query ? 'Разговоры не найдены.' : 'Ваши разговоры появятся здесь.'}</p>}</nav><a className="chat-workspace-link" href="#/workspace">Рабочее пространство <span aria-hidden="true">↗</span></a><p className="chat-sidebar-note">Задачи, подтверждения и память</p></>
+  const navigation = <ChatSidebar conversations={conversations.data ?? []} error={conversations.error} loading={conversations.loading} selected={selected} onSelect={select} onNew={() => select('')} onRetry={() => void conversations.reload('manual_retry')} />
   return <div className="conversation-shell"><aside className="chat-sidebar" aria-label="Навигация по чатам">{navigation}</aside><ConversationView key={selected || `new-${newVersion}`} id={selected} onSelect={select} onChanged={conversations.reload} onSidebar={() => setSidebar(true)} />{sidebar && <Drawer title="Разговоры" onClose={() => setSidebar(false)}>{navigation}</Drawer>}</div>
 }
 
@@ -255,6 +255,34 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
     })
   }
 
+  function changeMode(next: ConversationMode) {
+    if (!id) { setMode(next); setDetails(next === 'research'); if (next === 'research') { setResearchContextRunID(''); submissionKey.current = null } return }
+    void action(async () => {
+      const result = await api.updateConversation(id, { mode: next })
+      if (!alive.current) return
+      conversation.setData(result); setMode(next); setDetails(next === 'research')
+      if (next === 'research') { setResearchContextRunID(''); submissionKey.current = null }
+      void onChanged()
+    })
+  }
+
+  function enableResearchContext() {
+    if (!currentRun || !id) return
+    const sourceRunID = currentRun.id
+    void action(async () => {
+      const updated = await api.updateConversation(id, { mode: 'chat' })
+      if (!alive.current) return
+      conversation.setData(updated); setMode('chat'); setDetails(false); setResearchContextRunID(sourceRunID); submissionKey.current = null; void onChanged()
+    })
+  }
+
+  function stopRun() {
+    void action(async () => {
+      const next = await api.cancelRun(runID)
+      if (alive.current) { run.setData(next); scheduleSync(['messages', 'conversation', 'run', 'runtime'], 'user_action'); void onChanged() }
+    })
+  }
+
   const status = currentRun ? terminal(currentRun.status) ? terminalLabels[currentRun.terminal_outcome || ''] || labels[currentRun.status] : labels[currentRun.phase || currentRun.stage || ''] || labels[currentRun.status] || currentRun.status : 'Готов к сообщению'
   const content = [...transcript.messages.filter((message) => ['user', 'assistant'].includes(message.role)), ...optimistic]
   const latestAssistant = [...content].reverse().find((message) => message.role === 'assistant')
@@ -378,7 +406,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   }, [transcript.stream.needsSync, mode, scheduleSync])
   const backendReady = health.data?.status === 'ok' && health.data.database === 'ok' && !health.error
   const modelReady = doctor.data?.checks.llm?.status === 'ok'
-  const detailsContent = <ResearchPanel resources={{ ...research, runtime }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onPause={() => void action(async () => { await api.pause(runID); await run.reload('user_action'); await runtime.reload('user_action') })} onResume={() => void action(async () => { await api.resume(runID); await run.reload('user_action'); await runtime.reload('user_action') })} />
+  const detailsContent = <ResearchInspector resources={{ ...research, runtime }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onPause={() => void action(async () => { await api.pause(runID); await run.reload('user_action'); await runtime.reload('user_action') })} onResume={() => void action(async () => { await api.resume(runID); await run.reload('user_action'); await runtime.reload('user_action') })} />
 
   return <main className={`chat-main ${details ? 'chat-has-details' : ''}`}>
     <header className="chat-header"><button className="chat-mobile-menu" type="button" aria-label="Открыть разговоры" onClick={onSidebar}>☰</button><div className="chat-heading">{editing ? <form onSubmit={(event) => { event.preventDefault(); if (title.trim()) void action(async () => { const next = await api.updateConversation(id, { title: title.trim() }); if (alive.current) { conversation.setData(next); setEditing(false); void onChanged() } }) }}><input aria-label="Название разговора" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} autoFocus /><button type="submit" disabled={busy || !title.trim()}>Сохранить</button><button type="button" onClick={() => setEditing(false)}>Отмена</button></form> : <><h1>{conversation.data?.title || 'Новый разговор'}</h1><p>{mode === 'research' ? 'Deep Research' : 'Локальный чат'}<span aria-hidden="true"> · </span>{status}</p></>}</div><div className="chat-header-actions">{id && <><button type="button" onClick={() => setEditing(true)} disabled={busy} aria-label="Переименовать разговор">Название</button><button type="button" onClick={() => void action(async () => { await api.deleteConversation(id); if (alive.current) { void onChanged(); onSelect('') } })} disabled={busy || active} title={active ? 'Сначала остановите текущую генерацию' : 'Архивировать разговор'}>Удалить</button></>}<button type="button" aria-expanded={details} onClick={() => setDetails((value) => !value)}>Детали</button></div></header>
@@ -386,7 +414,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
       <ResourceStatus resource={conversation} /><ResourceStatus resource={snapshots} />{runID && <ResourceStatus resource={run} />}
       <div className="chat-transcript" ref={listRef} onScroll={() => { const el = listRef.current; if (el) setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 100) }}>
         {!content.length && !snapshots.loading && <div className="chat-empty"><span className="chat-empty-mark">Q</span><h2>С чего начнём?</h2><p>Задайте вопрос локальной модели или выберите Deep Research для работы с источниками.</p><div><button type="button" onClick={() => { setMode('chat'); setText('Помоги разобраться в сложной теме') }}>Объяснить тему</button><button type="button" onClick={() => { setMode('research'); setDetails(true); setText('Сравни варианты и приведи проверяемые источники') }}>Исследовать вопрос</button></div></div>}
-         {content.map((message) => <article className={`chat-message chat-role-${message.role}`} key={message.id} aria-label={message.role === 'user' ? 'Ваше сообщение' : 'Ответ Qwen'}><header><strong>{message.role === 'user' ? 'Вы' : 'Qwen'}</strong><time dateTime={message.created_at}>{stamp(message.created_at)}</time></header>{message.content ? <MessageContent message={message} runID={runID} references={references} evidenceCache={evidenceCache} /> : <p className="chat-muted">{active ? 'Готовлю ответ…' : 'Текст ответа отсутствует.'}</p>}{message.status === 'pending' && <p className="chat-muted">{busy ? 'Отправка…' : 'Не отправлено. Повторите действие.'}</p>}{message.role === 'assistant' && <footer className="chat-message-meta">{message.status === 'streaming' && active ? 'Ответ поступает' : ['cancelled', 'stopped', 'partial'].includes(message.status) ? 'Частичный ответ сохранён' : message.status === 'failed' ? 'Ответ не завершён' : ''}</footer>}</article>)}
+         <ChatTranscript messages={content} loading={snapshots.loading} active={active} runID={runID} references={references} evidenceCache={evidenceCache} onExample={(nextMode, prompt) => { setMode(nextMode); setDetails(nextMode === 'research'); setText(prompt) }} />
         {busy && optimistic.length > 0 && <p className="chat-muted" role="status">Готовлю ответ…</p>}
       </div>
       {!follow && <button type="button" className="chat-to-bottom" onClick={() => setFollow(true)}>К последнему сообщению ↓</button>}
@@ -395,33 +423,10 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
       {currentRun?.status === 'waiting_approval' && <p role="status">Нужно ваше решение. <a href="#/workspace">Открыть подтверждения в рабочем пространстве</a></p>}
       {error && <div className="chat-action-error" role="alert"><p>{error}</p>{actionRetry && <button type="button" onClick={actionRetry} disabled={busy}>Повторить действие</button>}</div>}
       {currentRun && !active && <div className="chat-answer-actions"><button type="button" disabled={busy} onClick={() => operate('retry')}>Повторить ответ</button><button type="button" disabled={busy || !hasPartial} title={!hasPartial ? 'Нет текста для продолжения' : 'Продолжить ответ новым запуском'} onClick={() => operate('continue')}>Продолжить ответ</button></div>}
-       {currentRun?.mode === 'research' && terminal(currentRun.status) && !researchContextRunID && <button className="chat-context-enable" type="button" disabled={busy} onClick={() => void action(async () => { if (id) { const updated = await api.updateConversation(id, { mode: 'chat' }); if (alive.current) conversation.setData(updated); void onChanged() } setMode('chat'); setDetails(false); setResearchContextRunID(currentRun.id); submissionKey.current = null })}>Продолжить с контекстом исследования</button>}
-       {researchContextRunID && <div className="chat-context-chip" role="status"><span>Research context: ON · run {researchContextRunID.slice(0, 8)}</span><button type="button" onClick={() => { setResearchContextRunID(''); submissionKey.current = null }}>Очистить research context</button></div>}
-       <form className="chat-composer" onSubmit={send}><label htmlFor="conversation-input" className="sr-only">Сообщение</label><textarea id="conversation-input" rows={3} value={text} maxLength={20000} placeholder={mode === 'research' ? 'Что нужно исследовать?' : 'Напишите сообщение…'} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); send() } }} /><div className="chat-composer-controls"><label>Режим<select aria-label="Режим разговора" value={mode} disabled={busy || active} onChange={(event) => { const next = event.target.value as ConversationMode; if (!id) { setMode(next); setDetails(next === 'research'); if (next === 'research') { setResearchContextRunID(''); submissionKey.current = null } return } void action(async () => { const result = await api.updateConversation(id, { mode: next }); if (alive.current) { conversation.setData(result); setMode(next); setDetails(next === 'research'); if (next === 'research') { setResearchContextRunID(''); submissionKey.current = null } void onChanged() } }) }}><option value="chat">Chat</option><option value="research">Deep Research</option></select></label>{active ? <button className="chat-primary" type="button" disabled={busy || !currentRun || terminal(currentRun.status)} onClick={() => void action(async () => { const next = await api.cancelRun(runID); if (alive.current) { run.setData(next); scheduleSync(['messages', 'conversation', 'run', 'runtime'], 'user_action'); void onChanged() } })}>{busy ? 'Останавливаем…' : 'Остановить'}</button> : <button className="chat-primary" type="submit" disabled={busy || !text.trim() || (!!id && !conversation.data)}>{busy ? 'Отправляем…' : 'Отправить'}</button>}</div></form>
+        <ChatComposer mode={mode} onModeChange={changeMode} text={text} onTextChange={setText} onSend={send} busy={busy} active={active} run={currentRun} onStop={stopRun} researchContextRunID={researchContextRunID} onEnableResearchContext={enableResearchContext} onClearResearchContext={() => { setResearchContextRunID(''); submissionKey.current = null }} />
       <div className="chat-composer-note"><span>{active ? 'Новый запрос доступен после завершения или остановки.' : 'Enter — отправить · Shift+Enter — новая строка'}</span>{runID && <span role="status">{connection === 'live' ? 'Поток подключён' : connection === 'connecting' ? 'Подключение…' : connection === 'reconnecting' ? 'Переподключение…' : connection === 'degraded' ? 'Резервная синхронизация' : connection === 'invalid' ? 'Ошибка потока' : connection === 'terminal' ? 'Поток завершён' : 'Нет активного потока'}</span>}{active && <button type="button" onClick={() => { recordReload('chat.stream', 'manual_retry'); setReconnect((value) => value + 1) }}>Переподключить</button>}</div>
     </section>{details && !mobile && <aside className="chat-research-desktop" aria-label="Детали исследования">{detailsContent}</aside>}</div>{details && mobile && <Drawer title="Детали исследования" onClose={() => setDetails(false)}>{detailsContent}</Drawer>}
   </main>
-}
-
-function MessageContent({ message, runID, references, evidenceCache }: { message: ConversationMessage; runID: string; references: ReturnType<typeof citationReferences>; evidenceCache: RunEvidenceCache }) {
-  const historicalRunID = message.role === 'assistant' && message.run_id && message.run_id !== runID ? message.run_id : ''
-  const historical = useRunEvidence(evidenceCache, historicalRunID)
-  const refs = message.run_id === runID ? references : citationReferences(historical.data ?? [])
-  return <><MarkdownMessage content={message.content} references={message.role === 'assistant' ? refs : []} />{historicalRunID && historical.error && <p className="chat-muted">{historical.error} <button type="button" onClick={() => void historical.retry()}>Загрузить источники</button></p>}</>
-}
-
-function useRunEvidence(cache: RunEvidenceCache, runID: string) {
-  const [observed, setObserved] = useState(() => ({ runID, entry: cache.get(runID) }))
-  useEffect(() => {
-    if (!runID) { setObserved({ runID: '', entry: { loading: false, error: '', data: undefined } }); return }
-    setObserved({ runID, entry: cache.get(runID) })
-    const update = () => setObserved({ runID, entry: cache.get(runID) })
-    const unsubscribe = cache.subscribe(runID, update)
-    void cache.load(runID)
-    return unsubscribe
-  }, [cache, runID])
-  const entry = observed.runID === runID ? observed.entry : cache.get(runID)
-  return { ...entry, retry: () => cache.load(runID, true) }
 }
 
 function useResearch(runID: string, enabled: boolean) {
