@@ -322,7 +322,7 @@ func (w *Worker) executeChat(ctx context.Context, task domain.Task, run domain.R
 	if err := checkRunResources(ctx); err != nil {
 		return err
 	}
-	stream, err := w.client.Stream(ctx, llm.ChatRequest{Messages: contextMessages, MaxTokens: w.options.MaxOutputTokens, Temperature: w.options.Temperature, TopP: w.options.TopP})
+	stream, err := w.client.Stream(ctx, llm.ChatRequest{Messages: contextMessages, ContextWindow: w.options.RuntimeModelContext, MaxTokens: w.options.MaxOutputTokens, Temperature: w.options.Temperature, TopP: w.options.TopP})
 	if err != nil {
 		return fmt.Errorf("%w: %w", errLLMUnavailable, err)
 	}

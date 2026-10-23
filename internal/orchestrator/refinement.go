@@ -110,7 +110,7 @@ func (w *Worker) refinementJSON(ctx context.Context, taskID, role, system string
 	if !w.requestFits(system, user, schema) {
 		return errInputBudgetExceeded
 	}
-	content, err := w.client.Complete(ctx, llm.ChatRequest{Messages: []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}, JSONSchema: schema, MaxTokens: w.options.MaxOutputTokens, Temperature: 0, TemperatureSet: true, TopP: w.options.TopP, TopPSet: true})
+	content, err := w.client.Complete(ctx, llm.ChatRequest{Messages: []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}, ContextWindow: w.options.RuntimeModelContext, JSONSchema: schema, MaxTokens: w.options.MaxOutputTokens, Temperature: 0, TemperatureSet: true, TopP: w.options.TopP, TopPSet: true})
 	if err != nil {
 		return err
 	}

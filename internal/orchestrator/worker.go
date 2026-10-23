@@ -2770,8 +2770,9 @@ func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryC
 		return "", err
 	}
 	stream, err := w.client.Stream(streamCtx, llm.ChatRequest{
-		Messages:  []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: user}},
-		MaxTokens: w.options.MaxOutputTokens, Temperature: w.options.Temperature, TopP: w.options.TopP,
+		Messages:      []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: user}},
+		ContextWindow: w.options.RuntimeModelContext,
+		MaxTokens:     w.options.MaxOutputTokens, Temperature: w.options.Temperature, TopP: w.options.TopP,
 		JSONSchema: schema,
 	})
 	if err != nil {
@@ -3259,8 +3260,9 @@ func (w *Worker) complete(ctx context.Context, system, user string, schema json.
 		return llm.ChatResponse{}, err
 	}
 	response, err := w.client.Complete(ctx, llm.ChatRequest{
-		Messages:  []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: user}},
-		MaxTokens: w.options.MaxOutputTokens, Temperature: w.options.Temperature, TopP: w.options.TopP, JSONSchema: schema,
+		Messages:      []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: user}},
+		ContextWindow: w.options.RuntimeModelContext,
+		MaxTokens:     w.options.MaxOutputTokens, Temperature: w.options.Temperature, TopP: w.options.TopP, JSONSchema: schema,
 	})
 	if err != nil {
 		return llm.ChatResponse{}, fmt.Errorf("%w: %w", errLLMUnavailable, err)

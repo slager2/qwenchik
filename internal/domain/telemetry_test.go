@@ -120,7 +120,7 @@ func TestTelemetryJSONKeepsCapabilityFlagsAndExplicitUnits(t *testing.T) {
 		t.Fatalf("unmarshal inference fields: %v", err)
 	}
 	for _, field := range []string{
-		"output_tokens", "total_tokens", "prompt_tokens_per_second", "output_tokens_per_second",
+		"output_tokens", "total_tokens", "cached_prompt_tokens", "prompt_tokens_per_second", "output_tokens_per_second",
 		"ttft_ms", "prompt_ms", "generation_ms", "context_tokens", "context_window",
 	} {
 		if _, ok := inference[field]; !ok {
@@ -334,6 +334,7 @@ func validTelemetry() Telemetry {
 			PromptTokens:          unavailableInt(MetricUnitTokens),
 			OutputTokens:          unavailableInt(MetricUnitTokens),
 			TotalTokens:           unavailableInt(MetricUnitTokens),
+			CachedPromptTokens:    unavailableInt(MetricUnitTokens),
 			PromptTokensPerSecond: unavailableFloat(MetricUnitTokensPerSecond),
 			OutputTokensPerSecond: unavailableFloat(MetricUnitTokensPerSecond),
 			TTFTMS:                unavailableFloat(MetricUnitMilliseconds),

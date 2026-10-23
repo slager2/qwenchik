@@ -14,7 +14,9 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/llm"
 	"github.com/slager2/qwenchik/internal/runtime/resources"
 )
@@ -57,8 +59,13 @@ type requestBody struct {
 	TopP               float64           `json:"top_p"`
 	Stop               []string          `json:"stop,omitempty"`
 	Stream             bool              `json:"stream"`
+	StreamOptions      *streamOptions    `json:"stream_options,omitempty"`
 	ResponseFormat     *responseFormat   `json:"response_format,omitempty"`
 	ChatTemplateKwargs map[string]bool   `json:"chat_template_kwargs,omitempty"`
+}
+
+type streamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 type responseFormat struct {
@@ -74,48 +81,93 @@ type jsonSchemaResponse struct {
 
 type completionResponse struct {
 	Choices []struct {
-		FinishReason string `json:"finish_reason"`
+		FinishReason json.RawMessage `json:"finish_reason"`
 		Message      struct {
 			Content string `json:"content"`
 		} `json:"message"`
 	} `json:"choices"`
-	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-	} `json:"usage"`
+	Usage   json.RawMessage `json:"usage"`
+	Timings json.RawMessage `json:"timings"`
+}
+
+func completionFinishReason(raw json.RawMessage) (string, bool) {
+	if len(raw) == 0 || rawIsNull(raw) {
+		return "", true
+	}
+	var reason string
+	if err := json.Unmarshal(raw, &reason); err != nil {
+		return "", false
+	}
+	return reason, true
 }
 
 func (c *Client) Complete(ctx context.Context, request llm.ChatRequest) (llm.ChatResponse, error) {
+	requestForTelemetry := c.telemetryRequest(request)
+	attemptStarted := time.Now()
 	resp, err := c.send(ctx, request, false)
 	if err != nil {
-		return llm.ChatResponse{}, err
+		return telemetryFailure(requestForTelemetry, statusForError(ctx, err)), err
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
-		return llm.ChatResponse{}, requestError(ctx, err)
+		requestErr := requestError(ctx, err)
+		return telemetryFailure(requestForTelemetry, statusForError(ctx, requestErr)), requestErr
 	}
 	if len(data) > maxResponseBytes {
-		return llm.ChatResponse{}, fmt.Errorf("%w: response exceeds size limit", llm.ErrInvalidModelOutput)
+		requestErr := fmt.Errorf("%w: response exceeds size limit", llm.ErrInvalidModelOutput)
+		return telemetryFailure(requestForTelemetry, domain.InferenceStatusFailed), requestErr
 	}
 	var decoded completionResponse
 	if err := json.Unmarshal(data, &decoded); err != nil {
-		return llm.ChatResponse{}, fmt.Errorf("%w: malformed completion JSON", llm.ErrInvalidModelOutput)
+		requestErr := fmt.Errorf("%w: malformed completion JSON", llm.ErrInvalidModelOutput)
+		return telemetryFailure(requestForTelemetry, domain.InferenceStatusFailed), requestErr
+	}
+	at := time.Now()
+	telemetry := newChatTelemetry(attemptStarted, requestForTelemetry, domain.InferenceStatusLoading)
+	applyProviderTelemetry(&telemetry, decoded.Usage, decoded.Timings, at)
+	result := llm.ChatResponse{Telemetry: &telemetry}
+	if metric := telemetry.PromptTokens; metric.Source != domain.MetricSourceUnavailable && metric.Value != nil {
+		result.PromptTokens = int(*metric.Value)
+	}
+	if metric := telemetry.OutputTokens; metric.Source != domain.MetricSourceUnavailable && metric.Value != nil {
+		result.OutputTokens = int(*metric.Value)
 	}
 	if len(decoded.Choices) != 1 || strings.TrimSpace(decoded.Choices[0].Message.Content) == "" {
-		return llm.ChatResponse{}, fmt.Errorf("%w: expected one nonempty completion", llm.ErrInvalidModelOutput)
+		telemetry.Status = domain.InferenceStatusFailed
+		telemetry.UpdatedAt = time.Now()
+		result.Telemetry = &telemetry
+		return result, fmt.Errorf("%w: expected one nonempty completion", llm.ErrInvalidModelOutput)
 	}
-	result := llm.ChatResponse{Content: decoded.Choices[0].Message.Content, PromptTokens: decoded.Usage.PromptTokens, OutputTokens: decoded.Usage.CompletionTokens}
-	if decoded.Choices[0].FinishReason == "length" {
-		return result, llm.ErrOutputTruncated
-	}
-	if reason := decoded.Choices[0].FinishReason; reason != "" && reason != "stop" {
+	result.Content = decoded.Choices[0].Message.Content
+	reason, validReason := completionFinishReason(decoded.Choices[0].FinishReason)
+	if !validReason {
+		telemetry.Status = domain.InferenceStatusFailed
+		telemetry.UpdatedAt = time.Now()
+		result.Telemetry = &telemetry
 		return result, fmt.Errorf("%w: unsupported completion finish reason", llm.ErrInvalidModelOutput)
 	}
+	if reason == "length" {
+		telemetry.Status = domain.InferenceStatusFailed
+		telemetry.UpdatedAt = time.Now()
+		result.Telemetry = &telemetry
+		return result, llm.ErrOutputTruncated
+	}
+	if reason != "" && reason != "stop" {
+		telemetry.Status = domain.InferenceStatusFailed
+		telemetry.UpdatedAt = time.Now()
+		result.Telemetry = &telemetry
+		return result, fmt.Errorf("%w: unsupported completion finish reason", llm.ErrInvalidModelOutput)
+	}
+	telemetry.UpdatedAt = time.Now()
+	telemetry.Status = domain.InferenceStatusCompleted
+	result.Telemetry = &telemetry
 	return result, nil
 }
 
 func (c *Client) Stream(ctx context.Context, request llm.ChatRequest) (<-chan llm.ChatEvent, error) {
+	started := time.Now()
+	requestForTelemetry := c.telemetryRequest(request)
 	resp, err := c.send(ctx, request, true)
 	if err != nil {
 		return nil, err
@@ -126,15 +178,72 @@ func (c *Client) Stream(ctx context.Context, request llm.ChatRequest) (<-chan ll
 		return nil, fmt.Errorf("%w: expected text/event-stream", llm.ErrInvalidModelOutput)
 	}
 	channel := make(chan llm.ChatEvent, 16)
-	go c.readStream(ctx, resp.Body, channel)
+	go c.readStream(ctx, resp.Body, channel, requestForTelemetry, started)
 	return channel, nil
 }
 
-func (c *Client) readStream(ctx context.Context, body io.ReadCloser, events chan<- llm.ChatEvent) {
+func (c *Client) telemetryRequest(request llm.ChatRequest) llm.ChatRequest {
+	if request.MaxTokens <= 0 {
+		request.MaxTokens = c.defaultMaxTokens
+	}
+	return request
+}
+
+func telemetryFailure(request llm.ChatRequest, status domain.InferenceStatus) llm.ChatResponse {
+	telemetry := newChatTelemetry(time.Now(), request, status)
+	return llm.ChatResponse{Telemetry: &telemetry}
+}
+
+func statusForError(ctx context.Context, err error) domain.InferenceStatus {
+	if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+		return domain.InferenceStatusCancelled
+	}
+	return domain.InferenceStatusFailed
+}
+
+type streamProgress struct {
+	telemetry     llm.ChatTelemetry
+	started       time.Time
+	firstOutputAt time.Time
+	outputRunes   int
+}
+
+func (progress *streamProgress) updateEstimate(at time.Time) {
+	if progress.firstOutputAt.IsZero() {
+		return
+	}
+	if progress.telemetry.OutputTokens.Source != domain.MetricSourceExact {
+		tokens := int64((progress.outputRunes + 3) / 4)
+		if tokens < 1 {
+			tokens = 1
+		}
+		progress.telemetry.OutputTokens = domain.NewEstimatedMetric(tokens, domain.MetricUnitTokens, at)
+	}
+	if progress.telemetry.OutputTokensPerSecond.Source == domain.MetricSourceExact || progress.telemetry.OutputTokens.Value == nil {
+		return
+	}
+	seconds := at.Sub(progress.firstOutputAt).Seconds()
+	if seconds <= 0 {
+		return
+	}
+	progress.telemetry.OutputTokensPerSecond = domain.NewEstimatedMetric(float64(*progress.telemetry.OutputTokens.Value)/seconds, domain.MetricUnitTokensPerSecond, at)
+}
+
+func (progress *streamProgress) snapshot(at time.Time) *llm.ChatTelemetry {
+	value := progress.telemetry
+	value.UpdatedAt = at
+	return &value
+}
+
+func (c *Client) readStream(ctx context.Context, body io.ReadCloser, events chan<- llm.ChatEvent, request llm.ChatRequest, started time.Time) {
 	defer close(events)
 	defer body.Close()
 	stop := context.AfterFunc(ctx, func() { _ = body.Close() })
 	defer stop()
+	progress := streamProgress{
+		telemetry: newChatTelemetry(started, request, domain.InferenceStatusLoading),
+		started:   started,
+	}
 	scanner := bufio.NewScanner(io.LimitReader(body, maxResponseBytes*8))
 	scanner.Buffer(make([]byte, 4096), 1<<20)
 	emit := func(event llm.ChatEvent) bool {
@@ -145,13 +254,61 @@ func (c *Client) readStream(ctx context.Context, body io.ReadCloser, events chan
 			return false
 		}
 	}
+	emitCancellation := func() {
+		at := time.Now()
+		progress.telemetry.Status = domain.InferenceStatusCancelled
+		progress.telemetry.UpdatedAt = at
+		progress.updateEstimate(at)
+		event := llm.ChatEvent{Telemetry: progress.snapshot(at)}
+		select {
+		case events <- event:
+		default:
+		}
+	}
+	finish := func(status domain.InferenceStatus, err error) {
+		at := time.Now()
+		progress.updateEstimate(at)
+		progress.telemetry.Status = status
+		progress.telemetry.UpdatedAt = at
+		event := llm.ChatEvent{Err: err, Telemetry: progress.snapshot(at)}
+		if ctx.Err() != nil {
+			emitCancellation()
+			return
+		}
+		if !emit(event) && ctx.Err() != nil {
+			emitCancellation()
+		}
+	}
+	progress.telemetry.Status = domain.InferenceStatusLoading
+	if !emit(llm.ChatEvent{Telemetry: progress.snapshot(time.Now())}) {
+		emitCancellation()
+		return
+	}
+	progress.telemetry.Status = domain.InferenceStatusPrefilling
+	progress.telemetry.UpdatedAt = time.Now()
+	if !emit(llm.ChatEvent{Telemetry: progress.snapshot(time.Now())}) {
+		emitCancellation()
+		return
+	}
+
 	hasText := false
-	process := func(data string) bool {
-		if data == "[DONE]" {
+	finishReason := ""
+	terminalError := func() error {
+		switch finishReason {
+		case "length":
+			return llm.ErrOutputTruncated
+		case "", "stop":
 			if !hasText {
-				emit(llm.ChatEvent{Err: fmt.Errorf("%w: empty stream", llm.ErrInvalidModelOutput)})
+				return fmt.Errorf("%w: empty stream", llm.ErrInvalidModelOutput)
 			}
-			return true
+			return nil
+		default:
+			return fmt.Errorf("%w: unsupported stream finish reason", llm.ErrInvalidModelOutput)
+		}
+	}
+	process := func(data string) (bool, error) {
+		if data == "[DONE]" {
+			return true, nil
 		}
 		var chunk struct {
 			Choices []struct {
@@ -160,58 +317,84 @@ func (c *Client) readStream(ctx context.Context, body io.ReadCloser, events chan
 				} `json:"delta"`
 				FinishReason *string `json:"finish_reason"`
 			} `json:"choices"`
-			Usage json.RawMessage `json:"usage"`
-			Error json.RawMessage `json:"error"`
+			Usage   json.RawMessage `json:"usage"`
+			Timings json.RawMessage `json:"timings"`
+			Error   json.RawMessage `json:"error"`
 		}
-		if json.Unmarshal([]byte(data), &chunk) != nil || len(chunk.Error) > 0 && string(chunk.Error) != "null" {
-			emit(llm.ChatEvent{Err: fmt.Errorf("%w: malformed stream event", llm.ErrInvalidModelOutput)})
-			return true
+		if json.Unmarshal([]byte(data), &chunk) != nil {
+			return true, fmt.Errorf("%w: malformed stream event", llm.ErrInvalidModelOutput)
+		}
+		applyProviderTelemetry(&progress.telemetry, chunk.Usage, chunk.Timings, time.Now())
+		if len(chunk.Error) > 0 && !rawIsNull(chunk.Error) {
+			return true, fmt.Errorf("%w: malformed stream event", llm.ErrInvalidModelOutput)
 		}
 		if len(chunk.Choices) == 0 {
-			if len(chunk.Usage) > 0 && string(chunk.Usage) != "null" {
-				return false
+			if !rawIsNull(chunk.Usage) || !rawIsNull(chunk.Timings) {
+				return false, nil
 			}
-			emit(llm.ChatEvent{Err: fmt.Errorf("%w: stream event has no choices", llm.ErrInvalidModelOutput)})
-			return true
+			return true, fmt.Errorf("%w: stream event has no choices", llm.ErrInvalidModelOutput)
 		}
 		if len(chunk.Choices) != 1 {
-			emit(llm.ChatEvent{Err: fmt.Errorf("%w: expected one stream choice", llm.ErrInvalidModelOutput)})
-			return true
+			return true, fmt.Errorf("%w: expected one stream choice", llm.ErrInvalidModelOutput)
 		}
 		choice := chunk.Choices[0]
 		if choice.Delta.Content != "" {
-			hasText = hasText || strings.TrimSpace(choice.Delta.Content) != ""
-			if !emit(llm.ChatEvent{Text: choice.Delta.Content}) {
-				return true
+			at := time.Now()
+			progress.outputRunes += utf8.RuneCountInString(choice.Delta.Content)
+			if strings.TrimSpace(choice.Delta.Content) != "" {
+				hasText = true
+				if progress.firstOutputAt.IsZero() {
+					progress.firstOutputAt = at
+					progress.telemetry.TTFTMS = domain.NewExactMetric(float64(at.Sub(progress.started).Microseconds())/1000, domain.MetricUnitMilliseconds, at)
+					progress.telemetry.Status = domain.InferenceStatusGenerating
+					progress.updateEstimate(at)
+					if !emit(llm.ChatEvent{Telemetry: progress.snapshot(at)}) {
+						return true, nil
+					}
+				}
+			}
+			progress.updateEstimate(at)
+			if !emit(llm.ChatEvent{Text: choice.Delta.Content, Telemetry: progress.snapshot(at)}) {
+				return true, nil
 			}
 		}
 		if choice.FinishReason != nil && *choice.FinishReason != "" {
-			switch *choice.FinishReason {
-			case "length":
-				emit(llm.ChatEvent{Err: llm.ErrOutputTruncated})
-			case "stop":
-				if !hasText {
-					emit(llm.ChatEvent{Err: fmt.Errorf("%w: empty stream", llm.ErrInvalidModelOutput)})
-				}
-			default:
-				emit(llm.ChatEvent{Err: fmt.Errorf("%w: unsupported stream finish reason", llm.ErrInvalidModelOutput)})
+			if *choice.FinishReason != "stop" && *choice.FinishReason != "length" {
+				return true, fmt.Errorf("%w: unsupported stream finish reason", llm.ErrInvalidModelOutput)
 			}
-			return true
+			finishReason = *choice.FinishReason
 		}
-		return false
+		return false, nil
+	}
+	finishFromResult := func(err error) {
+		if ctx.Err() != nil {
+			emitCancellation()
+			return
+		}
+		if err == nil {
+			err = terminalError()
+		}
+		status := domain.InferenceStatusCompleted
+		if err != nil {
+			status = domain.InferenceStatusFailed
+		}
+		finish(status, err)
 	}
 	var data []string
 	for scanner.Scan() {
 		if ctx.Err() != nil {
+			emitCancellation()
 			return
 		}
 		line := scanner.Text()
 		if line == "" {
 			if len(data) > 0 {
-				if process(strings.Join(data, "\n")) {
+				stop, err := process(strings.Join(data, "\n"))
+				data = nil
+				if stop {
+					finishFromResult(err)
 					return
 				}
-				data = nil
 			}
 			continue
 		}
@@ -220,16 +403,25 @@ func (c *Client) readStream(ctx context.Context, body io.ReadCloser, events chan
 		}
 	}
 	if ctx.Err() != nil {
+		emitCancellation()
 		return
 	}
 	if err := scanner.Err(); err != nil {
-		emit(llm.ChatEvent{Err: errors.Join(llm.ErrStreamInterrupted, requestError(ctx, err))})
+		finish(domain.InferenceStatusFailed, errors.Join(llm.ErrStreamInterrupted, requestError(ctx, err)))
 		return
 	}
-	if len(data) > 0 && process(strings.Join(data, "\n")) {
+	if len(data) > 0 {
+		stop, err := process(strings.Join(data, "\n"))
+		if stop {
+			finishFromResult(err)
+			return
+		}
+	}
+	if finishReason != "" {
+		finishFromResult(nil)
 		return
 	}
-	emit(llm.ChatEvent{Err: llm.ErrStreamInterrupted})
+	finish(domain.InferenceStatusFailed, llm.ErrStreamInterrupted)
 }
 
 type HTTPError struct {
@@ -237,8 +429,8 @@ type HTTPError struct {
 	cause      error
 }
 
-func (e *HTTPError) Error() string { return fmt.Sprintf("local LLM returned HTTP %d", e.StatusCode) }
-func (e *HTTPError) Unwrap() error { return e.cause }
+func (e *HTTPError) Error() string       { return fmt.Sprintf("local LLM returned HTTP %d", e.StatusCode) }
+func (e *HTTPError) Unwrap() error       { return e.cause }
 func (e *HTTPError) HTTPStatusCode() int { return e.StatusCode }
 
 type requestFailure struct{ cause error }
@@ -359,6 +551,9 @@ func (c *Client) prepare(request llm.ChatRequest, stream bool) requestBody {
 		Model: model, Messages: request.Messages, MaxTokens: maxTokens,
 		Temperature: temperature, TopP: topP, Stop: append([]string(nil), request.Stop...), Stream: stream,
 		ChatTemplateKwargs: map[string]bool{"enable_thinking": c.thinking},
+	}
+	if stream {
+		body.StreamOptions = &streamOptions{IncludeUsage: true}
 	}
 	if len(request.JSONSchema) != 0 {
 		body.ResponseFormat = &responseFormat{

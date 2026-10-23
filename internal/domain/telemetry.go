@@ -228,11 +228,13 @@ func (status InferenceStatus) Valid() bool {
 
 type InferenceTelemetry struct {
 	Status                InferenceStatus `json:"status"`
+	Source                string          `json:"source,omitempty"`
 	UpdatedAt             time.Time       `json:"updated_at"`
 	RequestedTokens       Metric[int64]   `json:"requested_tokens"`
 	PromptTokens          Metric[int64]   `json:"prompt_tokens"`
 	OutputTokens          Metric[int64]   `json:"output_tokens"`
 	TotalTokens           Metric[int64]   `json:"total_tokens"`
+	CachedPromptTokens    Metric[int64]   `json:"cached_prompt_tokens"`
 	PromptTokensPerSecond Metric[float64] `json:"prompt_tokens_per_second"`
 	OutputTokensPerSecond Metric[float64] `json:"output_tokens_per_second"`
 	TTFTMS                Metric[float64] `json:"ttft_ms"`
@@ -248,6 +250,9 @@ func (inference InferenceTelemetry) Validate() error {
 	}
 	if inference.UpdatedAt.IsZero() {
 		return errors.New("inference updated_at is required")
+	}
+	if len(inference.Source) > 64 || strings.ContainsAny(inference.Source, "\x00\r\n") {
+		return errors.New("inference source exceeds safe bounds")
 	}
 	return nil
 }
@@ -324,6 +329,9 @@ func (telemetry Telemetry) Validate() error {
 		}},
 		{"system.llama_slots_total", func() error {
 			return validateMetric(system.LlamaSlotsTotal, MetricUnitSlots, telemetry.Timestamp, validateNonnegative)
+		}},
+		{"inference.cached_prompt_tokens", func() error {
+			return validateMetric(telemetry.Inference.CachedPromptTokens, MetricUnitTokens, telemetry.Timestamp, validateNonnegative)
 		}},
 	}
 	for _, metric := range metrics {

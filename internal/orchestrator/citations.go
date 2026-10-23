@@ -243,7 +243,7 @@ func (w *Worker) reviewCitationClaims(ctx context.Context, taskID, answer string
 		if err := w.ensureActive(ctx, taskID); err != nil {
 			return citationReview{}, err
 		}
-		response, err := w.client.Complete(roleCtx, llm.ChatRequest{Messages: []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}, JSONSchema: schema, MaxTokens: min(w.options.MaxOutputTokens, 2048), Temperature: 0, TemperatureSet: true, TopP: w.options.TopP, TopPSet: true})
+		response, err := w.client.Complete(roleCtx, llm.ChatRequest{Messages: []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}, ContextWindow: w.options.RuntimeModelContext, JSONSchema: schema, MaxTokens: min(w.options.MaxOutputTokens, 2048), Temperature: 0, TemperatureSet: true, TopP: w.options.TopP, TopPSet: true})
 		if err != nil {
 			if ctx.Err() != nil {
 				return citationReview{}, ctx.Err()

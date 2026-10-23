@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
+	"github.com/slager2/qwenchik/internal/domain"
 )
 
 var (
@@ -24,6 +26,7 @@ type ChatRequest struct {
 	Model                 string   `json:"-"`
 	BaseURL               string   `json:"-"`
 	Stop                  []string `json:"-"`
+	ContextWindow         int      `json:"-"`
 	MaxTokens             int
 	Temperature           float64
 	TemperatureSet        bool
@@ -34,15 +37,20 @@ type ChatRequest struct {
 	BeforeFallbackAttempt func() error `json:"-"`
 }
 
+// ChatTelemetry carries inference metrics gathered by a chat transport.
+type ChatTelemetry struct{ domain.InferenceTelemetry }
+
 type ChatResponse struct {
 	Content      string
 	PromptTokens int
 	OutputTokens int
+	Telemetry    *ChatTelemetry
 }
 
 type ChatEvent struct {
-	Text string
-	Err  error
+	Text      string
+	Err       error
+	Telemetry *ChatTelemetry
 }
 
 type Client interface {

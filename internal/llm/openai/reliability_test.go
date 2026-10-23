@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/llm"
 )
 
@@ -54,6 +55,143 @@ func TestStreamTerminalContractsPreservePartial(t *testing.T) {
 				t.Fatal("raw response leaked")
 			}
 		})
+	}
+}
+
+func TestStreamUsageOnlyFrameAddsFinalLlamaTimings(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		if options, ok := request["stream_options"].(map[string]any); !ok || options["include_usage"] != true {
+			t.Errorf("stream_options = %#v, want include_usage=true", request["stream_options"])
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n\n")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+		fmt.Fprint(w, "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15,\"prompt_tokens_details\":{\"cached_tokens\":3}},\"timings\":{\"cache_n\":4,\"prompt_n\":10,\"prompt_ms\":12.5,\"prompt_per_second\":800,\"predicted_n\":5,\"predicted_ms\":50,\"predicted_per_second\":100}}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "", "local", time.Second, 128, 0, 1, false)
+	stream, err := client.Stream(context.Background(), llm.ChatRequest{ContextWindow: 2048})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var content string
+	var statuses []domain.InferenceStatus
+	var final *llm.ChatTelemetry
+	for event := range stream {
+		if event.Err != nil {
+			t.Fatal(event.Err)
+		}
+		content += event.Text
+		if event.Telemetry != nil {
+			statuses = append(statuses, event.Telemetry.Status)
+			if event.Telemetry.Status == domain.InferenceStatusCompleted {
+				final = event.Telemetry
+			}
+		}
+	}
+	if content != "hello" {
+		t.Fatalf("content = %q, want hello", content)
+	}
+	for _, want := range []domain.InferenceStatus{
+		domain.InferenceStatusLoading, domain.InferenceStatusPrefilling,
+		domain.InferenceStatusGenerating, domain.InferenceStatusCompleted,
+	} {
+		found := false
+		for _, status := range statuses {
+			found = found || status == want
+		}
+		if !found {
+			t.Errorf("status %q was not emitted: %v", want, statuses)
+		}
+	}
+	if final == nil {
+		t.Fatal("completed telemetry was not emitted")
+	}
+	if got := *final.PromptTokens.Value; got != 10 || final.PromptTokens.Source != domain.MetricSourceExact {
+		t.Errorf("prompt tokens = %d (%s), want exact 10", got, final.PromptTokens.Source)
+	}
+	if got := *final.OutputTokens.Value; got != 5 || final.OutputTokens.Source != domain.MetricSourceExact {
+		t.Errorf("output tokens = %d (%s), want exact 5", got, final.OutputTokens.Source)
+	}
+	if got := *final.CachedPromptTokens.Value; got != 4 || final.CachedPromptTokens.Source != domain.MetricSourceExact {
+		t.Errorf("cached prompt tokens = %d (%s), want exact 4", got, final.CachedPromptTokens.Source)
+	}
+	if final.PromptMS.Source != domain.MetricSourceExact || *final.PromptMS.Value != 12.5 || final.GenerationMS.Source != domain.MetricSourceExact || *final.GenerationMS.Value != 50 {
+		t.Errorf("timing metrics were not parsed: prompt=%#v generation=%#v", final.PromptMS, final.GenerationMS)
+	}
+}
+
+func TestStreamAcceptsEmptyFinalDeltaAndEOFAfterFinishReason(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"answer\"}}]}\n\n")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "", "local", time.Second, 128, 0, 1, false)
+	stream, err := client.Stream(context.Background(), llm.ChatRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var content string
+	var failure error
+	var final *llm.ChatTelemetry
+	for event := range stream {
+		content += event.Text
+		failure = errors.Join(failure, event.Err)
+		if event.Telemetry != nil && event.Telemetry.Status == domain.InferenceStatusCompleted {
+			final = event.Telemetry
+		}
+	}
+	if content != "answer" || failure != nil || final == nil {
+		t.Fatalf("content=%q error=%v final=%#v", content, failure, final)
+	}
+}
+
+func TestStreamCancellationKeepsPartialEstimates(t *testing.T) {
+	serverStopped := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n")
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+		close(serverStopped)
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client := New(server.URL, "", "local", time.Second, 128, 0, 1, false)
+	stream, err := client.Stream(ctx, llm.ChatRequest{})
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	var sawText bool
+	for event := range stream {
+		if event.Text == "partial" {
+			sawText = true
+			cancel()
+		}
+		if event.Telemetry != nil && event.Telemetry.Status == domain.InferenceStatusCancelled {
+			if event.Telemetry.OutputTokens.Source != domain.MetricSourceEstimated || event.Telemetry.OutputTokens.Value == nil || *event.Telemetry.OutputTokens.Value < 1 {
+				t.Errorf("cancellation lost partial output estimate: %#v", event.Telemetry.OutputTokens)
+			}
+		}
+	}
+	if !sawText {
+		t.Fatal("stream did not deliver partial text before cancellation")
+	}
+	select {
+	case <-serverStopped:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled request did not stop the server")
 	}
 }
 
@@ -317,12 +455,19 @@ func TestStreamTimeoutPreservesPartialAndClassifiesTimeout(t *testing.T) {
 	}
 	var content string
 	var failure error
+	var final *llm.ChatTelemetry
 	for event := range stream {
 		content += event.Text
 		failure = errors.Join(failure, event.Err)
+		if event.Telemetry != nil && event.Err != nil {
+			final = event.Telemetry
+		}
 	}
 	if content != "partial" || !errors.Is(failure, llm.ErrModelTimeout) || !errors.Is(failure, llm.ErrStreamInterrupted) {
 		t.Fatalf("content=%q error=%v", content, failure)
+	}
+	if final == nil || final.Status != domain.InferenceStatusFailed || final.OutputTokens.Source != domain.MetricSourceEstimated || final.OutputTokens.Value == nil {
+		t.Fatalf("interruption did not preserve partial telemetry: %#v", final)
 	}
 }
 
@@ -335,5 +480,8 @@ func TestCompletionLengthReturnsPartialWithTypedError(t *testing.T) {
 	result, e := c.Complete(context.Background(), llm.ChatRequest{})
 	if result.Content != "partial" || !errors.Is(e, llm.ErrOutputTruncated) {
 		t.Fatalf("result=%#v error=%v", result, e)
+	}
+	if result.Telemetry == nil || result.Telemetry.Status != domain.InferenceStatusFailed {
+		t.Fatalf("truncated completion telemetry = %#v, want failed", result.Telemetry)
 	}
 }
