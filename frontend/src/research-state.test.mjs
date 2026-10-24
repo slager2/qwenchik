@@ -42,9 +42,25 @@ test('research panel renders partial/error states with human explanations and no
 test('terminal research explains unfinished fetching and fallback, with a single mobile drawer heading', () => {
   const resource = (data) => ({ data, error: '', loading: false, reload: async () => {} })
   const html = renderToStaticMarkup(createElement(ResearchPanel, { showHeading: false, run: { status: 'completed', stage: 'finalization' }, events: [event(1, 'verification.updated', { status: 'fallback_excerpts' })], resources: { plan: resource({ subtasks: [{ id: 's1', description: 'Find sources. Long request and acceptance constraints.' }] }), sources: resource([{ id: 'pending', title: 'Source', canonical_url: 'https://example.org', status: 'fetching' }]), evidence: resource([]), providers: resource(null) } }))
-  for (const expected of ['Показаны дословные выдержки', 'Загрузка не подтверждена', '<details>', '<summary>', 'Long request and acceptance constraints.']) assert.ok(html.includes(expected), expected)
+  for (const expected of ['Показаны дословные выдержки', 'Загрузка не подтверждена', 'aria-expanded="false"', 'Long request and acceptance constraints.']) assert.ok(html.includes(expected), expected)
+  assert.doesNotMatch(html, /<details|<summary|chat-step-board|chat-run-status/)
   assert.ok(!html.includes('<h2>Детали исследования</h2>'))
   assert.ok(!html.includes('<p>Загрузка</p>'))
+})
+
+test('unified inspector keeps guard controls and outcomes without legacy resource duplicates', () => {
+  const resource = (data) => ({ data, error: '', loading: false, reload: async () => {} })
+  const html = renderToStaticMarkup(createElement(ResearchPanel, {
+    run: { id: 'run-1', mode: 'research', status: 'paused' }, events: [], onResume: () => {},
+    resources: { plan: resource(null), sources: resource([]), evidence: resource([]), providers: resource(null),
+      runtime: resource({ task_id: 'run-1', pause_reason: 'resource_guard', terminal_outcome: 'partial', runtime: { resources: { free_ram_bytes: 999999999 } } }) },
+  }))
+  assert.match(html, /Возобновить/)
+  assert.match(html, /disabled=""/)
+  assert.match(html, /Возобновление разрешит backend/)
+  assert.match(html, /Частичный результат/)
+  assert.equal((html.match(/class="telemetry-panel"/g) || []).length, 1)
+  assert.doesNotMatch(html, /chat-run-status|999999999/)
 })
 
 test('source failures replay by attempt and sequence, retain discovery, and require a next attempt to confirm fallback', () => {

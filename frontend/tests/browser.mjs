@@ -12,17 +12,19 @@ server.stderr.on('data', (data) => { serverOutput += data })
 let browser
 const failures = []
 const now = '2026-10-19T10:00:00Z'
+const bundleHash = '0123456789abcdef'.repeat(4)
+const contextHash = 'fedcba9876543210'.repeat(4)
 const telemetryFixture = () => {
   const at = new Date().toISOString()
   const metric = (value, unit, source = 'exact') => ({ value, unit, source, updated_at: at })
   return {
     timestamp: at, stale_after_ms: 30000,
-    capabilities: { cpu: true, ram: true, gpu: false, gpu_temperature: false, gpu_utilization: false, power: false, battery: false, process_rss: true, llama_health: false, llama_timings: true, llama_metrics: false, llama_slots: false },
+    capabilities: { cpu: true, ram: true, gpu: true, gpu_temperature: true, gpu_utilization: false, power: false, battery: false, process_rss: true, llama_health: false, llama_timings: true, llama_metrics: false, llama_slots: false },
     system: {
       metadata: { os: 'linux', platform: 'linux', uptime_seconds: metric(3600, 'seconds') },
       cpu_usage: metric(24, 'percent'), cpu_temperature: metric(null, 'celsius', 'unavailable'),
-      ram_used: metric(4096, 'bytes'), ram_free: metric(8192, 'bytes'), ram_total: metric(12288, 'bytes'),
-      gpus: [], agent_rss: metric(1024, 'bytes'), llama_server_rss: metric(null, 'bytes', 'unavailable'),
+      ram_used: metric(4 * 1024 ** 3, 'bytes'), ram_free: metric(8 * 1024 ** 3, 'bytes'), ram_total: metric(12 * 1024 ** 3, 'bytes'),
+      gpus: [{ name: metric('Browser fixture GPU', 'name'), temperature: metric(52, 'celsius'), vram_free: metric(4 * 1024 ** 3, 'bytes') }], agent_rss: metric(1024, 'bytes'), llama_server_rss: metric(null, 'bytes', 'unavailable'),
       power_source: metric('unknown', 'status'), power_watts: metric(null, 'watts', 'unavailable'),
       battery_percent: metric(null, 'percent', 'unavailable'), battery_charging: metric(null, 'boolean', 'unavailable'),
       llama_health: metric(null, 'status', 'unavailable'), llama_slots_active: metric(null, 'slots', 'unavailable'), llama_slots_total: metric(null, 'slots', 'unavailable'),
@@ -36,7 +38,7 @@ const telemetryFixture = () => {
   }
 }
 const runtimeFixture = (task_id, cursor = 0) => ({
-  task_id, cursor, status: 'running', telemetry: telemetryFixture(), telemetry_revision: 1,
+  task_id, cursor, status: 'running', telemetry: telemetryFixture(), telemetry_revision: 1, bundle_hash: bundleHash, context_snapshot_hash: contextHash,
   runtime: { enabled: true, keep_awake: true, resources: { free_ram_bytes: 8192, rss_bytes: 1024, gpu_free_vram_mb: null, gpu_temp_c: null, power_source: 'unknown', snapshot_at: new Date().toISOString(), warnings: [] }, sleep: { active: false, available: false, provider: 'unavailable' } },
 })
 const conversation = (id, mode) => ({ id, title: id === 'a' ? 'Первый разговор' : 'Исследование', mode, created_at: now, updated_at: now, latest_run_id: `r-${id}` })
@@ -100,6 +102,86 @@ async function until(check, description, timeout = 10000) {
   throw new Error(`Timed out: ${description}`)
 }
 
+async function assertTelemetryOverflow(panel, description) {
+  const overflow = await panel.evaluate((element) => {
+    const bounds = element.getBoundingClientRect()
+    return [...element.querySelectorAll('.telemetry-panel__ticker, .telemetry-panel__ticker-item, .telemetry-panel__disclosure-grid[aria-hidden="false"], .telemetry-panel__metric, .telemetry-panel__copy')]
+      .filter((child) => {
+        const rect = child.getBoundingClientRect()
+        return rect.width > 0 && rect.height > 0 && (child.scrollWidth > child.clientWidth + 1 || rect.left < bounds.left - 1 || rect.right > bounds.right + 1)
+      })
+      .map((child) => ({ className: child.className, text: child.textContent, width: child.clientWidth, scrollWidth: child.scrollWidth }))
+  })
+  assert.deepEqual(overflow, [], `${description}: telemetry horizontal overflow`)
+}
+
+async function assertPageOverflow(page, description) {
+  const layout = await page.evaluate(() => ({
+    viewport: innerWidth,
+    width: document.documentElement.scrollWidth,
+    overflowing: [...document.querySelectorAll('body *')].filter((element) => {
+      const rect = element.getBoundingClientRect()
+      return rect.width > 0 && rect.height > 0 && rect.right > innerWidth + 1 && getComputedStyle(element).visibility !== 'hidden'
+    }).slice(0, 12).map((element) => ({ tag: element.tagName, className: element.className, right: element.getBoundingClientRect().right })),
+  }))
+  if (layout.width > layout.viewport) failures.push(`${description}: ${JSON.stringify(layout)}`)
+}
+
+async function expandResearchSections(page) {
+  const research = page.locator('.chat-research')
+  await research.waitFor({ state: 'visible' })
+  for (const name of ['Поисковые запросы', 'Поисковые провайдеры', 'Действия']) {
+    const toggle = research.getByRole('button', { name, exact: true })
+    await toggle.waitFor({ state: 'visible' })
+    if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click()
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true', `${name} should be expanded`)
+  }
+}
+
+async function checkTelemetry(panel, { cpu, tokens, temperature, ram, description }) {
+  await panel.waitFor({ state: 'visible' })
+  const ticker = panel.locator('.telemetry-panel__ticker')
+  await until(async () => (await ticker.innerText()).includes(`${temperature}°`) && (await ticker.innerText()).includes(`${ram}G`), `${description} SSE resource ticker`)
+  assert.match(await ticker.innerText(), /GPU/)
+  assert.match(await ticker.innerText(), /RAM/)
+  assert.doesNotMatch(await ticker.innerText(), /CPU/)
+  assert.equal(await panel.locator('details, summary').count(), 0, `${description}: React disclosure replaces native details`)
+  const toggle = panel.getByRole('button', { name: 'Подробная диагностика', exact: true })
+  assert.equal(await toggle.count(), 1)
+  assert.equal(await toggle.getAttribute('aria-expanded'), 'false')
+  const diagnosticsID = await toggle.getAttribute('aria-controls')
+  assert.ok(diagnosticsID)
+  const diagnostics = panel.locator(`[id=${JSON.stringify(diagnosticsID)}]`)
+  assert.equal(await panel.getByRole('heading', { name: 'Система', exact: true }).count(), 0, 'collapsed diagnostics are hidden from accessibility tree')
+  await toggle.click()
+  assert.equal(await toggle.getAttribute('aria-expanded'), 'true')
+  assert.equal(await panel.evaluate((element, id) => element.querySelector(`[id="${CSS.escape(id)}"]`)?.getAttribute('aria-hidden'), diagnosticsID), 'false')
+  await diagnostics.waitFor({ state: 'visible' })
+  const metric = (label) => panel.locator('.telemetry-panel__metric').filter({ has: panel.page().getByText(label, { exact: true }) })
+  await until(async () => (await metric('Загрузка CPU').innerText()).includes(`${cpu}%`), `${description} SSE CPU in diagnostics`)
+  await until(async () => (await metric('Токенов ответа').innerText()).includes(`${tokens} токенов`), `${description} inference_progress output tokens`)
+  for (const [label, hash] of [['Bundle', bundleHash], ['Контекст', contextHash]]) {
+    const copy = panel.getByRole('button', { name: `Копировать ${label}: ${hash}`, exact: true })
+    assert.equal(await copy.innerText(), `${hash.slice(0, 6)}...${hash.slice(-4)}`)
+    assert.equal(await copy.getAttribute('title'), hash)
+    await copy.click()
+    await until(async () => await copy.getAttribute('data-state') === 'success', `${description} ${label} clipboard success`)
+    assert.equal(await panel.page().evaluate(() => navigator.clipboard.readText()), hash, 'clipboard retains full hash')
+  }
+  const originalStyle = await panel.getAttribute('style')
+  try {
+    await panel.evaluate((element) => { element.style.width = '330px'; element.style.maxWidth = 'none'; element.style.boxSizing = 'border-box' })
+    assert.equal(await panel.evaluate((element) => Math.round(element.getBoundingClientRect().width)), 330)
+    await assertTelemetryOverflow(panel, `${description} expanded 330px panel`)
+    await toggle.click()
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false')
+    await assertTelemetryOverflow(panel, `${description} collapsed 330px panel`)
+    await toggle.click()
+  } finally {
+    await panel.evaluate((element, style) => { if (style === null) element.removeAttribute('style'); else element.setAttribute('style', style) }, originalStyle)
+  }
+}
+
 function submit(id, content, mode, operation = 'message', previous) {
   const runID = `run-${++counter}`
   const user = previous ? messages[id].find((item) => item.id === previous.user_message_id) : message(`user-${counter}`, id, runID, 'user', content)
@@ -119,6 +201,7 @@ try {
   await until(async () => { if (server.exitCode !== null) throw new Error(serverOutput); try { return (await fetch(base)).ok } catch { return false } }, 'Vite startup')
   browser = await chromium.launch({ executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'] })
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' })
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base })
   page.on('pageerror', (error) => failures.push(error.message))
   await page.route('**/api/**', async (route) => {
     const request = route.request()
@@ -144,6 +227,8 @@ try {
           const selected = workspaceSSEEvents.filter((event) => event.seq > after)
           const runtime = runtimeFixture(activeWorkspaceTask.id, 1)
           runtime.telemetry.system.cpu_usage.value = 31
+          runtime.telemetry.system.gpus[0].temperature.value = 61
+          runtime.telemetry.system.ram_free.value = 7 * 1024 ** 3
           runtime.telemetry.inference.output_tokens.value = 6
           const inference = { ...runtime.telemetry.inference, output_tokens: { ...runtime.telemetry.inference.output_tokens, value: 12 } }
           const telemetryFrames = `event: snapshot\ndata: ${JSON.stringify(runtime)}\n\n` +
@@ -226,6 +311,8 @@ try {
           const runtime = runtimeFixture(run.id, events[run.id]?.at(-1)?.seq || 0)
           runtime.status = run.status
           runtime.telemetry.system.cpu_usage.value = 37
+          runtime.telemetry.system.gpus[0].temperature.value = 63
+          runtime.telemetry.system.ram_free.value = 6 * 1024 ** 3
           runtime.telemetry.inference.output_tokens.value = 5
           const inference = { ...runtime.telemetry.inference, output_tokens: { ...runtime.telemetry.inference.output_tokens, value: 9 } }
           telemetryFrames = `event: snapshot\ndata: ${JSON.stringify(runtime)}\n\n` +
@@ -268,11 +355,22 @@ try {
   await page.getByRole('link', { name: /Исследование/ }).click()
   await page.getByRole('heading', { name: 'Результат', exact: true }).waitFor()
   await page.getByText('Источники временно недоступны', { exact: true }).waitFor()
+  for (const name of ['Поисковые запросы', 'Поисковые провайдеры', 'Действия']) {
+    assert.equal(await page.locator('.chat-research').getByRole('button', { name, exact: true }).getAttribute('aria-expanded'), 'false', `${name} starts collapsed`)
+  }
+  await expandResearchSections(page)
   await page.getByText('actual public search query', { exact: true }).waitFor()
   await page.getByText('Проверяю официальные источники', { exact: true }).waitFor()
   await page.getByText('Источник не ответил вовремя. Проверьте доступные материалы ниже.', { exact: true }).waitFor()
   assert.ok(!(await page.locator('body').innerText()).includes('PRIVATE-'))
-  assert.ok((await page.locator('.chat-research section').filter({ has: page.getByRole('heading', { name: 'План', exact: true }) }).innerText()).includes('Завершено'))
+  const researchPlan = page.locator('.chat-research section').filter({ has: page.getByRole('heading', { name: 'План', exact: true }) })
+  assert.equal(await researchPlan.locator('ol').count(), 1, 'plan has one ordered list')
+  assert.equal(await researchPlan.locator('ol > li[data-status="completed"]').count(), 1)
+  assert.ok((await researchPlan.innerText()).includes('Завершено'))
+  assert.equal(await page.locator('.chat-step-board').count(), 0, 'plan is not duplicated as a step board')
+  const progress = page.getByRole('progressbar', { name: 'Выполнено этапов', exact: true })
+  assert.equal(await progress.getAttribute('value'), '1')
+  assert.equal(await progress.getAttribute('max'), '1')
   assert.equal(await page.locator('.chat-markdown a[href="https://example.org/source"]').count(), 2)
   const citationSources = page.locator('.chat-citation-sources').first()
   await citationSources.locator('summary').click()
@@ -289,20 +387,21 @@ try {
   assert.equal(await page.locator('.chat-markdown a[href="https://example.org/report.pdf"]').count(), 0)
   await page.getByText('Проверенный фрагмент', { exact: true }).waitFor()
   const chatTelemetry = page.locator('.telemetry-panel').first()
-  await chatTelemetry.getByRole('heading', { name: 'Телеметрия' }).waitFor()
-  await chatTelemetry.locator('details').first().locator('summary').click()
-  await until(() => chatTelemetry.locator('details').first().evaluate((element) => element.open), 'Chat telemetry System details')
-  assert.ok(await chatTelemetry.evaluate((panel) => panel.innerText.includes('Загрузка CPU') && panel.innerText.includes('37%')))
-  await chatTelemetry.locator('details').nth(1).locator('summary').click()
-  await until(() => chatTelemetry.locator('details').nth(1).evaluate((element) => element.open), 'Chat telemetry Inference details')
-  assert.ok(await chatTelemetry.evaluate((panel) => panel.innerText.includes('9 токенов')))
-  await until(() => page.locator('.chat-run-status').evaluate((element) => element.innerText.includes('chat warning fixture')), 'Chat resource warning SSE update')
+  await checkTelemetry(chatTelemetry, { cpu: 37, tokens: 9, temperature: 63, ram: 6, description: 'Chat' })
+  if (process.env.TELEMETRY_SCREENSHOTS) {
+    await chatTelemetry.getByRole('button', { name: 'Подробная диагностика', exact: true }).click()
+    await page.locator('.chat-research-desktop').evaluate((element) => { element.scrollTop = 0 })
+    await page.waitForTimeout(200)
+    await page.screenshot({ path: '/tmp/opencode/telemetry-desktop.png' })
+  }
+  await chatTelemetry.getByRole('list', { name: 'Предупреждения runtime', exact: true }).getByText('chat warning fixture', { exact: true }).waitFor()
   for (const [type, payload] of [
     ['source.updated', { ...events['r-b'].at(-1).payload, fallback_attempted: true }],
     ['tool.started', { tool: 'fetch_url', step_id: 'step2', target_url: 'https://example.org/source' }],
     ['source.extracted', { tool: 'fetch_url', step_id: 'step2', plan_attempt: 1, attempt_id: 'html-attempt', target_url: 'https://example.org/source' }],
   ]) events['r-b'].push({ id: `research-event-${events['r-b'].length}`, task_id: 'r-b', seq: events['r-b'].length + 1, visibility: 'user', schema_version: 1, created_at: now, type, payload })
   await page.reload()
+  await expandResearchSections(page)
   await pdfCard.getByText('Попытка перехода к другому источнику подтверждена.', { exact: true }).waitFor()
   assert.equal(await pdfCard.count(), 1)
   assert.equal(await pdfCard.getByText('Код: pdf_source_too_large', { exact: true }).count(), 1)
@@ -316,6 +415,7 @@ try {
   providersFail = true
   await page.reload()
   await page.getByRole('heading', { name: 'Результат', exact: true }).waitFor()
+  await expandResearchSections(page)
   await page.getByText('План недоступен', { exact: true }).waitFor()
   await page.getByText('Провайдеры недоступны', { exact: true }).waitFor()
   assert.equal(await page.locator('.chat-markdown a[href="https://example.org/source"]').count(), 2)
@@ -325,10 +425,12 @@ try {
   await page.reload()
   await page.getByText('Runtime snapshot unavailable', { exact: true }).waitFor()
   await page.waitForFunction(() => !document.body.innerText.includes('Runtime snapshot unavailable'))
+  await expandResearchSections(page)
   runtimeGetUnavailable = false
   messagesFail = true
   await page.reload()
   await page.getByText('Сеть недоступна', { exact: true }).waitFor()
+  await expandResearchSections(page)
   messagesFail = false
 
   const detailsToggle = page.getByRole('button', { name: 'Детали', exact: true })
@@ -337,6 +439,18 @@ try {
     await page.setViewportSize({ width, height: 900 })
     await until(async () => width > 1120 || await page.locator('dialog[open]').count() > 0, `responsive details drawer at ${width}`)
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `page overflow at ${width}`)
+    if (width === 375) {
+      const mobileTelemetry = page.locator('.telemetry-panel').first()
+      const toggle = mobileTelemetry.getByRole('button', { name: 'Подробная диагностика', exact: true })
+      if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click()
+      await assertTelemetryOverflow(mobileTelemetry, 'Chat expanded mobile 375px')
+      await toggle.click()
+      await assertTelemetryOverflow(mobileTelemetry, 'Chat collapsed mobile 375px')
+      if (process.env.TELEMETRY_SCREENSHOTS) {
+        await page.locator('.chat-drawer-body').evaluate((element) => { element.scrollTop = 0 })
+        await page.screenshot({ path: '/tmp/opencode/telemetry-mobile.png' })
+      }
+    }
     if (width <= 1120) {
       const dialog = page.getByRole('dialog', { name: 'Детали исследования', exact: true })
       await dialog.waitFor()
@@ -437,16 +551,8 @@ try {
   await page.getByText('Workspace live draft', { exact: true }).waitFor()
   await page.locator('.inspector-header .status-tag').getByText('Проверка', { exact: true }).waitFor()
   const workspaceTelemetry = page.locator('.telemetry-panel').last()
-  await workspaceTelemetry.getByRole('heading', { name: 'Телеметрия' }).waitFor()
-  await workspaceTelemetry.locator('details').first().locator('summary').click()
-  await until(() => workspaceTelemetry.locator('details').first().evaluate((element) => element.open), 'Workspace telemetry System details')
-  assert.ok(await workspaceTelemetry.evaluate((panel) => panel.innerText.includes('Загрузка CPU') && panel.innerText.includes('31%')))
-  await workspaceTelemetry.locator('details').nth(1).locator('summary').click()
-  await until(() => workspaceTelemetry.locator('details').nth(1).evaluate((element) => element.open), 'Workspace telemetry Inference details')
-  assert.ok(await workspaceTelemetry.evaluate((panel) => panel.innerText.includes('12 токенов')))
-  await workspaceTelemetry.locator('details').last().locator('summary').click()
-  await until(() => workspaceTelemetry.locator('details').last().evaluate((element) => element.open), 'Workspace telemetry Guard details')
-  assert.ok(await workspaceTelemetry.evaluate((panel) => panel.innerText.includes('runtime warning fixture')))
+  await checkTelemetry(workspaceTelemetry, { cpu: 31, tokens: 12, temperature: 61, ram: 7, description: 'Workspace' })
+  await workspaceTelemetry.getByRole('list', { name: 'Предупреждения runtime', exact: true }).getByText('runtime warning fixture', { exact: true }).waitFor()
   await page.waitForTimeout(650)
   for (const endpoint of ['messages', 'events', 'checkpoints']) assert.equal(workspaceEventRequests.filter((item) => item === endpoint).length, 1, `${endpoint} should not refresh for unrelated SSE events`)
   for (const endpoint of ['steps', 'evidence', 'artifacts', 'approvals']) assert.equal(workspaceEventRequests.filter((item) => item === endpoint).length, 2, `${endpoint} should be coalesced to initial + one selective refresh`)
@@ -454,7 +560,9 @@ try {
   assert.equal(workspaceEventRequests.filter((item) => item === 'events/stream').length, 1, 'status transitions do not recreate the workspace SSE connection')
   for (const width of [320, 375, 414, 680, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 })
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `workspace page overflow at ${width}`)
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    await assertPageOverflow(page, `workspace page overflow at ${width}`)
+    if (width === 375) await assertTelemetryOverflow(workspaceTelemetry, 'Workspace expanded mobile 375px')
     await page.getByRole('heading', { name: 'Задачи', exact: true }).waitFor()
     await page.locator('.task-card').filter({ hasText: 'Активный поток Workspace' }).waitFor()
   }
@@ -484,7 +592,7 @@ try {
   await until(async () => await page.locator('dialog[open]').count() === 0, 'backdrop dismissal')
   assert.ok(await trigger.evaluate((element) => element === document.activeElement))
   assert.deepEqual(failures, [])
-  console.log('PASS: Chrome browser smoke; conversation isolation/refresh, markdown/citations, independent source failure/retry, widths 320/375/414/768/1440, drawer focus/Escape, optimistic failure/idempotent retry, streaming/reconnect/stop, continuation/retry, lost terminal polling, rename/create/research/delete, workspace/memory navigation.')
+  console.log('PASS: Chrome browser smoke; conversation isolation/refresh, markdown/citations, independent source failure/retry, SSE GPU/RAM ticker and CPU/output-token diagnostics, React disclosure, 330px telemetry panels/375px mobile overflow, abbreviated hashes/full clipboard values, widths 320/375/414/768/1440, drawer focus/Escape, optimistic failure/idempotent retry, streaming/reconnect/stop, continuation/retry, lost terminal polling, rename/create/research/delete, workspace/memory navigation.')
 } finally {
   await browser?.close()
   server.kill('SIGTERM')

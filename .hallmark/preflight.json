@@ -1,0 +1,10 @@
+{
+  "scope": "research inspector and telemetry components",
+  "genre": "modern-minimal",
+  "theme": "existing Cobalt",
+  "fonts": {"display": "Space Grotesk", "body": "Inter", "source": "frontend/src/style.css:36-38"},
+  "palette": "frontend/src/style.css:6-35",
+  "spacing": "frontend/src/style.css:39-46",
+  "framework": "React 19 + TypeScript + Vite",
+  "motion": "CSS disclosure and chevron transitions with reduced-motion support"
+}

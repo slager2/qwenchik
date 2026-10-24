@@ -121,7 +121,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .health-dot.is-ok { background: var(--color-success); }
 .health-dot.is-warning { background: var(--color-warning); }
 
-.workspace { width: min(100%, 1840px); min-height: 100vh; margin-left: 64px; padding: 0 clamp(20px, 3vw, 48px); }
+.workspace { width: min(calc(100% - 64px), 1840px); min-height: 100vh; margin-left: 64px; padding: 0 clamp(20px, 3vw, 48px); }
 .topbar {
   display: flex;
   min-height: 68px;
@@ -418,7 +418,7 @@ input.text-field { height: 39px; padding: 0 11px; }
   .rail-glyph { font-size: 15px; }
   .rail-spacer { flex: 1; }
   .rail-runtime { display: flex; gap: 6px; padding: 7px; }
-  .workspace { margin-left: 0; padding: 0 16px; }
+  .workspace { width: 100%; margin-left: 0; padding: 0 16px; }
   .topbar { min-height: 58px; }
   .breadcrumb { font-size: 10px; }
   .service-pill { display: none; }

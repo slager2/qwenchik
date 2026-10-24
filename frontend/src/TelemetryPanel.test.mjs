@@ -4,83 +4,81 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 const { default: TelemetryPanel } = await import('./TelemetryPanel.tsx')
+const metric = (value, unit = '', source = 'exact', updated_at = new Date().toISOString()) => ({ value, source, unit, updated_at })
+const render = (runtime, props = {}) => renderToStaticMarkup(createElement(TelemetryPanel, { runtime, ...props }))
+const ticker = html => html.slice(html.indexOf('class="telemetry-panel__ticker"'), html.indexOf('<button'))
 
-const metric = (value, source = 'exact', updated_at = new Date().toISOString(), unit = '') => ({ value, source, unit, updated_at })
-const render = (props = {}) => renderToStaticMarkup(createElement(TelemetryPanel, props))
-
-test('missing telemetry renders accessible unavailable states and tolerates null inputs', () => {
-  const html = render({ runtime: null, telemetry: null })
-  assert.match(html, />Система</)
-  assert.match(html, />Инференс</)
-  assert.match(html, />Контроль ресурсов</)
-  assert.match(html, /Нет данных/)
-  assert.match(html, /aria-label="Качество данных: Нет данных"/)
-  assert.match(html, /<dt>Защита от сна<\/dt><dd><span class="telemetry-panel__value">—<\/span><span class="telemetry-panel__quality is-unavailable"/)
+test('ticker uses live GPU temperature/free VRAM, speed and free RAM', () => {
+  const html = render({ telemetry: {
+    system: { gpus: [{ temperature: metric(65, 'celsius'), vram_free: metric(8 * 1024 ** 3, 'bytes') }], ram_free: metric(16 * 1024 ** 3, 'bytes') },
+    inference: { output_tokens_per_second: metric(24, 'tokens/s') },
+  } }, { className: 'custom-panel' })
+  const strip = ticker(html)
+  assert.match(html, /telemetry-panel custom-panel/)
+  assert.match(strip, /GPU/)
+  assert.match(strip, /65°/)
+  assert.match(strip, /8G/)
+  assert.match(strip, /Speed/)
+  assert.match(strip, /24/)
+  assert.match(strip, /tok\/s/)
+  assert.match(strip, /RAM/)
+  assert.match(strip, /16G/)
+  assert.doesNotMatch(html, /<(?:details|summary)\b|telemetry-panel__quality/)
+  assert.match(html, /aria-expanded="false"/)
+  assert.match(html, /data-expanded="false" inert="" aria-hidden="true"/)
+  assert.match(html, /Подробная диагностика/)
 })
 
-test('telemetry provenance, stale values, and RunRuntime resource guard state stay distinct', () => {
-  const now = new Date().toISOString()
-  const old = '2000-01-01T00:00:00.000Z'
+test('missing telemetry stays unavailable and never reads legacy or persisted metrics', () => {
   const html = render({
-    runtime: {
-      task_id: 'run-1', status: 'running', cursor: 0,
-      pause_reason: 'resource_guard', resource_reason: 'low_ram', resource_probe_attempts: 2,
-      runtime: { enabled: true, keep_awake: true, resources: { free_ram_bytes: 0, rss_bytes: null, snapshot_at: old, warnings: ['Memory below threshold'] }, sleep: { active: false } },
-    },
-    telemetry: {
-      timestamp: now, stale_after_ms: 1000, capabilities: {},
-      system: {
-        metadata: { uptime_seconds: metric(61, 'exact', now, 'seconds') },
-        cpu_usage: metric(42.5, 'exact', now, 'percent'),
-        cpu_temperature: metric(71, 'estimated', now, 'celsius'),
-        ram_used: metric(null, 'unavailable', now, 'bytes'),
-        gpus: [],
-      },
-      inference: {
-        status: 'generating', updated_at: now,
-        requested_tokens: metric(100, 'exact', now, 'tokens'),
-        output_tokens: metric(5, 'estimated', old, 'tokens'),
-      },
-    },
+    runtime: { resources: { free_ram_bytes: 123456, gpu_temp_c: 99 } },
+    inference_summary: { inference: { output_tokens: metric(123456), output_tokens_per_second: metric(999) } },
   })
+  assert.match(html, /Телеметрия недоступна/)
+  assert.match(html, /Нет данных/)
+  assert.match(ticker(html), /—/)
+  assert.doesNotMatch(ticker(html), /Speed|0G|99°/)
+  assert.doesNotMatch(html, /123456|999|Итог инференса/)
+  assert.doesNotThrow(() => render(null))
+})
 
+test('diagnostics retain provenance, stale and unavailable distinctions without badges', () => {
+  const html = render({ telemetry: {
+    system: { cpu_usage: metric(42, 'percent'), cpu_temperature: metric(71, 'celsius', 'estimated'), ram_free: metric(null, 'bytes', 'unavailable'), gpus: [] },
+    inference: { output_tokens: metric(5, 'tokens', 'estimated', '2000-01-01T00:00:00Z') },
+  } })
   assert.match(html, /Качество данных: Точно/)
   assert.match(html, /Качество данных: Оценка/)
-  assert.match(html, /Устарело · оценка/)
+  assert.match(html, /Устарело; ранее: оценка/)
   assert.match(html, /Качество данных: Нет данных/)
+  assert.match(html, /5 токенов/)
+})
+
+test('known zero is displayed, unavailable speed is omitted', () => {
+  const html = render({ telemetry: { system: { ram_free: metric(0, 'bytes'), gpus: [] }, inference: { output_tokens_per_second: metric(0, 'tokens/s') } } })
+  assert.match(ticker(html), /0G/)
+  assert.match(ticker(html), /Speed <strong>0<\/strong>/)
+  const unavailable = render({ telemetry: { inference: { output_tokens_per_second: metric(0, 'tokens/s', 'unavailable') } } })
+  assert.doesNotMatch(ticker(unavailable), /Speed/)
+})
+
+test('hashes show first six and last four characters with accessible full clipboard targets', () => {
+  const hash = 'abcdef0123456789fedcba9876543210'
+  const html = render({ bundle_hash: hash, context_snapshot_hash: hash, compactions: 2 })
+  assert.equal((html.match(/>abcdef\.\.\.3210<\/button>/g) || []).length, 2)
+  assert.match(html, new RegExp(`aria-label="Копировать Bundle: ${hash}"`))
+  assert.match(html, /role="status"/)
+  assert.match(html, /Сжатия контекста/)
+})
+
+test('guard warnings stay visible above disclosure and respect showWarnings', () => {
+  const runtime = { pause_reason: 'resource_guard', resource_reason: 'low_ram', runtime_warnings: ['Memory below threshold'], runtime: { enabled: true, keep_awake: true, sleep: { active: false }, resources: { warnings: ['obsolete warning'] } } }
+  const html = render(runtime)
+  assert.ok(html.indexOf('Memory below threshold') < html.indexOf('Подробная диагностика'))
   assert.match(html, /Приостановлено защитой ресурсов/)
-  assert.match(html, /Запрошено, не активно/)
   assert.match(html, /Недостаточно свободной RAM/)
-  assert.match(html, /0 B/)
-  assert.match(html, /Снимок ресурсов устарел/)
-  assert.match(html, /Memory below threshold/)
-})
-
-test('fresh warning frames suppress stale warning copies from the last resource snapshot', () => {
-  const html = render({
-    runtime: {
-      task_id: 'run-warning', status: 'running', cursor: 0, runtime_warnings: [],
-      runtime: { enabled: true, resources: { warnings: ['warning already cleared'] } },
-    },
-  })
-  assert.doesNotMatch(html, /warning already cleared/)
-})
-
-test('persisted inference summaries remain visible when the live telemetry cache is gone', () => {
-  const at = new Date().toISOString()
-  const html = render({
-    runtime: {
-      task_id: 'run-summary', status: 'completed', cursor: 4,
-      inference_summary: {
-        invocation_id: 'invocation-abc', invocation_status: 'completed', snapshot_at: at,
-        inference: {
-          status: 'completed', source: 'llama.cpp', updated_at: at,
-          output_tokens: metric(42, 'exact', at, 'tokens'),
-        },
-      },
-    },
-  })
-  assert.match(html, /Итог инференса сохранён/)
-  assert.match(html, /Сохранённый вызов: Завершён/)
-  assert.match(html, /42 токенов/)
+  assert.match(html, /Запрошено, не активно/)
+  assert.doesNotMatch(html, /obsolete warning/)
+  assert.doesNotMatch(render(runtime, { showWarnings: false }), /Memory below threshold/)
+  assert.doesNotMatch(render({ ...runtime, runtime_warnings: [] }), /Memory below threshold|obsolete warning/)
 })
