@@ -1,8 +1,10 @@
 package orchestrator
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -132,6 +134,110 @@ func TestResearchNormalizerAddsMissingReadActionsAndRepairsStepBudget(t *testing
 	invalid := normalizeResearchPlan(plan, "Research", "Исследуй протокол")
 	if domain.ValidatePlan(invalid, 12) == nil {
 		t.Fatal("normalization silently accepted a cycle")
+	}
+}
+
+func TestResearchNormalizerPreservesUniqueUserGroundedSearchFacets(t *testing.T) {
+	goal := "Research the protocol architecture and interoperability limitations"
+	facets := []string{
+		"Compare protocol architecture, message structures, and execution flow",
+		"Find protocol interoperability limitations and compatibility risks",
+	}
+	plan := domain.Plan{SchemaVersion: 1, Goal: goal, MaxSteps: 4, FinalDeliverable: "Supported protocol summary", Subtasks: []domain.PlanStep{
+		{ID: "search_architecture", Kind: "search", Description: facets[0], Dependencies: []string{}, ExpectedOutput: "architecture results", SuccessCriteria: []string{"results recorded"}},
+		{ID: "search_compatibility", Kind: "search", Description: facets[1], Dependencies: []string{}, ExpectedOutput: "compatibility results", SuccessCriteria: []string{"results recorded"}},
+		{ID: "fetch_architecture", Kind: "fetch", Description: "Inspect an architecture source", Dependencies: []string{"search_architecture", "search_compatibility"}, ExpectedOutput: "first evidence", SuccessCriteria: []string{"evidence stored"}},
+		{ID: "fetch_compatibility", Kind: "fetch", Description: "Inspect an independent source", Dependencies: []string{"search_architecture", "search_compatibility"}, ExpectedOutput: "second evidence", SuccessCriteria: []string{"evidence stored"}},
+	}}
+	normalized := normalizeResearchPlan(plan, "Protocol research", goal)
+	searchDescriptions := []string{}
+	for _, step := range normalized.Subtasks {
+		if step.Kind != "search" {
+			continue
+		}
+		searchDescriptions = append(searchDescriptions, step.Description)
+		if !strings.Contains(step.Description, goal) {
+			t.Fatalf("user request missing from normalized facet: %q", step.Description)
+		}
+	}
+	if len(searchDescriptions) != 2 || !strings.Contains(searchDescriptions[0], facets[0]) || !strings.Contains(searchDescriptions[1], facets[1]) {
+		t.Fatalf("unique search facets were not preserved: %#v", searchDescriptions)
+	}
+	worker := New(nil, nil, registerPlanValidationResearchTools(t), Options{})
+	if err := worker.validateTaskPlan(normalized, "Protocol research", goal); err != nil {
+		t.Fatalf("preserved facets failed plan validation: %v", err)
+	}
+	model := &scriptedLLM{responses: []string{
+		`{"status":"continue","summary":"Search architecture facet","tool_call":{"name":"search","arguments":{"query":"protocol architecture data structures"}}}`,
+		`{"status":"continue","summary":"Search compatibility facet","tool_call":{"name":"search","arguments":{"query":"protocol interoperability compatibility risks"}}}`,
+	}}
+	worker = New(nil, model, registerPlanValidationResearchTools(t), Options{})
+	searchIndex := 0
+	for _, step := range normalized.Subtasks {
+		if step.Kind != "search" {
+			continue
+		}
+		if _, err := worker.chooseAction(context.Background(), domain.Task{ID: "facet-input"}, goal, "", step, "researcher", "search", "", checkpointState{}, nil); err != nil {
+			t.Fatalf("actor rejected preserved facet %q: %v", step.Description, err)
+		}
+		var input struct {
+			Step string `json:"step"`
+		}
+		if err := json.Unmarshal([]byte(model.seen[searchIndex].Messages[1].Content), &input); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(input.Step, facets[searchIndex]) {
+			t.Fatalf("actor input lost facet %q: %q", facets[searchIndex], input.Step)
+		}
+		searchIndex++
+	}
+}
+
+func TestResearchNormalizerDoesNotManufactureDistinctDuplicateFacets(t *testing.T) {
+	goal := "Research the protocol architecture and limitations"
+	plan := domain.Plan{SchemaVersion: 1, Goal: goal, MaxSteps: 4, FinalDeliverable: "Supported protocol summary", Subtasks: []domain.PlanStep{
+		{ID: "search_1", Kind: "search", Description: "Search protocol architecture and limitations", Dependencies: []string{}, ExpectedOutput: "first results", SuccessCriteria: []string{"results recorded"}},
+		{ID: "search_2", Kind: "search", Description: "Search protocol architecture and limitations", Dependencies: []string{}, ExpectedOutput: "second results", SuccessCriteria: []string{"results recorded"}},
+		{ID: "fetch_1", Kind: "fetch", Description: "Inspect a source", Dependencies: []string{"search_1", "search_2"}, ExpectedOutput: "first evidence", SuccessCriteria: []string{"evidence stored"}},
+		{ID: "fetch_2", Kind: "fetch", Description: "Inspect another source", Dependencies: []string{"search_1", "search_2"}, ExpectedOutput: "second evidence", SuccessCriteria: []string{"evidence stored"}},
+	}}
+	normalized := normalizeResearchPlan(plan, "Protocol research", goal)
+	if normalizeResearchText(normalized.Subtasks[0].Description) != normalizeResearchText(normalized.Subtasks[1].Description) {
+		t.Fatalf("duplicate facets were rewritten to appear unique: %#v", normalized.Subtasks[:2])
+	}
+	if err := validateDistinctSearchQuestions(normalized.Subtasks); !errors.Is(err, errResearchPlanIncomplete) {
+		t.Fatalf("duplicate search facets were accepted: %v", err)
+	}
+}
+
+func TestResearchNormalizerNeverSilentlyDropsOverLimitFacets(t *testing.T) {
+	goal := "Research protocol architecture, compatibility, implementation, and limitations"
+	for _, includeAnalysis := range []bool{false, true} {
+		plan := domain.Plan{SchemaVersion: 1, Goal: goal, MaxSteps: 8, FinalDeliverable: "Supported protocol summary"}
+		for index, facet := range []string{"architecture", "compatibility", "implementation", "limitations"} {
+			plan.Subtasks = append(plan.Subtasks, domain.PlanStep{ID: fmt.Sprintf("search_%d", index+1), Kind: "search", Description: "Research protocol " + facet, Dependencies: []string{}, ExpectedOutput: "results", SuccessCriteria: []string{"results recorded"}})
+		}
+		plan.Subtasks = append(plan.Subtasks,
+			domain.PlanStep{ID: "fetch_1", Kind: "fetch", Description: "Inspect source one", Dependencies: []string{}, ExpectedOutput: "evidence", SuccessCriteria: []string{"evidence stored"}},
+			domain.PlanStep{ID: "fetch_2", Kind: "fetch", Description: "Inspect source two", Dependencies: []string{}, ExpectedOutput: "evidence", SuccessCriteria: []string{"evidence stored"}},
+		)
+		if includeAnalysis {
+			plan.Subtasks = append(plan.Subtasks, domain.PlanStep{ID: "analysis", Kind: "analysis", Description: "Inspect final result", Dependencies: []string{}, ExpectedOutput: "summary", SuccessCriteria: []string{"summary recorded"}})
+		}
+		before := append([]domain.PlanStep(nil), plan.Subtasks...)
+		normalized := normalizeResearchPlan(plan, "Protocol research", goal)
+		if len(normalized.Subtasks) != len(before) {
+			t.Fatalf("over-limit plan silently dropped steps: got %d of %d, analysis=%t", len(normalized.Subtasks), len(before), includeAnalysis)
+		}
+		searchCount := 0
+		for _, step := range normalized.Subtasks {
+			if step.Kind == "search" {
+				searchCount++
+			}
+		}
+		if searchCount != 4 {
+			t.Fatalf("over-limit facet count changed to %d, analysis=%t", searchCount, includeAnalysis)
+		}
 	}
 }
 
