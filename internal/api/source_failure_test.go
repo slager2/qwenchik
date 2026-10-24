@@ -52,6 +52,19 @@ func TestPDFFallbackAvailabilityRespectsWindowsCapability(t *testing.T) {
 	}
 }
 
+func TestDoctorProjectsFetchTempReadinessWithoutConfiguredPath(t *testing.T) {
+	server, store := newTestServer(t)
+	defer store.Close()
+	server.SetFetchTempCheck(func(context.Context) error { return fmt.Errorf("private path /sensitive/fetch-temp") })
+	request := httptest.NewRequest(http.MethodGet, "/api/doctor", nil)
+	request.Host = "127.0.0.1"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"fetch_temp":{"message":"Fetch temporary storage is unavailable or unsafe","status":"warning"}`) || strings.Contains(response.Body.String(), "/sensitive/fetch-temp") {
+		t.Fatalf("unsafe fetch-temp readiness projection: %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestPDFFailureProjectionAndReplayPreserveIdentityBytesAndEvidence(t *testing.T) {
 	ctx := context.Background()
 	s, store := newTestServer(t)

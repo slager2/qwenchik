@@ -97,6 +97,14 @@ func NewSafeFetcherWithFetchPolicy(policy FetchPolicy, resolver IPResolver, allo
 	return newSafeFetcher(policy, resolver, allowedDomains), nil
 }
 
+func CheckFetchTemp(ctx context.Context, policy FetchPolicy) error {
+	if err := policy.Validate(); err != nil {
+		return err
+	}
+	_, err := createFetchTemp(ctx, policy, "", 0)
+	return err
+}
+
 func newSafeFetcher(policy FetchPolicy, resolver IPResolver, allowedDomains []string) *SafeFetcher {
 	if resolver == nil {
 		resolver = systemResolver{resolver: net.DefaultResolver}

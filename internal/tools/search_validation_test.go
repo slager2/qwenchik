@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,6 +19,25 @@ import (
 type healthyValidationSearch struct{}
 
 type timedValidationSearch struct{ empty bool }
+
+func validationSafeFetcher(t *testing.T, maxBytes int64, timeout time.Duration, resolver research.IPResolver) *research.SafeFetcher {
+	t.Helper()
+	policy := research.DefaultFetchPolicy()
+	policy.TempRoot = filepath.Join(t.TempDir(), "fetch-temp")
+	if maxBytes > 0 {
+		policy.SourceFetchBytes = min(policy.SourceFetchBytes, maxBytes)
+		policy.PDFBytes = min(policy.PDFBytes, maxBytes)
+	}
+	if timeout > 0 {
+		policy.SourceDownloadTimeout = timeout
+		policy.PDFDownloadTimeout = timeout
+	}
+	fetcher, err := research.NewSafeFetcherWithFetchPolicy(policy, resolver, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fetcher
+}
 
 func (p timedValidationSearch) Search(ctx context.Context, options research.SearchOptions) ([]research.SearchHit, error) {
 	report, err := p.SearchWithDiagnostics(ctx, options)
@@ -38,7 +58,7 @@ func TestSearchBudgetsReserveValidationAfterCollectionTimeout(t *testing.T) {
 		t.Run(fmt.Sprintf("empty=%t", empty), func(t *testing.T) {
 			registry := NewRegistry()
 			resolver := &validationDeadlineResolver{}
-			if err := RegisterResearchTools(registry, ResearchTools{SearchProvider: timedValidationSearch{empty: empty}, Fetcher: research.NewSafeFetcherWithResolver(1024, time.Second, resolver)}); err != nil {
+			if err := RegisterResearchTools(registry, ResearchTools{SearchProvider: timedValidationSearch{empty: empty}, Fetcher: validationSafeFetcher(t, 1024, time.Second, resolver)}); err != nil {
 				t.Fatal(err)
 			}
 			tool := registry.byName["search"]
@@ -82,7 +102,7 @@ func TestSearchValidationDeduplicatesBeforeDNSAndSerializesObservations(t *testi
 		{Provider: "searxng", URL: "https://usable.example/source?utm_source=one#top", Title: "Source", Snippet: "Useful discovery"},
 		{Provider: "tavily", URL: "https://USABLE.example:443/source", Title: "Duplicate"},
 	}
-	if err := RegisterResearchTools(registry, ResearchTools{SearchProvider: hits, Fetcher: research.NewSafeFetcherWithResolver(1024, time.Second, resolver)}); err != nil {
+	if err := RegisterResearchTools(registry, ResearchTools{SearchProvider: hits, Fetcher: validationSafeFetcher(t, 1024, time.Second, resolver)}); err != nil {
 		t.Fatal(err)
 	}
 	var observations []research.SearchHitObservation
@@ -226,7 +246,7 @@ func (r *validationDeadlineResolver) LookupIPAddr(ctx context.Context, host stri
 func TestSearchValidationPreservesUsableHitsAfterSlowDNS(t *testing.T) {
 	registry := NewRegistry()
 	resolver := &validationDeadlineResolver{}
-	fetcher := research.NewSafeFetcherWithResolver(1024, time.Second, resolver)
+	fetcher := validationSafeFetcher(t, 1024, time.Second, resolver)
 	if err := RegisterResearchTools(registry, ResearchTools{SearchProvider: healthyValidationSearch{}, Fetcher: fetcher}); err != nil {
 		t.Fatal(err)
 	}

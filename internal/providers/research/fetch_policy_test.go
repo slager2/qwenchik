@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -42,7 +43,7 @@ func policyFetcher(t *testing.T, p FetchPolicy, body io.Reader, mime string, len
 func smallFetchPolicy(t *testing.T) FetchPolicy {
 	t.Helper()
 	p := DefaultFetchPolicy()
-	p.TempRoot = t.TempDir()
+	p.TempRoot = filepath.Join(t.TempDir(), "fetch-temp")
 	p.SourceFetchBytes = 64
 	p.PDFBytes = 1024
 	p.TempTaskBytes = 2048
@@ -80,7 +81,7 @@ func TestFetchPolicyValidation(t *testing.T) {
 func TestFetchIncidentSizePDFFileBackedHashCleanup(t *testing.T) {
 	const size int64 = 40_534_667
 	p := DefaultFetchPolicy()
-	p.TempRoot = t.TempDir()
+	p.TempRoot = filepath.Join(t.TempDir(), "fetch-temp")
 	payload := func() io.Reader {
 		return io.MultiReader(strings.NewReader("%PDF-1.7\n"), io.LimitReader(repeatedByteReader('x'), size-9))
 	}
@@ -292,6 +293,9 @@ func TestFetchTempQuotasRecoveryAndSymlinks(t *testing.T) {
 	outside := t.TempDir()
 	link := filepath.Join(p.TempRoot, "symlink")
 	if err := os.Symlink(outside, link); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink creation is unavailable in this Windows environment: %v", err)
+		}
 		t.Fatal(err)
 	}
 	p.TempRoot = link
@@ -335,6 +339,91 @@ func TestFetchSeparateSourceAndPDFTimeouts(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestFetchTempRootRejectsDangerousAndNonPrivateDirectoriesWithoutChangingModes(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, root := range []string{"/", ".", home} {
+		before, err := os.Stat(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if opened, err := openFetchRoot(root); err == nil {
+			opened.Close()
+			t.Fatalf("unsafe fetch temp root %q was accepted", root)
+		}
+		after, err := os.Stat(root)
+		if err != nil || after.Mode().Perm() != before.Mode().Perm() {
+			t.Fatalf("rejected root %q changed permissions: before=%v after=%v err=%v", root, before.Mode().Perm(), after.Mode().Perm(), err)
+		}
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX directory mode checks are not available on Windows")
+	}
+
+	privateParent := t.TempDir()
+	sharedRoot := filepath.Join(privateParent, "shared")
+	if err := os.Mkdir(sharedRoot, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(sharedRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openFetchRoot(sharedRoot); err == nil {
+		t.Fatal("existing non-private fetch directory was accepted")
+	}
+	info, err := os.Stat(sharedRoot)
+	if err != nil || info.Mode().Perm() != 0755 {
+		t.Fatalf("rejected non-private root was modified: mode=%v err=%v", info.Mode().Perm(), err)
+	}
+}
+
+func TestCheckFetchTempReportsReadinessWithoutExposingConfiguredPath(t *testing.T) {
+	policy := smallFetchPolicy(t)
+	if err := CheckFetchTemp(context.Background(), policy); err != nil {
+		t.Fatalf("private fetch temp root was not ready: %v", err)
+	}
+	policy.TempRoot = "."
+	if err := CheckFetchTemp(context.Background(), policy); err == nil {
+		t.Fatal("working directory was accepted as fetch temp root")
+	}
+}
+
+func TestFetchTempRelativeRootResolvesSymlinkedWorkingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory symlink setup is platform-specific")
+	}
+	physicalWorkingDirectory := t.TempDir()
+	aliasParent := t.TempDir()
+	workingDirectoryAlias := filepath.Join(aliasParent, "work")
+	if err := os.Symlink(physicalWorkingDirectory, workingDirectoryAlias); err != nil {
+		t.Skipf("symlink creation is unavailable: %v", err)
+	}
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Chdir(originalWorkingDirectory); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	}()
+	if err := os.Chdir(workingDirectoryAlias); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PWD", workingDirectoryAlias)
+	root, err := openFetchRoot(filepath.Join("data", "fetch-temp"))
+	if err != nil {
+		t.Fatalf("relative fetch temp root through working-directory alias: %v", err)
+	}
+	defer root.Close()
+	want := filepath.Join(physicalWorkingDirectory, "data", "fetch-temp")
+	if filepath.Clean(root.Name()) != filepath.Clean(want) {
+		t.Fatalf("resolved fetch temp root = %q, want physical path %q", root.Name(), want)
 	}
 }
 

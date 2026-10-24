@@ -397,7 +397,7 @@ func researchRunRegistry(t *testing.T, store *sqlite.Store, search *researchRunS
 	}
 	registry := tools.NewRegistry()
 	fetchPolicy := research.DefaultFetchPolicy()
-	fetchPolicy.TempRoot = t.TempDir()
+	fetchPolicy.TempRoot = filepath.Join(t.TempDir(), "fetch-temp")
 	if err := tools.RegisterResearchTools(registry, tools.ResearchTools{SearchProvider: search, Fetcher: fetcher, Extractor: researchExtractorStub{}, Artifacts: artifactStore, Repository: store, MaxFetchBytes: 128 << 20, FetchPolicy: fetchPolicy}); err != nil {
 		t.Fatal(err)
 	}

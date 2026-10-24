@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -87,7 +88,17 @@ func TestResearchPartialValidationContinuesToFreshFetch(t *testing.T) {
 				t.Fatal(err)
 			}
 			resolver := &partialIntegrationResolver{calls: map[string]int{}}
-			fetcher := &partialIntegrationFetcher{safe: research.NewSafeFetcherWithResolver(100_000, time.Second, resolver)}
+			fetchPolicy := research.DefaultFetchPolicy()
+			fetchPolicy.TempRoot = filepath.Join(t.TempDir(), "fetch-temp")
+			fetchPolicy.SourceFetchBytes = min(fetchPolicy.SourceFetchBytes, 100_000)
+			fetchPolicy.PDFBytes = min(fetchPolicy.PDFBytes, 100_000)
+			fetchPolicy.SourceDownloadTimeout = time.Second
+			fetchPolicy.PDFDownloadTimeout = time.Second
+			safeFetcher, err := research.NewSafeFetcherWithFetchPolicy(fetchPolicy, resolver, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fetcher := &partialIntegrationFetcher{safe: safeFetcher}
 			registry := tools.NewRegistry()
 			if err := tools.RegisterResearchTools(registry, tools.ResearchTools{SearchProvider: partialIntegrationProvider{usable: usable}, Fetcher: fetcher, Extractor: researchExtractorStub{}, Artifacts: artifactStore, Repository: store, MaxFetchBytes: 100_000}); err != nil {
 				t.Fatal(err)

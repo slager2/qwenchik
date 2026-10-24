@@ -15,6 +15,19 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+func TestWindowsFetchTempRejectsCurrentDirectoryAndHomeRoots(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	driveRoot := filepath.VolumeName(home) + string(filepath.Separator)
+	for _, root := range []string{driveRoot, ".", home} {
+		if _, _, _, err := fetchAbsoluteComponents(root); err == nil {
+			t.Fatalf("unsafe fetch temp root %q was accepted", root)
+		}
+	}
+}
+
 func TestWindowsFetchTempQuotaPrivacyAndCleanup(t *testing.T) {
 	policy := smallFetchPolicy(t)
 	policy.TempRoot = filepath.Join(t.TempDir(), "private-fetch")

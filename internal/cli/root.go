@@ -720,6 +720,7 @@ func serve(parent context.Context) error {
 		apiServer.SetRunTelemetry(telemetryWorker.RunTelemetry)
 	}
 	apiServer.SetResearchPolicy(cfg.ResearchLimits(), pdfExtractor.Check)
+	apiServer.SetFetchTempCheck(func(ctx context.Context) error { return research.CheckFetchTemp(ctx, cfg.FetchPolicy()) })
 	setResearchRunDefaultsForServe(deps.app, cfg, &activeBundle)
 	apiServer.SetTavilyConfigured(cfg.TavilyAPIKey != "")
 	apiServer.SetDDGEnabled(cfg.SearchEnableDDG)
@@ -967,6 +968,14 @@ func doctor(ctx context.Context, cfg config.Config) doctorReport {
 			pdfRuntime["isolated_available"], pdfRuntime["isolated_status"] = true, "available"
 			checks["pdf_extractor"] = doctorCheck{Status: "ok", Message: "rootless Docker and local PDF extractor image are available"}
 		}
+	}
+	fetchTempCtx, fetchTempCancel := context.WithTimeout(ctx, 2*time.Second)
+	fetchTempErr := research.CheckFetchTemp(fetchTempCtx, cfg.FetchPolicy())
+	fetchTempCancel()
+	if fetchTempErr != nil {
+		checks["fetch_temp"] = doctorCheck{Status: "error", Message: "fetch temporary storage is unavailable or unsafe"}
+	} else {
+		checks["fetch_temp"] = doctorCheck{Status: "ok", Message: "fetch temporary storage is ready"}
 	}
 	store, err := sqlite.Open(ctx, cfg.DatabasePath)
 	if err != nil {

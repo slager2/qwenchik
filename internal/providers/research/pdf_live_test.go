@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -23,7 +24,7 @@ func TestLivePDFPolicy(t *testing.T) {
 	const sourceURL = "https://internat.msu.ru/wp-content/uploads/2026/10/cbm03_2026-101.pdf"
 	const expectedBytes int64 = 40_534_667
 	policy := DefaultFetchPolicy()
-	policy.TempRoot = t.TempDir()
+	policy.TempRoot = filepath.Join(t.TempDir(), "fetch-temp")
 	if policy.PDFBytes != 64<<20 {
 		t.Fatalf("PDF limit=%d, want 64 MiB", policy.PDFBytes)
 	}

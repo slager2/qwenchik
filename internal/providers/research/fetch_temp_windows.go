@@ -394,14 +394,16 @@ func fetchAbsoluteComponents(path string) (string, []string, string, error) {
 	if volume := filepath.VolumeName(path); volume != "" && !filepath.IsAbs(path) {
 		return "", nil, "", errors.New("drive-relative fetch temporary paths are unsupported")
 	}
-	absolute, err := filepath.Abs(path)
+	absolute, err := resolveFetchTempPath(path)
 	if err != nil {
 		return "", nil, "", err
 	}
-	absolute = filepath.Clean(absolute)
 	volume := filepath.VolumeName(absolute)
 	if len(volume) != 2 || volume[1] != ':' || !((volume[0] >= 'A' && volume[0] <= 'Z') || (volume[0] >= 'a' && volume[0] <= 'z')) {
 		return "", nil, "", errors.New("fetch temporary storage requires a local drive path")
+	}
+	if err := validateFetchTempRootPath(absolute); err != nil {
+		return "", nil, "", err
 	}
 	relative := strings.TrimLeft(strings.TrimPrefix(absolute, volume), `\`)
 	if relative == "" {
@@ -414,6 +416,20 @@ func fetchAbsoluteComponents(path string) (string, []string, string, error) {
 		}
 	}
 	return absolute, parts, volume, nil
+}
+
+func validateFetchTempRootPath(absolute string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	if fetchTempRootContains(absolute, cwd) {
+		return errors.New("fetch temp root must be a dedicated directory, not the working directory or an ancestor")
+	}
+	if home, err := os.UserHomeDir(); err == nil && fetchTempRootContains(absolute, home) {
+		return errors.New("fetch temp root must not contain the user home directory")
+	}
+	return nil
 }
 
 func openFetchRoot(path string) (*os.File, error) {

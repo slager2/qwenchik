@@ -15,9 +15,9 @@ import (
 
 func TestDuckDuckGoSearchParsesOrganicResultsAndUsesBoundedBrowserRequest(t *testing.T) {
 	var requests []*http.Request
-	fetcher := NewSafeFetcherWithResolver(duckDuckGoMaxBody, time.Second, resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
+	fetcher := testSafeFetcher(t, duckDuckGoMaxBody, time.Second, resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
 		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
-	}))
+	}), nil)
 	fetcher.client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		requests = append(requests, request.Clone(request.Context()))
 		body := duckDuckGoFixture(10)
@@ -126,7 +126,7 @@ func TestNormalizeDuckDuckGoResultURLUnwrapsAndValidatesTargets(t *testing.T) {
 }
 
 func TestDuckDuckGoValidatesFixedHostAndSearchOptions(t *testing.T) {
-	fetcher := NewSafeFetcherWithPolicy(duckDuckGoMaxBody, time.Second, resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
+	fetcher := testSafeFetcher(t, duckDuckGoMaxBody, time.Second, resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
 		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
 	}), []string{duckDuckGoHost})
 	provider, err := NewDuckDuckGoWithFetcher(fetcher)
@@ -153,9 +153,9 @@ func TestDuckDuckGoValidatesFixedHostAndSearchOptions(t *testing.T) {
 
 func newFixtureDuckDuckGo(t *testing.T, transport http.RoundTripper) *DuckDuckGo {
 	t.Helper()
-	fetcher := NewSafeFetcherWithResolver(duckDuckGoMaxBody, time.Second, resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
+	fetcher := testSafeFetcher(t, duckDuckGoMaxBody, time.Second, resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
 		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
-	}))
+	}), nil)
 	fetcher.client.Transport = transport
 	provider, err := NewDuckDuckGoWithFetcher(fetcher)
 	if err != nil {

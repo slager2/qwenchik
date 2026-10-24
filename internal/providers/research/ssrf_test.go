@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -16,9 +17,9 @@ type resolverFunc func(context.Context, string) ([]net.IPAddr, error)
 
 func TestValidateURLPreservesDNSCancellationAndTimeout(t *testing.T) {
 	for _, cause := range []error{context.Canceled, context.DeadlineExceeded} {
-		fetcher := NewSafeFetcherWithResolver(1024, time.Second, resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
+		fetcher := testSafeFetcher(t, 1024, time.Second, resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
 			return nil, cause
-		}))
+		}), nil)
 		err := fetcher.ValidateURL(context.Background(), "https://example.org/source")
 		if !errors.Is(err, cause) || errors.Is(err, ErrUnsafeURL) {
 			t.Fatalf("DNS cause=%v returned=%v", cause, err)
@@ -26,7 +27,7 @@ func TestValidateURLPreservesDNSCancellationAndTimeout(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := NewSafeFetcher(1024, time.Second).ValidateURL(ctx, "https://8.8.8.8/source"); !errors.Is(err, context.Canceled) {
+	if err := testSafeFetcher(t, 1024, time.Second, nil, nil).ValidateURL(ctx, "https://8.8.8.8/source"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("literal IP validation ignored parent cancellation: %v", err)
 	}
 }
@@ -43,6 +44,25 @@ type bodyReaderFunc func([]byte) (int, error)
 
 func (f bodyReaderFunc) Read(p []byte) (int, error) { return f(p) }
 
+func testSafeFetcher(t *testing.T, maxBytes int64, timeout time.Duration, resolver IPResolver, allowedDomains []string) *SafeFetcher {
+	t.Helper()
+	policy := DefaultFetchPolicy()
+	policy.TempRoot = filepath.Join(t.TempDir(), "fetch-temp")
+	if maxBytes > 0 {
+		policy.SourceFetchBytes = min(policy.SourceFetchBytes, maxBytes)
+		policy.PDFBytes = min(policy.PDFBytes, maxBytes)
+	}
+	if timeout > 0 {
+		policy.SourceDownloadTimeout = timeout
+		policy.PDFDownloadTimeout = timeout
+	}
+	fetcher, err := NewSafeFetcherWithFetchPolicy(policy, resolver, allowedDomains)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fetcher
+}
+
 func TestFetchAccountsForPartialBodyReadFailures(t *testing.T) {
 	for _, contentType := range []string{"text/plain", ""} {
 		for _, test := range []struct {
@@ -58,7 +78,7 @@ func TestFetchAccountsForPartialBodyReadFailures(t *testing.T) {
 				t.Parallel()
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				fetcher := NewSafeFetcher(1024, time.Second)
+				fetcher := testSafeFetcher(t, 1024, time.Second, nil, nil)
 				body := "partial response"
 				fetcher.client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 					reader := bodyReaderFunc(func(p []byte) (int, error) {
@@ -112,7 +132,7 @@ func TestFetchAccountsForOversizeBody(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			fetcher := NewSafeFetcher(20<<20, time.Second)
+			fetcher := testSafeFetcher(t, 20<<20, time.Second, nil, nil)
 			payload := strings.Repeat("x", int(test.limit+2))
 			if test.contentType == "application/pdf" {
 				payload = "%PDF-" + payload[5:]
@@ -153,7 +173,7 @@ func TestFetchChargesSniffedBytesWhenMIMERejectsDocument(t *testing.T) {
 		{name: "declared oversized PDF", body: "%PDF-1.7", contentLength: (64 << 20) + 1, cause: ErrResponseTooBig},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			fetcher := NewSafeFetcher(20<<20, time.Second)
+			fetcher := testSafeFetcher(t, 20<<20, time.Second, nil, nil)
 			fetcher.client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode: http.StatusOK, Header: make(http.Header), ContentLength: test.contentLength,
@@ -188,7 +208,7 @@ func TestValidateURLRejectsLocalAndPrivateTargets(t *testing.T) {
 		}
 		return []net.IPAddr{{IP: ip}}, nil
 	})
-	fetcher := NewSafeFetcherWithResolver(1024, time.Second, resolver)
+	fetcher := testSafeFetcher(t, 1024, time.Second, resolver, nil)
 	blocked := []string{
 		"http://127.0.0.1/",
 		"http://localhost/",
@@ -208,7 +228,7 @@ func TestValidateURLRejectsLocalAndPrivateTargets(t *testing.T) {
 	if err := fetcher.ValidateURL(context.Background(), "https://public.example/path"); err != nil {
 		t.Fatalf("public URL rejected: %v", err)
 	}
-	allowlisted := NewSafeFetcherWithPolicy(1024, time.Second, resolver, []string{"example.com"})
+	allowlisted := testSafeFetcher(t, 1024, time.Second, resolver, []string{"example.com"})
 	if err := allowlisted.ValidateURL(context.Background(), "https://docs.example.com/path"); err != nil {
 		t.Fatalf("configured domain rejected: %v", err)
 	}
@@ -227,7 +247,7 @@ func TestDialContextBlocksDNSRebindingOnConnection(t *testing.T) {
 		}
 		return []net.IPAddr{{IP: net.ParseIP(address)}}, nil
 	})
-	fetcher := NewSafeFetcherWithResolver(1024, time.Second, resolver)
+	fetcher := testSafeFetcher(t, 1024, time.Second, resolver, nil)
 	if err := fetcher.ValidateURL(context.Background(), "https://rebind.example/"); err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +261,7 @@ func TestFetchBoundsBodyAndBlocksPrivateRedirect(t *testing.T) {
 	resolver := resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
 		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
 	})
-	fetcher := NewSafeFetcherWithResolver(1024, time.Second, resolver)
+	fetcher := testSafeFetcher(t, 1024, time.Second, resolver, nil)
 	fetcher.client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/html; charset=utf-8"}}, Body: io.NopCloser(strings.NewReader("<html>safe</html>")), Request: request}, nil
 	})
@@ -274,7 +294,7 @@ func TestPDFFetchHasPolicyCeilingEvenWhenTaskBudgetIsLarger(t *testing.T) {
 	resolver := resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
 		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
 	})
-	fetcher := NewSafeFetcherWithResolver(128<<20, time.Second, resolver)
+	fetcher := testSafeFetcher(t, 128<<20, time.Second, resolver, nil)
 	fetcher.client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode:    http.StatusOK,
@@ -292,7 +312,7 @@ func TestFetchRequestFailureIsRetryableButDoesNotHidePolicyOrCancellation(t *tes
 	resolver := resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
 		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
 	})
-	fetcher := NewSafeFetcherWithResolver(1024, time.Second, resolver)
+	fetcher := testSafeFetcher(t, 1024, time.Second, resolver, nil)
 	dialError := errors.New("connection refused")
 	fetcher.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, dialError })
 	_, err := fetcher.Fetch(context.Background(), "https://public.example/article", FetchOptions{})

@@ -102,6 +102,7 @@ type Server struct {
 	runTelemetry      func(runID string) (domain.Telemetry, uint64, bool)
 	researchPolicy    map[string]any
 	pdfCheck          func(context.Context) error
+	fetchTempCheck    func(context.Context) error
 }
 
 func New(service TaskService, worker WorkerControl, dbPing func(context.Context) error, llmURL, llmKey, searchURL string, logger *slog.Logger) *Server {
@@ -843,6 +844,19 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	checks := map[string]map[string]string{}
 	researchLimits, pdfRuntime, pdfReadiness := s.researchPolicyStatus(r.Context())
 	checks["pdf_extractor"] = pdfReadiness
+	s.healthMu.RLock()
+	fetchTempCheck := s.fetchTempCheck
+	s.healthMu.RUnlock()
+	if fetchTempCheck != nil {
+		checkCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		err := fetchTempCheck(checkCtx)
+		cancel()
+		if err == nil {
+			checks["fetch_temp"] = map[string]string{"status": "ok", "message": "Fetch temporary storage is ready"}
+		} else {
+			checks["fetch_temp"] = map[string]string{"status": "warning", "message": "Fetch temporary storage is unavailable or unsafe"}
+		}
+	}
 	checks["app"] = map[string]string{"status": "ok", "message": "API application is ready"}
 	if s.service == nil {
 		checks["app"] = map[string]string{"status": "error", "message": "Task service is absent"}

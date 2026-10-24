@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -11,7 +12,7 @@ import (
 func TestDNSFailuresPreserveClassificationAndDoNotImplySSRF(t *testing.T) {
 	for _, cause := range []error{&net.DNSError{Err: "private-resolver-detail", Name: "public.example", IsNotFound: true}, errors.New("private-resolver-detail"), nil} {
 		policy := DefaultFetchPolicy()
-		policy.TempRoot = t.TempDir()
+		policy.TempRoot = filepath.Join(t.TempDir(), "fetch-temp")
 		fetcher, err := NewSafeFetcherWithFetchPolicy(policy, resolverFunc(func(context.Context, string) ([]net.IPAddr, error) { return nil, cause }), nil)
 		if err != nil {
 			t.Fatal(err)
@@ -31,7 +32,7 @@ func TestDNSFailuresPreserveClassificationAndDoNotImplySSRF(t *testing.T) {
 
 func TestDNSCancellationRemainsCancellation(t *testing.T) {
 	policy := DefaultFetchPolicy()
-	policy.TempRoot = t.TempDir()
+	policy.TempRoot = filepath.Join(t.TempDir(), "fetch-temp")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	fetcher, err := NewSafeFetcherWithFetchPolicy(policy, resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {

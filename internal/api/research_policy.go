@@ -29,6 +29,12 @@ func (s *Server) SetResearchPolicy(policy map[string]any, pdfCheck func(context.
 	s.healthMu.Unlock()
 }
 
+func (s *Server) SetFetchTempCheck(check func(context.Context) error) {
+	s.healthMu.Lock()
+	s.fetchTempCheck = check
+	s.healthMu.Unlock()
+}
+
 func (s *Server) researchPolicyStatus(ctx context.Context) (map[string]any, map[string]any, map[string]string) {
 	s.healthMu.RLock()
 	policy := map[string]any{"configured": false, "pdf_allow_unsandboxed_fallback": false}

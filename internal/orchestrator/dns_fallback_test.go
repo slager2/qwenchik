@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -51,7 +52,7 @@ func TestFetchAuthorizationDNSFailureUsesNextSource(t *testing.T) {
 				return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
 			})
 			fetchPolicy := research.DefaultFetchPolicy()
-			fetchPolicy.TempRoot = t.TempDir()
+			fetchPolicy.TempRoot = filepath.Join(t.TempDir(), "fetch-temp")
 			safe, err := research.NewSafeFetcherWithFetchPolicy(fetchPolicy, resolver, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -121,7 +122,7 @@ func TestWorkerCompletesAfterDiscoveredSourceDNSFailure(t *testing.T) {
 		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
 	})
 	policy := research.DefaultFetchPolicy()
-	policy.TempRoot = t.TempDir()
+	policy.TempRoot = filepath.Join(t.TempDir(), "fetch-temp")
 	safe, err := research.NewSafeFetcherWithFetchPolicy(policy, resolver, nil)
 	if err != nil {
 		t.Fatal(err)

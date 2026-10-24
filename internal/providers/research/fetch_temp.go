@@ -35,8 +35,11 @@ func (t *fetchTemp) cleanup() {
 }
 
 func openFetchRoot(path string) (*os.File, error) {
-	absolute, err := filepath.Abs(path)
+	absolute, err := resolveFetchTempPath(path)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateFetchTempRootPath(absolute); err != nil {
 		return nil, err
 	}
 	fd, err := syscall.Open("/", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC, 0)
@@ -70,11 +73,32 @@ func openFetchRoot(path string) (*os.File, error) {
 		root.Close()
 		return nil, errors.New("fetch temp root must be private and owned")
 	}
-	if err := root.Chmod(0700); err != nil {
+	if info.Mode().Perm() != 0700 {
+		root.Close()
+		return nil, fmt.Errorf("existing fetch temp root must already have mode 0700 (got %#o)", info.Mode().Perm())
+	}
+	if err := validateFetchTempACL(root); err != nil {
 		root.Close()
 		return nil, err
 	}
 	return root, nil
+}
+
+func validateFetchTempRootPath(absolute string) error {
+	if absolute == string(filepath.Separator) {
+		return errors.New("filesystem root cannot be used as fetch temporary storage")
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	if fetchTempRootContains(absolute, cwd) {
+		return errors.New("fetch temp root must be a dedicated directory, not the working directory or an ancestor")
+	}
+	if home, err := os.UserHomeDir(); err == nil && fetchTempRootContains(absolute, home) {
+		return errors.New("fetch temp root must not contain the user home directory")
+	}
+	return nil
 }
 
 func createFetchTemp(ctx context.Context, p FetchPolicy, task string, reserve int64) (*fetchTemp, error) {
