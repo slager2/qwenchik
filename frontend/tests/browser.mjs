@@ -43,17 +43,20 @@ const runtimeFixture = (task_id, cursor = 0) => ({
 })
 const conversation = (id, mode) => ({ id, title: id === 'a' ? 'Первый разговор' : 'Исследование', mode, created_at: now, updated_at: now, latest_run_id: `r-${id}` })
 const conversations = [conversation('a', 'chat'), conversation('b', 'research'), { id: 'c', title: 'Заблокированная проверка', mode: 'research', created_at: now, updated_at: now, latest_run_id: 'r-c' }, { id: 'd', title: 'Ресурсная пауза', mode: 'research', created_at: now, updated_at: now, latest_run_id: 'r-d' }]
+conversations.push({ ...conversation('e', 'research'), title: 'Сбой планирования' })
 const message = (id, conversation_id, run_id, role, content, status = 'completed', seq = 0) => ({ id, conversation_id, run_id, role, content, status, created_at: now, updated_at: now, last_event_seq: seq })
 const messages = {
   a: [message('u-a', 'a', 'r-a', 'user', 'Первый вопрос'), message('m-a', 'a', 'r-a', 'assistant', 'Ответ первого разговора')],
   b: [message('u-b', 'b', 'r-b', 'user', 'Второй вопрос'), message('m-b', 'b', 'r-b', 'assistant', '## Результат\n\nПроверяемый факт [ev-1].\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n```js\n' + 'veryLongIdentifier'.repeat(60) + '\n```')],
   c: [message('u-c', 'c', 'r-c', 'user', 'Проверить критические критерии'), message('m-c', 'c', 'r-c', 'assistant', '', 'failed')],
   d: [message('u-d', 'd', 'r-d', 'user', 'Исследование на паузе'), message('m-d', 'd', 'r-d', 'assistant', 'Сохранённый фрагмент', 'streaming')],
+  e: [message('old-e', 'e', 'old-e-run', 'assistant', 'Предыдущий непустой ответ'), message('u-e', 'e', 'r-e', 'user', 'Составить план'), message('m-e', 'e', 'r-e', 'assistant', '', 'failed')],
 }
 const runs = Object.fromEntries(conversations.map((item) => [item.latest_run_id, { id: item.latest_run_id, conversation_id: item.id, user_message_id: `u-${item.id}`, assistant_message_id: `m-${item.id}`, mode: item.mode, operation: 'message', status: 'completed', retry_count: 0 }]))
 runs['r-b'].terminal_outcome = 'partial'
 runs['r-c'] = { ...runs['r-c'], status: 'failed', terminal_outcome: 'blocked', error_code: 'completion_blocked', error_message: 'Проверка не смогла подтвердить обязательные критерии.' }
 runs['r-d'] = { ...runs['r-d'], status: 'paused', pause_reason: 'resource_guard', resource_reason: 'low_ram', stage: 'verification' }
+runs['r-e'] = { ...runs['r-e'], status: 'failed', stage: 'planning', error_code: 'research_plan_incomplete' }
 const events = {}
 events['r-b'] = [
   { type: 'plan.created', payload: {} },
@@ -73,6 +76,7 @@ events['r-b'].push({
 })
 events['r-c'] = [{ id: 'blocked-failure', task_id: 'r-c', seq: 1, type: 'task.failed', schema_version: 1, visibility: 'user', created_at: now, payload: { error_code: 'completion_blocked', message: 'Завершение заблокировано проверкой.', verification_summary: 'Обязательные требования пользователя не подтверждены источниками.', missing: ['Критическое требование: подтвердить запрошенный параметр.'] } }]
 events['r-d'] = [{ id: 'paused-event', task_id: 'r-d', seq: 1, type: 'run.paused', schema_version: 1, visibility: 'user', created_at: now, payload: { pause_reason: 'resource_guard', resource_reason: 'low_ram' } }]
+events['r-e'] = [{ id: 'planning-failure', task_id: 'r-e', seq: 1, type: 'task.failed', schema_version: 1, visibility: 'user', created_at: now, payload: { failure_stage: 'planning', failure_role: 'planner', planner_attempt: 2, validation_error: 'Не задан шаг поиска', error_code: 'research_plan_incomplete', plan_summary: { steps: 2, search_steps: 0, raw_plan: 'PRIVATE-PLAN', query_count: 'PRIVATE-COUNT' } } }]
 const streamCursors = []
 const submissionKeys = []
 const researchContextSubmissions = []
@@ -302,6 +306,11 @@ try {
       const run = runs[parts[2]]
       if (!run) return json({ error: { message: 'Run not found' } }, 404)
       if (!parts[3]) return json(run)
+      if (run.id === 'r-e') {
+        if (parts[3] === 'runtime') return json({ task_id: run.id, cursor: 1, status: 'failed', stage: 'planning', counters: { llm_calls: 2, search_queries: 0, fetches: 0 } })
+        if (parts[3] === 'plan') return json({ error: { message: 'Детали исследования недоступны' } }, 404)
+        if (['sources', 'evidence'].includes(parts[3])) return json([])
+      }
       if (parts[3] === 'runtime') return runtimeGetUnavailable && run.id === 'r-b' ? json({ error: { message: 'Runtime snapshot unavailable' } }, 503) : json({ ...runtimeFixture(run.id, events[run.id]?.at(-1)?.seq || 0), status: run.status, terminal_outcome: run.terminal_outcome, pause_reason: run.pause_reason || '', resource_reason: run.resource_reason || '', verdict: run.id === 'r-b' ? 'PARTIAL' : run.id === 'r-c' ? 'RESEARCH' : undefined, completed_steps: 1, compactions: 1, max_continuations: 1, completion: { continuations: 0 } })
       if (parts[3] === 'cancel') {
         run.status = 'cancelled'
@@ -519,6 +528,28 @@ try {
   const unsafeResume = page.getByRole('button', { name: 'Возобновить', exact: true })
   await unsafeResume.waitFor()
   assert.equal(await unsafeResume.isDisabled(), true)
+  await page.getByRole('link', { name: /Сбой планирования/ }).click()
+  const planningDiagnostic = page.getByRole('status').filter({ has: page.getByRole('heading', { name: 'Планирование не завершено', exact: true }) })
+  await planningDiagnostic.waitFor()
+  await planningDiagnostic.getByText('План не был сохранён: ошибка произошла до начала поиска', { exact: true }).waitFor()
+  await planningDiagnostic.getByText('Причина: Не задан шаг поиска', { exact: true }).waitFor()
+  assert.match(await page.locator('.chat-action-error[role="alert"]').innerText(), /Не задан шаг поиска[\s\S]*planning[\s\S]*planner[\s\S]*2[\s\S]*steps: 2/)
+  assert.match(await planningDiagnostic.innerText(), /Вызовы LLM\s+2\s+Поиски\s+0\s+Загрузки\s+0/)
+  assert.equal(await page.getByRole('button', { name: 'Продолжить ответ', exact: true }).isDisabled(), true, 'previous run text must not enable continue for an empty failed assistant')
+  assert.doesNotMatch(await page.locator('body').innerText(), /PRIVATE-PLAN|PRIVATE-COUNT|Детали исследования недоступны/)
+  // Legacy error-code fallback still diagnoses planning when failure_stage is absent.
+  delete events['r-e'][0].payload.failure_stage
+  events['r-e'][0].stage = 'planning'
+  events['r-e'][0].payload.error_code = 'invalid_model_output'
+  runs['r-e'].error_code = 'invalid_model_output'
+  await page.reload()
+  await planningDiagnostic.waitFor()
+  await planningDiagnostic.getByText('Код: invalid_model_output', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Продолжить ответ', exact: true }).isDisabled(), true)
+  const retryRequest = page.waitForRequest((request) => request.url().endsWith('/api/runs/r-e/retry') && request.method() === 'POST')
+  await planningDiagnostic.getByRole('button', { name: 'Повторить ответ', exact: true }).click()
+  assert.ok((await retryRequest).headers()['idempotency-key'])
+  await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor()
   await page.getByRole('link', { name: /Первый разговор/ }).click()
   await page.getByText('Ответ первого разговора', { exact: true }).waitFor()
   const chatDetails = page.getByRole('button', { name: 'Детали', exact: true })

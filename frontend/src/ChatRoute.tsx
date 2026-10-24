@@ -7,6 +7,8 @@ import ChatComposer from './ChatComposer'
 import ChatTranscript from './ChatTranscript'
 import { applyRunEvent, citationReferences, explicitResearchContextReferences, createStreamState, mergeMessages, normalizeSources, terminal, type StreamState } from './conversation-state.mjs'
 import ResearchInspector from './ResearchInspector'
+import FailureDetails from './FailureDetails'
+import { publicResearchEvents } from './research-state.mjs'
 import ChatSidebar from './ChatSidebar'
 import { recordReload, recordSSE, type ReloadReason } from './network-debug'
 import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, Evidence, InferenceTelemetry, ResearchPlan, Run, RunRuntime, RuntimeTelemetry, Submission } from './types'
@@ -288,9 +290,9 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
 
   const status = currentRun ? currentRun.status === 'paused' ? labels.paused : terminal(currentRun.status) ? terminalLabels[currentRun.terminal_outcome || ''] || labels[currentRun.status] : labels[currentRun.phase || currentRun.stage || ''] || labels[currentRun.status] || currentRun.status : 'Готов к сообщению'
   const content = [...transcript.messages.filter((message) => ['user', 'assistant'].includes(message.role)), ...optimistic]
-  const latestAssistant = [...content].reverse().find((message) => message.role === 'assistant')
+  const latestAssistant = [...content].reverse().find((message) => message.role === 'assistant' && message.run_id === currentRun?.id)
   const hasPartial = !!latestAssistant?.content.trim()
-  const terminalFailure = [...transcript.stream.events].reverse().find((event) => event.type === 'task.failed')
+  const terminalFailure = publicResearchEvents(transcript.stream.events).filter((event) => event.task_id === currentRun?.id && event.type === 'task.failed').at(-1)
   const failurePayload = terminalFailure?.payload
   const failureMessage = typeof failurePayload?.message === 'string' ? failurePayload.message.slice(0, 1000) : ''
   const verificationSummary = typeof failurePayload?.verification_summary === 'string' ? failurePayload.verification_summary.slice(0, 1000) : ''
@@ -446,7 +448,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   }, [transcript.stream.needsSync, mode, scheduleSync])
   const backendReady = health.data?.status === 'ok' && health.data.database === 'ok' && !health.error
   const modelReady = doctor.data?.checks.llm?.status === 'ok'
-  const detailsContent = <ResearchInspector resources={{ ...research, runtime }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onPause={() => void action(async () => { await api.pause(runID); await run.reload('user_action'); await runtime.reload('user_action') })} onResume={() => void action(async () => { await api.resume(runID); await run.reload('user_action'); await runtime.reload('user_action') })} />
+  const detailsContent = <ResearchInspector resources={{ ...research, runtime }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onRetry={() => operate('retry')} onPause={() => void action(async () => { await api.pause(runID); await run.reload('user_action'); await runtime.reload('user_action') })} onResume={() => void action(async () => { await api.resume(runID); await run.reload('user_action'); await runtime.reload('user_action') })} />
 
   return <main className={`chat-main ${details ? 'chat-has-details' : ''}`}>
     <header className="chat-header"><button className="chat-mobile-menu" type="button" aria-label="Открыть разговоры" onClick={onSidebar}>☰</button><div className="chat-heading">{editing ? <form onSubmit={(event) => { event.preventDefault(); if (title.trim()) void action(async () => { const next = await api.updateConversation(id, { title: title.trim() }); if (alive.current) { conversation.setData(next); setEditing(false); void onChanged() } }) }}><input aria-label="Название разговора" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} autoFocus /><button type="submit" disabled={busy || !title.trim()}>Сохранить</button><button type="button" onClick={() => setEditing(false)}>Отмена</button></form> : <><h1>{conversation.data?.title || 'Новый разговор'}</h1><p>{mode === 'research' ? 'Deep Research' : 'Локальный чат'}<span aria-hidden="true"> · </span>{status}</p></>}</div><div className="chat-header-actions">{id && <><button type="button" onClick={() => setEditing(true)} disabled={busy} aria-label="Переименовать разговор">Название</button><button type="button" onClick={() => void action(async () => { await api.deleteConversation(id); if (alive.current) { void onChanged(); onSelect('') } })} disabled={busy || active} title={active ? 'Сначала остановите текущую генерацию' : 'Архивировать разговор'}>Удалить</button></>}<button type="button" aria-expanded={details} onClick={() => setDetails((value) => !value)}>Детали</button></div></header>
@@ -457,7 +459,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
         {busy && optimistic.length > 0 && <p className="chat-muted" role="status">Готовлю ответ…</p>}
       </div>
       {!follow && <button type="button" className="chat-to-bottom" onClick={() => setFollow(true)}>К последнему сообщению ↓</button>}
-      {currentRun?.status === 'failed' && <div className="chat-action-error" role="alert"><strong>{currentRun.terminal_outcome === 'blocked' ? 'Ответ заблокирован проверкой' : 'Не удалось завершить ответ'}</strong><p>{failureMessage || currentRun.error_message || 'Сохранённый текст доступен. Можно повторить запрос.'}{currentRun.error_code ? ` Код: ${currentRun.error_code}` : ''}</p>{verificationSummary && <p>{verificationSummary}</p>}{missingCriteria.length > 0 && <div className="chat-failure-missing"><strong>Не хватает критических критериев</strong><ul>{missingCriteria.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></div>}</div>}
+      {currentRun?.status === 'failed' && <div className="chat-action-error" role="alert"><strong>{currentRun.terminal_outcome === 'blocked' ? 'Ответ заблокирован проверкой' : 'Не удалось завершить ответ'}</strong><p>{failureMessage || currentRun.error_message || 'Можно повторить запрос.'}{currentRun.error_code ? ` Код: ${currentRun.error_code}` : typeof failurePayload?.error_code === 'string' ? ` Код: ${failurePayload.error_code}` : ''}</p><FailureDetails payload={failurePayload} />{verificationSummary && <p>{verificationSummary}</p>}{missingCriteria.length > 0 && <div className="chat-failure-missing"><strong>Не хватает критических критериев</strong><ul>{missingCriteria.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></div>}</div>}
       {currentRun?.status === 'cancelled' && <p className="chat-muted" role="status">Генерация остановлена. Полученный текст сохранён.</p>}
       {currentRun?.status === 'waiting_approval' && <p role="status">Нужно ваше решение. <a href="#/workspace">Открыть подтверждения в рабочем пространстве</a></p>}
       {error && <div className="chat-action-error" role="alert"><p>{error}</p>{actionRetry && <button type="button" onClick={actionRetry} disabled={busy}>Повторить действие</button>}</div>}

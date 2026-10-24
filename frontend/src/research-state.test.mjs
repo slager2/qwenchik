@@ -2,12 +2,45 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { formatSourceBytes, researchError, researchSources, researchQueries, researchSteps } from './research-state.mjs'
+import { formatSourceBytes, planningFailure, researchError, researchSources, researchQueries, researchSteps } from './research-state.mjs'
+import FailureDetails from './FailureDetails.tsx'
 import { citationReferences, normalizeSources } from './conversation-state.mjs'
 import ResearchPanel from './ResearchInspector.tsx'
 
 const event = (seq, type, payload, visibility = 'user') => ({ seq, type, payload, visibility, created_at: '2026-10-19T10:00:00Z' })
 const hit = (seq, status, extra = {}) => event(seq, 'search.hit', { step_id: 's1', hit: { id: 'h1', url: 'https://example.org/source', title: 'Источник', provider: 'searxng', status, ...extra } })
+
+test('planning failure survives missing plan endpoint and uses only matching runtime counts', () => {
+  const resource = (data, error = '') => ({ data, error, loading: false, reload: async () => {} })
+  const failure = { ...event(1, 'task.failed', { failure_stage: 'planning', failure_role: 'planner', validation_error: 'Missing search step', planner_attempt: 2, error_code: 'research_plan_incomplete', plan_summary: { steps: 3, search_steps: 0, raw_plan: 'PRIVATE-PLAN', invalid: -1, string_count: '4', nested: { count: 1 } } }), task_id: 'planning-run' }
+  const props = { run: { id: 'planning-run', status: 'failed', mode: 'research' }, events: [failure], onRetry() {}, resources: { plan: resource(undefined, 'Детали исследования недоступны'), sources: resource([]), evidence: resource([]), providers: resource(null), runtime: resource({ task_id: 'planning-run', counters: { llm_calls: 2, search_queries: 0, fetches: 0 } }) } }
+  const html = renderToStaticMarkup(createElement(ResearchPanel, props))
+  for (const expected of ['Планирование не завершено', 'План не был сохранён: ошибка произошла до начала поиска', 'Missing search step', 'planning', 'planner', 'Попытка планирования', 'steps: 3', 'search_steps: 0', 'Вызовы LLM</dt><dd>2', 'Поиски</dt><dd>0', 'Загрузки</dt><dd>0', 'Повторить ответ']) assert.ok(html.includes(expected), expected)
+  assert.doesNotMatch(html, /PRIVATE-PLAN|raw_plan|string_count|nested|invalid:|Детали исследования недоступны/)
+  const stale = renderToStaticMarkup(createElement(ResearchPanel, { ...props, busy: true, resources: { ...props.resources, runtime: resource({ task_id: 'old-run', counters: { llm_calls: 98765, search_queries: 98765, fetches: 98765 } }) } }))
+  assert.doesNotMatch(stale, /98765/)
+  assert.match(stale, /Вызовы LLM<\/dt><dd>—/)
+  assert.match(stale, /disabled=""[^>]*>Повторить ответ/)
+})
+
+test('planning diagnosis requires failed current run, public events, planning stage and no saved-plan event', () => {
+  const run = { id: 'r', status: 'failed', stage: 'planning', error_code: 'invalid_model_output' }
+  assert.equal(planningFailure(run, []).failure_stage, 'planning')
+  assert.ok(planningFailure({ ...run, error_code: 'research_plan_incomplete' }, []))
+  assert.equal(planningFailure({ ...run, stage: 'fetch' }, []), null)
+  assert.equal(planningFailure({ ...run, status: 'paused' }, []), null)
+  assert.equal(planningFailure(run, [{ ...event(2, 'plan.created', {}), task_id: 'r' }]), null)
+  const failed = { ...event(1, 'task.failed', { failure_stage: 'planning', validation_error: 'private' }, 'internal'), task_id: 'r' }
+  assert.equal(planningFailure({ ...run, error_code: '', stage: '' }, [failed]), null)
+  assert.equal(planningFailure({ ...run, error_code: '', stage: '' }, [{ ...failed, visibility: 'user', task_id: 'old' }]), null)
+})
+
+test('failure details render only safe numeric plan summary counts and escaped public diagnostics', () => {
+  const html = renderToStaticMarkup(createElement(FailureDetails, { payload: { validation_error: '<script>reason</script>', failure_stage: 'planning', failure_role: 'planner', planner_attempt: 1, plan_summary: { steps: 4, nan: NaN, infinite: Infinity, huge: Number.MAX_SAFE_INTEGER + 1, fraction: 1.5, negative: -1, text: 'SECRET', nested: { raw: 'SECRET' } } } }))
+  assert.match(html, /&lt;script&gt;reason&lt;\/script&gt;/)
+  assert.match(html, /steps: 4/)
+  assert.doesNotMatch(html, /SECRET|nan:|infinite:|huge:|fraction:|negative:|<script>/)
+})
 
 test('nested real search observations retain latest rejection and partial sources when endpoint fails', () => {
   const events = [hit(1, 'discovered'), hit(2, 'validated'), hit(3, 'rejected', { error_code: 'url_rejected_ssrf' }), event(4, 'search.hit', { hit: { id: 'h2', url: 'javascript:bad()', title: 'Unsafe', status: 'rejected' } })]

@@ -3,6 +3,17 @@ import { normalizeSources, sourceErrorCode } from './conversation-state.mjs'
 const text = (value, limit = 600) => typeof value === 'string' ? value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').slice(0, limit) : ''
 export const publicResearchEvents = (events) => events.filter((event) => event?.visibility === 'user' && Number.isSafeInteger(event.seq) && event.seq >= 0 && event.payload && typeof event.payload === 'object').sort((a, b) => a.seq - b.seq)
 
+export function planningFailure(run, events) {
+  if (run?.status !== 'failed') return null
+  const current = publicResearchEvents(events).filter((event) => event.task_id === run.id)
+  if (current.some((event) => event.type === 'plan.created')) return null
+  const failure = current.filter((event) => event.type === 'task.failed').at(-1)
+  const stage = failure?.payload.failure_stage || failure?.stage || run.phase || run.stage
+  const code = failure?.payload.error_code || run.error_code
+  if (failure?.payload.failure_stage !== 'planning' && !(stage === 'planning' && ['research_plan_incomplete', 'invalid_model_output'].includes(code))) return null
+  return { ...failure?.payload, failure_stage: stage, error_code: code }
+}
+
 export function researchSources(sources, events) {
   const records = new Map()
   const fingerprints = new Map()

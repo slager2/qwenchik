@@ -226,8 +226,8 @@ func TestResearchNormalizerNeverSilentlyDropsOverLimitFacets(t *testing.T) {
 		}
 		before := append([]domain.PlanStep(nil), plan.Subtasks...)
 		normalized := normalizeResearchPlan(plan, "Protocol research", goal)
-		if len(normalized.Subtasks) != len(before) {
-			t.Fatalf("over-limit plan silently dropped steps: got %d of %d, analysis=%t", len(normalized.Subtasks), len(before), includeAnalysis)
+		if len(normalized.Subtasks) != len(before)-1 {
+			t.Fatalf("over-limit plan did not merge exactly one pair: got %d of %d, analysis=%t", len(normalized.Subtasks), len(before), includeAnalysis)
 		}
 		searchCount := 0
 		for _, step := range normalized.Subtasks {
@@ -235,22 +235,32 @@ func TestResearchNormalizerNeverSilentlyDropsOverLimitFacets(t *testing.T) {
 				searchCount++
 			}
 		}
-		if searchCount != 4 {
+		if searchCount != 3 {
 			t.Fatalf("over-limit facet count changed to %d, analysis=%t", searchCount, includeAnalysis)
+		}
+		for _, original := range before {
+			if original.Kind != "search" {
+				continue
+			}
+			preserved := false
+			for _, step := range normalized.Subtasks {
+				preserved = preserved || (step.Kind == "search" && strings.Contains(step.Description, original.Description))
+			}
+			if !preserved {
+				t.Fatalf("lost original facet: %q", original.Description)
+			}
 		}
 	}
 }
 
-func TestResearchFacetsCannotSilentlyChangeTheUserSubject(t *testing.T) {
+func TestResearchFacetsRemainUntrustedAndVerbatimAlongsideUserGoal(t *testing.T) {
 	goal := "библиотеки в Астане"
 	plan := domain.Plan{SchemaVersion: 1, Goal: "Libraries", MaxSteps: 2, FinalDeliverable: "Sources", Subtasks: []domain.PlanStep{
 		{ID: "software_libraries", Kind: "search", Description: "Find software libraries for developers", SuccessCriteria: []string{"Leads found"}},
 		{ID: "it_courses", Kind: "fetch", Description: "Inspect unrelated programming courses", SuccessCriteria: []string{"Source fetched"}},
 	}}
 	normalized := normalizeResearchPlan(plan, "Libraries", goal)
-	for _, step := range normalized.Subtasks {
-		if !strings.Contains(step.Description, goal) || strings.Contains(step.Description, "software libraries") || strings.Contains(step.Description, "programming courses") {
-			t.Fatalf("model changed the requested entity: %#v", step)
-		}
+	if !strings.Contains(normalized.Subtasks[0].Description, goal) || !strings.Contains(normalized.Subtasks[0].Description, "untrusted plan text") || !strings.Contains(normalized.Subtasks[0].Description, plan.Subtasks[0].Description) {
+		t.Fatalf("facet or actual user goal lost: %#v", normalized)
 	}
 }

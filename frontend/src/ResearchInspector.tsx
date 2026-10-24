@@ -1,10 +1,11 @@
 import { ProviderCard } from './diagnostic-ui.mjs'
 import TelemetryPanel from './TelemetryPanel'
 import Expandable from './Expandable'
+import FailureDetails, { safeCount } from './FailureDetails'
 import type { ReloadReason } from './network-debug'
 import { safeURL } from './conversation-state.mjs'
 import { diagnosticSummary } from './observability.mjs'
-import { formatSourceBytes, publicResearchEvents, researchError, researchQueries, researchSources, researchSteps } from './research-state.mjs'
+import { formatSourceBytes, planningFailure, publicResearchEvents, researchError, researchQueries, researchSources, researchSteps } from './research-state.mjs'
 import type { AgentEvent, Evidence, ProvidersResponse, ResearchPlan, Run, RunRuntime, SourceRecord, VerificationCriterionRecord } from './types'
 
 interface Remote<T> { data?: T; error: string; loading: boolean; reload: (reason?: ReloadReason) => Promise<void> }
@@ -49,9 +50,10 @@ function Status({ resource, empty }: { resource: Remote<unknown>; empty?: boolea
   return empty ? <p className="chat-muted">Пока нет данных.</p> : null
 }
 
-export default function ResearchInspector({ resources, events, run, showHeading = true, busy, onPause, onResume }: { resources: Resources; events: AgentEvent[]; run: Run | null; showHeading?: boolean; busy?: boolean; onPause?: () => void; onResume?: () => void }) {
+export default function ResearchInspector({ resources, events, run, showHeading = true, busy, onPause, onResume, onRetry }: { resources: Resources; events: AgentEvent[]; run: Run | null; showHeading?: boolean; busy?: boolean; onPause?: () => void; onResume?: () => void; onRetry?: () => void }) {
   const { plan, sources, evidence, providers } = resources
   const currentRuntime = run && resources.runtime?.data?.task_id === run.id ? resources.runtime?.data ?? null : null
+  const failedPlanning = planningFailure(run, events)
   const steps = researchSteps(plan.data, events)
   const sourceList = researchSources(sources.data ?? [], events)
   const queries = researchQueries(events)
@@ -75,6 +77,14 @@ export default function ResearchInspector({ resources, events, run, showHeading 
   return <div className="chat-research">
     <TelemetryPanel runtime={currentRuntime} />
     <header className="research-heading">{showHeading && <h2>{run?.mode === 'chat' ? 'Детали запуска' : 'Детали исследования'}</h2>}<p>{labels[state] || 'Исследование ещё не запущено'}</p></header>
+    {failedPlanning && <section className="chat-action-error" aria-label="Ошибка планирования" role="status">
+      <h3>Планирование не завершено</h3>
+      <p>План не был сохранён: ошибка произошла до начала поиска</p>
+      <FailureDetails payload={failedPlanning} />
+      {typeof failedPlanning.error_code === 'string' && <p>Код: {failedPlanning.error_code}</p>}
+      <dl><dt>Вызовы LLM</dt><dd>{safeCount(currentRuntime?.counters?.llm_calls) ?? '—'}</dd><dt>Поиски</dt><dd>{safeCount(currentRuntime?.counters?.search_queries) ?? '—'}</dd><dt>Загрузки</dt><dd>{safeCount(currentRuntime?.counters?.fetches) ?? '—'}</dd></dl>
+      {onRetry && <button type="button" disabled={busy} onClick={onRetry}>Повторить ответ</button>}
+    </section>}
     <div className="research-progress" aria-label="Прогресс исследования">
       {steps.length > 0 && <><div className="research-progress__caption"><span>Выполнено этапов</span><strong>{completedSteps} / {steps.length}</strong></div><progress value={completedSteps} max={steps.length} aria-label="Выполнено этапов" /></>}
       <div className="research-run-actions">
@@ -96,7 +106,7 @@ export default function ResearchInspector({ resources, events, run, showHeading 
       const title = plannedSteps.find((step) => step.id === item.step_id)?.success_criteria?.[item.criterion_index]
       return <li key={`${item.step_id}-${item.criterion_index}`}><strong>{item.classification === 'critical' ? 'Критический' : 'Дополнительный'}</strong>: {title || `Критерий ${item.step_id}.${item.criterion_index + 1}`} · {item.met ? 'выполнен' : 'не подтверждён'}{item.evidence_ids.length > 0 && <p>Evidence IDs: {item.evidence_ids.map((id) => <code key={id}>{id} </code>)}</p>}</li>
     })}</ol></details>}</section>}
-    <section><h3>План</h3><Status resource={plan} empty={!steps.length} />
+    <section><h3>План</h3>{!failedPlanning && <Status resource={plan} empty={!steps.length} />}
       {steps.length > 0 && <ol className="chat-plan-list">{steps.map((step) => {
         const lead = step.description.split(/[.!?](?:\s|$)|:\s/)[0]
         const concise = lead.length > 120 ? `${lead.slice(0, 117).trimEnd()}…` : lead

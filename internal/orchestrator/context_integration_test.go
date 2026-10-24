@@ -202,6 +202,9 @@ func TestPhase3RoleBuildersSendPinnedSnapshot(t *testing.T) {
 			stop := errors.New("captured role call")
 			model := &scriptedLLM{respond: func(llm.ChatRequest, int) (string, error) { return "", stop }}
 			w := New(f.store, model, tools.NewRegistry(), Options{MaxInputBytes: 128 << 10, MaxOutputTokens: 1024})
+			if role == "planner_initial" {
+				w.tools = registerPlanValidationResearchTools(t)
+			}
 			step := domain.PlanStep{ID: "step_1", Kind: "analysis", Description: "Count words", SuccessCriteria: []string{"Word count recorded"}}
 			plan := domain.Plan{Subtasks: []domain.PlanStep{step}}
 			call := func(memory string) error {

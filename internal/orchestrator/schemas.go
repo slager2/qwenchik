@@ -14,7 +14,9 @@ func planOutputSchema(maxSteps int, allowedKinds []string) json.RawMessage {
 	return planOutputSchemaWithRequiredKinds(maxSteps, allowedKinds, nil)
 }
 
-func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, requiredKinds []string) json.RawMessage {
+// Required kinds are semantic constraints checked by validateTaskPlan after
+// lossless normalization, not positional JSON-schema constraints.
+func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, _ []string) json.RawMessage {
 	idSchema := boundedStringSchema(1, 64)
 	idSchema["pattern"] = "^[a-zA-Z0-9_-]{1,64}$"
 	dependencyItems := map[string]any{"type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_-]{1,64}$"}
@@ -33,10 +35,6 @@ func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, requiredKinds
 	}
 	subtasksSchema := boundedArraySchema(step, 1, maxSteps)
 	maxStepsSchema := map[string]any{"type": "integer", "minimum": 1, "maximum": maxSteps}
-	if len(requiredKinds) != 0 {
-		subtasksSchema = boundedArraySchema(step, len(requiredKinds), maxSteps)
-		maxStepsSchema = map[string]any{"type": "integer", "minimum": len(requiredKinds), "maximum": maxSteps}
-	}
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{

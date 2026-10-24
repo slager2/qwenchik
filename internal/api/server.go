@@ -1140,6 +1140,10 @@ func (s *Server) searchProviderStatus() map[string]map[string]any {
 }
 
 func safePublicEvent(event domain.Event) domain.Event {
+	if event.Type == "task.failed" {
+		event.Payload = safePlannerFailurePayload(event.Payload)
+		return event
+	}
 	if event.Type == "context.compacted" || event.Type == "continuation.requested" || event.Type == "verification.completed" || event.Type == "refinement.evaluated" || event.Type == "refinement.promoted" || event.Type == "refinement.rollback" {
 		event.Payload, _ = json.Marshal(safeHarnessEvent(event.Payload))
 		return event

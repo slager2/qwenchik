@@ -1106,7 +1106,7 @@ func TestUserURLDetectionForcesFetchBeforeSearch(t *testing.T) {
 	}
 }
 
-func TestResearchFetchDependenciesMayBePartialButSearchesStayFirst(t *testing.T) {
+func TestResearchFetchDependenciesRequireEverySearchAndSearchesStayFirst(t *testing.T) {
 	registry := registerPlanValidationResearchTools(t)
 	worker := New(nil, &scriptedLLM{}, registry, Options{MaxSteps: 12})
 	makePlan := func(steps []domain.PlanStep) domain.Plan {
@@ -1116,12 +1116,17 @@ func TestResearchFetchDependenciesMayBePartialButSearchesStayFirst(t *testing.T)
 	searchTwo := domain.PlanStep{ID: "search_2", Kind: "search", Description: "Research protocol implementation independently", SuccessCriteria: []string{"independent search results are recorded"}}
 	fetchOne := domain.PlanStep{ID: "fetch_1", Kind: "fetch", Description: "Fetch protocol source one", Dependencies: []string{"search_1"}, SuccessCriteria: []string{"source evidence is stored"}}
 	fetchTwo := domain.PlanStep{ID: "fetch_2", Kind: "fetch", Description: "Fetch protocol source two", SuccessCriteria: []string{"second source evidence is stored"}}
+	if err := worker.validateTaskPlan(makePlan([]domain.PlanStep{searchOne, searchTwo, fetchOne, fetchTwo}), "Protocol research", "Research the protocol."); !errors.Is(err, errResearchPlanIncomplete) {
+		t.Fatalf("partial fetch dependencies accepted: %v", err)
+	}
+	fetchOne.Dependencies = []string{"search_1", "search_2"}
+	fetchTwo.Dependencies = []string{"search_1", "search_2"}
 	if err := worker.validateTaskPlan(makePlan([]domain.PlanStep{searchOne, searchTwo, fetchOne, fetchTwo}), "Protocol research", "Research the protocol."); err != nil {
-		t.Fatalf("partial fetch dependencies rejected: %v", err)
+		t.Fatalf("complete fetch dependencies rejected: %v", err)
 	}
 	unknownDependency := fetchOne
 	unknownDependency.Dependencies = []string{"unknown_step"}
-	if err := worker.validateTaskPlan(makePlan([]domain.PlanStep{searchOne, searchTwo, unknownDependency, fetchTwo}), "Protocol research", "Research the protocol."); !errors.Is(err, errInvalidModelOutput) {
+	if err := worker.validateTaskPlan(makePlan([]domain.PlanStep{searchOne, searchTwo, unknownDependency, fetchTwo}), "Protocol research", "Research the protocol."); !errors.Is(err, errResearchPlanIncomplete) {
 		t.Fatalf("unknown fetch dependency error = %v, want backend plan validation failure", err)
 	}
 	if err := worker.validateTaskPlan(makePlan([]domain.PlanStep{searchOne, fetchOne, searchTwo, fetchTwo}), "Protocol research", "Research the protocol."); !errors.Is(err, errResearchPlanIncomplete) {

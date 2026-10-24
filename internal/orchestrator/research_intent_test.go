@@ -465,6 +465,13 @@ func TestResearchTaskWithoutSearchFailsClearlyBeforeCallingModel(t *testing.T) {
 		if payload["error_code"] != "search_unavailable" {
 			t.Fatalf("task.failed error_code = %#v", payload["error_code"])
 		}
+		if payload["failure_stage"] != "planning" || payload["failure_role"] != "planner_initial" || payload["planner_attempt"] != float64(1) || payload["validation_error"] != safePlannerReason(errSearchUnavailable) {
+			t.Fatalf("missing safe planning diagnostics: %#v", payload)
+		}
+		summary, ok := payload["plan_summary"].(map[string]any)
+		if !ok || summary["steps"] != float64(0) || summary["search"] != float64(0) || summary["fetch"] != float64(0) {
+			t.Fatalf("unexpected pre-planner summary: %#v", payload["plan_summary"])
+		}
 		return
 	}
 	t.Fatal("missing task.failed event")
