@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -39,7 +40,7 @@ func TestFixedCriterionAddressesPreventMissingOrInventedStepAssessments(t *testi
 					assessments[key] = verdict
 				}
 			}
-			encoded, _ := json.Marshal(map[string]any{"ready_to_answer": true, "summary": "Supported", "missing": []string{}, "criterion_assessments": assessments})
+			encoded, _ := json.Marshal(map[string]any{"ready_to_answer": true, "summary": "Supported", "missing": []string{}, "supplementary_criteria": []string{}, "criterion_assessments": assessments})
 			err := tools.ValidateJSONSchema(schema, encoded)
 			if (err == nil) != test.valid {
 				t.Fatalf("assessment validation = %v", err)
@@ -51,6 +52,51 @@ func TestFixedCriterionAddressesPreventMissingOrInventedStepAssessments(t *testi
 	}}, catalog)
 	if err != nil || len(result.CriterionAssessments) != 3 || result.CriterionAssessments[2].StepID != "fetch_culture_education_site" || result.CriterionAssessments[2].Criterion != 1 || result.CriterionAssessments[2].Met {
 		t.Fatalf("backend addressing changed meaning: %#v err=%v", result, err)
+	}
+	if _, err := addressedVerification(verificationResponse{Complete: true, Supplementary: []string{"c3"}, Assessments: map[string]criterionVerdict{"c0": {Met: true}, "c1": {Met: true}, "c2": {Met: true}}}, catalog); !errors.Is(err, errInvalidModelOutput) {
+		t.Fatalf("unknown supplementary criterion accepted: %v", err)
+	}
+}
+
+func TestSupplementaryGapsArePartialButEvidenceIntegrityRemainsCritical(t *testing.T) {
+	plan := domain.Plan{Subtasks: []domain.PlanStep{{ID: "fetch_1", Kind: "fetch", SuccessCriteria: []string{"Inspect requested source", "Report supplementary publication details"}}}}
+	state := checkpointState{CompletedSteps: []string{"fetch_1"}, ToolResults: map[string]any{"fetch_1": map[string]any{"evidence_id": "owned"}}}
+	defaultCritical, err := addressedVerification(verificationResponse{Complete: true, Assessments: map[string]criterionVerdict{
+		"c0": {Met: false}, "c1": {Met: true, EvidenceIDs: []string{"owned"}},
+	}}, verificationCatalog(plan, state))
+	if err != nil {
+		t.Fatal(err)
+	}
+	critical, supplementary := verificationCriterionFindings(plan, state, defaultCritical.CriterionAssessments)
+	if len(critical) != 1 || len(supplementary) != 0 {
+		t.Fatalf("unclassified criteria were not fail-closed: critical=%#v supplementary=%#v", critical, supplementary)
+	}
+	critical, supplementary = verificationCriterionFindings(plan, state, []criterionAssessment{
+		{StepID: "fetch_1", Criterion: 0, Classification: "critical", Met: true, EvidenceIDs: []string{"owned"}},
+		{StepID: "fetch_1", Criterion: 1, Classification: "supplementary", Met: false},
+	})
+	if len(critical) != 0 || len(supplementary) != 1 || !strings.Contains(supplementary[0], "Report supplementary publication details") {
+		t.Fatalf("supplementary gap classification: critical=%#v supplementary=%#v", critical, supplementary)
+	}
+	critical, supplementary = verificationCriterionFindings(plan, state, []criterionAssessment{
+		{StepID: "fetch_1", Criterion: 0, Classification: "supplementary", Met: true, EvidenceIDs: []string{"foreign"}},
+		{StepID: "fetch_1", Criterion: 1, Classification: "supplementary", Met: false},
+	})
+	if len(critical) == 0 || !strings.Contains(critical[0], "not returned by its step") || len(supplementary) != 1 {
+		t.Fatalf("supplementary classification weakened evidence ownership: critical=%#v supplementary=%#v", critical, supplementary)
+	}
+}
+
+func TestSupplementaryClassificationCannotHideUnsuitableEvidence(t *testing.T) {
+	assessments, missing := filterVerificationEvidence([]criterionAssessment{{
+		StepID: "fetch_1", Criterion: 0, Classification: "supplementary", Met: true,
+		EvidenceIDs: []string{"owned-good", "owned-flagged", "missing"},
+	}}, []domain.Evidence{
+		{ID: "owned-good", HTTPStatus: 200, Excerpt: "usable excerpt"},
+		{ID: "owned-flagged", HTTPStatus: 200, Excerpt: "flagged excerpt", QualityFlags: []string{"low_quality"}},
+	})
+	if len(assessments) != 1 || len(assessments[0].EvidenceIDs) != 1 || assessments[0].EvidenceIDs[0] != "owned-good" || len(missing) != 1 || !strings.Contains(missing[0], "unavailable or unsuitable") {
+		t.Fatalf("unsuitable evidence was not failed closed: assessments=%#v missing=%#v", assessments, missing)
 	}
 }
 

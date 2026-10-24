@@ -36,7 +36,7 @@ func TestStructuredOutputSchemasConstrainRoleEnvelopes(t *testing.T) {
 		{
 			name:    "verifier",
 			schema:  verificationOutputSchema([]verificationCriterion{{ID: "c0", StepID: "step_1", Index: 0}}),
-			valid:   `{"ready_to_answer":true,"summary":"The result is usable.","missing":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The step result supports the criterion."}}}`,
+			valid:   `{"ready_to_answer":true,"summary":"The result is usable.","missing":[],"supplementary_criteria":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The step result supports the criterion."}}}`,
 			invalid: `{"ready_to_answer":true,"summary":"The result is usable.","missing":[]}`,
 		},
 	}

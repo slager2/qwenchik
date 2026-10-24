@@ -13,6 +13,48 @@ import (
 	"github.com/slager2/qwenchik/internal/domain"
 )
 
+func TestSafeHarnessEventProjectsVerificationClassifications(t *testing.T) {
+	raw := json.RawMessage(`{"verdict":"PARTIAL","phase":"evidence_readiness","summary":"Core requirements supported.","missing":[],"supplementary_missing":["A supplementary detail is unavailable."],"criteria":[{"step_id":"fetch_1","criterion_index":0,"classification":"critical","met":true,"evidence_ids":["evidence-1"],"rationale":"private"},{"step_id":"fetch_1","criterion_index":1,"classification":"unknown","met":false,"evidence_ids":["bad id"]}],"secret":"private"}`)
+	projected := safeHarnessEvent(raw)
+	if projected["verdict"] != "PARTIAL" || projected["summary"] != nil || projected["secret"] != nil {
+		t.Fatalf("verification envelope projection: %#v", projected)
+	}
+	if missing, ok := projected["supplementary_missing"].([]string); !ok || len(missing) != 1 || missing[0] != "A supplementary detail is unavailable." {
+		t.Fatalf("supplementary missing projection: %#v", projected["supplementary_missing"])
+	}
+	criteria, ok := projected["criteria"].([]map[string]any)
+	if !ok || len(criteria) != 1 || criteria[0]["classification"] != "critical" || criteria[0]["met"] != true {
+		t.Fatalf("criterion projection: %#v", projected["criteria"])
+	}
+	ids, ok := criteria[0]["evidence_ids"].([]string)
+	if !ok || len(ids) != 1 || ids[0] != "evidence-1" {
+		t.Fatalf("criterion evidence projection: %#v", criteria[0]["evidence_ids"])
+	}
+}
+
+func TestSafeHarnessEventRetainsMaximumVerificationCatalog(t *testing.T) {
+	criteria := make([]map[string]any, 0, 120)
+	evidenceIDs := make([]string, 0, 8)
+	for index := 0; index < 8; index++ {
+		evidenceIDs = append(evidenceIDs, fmt.Sprintf("evidence-%024d", index))
+	}
+	for index := 0; index < 120; index++ {
+		criteria = append(criteria, map[string]any{
+			"step_id": fmt.Sprintf("step_%d", index/10), "criterion_index": index % 10,
+			"classification": "critical", "met": true, "evidence_ids": evidenceIDs,
+		})
+	}
+	raw, err := json.Marshal(map[string]any{"verdict": "PASS", "phase": "evidence_readiness", "missing": []string{}, "criteria": criteria})
+	if err != nil || len(raw) <= 16384 {
+		t.Fatalf("large verification fixture size=%d err=%v", len(raw), err)
+	}
+	projected := safeHarnessEvent(raw)
+	result, ok := projected["criteria"].([]map[string]any)
+	if !ok || len(result) != 120 || projected["verdict"] != "PASS" {
+		t.Fatalf("maximum verification catalog was dropped: criteria=%d projection=%#v", len(result), projected)
+	}
+}
+
 func TestRuntimeSnapshotResyncAndPublicHarnessProjection(t *testing.T) {
 	ctx := context.Background()
 	server, store := newTestServer(t)

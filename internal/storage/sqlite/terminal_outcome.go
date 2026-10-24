@@ -17,6 +17,9 @@ func setTerminalOutcome(ctx context.Context, tx *sql.Tx, id string, status domai
 		outcome = "blocked"
 	}
 	if status == domain.StatusCompleted {
+		if partial, _ := payload["partial_outcome"].(bool); partial {
+			outcome = "partial"
+		}
 		var verification string
 		err := tx.QueryRowContext(ctx, `SELECT json_extract(payload_json,'$.status') FROM events WHERE task_id=? AND type='verification.updated' AND visibility='user' AND json_valid(payload_json) AND json_extract(payload_json,'$.status') IN ('supported','fallback_excerpts') ORDER BY seq DESC LIMIT 1`, id).Scan(&verification)
 		if err != nil && err != sql.ErrNoRows {
@@ -24,6 +27,15 @@ func setTerminalOutcome(ctx context.Context, tx *sql.Tx, id string, status domai
 		}
 		if verification == "fallback_excerpts" {
 			outcome = "partial"
+		} else {
+			var readiness string
+			err := tx.QueryRowContext(ctx, `SELECT json_extract(payload_json,'$.verdict') FROM events WHERE task_id=? AND type='verification.completed' AND json_valid(payload_json) ORDER BY seq DESC LIMIT 1`, id).Scan(&readiness)
+			if err != nil && err != sql.ErrNoRows {
+				return err
+			}
+			if readiness == "PARTIAL" {
+				outcome = "partial"
+			}
 		}
 	}
 	if payload != nil {

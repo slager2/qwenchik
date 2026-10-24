@@ -212,6 +212,10 @@ func stripOptionalNulls(value any, schema map[string]any) {
 }
 
 func verificationOutputSchema(catalog []verificationCriterion, contradictions ...bool) json.RawMessage {
+	supplementaryIDSchema := boundedStringSchema(1, 16)
+	if len(catalog) > 0 {
+		supplementaryIDSchema["enum"] = criterionIDs(catalog)
+	}
 	assessmentSchema := func(criterion verificationCriterion) map[string]any {
 		evidenceItem := boundedStringSchema(1, 128)
 		if len(criterion.EvidenceIDs) > 0 {
@@ -237,18 +241,27 @@ func verificationOutputSchema(catalog []verificationCriterion, contradictions ..
 	output := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"ready_to_answer":       map[string]any{"type": "boolean"},
-			"summary":               boundedStringSchema(1, 1000),
-			"missing":               boundedArraySchema(boundedStringSchema(1, 500), 0, 20),
-			"criterion_assessments": map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false},
+			"ready_to_answer":        map[string]any{"type": "boolean"},
+			"summary":                boundedStringSchema(1, 1000),
+			"missing":                boundedArraySchema(boundedStringSchema(1, 500), 0, 20),
+			"supplementary_criteria": boundedArraySchema(supplementaryIDSchema, 0, len(catalog)),
+			"criterion_assessments":  map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false},
 		},
-		"required":             []string{"ready_to_answer", "summary", "missing", "criterion_assessments"},
+		"required":             []string{"ready_to_answer", "summary", "missing", "supplementary_criteria", "criterion_assessments"},
 		"additionalProperties": false,
 	}
 	if len(contradictions) > 0 && contradictions[0] {
 		output["properties"].(map[string]any)["contradictions"] = boundedArraySchema(boundedStringSchema(1, 500), 0, 8)
 	}
 	return encodeSchema(output)
+}
+
+func criterionIDs(catalog []verificationCriterion) []string {
+	ids := make([]string, 0, len(catalog))
+	for _, criterion := range catalog {
+		ids = append(ids, criterion.ID)
+	}
+	return ids
 }
 
 func boundedStringSchema(minLength, maxLength int) map[string]any {

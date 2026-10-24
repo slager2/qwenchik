@@ -60,6 +60,59 @@ func TestCompletionPersistsOnlyOwnedVerifiedCitations(t *testing.T) {
 	}
 }
 
+func TestCommitVerificationPersistsPartialCriteriaAndRequiresOwnedEvidence(t *testing.T) {
+	ctx := context.Background()
+	store, turn := conversationFixture(t, "research")
+	verifyConversationRun(t, store, turn.Run.ID)
+	owned, err := store.SaveEvidence(ctx, domain.Evidence{
+		ID: "owned-criterion-evidence", TaskID: turn.Run.ID, Provider: "searxng",
+		OriginalURL: "https://example.org/source", CanonicalURL: "https://example.org/source",
+		ContentSHA256: "source-hash", HTTPStatus: 200, Excerpt: "Fetched source evidence",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	criteria := []domain.VerificationCriterionResult{
+		{StepID: "fetch_1", Criterion: 0, Classification: "critical", Met: true, EvidenceIDs: []string{owned.ID}},
+		{StepID: "fetch_1", Criterion: 1, Classification: "supplementary", Met: false},
+	}
+	foreign := append([]domain.VerificationCriterionResult(nil), criteria...)
+	foreign[0].EvidenceIDs = []string{"not-owned"}
+	if err := store.CommitVerification(ctx, turn.Run.ID, "PARTIAL", "Core requirements are supported.", nil, []string{"Supplementary publication date is unavailable."}, foreign); !errors.Is(err, ErrCheckpointInvalid) {
+		t.Fatalf("unowned criterion evidence accepted: %v", err)
+	}
+	if err := store.CommitVerification(ctx, turn.Run.ID, "PARTIAL", "Core requirements are supported.", nil, []string{"Supplementary publication date is unavailable."}, criteria); err != nil {
+		t.Fatal(err)
+	}
+	events, err := store.EventsAfter(ctx, turn.Run.ID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Verdict              string                               `json:"verdict"`
+		Missing              []string                             `json:"missing"`
+		SupplementaryMissing []string                             `json:"supplementary_missing"`
+		Criteria             []domain.VerificationCriterionResult `json:"criteria"`
+	}
+	for _, event := range events {
+		if event.Type == "verification.completed" {
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if payload.Verdict != "PARTIAL" || len(payload.Missing) != 0 || len(payload.SupplementaryMissing) != 1 || len(payload.Criteria) != 2 || payload.Criteria[0].EvidenceIDs[0] != owned.ID {
+		t.Fatalf("verification criteria event = %+v", payload)
+	}
+	if _, err := store.CompleteTask(ctx, turn.Run.ID, "Supported answer", nil); err != nil {
+		t.Fatal(err)
+	}
+	task, err := store.GetTask(ctx, turn.Run.ID)
+	if err != nil || task.Status != domain.StatusCompleted || task.TerminalOutcome != "partial" {
+		t.Fatalf("partial verification terminal outcome: task=%+v err=%v", task, err)
+	}
+}
+
 func TestCreateConversationIdempotencyIsAtomicAndConcurrent(t *testing.T) {
 	ctx := context.Background()
 	store, _ := conversationFixture(t, "chat")

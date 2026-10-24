@@ -9,6 +9,8 @@ import (
 	"github.com/slager2/qwenchik/internal/domain"
 )
 
+const maxPublicHarnessEventBytes = 512 << 10
+
 type runRuntimeService interface {
 	RunRuntime(context.Context, string) (map[string]any, error)
 }
@@ -88,7 +90,7 @@ func (s *Server) runRuntime(w http.ResponseWriter, r *http.Request) {
 
 func safeHarnessEvent(raw json.RawMessage) map[string]any {
 	result := map[string]any{}
-	if len(raw) > 16384 {
+	if len(raw) > maxPublicHarnessEventBytes {
 		return result
 	}
 	var input map[string]any
@@ -107,7 +109,7 @@ func safeHarnessEvent(raw json.RawMessage) map[string]any {
 	}
 	for _, key := range []string{"verdict", "phase", "reason"} {
 		if value, ok := input[key].(string); ok {
-			for _, allowed := range []string{"PASS", "REPAIR", "RESEARCH", "UNCERTAIN", "BLOCK", "evidence_readiness", "role_tool_results", "compaction", "context_compaction", "context.compacted"} {
+			for _, allowed := range []string{"PASS", "PARTIAL", "REPAIR", "RESEARCH", "UNCERTAIN", "BLOCK", "evidence_readiness", "role_tool_results", "compaction", "context_compaction", "context.compacted"} {
 				if value == allowed {
 					result[key] = value
 				}
@@ -132,6 +134,54 @@ func safeHarnessEvent(raw json.RawMessage) map[string]any {
 			}
 		}
 		result["missing"] = missing
+	}
+	readinessPhase, _ := input["phase"].(string)
+	if items, ok := input["supplementary_missing"].([]any); ok && readinessPhase == "evidence_readiness" {
+		missing := []string{}
+		for _, item := range items {
+			if value, ok := item.(string); ok && len(missing) < 20 {
+				runes := []rune(value)
+				missing = append(missing, string(runes[:min(500, len(runes))]))
+			}
+		}
+		result["supplementary_missing"] = missing
+	}
+	if items, ok := input["criteria"].([]any); ok && len(items) <= 120 && readinessPhase == "evidence_readiness" {
+		criteria := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			entry, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			stepID, stepOK := entry["step_id"].(string)
+			index, indexOK := entry["criterion_index"].(float64)
+			classification, classificationOK := entry["classification"].(string)
+			met, metOK := entry["met"].(bool)
+			if !stepOK || !safeStepID(stepID) || !indexOK || index < 0 || index >= 10 || math.Trunc(index) != index || !classificationOK || classification != "critical" && classification != "supplementary" || !metOK {
+				continue
+			}
+			projected := map[string]any{"step_id": stepID, "criterion_index": index, "classification": classification, "met": met}
+			if evidence, ok := entry["evidence_ids"].([]any); ok {
+				ids := []string{}
+				for _, candidate := range evidence {
+					if id, ok := candidate.(string); ok && safeStepID(id) && len(ids) < 16 {
+						duplicate := false
+						for _, prior := range ids {
+							if prior == id {
+								duplicate = true
+								break
+							}
+						}
+						if !duplicate {
+							ids = append(ids, id)
+						}
+					}
+				}
+				projected["evidence_ids"] = ids
+			}
+			criteria = append(criteria, projected)
+		}
+		result["criteria"] = criteria
 	}
 	if status, ok := input["status"].(string); ok {
 		for _, allowed := range []string{"candidate", "evaluating", "ready", "approved", "rejected"} {

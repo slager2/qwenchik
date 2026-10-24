@@ -121,16 +121,30 @@ func (s *Store) RequestResearchContinuation(ctx context.Context, taskID string, 
 	return tx.Commit()
 }
 
-func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary string, missing []string) error {
-	if verdict != "PASS" && verdict != "REPAIR" && verdict != "RESEARCH" && verdict != "UNCERTAIN" && verdict != "BLOCK" {
+func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary string, missing, supplementaryMissing []string, criteria []domain.VerificationCriterionResult) error {
+	if verdict != "PASS" && verdict != "PARTIAL" && verdict != "REPAIR" && verdict != "RESEARCH" && verdict != "UNCERTAIN" && verdict != "BLOCK" {
 		return ErrCheckpointInvalid
 	}
-	if len(summary) > 4000 || len(missing) > 20 {
+	if len(summary) > 4000 || len(missing) > 20 || len(supplementaryMissing) > 20 || len(criteria) > 120 {
 		return ErrCheckpointInvalid
 	}
-	for _, value := range missing {
-		if utf8.RuneCountInString(value) > 500 {
+	for _, values := range [][]string{missing, supplementaryMissing} {
+		for _, value := range values {
+			if utf8.RuneCountInString(value) > 500 {
+				return ErrCheckpointInvalid
+			}
+		}
+	}
+	evidenceIDs := []string{}
+	for _, criterion := range criteria {
+		if len(criterion.StepID) == 0 || len(criterion.StepID) > 64 || criterion.Criterion < 0 || criterion.Criterion >= 10 || criterion.Classification != "critical" && criterion.Classification != "supplementary" || len(criterion.EvidenceIDs) > 16 {
 			return ErrCheckpointInvalid
+		}
+		for _, evidenceID := range criterion.EvidenceIDs {
+			if evidenceID == "" || len(evidenceID) > 128 {
+				return ErrCheckpointInvalid
+			}
+			evidenceIDs = append(evidenceIDs, evidenceID)
 		}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -139,6 +153,17 @@ func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary
 	}
 	defer tx.Rollback()
 	if err := invocationAllowed(ctx, tx, taskID, true); err != nil {
+		return err
+	}
+	ownedEvidence := make([]string, 0, len(evidenceIDs))
+	seenEvidence := map[string]bool{}
+	for _, evidenceID := range evidenceIDs {
+		if !seenEvidence[evidenceID] {
+			seenEvidence[evidenceID] = true
+			ownedEvidence = append(ownedEvidence, evidenceID)
+		}
+	}
+	if err := validateSnapshotEvidence(ctx, tx, taskID, ownedEvidence); err != nil {
 		return err
 	}
 	state, version, err := invocationCheckpointState(ctx, tx, taskID)
@@ -152,7 +177,15 @@ func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary
 	}
 	completion.Verdict = verdict
 	state["completion"] = completion
-	seq, err := appendEvent(ctx, tx, taskID, "verification.completed", stagePointer(domain.StageVerification), "user", map[string]any{"verdict": verdict, "phase": "evidence_readiness", "summary": summary, "missing": missing})
+	payload := map[string]any{
+		"verdict": verdict, "phase": "evidence_readiness", "summary": summary,
+		"missing": missing, "supplementary_missing": supplementaryMissing, "criteria": criteria,
+	}
+	encodedPayload, err := json.Marshal(payload)
+	if err != nil || len(encodedPayload) > 512<<10 {
+		return ErrCheckpointInvalid
+	}
+	seq, err := appendEvent(ctx, tx, taskID, "verification.completed", stagePointer(domain.StageVerification), "user", payload)
 	if err != nil {
 		return err
 	}

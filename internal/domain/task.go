@@ -228,6 +228,14 @@ type PlanStep struct {
 	SuccessCriteria []string `json:"success_criteria"`
 }
 
+type VerificationCriterionResult struct {
+	StepID         string   `json:"step_id"`
+	Criterion      int      `json:"criterion_index"`
+	Classification string   `json:"classification"`
+	Met            bool     `json:"met"`
+	EvidenceIDs    []string `json:"evidence_ids"`
+}
+
 func ValidatePlan(plan Plan, maxSteps int) error {
 	if err := validatePlan(plan, maxSteps); err != nil {
 		if errors.Is(err, ErrInvalidPlan) {

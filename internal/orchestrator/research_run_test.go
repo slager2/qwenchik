@@ -690,7 +690,7 @@ func TestResearchRunLegacyTaskKeepsRequestDefaults(t *testing.T) {
 	responses := []string{
 		`{"schema_version":1,"goal":"count supplied words","subtasks":[{"id":"step_1","kind":"analysis","description":"Inspect supplied text","dependencies":[],"expected_output":"word count","success_criteria":["count returned"]}],"max_steps":1,"final_deliverable":"short answer"}`,
 		`{"status":"continue","summary":"Inspect the supplied text","tool_call":{"name":"text.inspect","arguments":{"text":"one two three"}}}`,
-		`{"ready_to_answer":true,"summary":"The count is available.","missing":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The tool recorded the count."}}}`,
+		`{"ready_to_answer":true,"summary":"The count is available.","missing":[],"supplementary_criteria":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The tool recorded the count."}}}`,
 		`{"answer":"The supplied text contains three words."}`,
 	}
 	model := &researchRunModel{respond: func(_ context.Context, _ llm.ChatRequest, index int, _ bool) (string, error) {

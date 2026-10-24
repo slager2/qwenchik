@@ -1506,6 +1506,14 @@ func (s *Store) CompleteTask(ctx context.Context, taskID, answer string, checkpo
 		return domain.Task{}, err
 	}
 	completionPayload := map[string]any{"status": domain.StatusCompleted}
+	if raw, err := json.Marshal(checkpointState); err == nil {
+		var state map[string]any
+		if json.Unmarshal(raw, &state) == nil {
+			if partial, _ := state["partial_outcome"].(bool); partial {
+				completionPayload["partial_outcome"] = true
+			}
+		}
+	}
 	if err := setTerminalOutcome(ctx, tx, taskID, domain.StatusCompleted, completionPayload); err != nil {
 		return domain.Task{}, err
 	}

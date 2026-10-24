@@ -71,8 +71,8 @@ func TestVerifierReceivesCompactedEvidenceOrFailsBeforeModelCall(t *testing.T) {
 		})
 	}
 	state.ToolResults["search_1"] = hits
-	for _, budget := range []int{8192, 1024} {
-		response := `{"ready_to_answer":false,"summary":"Insufficient support","missing":["criterion unsupported"],"criterion_assessments":{"c0":{"met":false,"evidence_ids":[],"rationale":"criterion unsupported"},"c1":{"met":false,"evidence_ids":[],"rationale":"criterion unsupported"}}}`
+	for _, budget := range []int{10240, 1024} {
+		response := `{"ready_to_answer":false,"summary":"Insufficient support","missing":["criterion unsupported"],"supplementary_criteria":[],"criterion_assessments":{"c0":{"met":false,"evidence_ids":[],"rationale":"criterion unsupported"},"c1":{"met":false,"evidence_ids":[],"rationale":"criterion unsupported"}}}`
 		model := &scriptedLLM{responses: []string{response, response}}
 		worker := New(nil, model, nil, Options{MaxInputBytes: budget})
 		_, err := worker.verify(context.Background(), domain.Task{Title: "Inspect source"}, "Inspect the supplied URL", "", plan, state)

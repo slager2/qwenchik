@@ -188,7 +188,7 @@ func TestWorkerCompletesOneSafeToolStep(t *testing.T) {
 	model := &scriptedLLM{responses: []string{
 		`{"schema_version":1,"goal":"count words","subtasks":[{"id":"step_1","kind":"analysis","description":"Inspect the text","dependencies":[],"expected_output":"word count","success_criteria":["count returned"]}],"max_steps":1,"final_deliverable":"short answer"}`,
 		`{"status":"continue","summary":"Searching the web for the requested word count.","tool_call":{"name":"text.inspect","arguments":{"text":"count three words here"}}}`,
-		`{"ready_to_answer":true,"summary":"The text was inspected and the tool result is available.","missing":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The inspection result contains the requested count."}}}`,
+		`{"ready_to_answer":true,"summary":"The text was inspected and the tool result is available.","missing":[],"supplementary_criteria":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The inspection result contains the requested count."}}}`,
 		`The supplied text contains four words.`,
 	}}
 	worker := New(store, model, tools.NewRegistry(), Options{MaxSteps: 12, TaskTimeout: time.Minute, MaxOutputTokens: 512})
@@ -287,7 +287,7 @@ func TestWorkerAddsOnlyAcceptedMemoriesAsUntrustedContext(t *testing.T) {
 	model := &scriptedLLM{responses: []string{
 		`{"schema_version":1,"goal":"summarize supplied text","subtasks":[{"id":"step_1","kind":"analysis","description":"Summarize the text","dependencies":[],"expected_output":"short summary","success_criteria":["summary returned"]}],"max_steps":1,"final_deliverable":"short summary"}`,
 		`{"status":"continue","summary":"Summarized the supplied text.","tool_call":{"name":"text.inspect","arguments":{"text":"three supplied words"}}}`,
-		`{"ready_to_answer":true,"summary":"The text was summarized.","missing":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The inspection result contains the summary."}}}`,
+		`{"ready_to_answer":true,"summary":"The text was summarized.","missing":[],"supplementary_criteria":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The inspection result contains the summary."}}}`,
 		`The text contains three words.`,
 	}}
 	worker := New(store, model, tools.NewRegistry(), Options{MaxSteps: 12, TaskTimeout: time.Minute, MaxOutputTokens: 512})
@@ -335,7 +335,7 @@ func TestWorkerReportsVerifierIncompletenessSeparately(t *testing.T) {
 	model := &scriptedLLM{responses: []string{
 		`{"schema_version":1,"goal":"summarize supplied sources","subtasks":[{"id":"step_1","kind":"analysis","description":"Inspect supplied material","dependencies":[],"expected_output":"summary","success_criteria":["summary supported"]}],"max_steps":1,"final_deliverable":"concise summary"}`,
 		`{"status":"continue","summary":"Inspected the supplied material.","tool_call":{"name":"text.inspect","arguments":{"text":"one supplied source"}}}`,
-		`{"ready_to_answer":false,"summary":"The available material is insufficient.","missing":["Three distinct sources are required."],"criterion_assessments":{"c0":{"met":false,"evidence_ids":[],"rationale":"The available material does not support the requested summary."}}}`,
+		`{"ready_to_answer":false,"summary":"The available material is insufficient.","missing":["Three distinct sources are required."],"supplementary_criteria":[],"criterion_assessments":{"c0":{"met":false,"evidence_ids":[],"rationale":"The available material does not support the requested summary."}}}`,
 	}}
 	worker := New(store, model, tools.NewRegistry(), Options{MaxSteps: 12, TaskTimeout: time.Minute, MaxOutputTokens: 512})
 	worker.runTask(ctx, claimed)
@@ -371,8 +371,8 @@ func TestWorkerReportsVerifierIncompletenessSeparately(t *testing.T) {
 }
 
 func TestVerifierIncompleteWithoutDetailsGetsActionableMissingItem(t *testing.T) {
-	model := &scriptedLLM{responses: []string{`{"ready_to_answer":false,"summary":"The provided source does not answer the request.","missing":[],"criterion_assessments":{"c0":{"met":false,"evidence_ids":[],"rationale":"The result does not support the requested answer."}}}`}}
-	worker := New(nil, model, tools.NewRegistry(), Options{MaxSteps: 12, MaxInputBytes: 4096, TaskTimeout: time.Minute, MaxOutputTokens: 128})
+	model := &scriptedLLM{responses: []string{`{"ready_to_answer":false,"summary":"The provided source does not answer the request.","missing":[],"supplementary_criteria":[],"criterion_assessments":{"c0":{"met":false,"evidence_ids":[],"rationale":"The result does not support the requested answer."}}}`}}
+	worker := New(nil, model, tools.NewRegistry(), Options{MaxSteps: 12, MaxInputBytes: 8192, TaskTimeout: time.Minute, MaxOutputTokens: 128})
 	verification, err := worker.verify(context.Background(), domain.Task{ID: "verify-task", Title: "Research"}, "Research the provided source", "[]", domain.Plan{
 		SchemaVersion: 1, Goal: "Research the provided source", MaxSteps: 1, FinalDeliverable: "summary",
 		Subtasks: []domain.PlanStep{{ID: "step_1", Kind: "analysis", Description: "Inspect source", ExpectedOutput: "summary", SuccessCriteria: []string{"answer supported"}}},
@@ -386,8 +386,8 @@ func TestVerifierIncompleteWithoutDetailsGetsActionableMissingItem(t *testing.T)
 }
 
 func TestVerifierCannotCompleteWithoutAssessingEveryPlanCriterion(t *testing.T) {
-	model := &scriptedLLM{responses: []string{`{"ready_to_answer":true,"summary":"The result is usable.","missing":[],"criterion_assessments":{}}`, `{"ready_to_answer":true,"summary":"The result is usable.","missing":[],"criterion_assessments":{}}`}}
-	worker := New(nil, model, tools.NewRegistry(), Options{MaxSteps: 12, MaxInputBytes: 4096, TaskTimeout: time.Minute, MaxOutputTokens: 128})
+	model := &scriptedLLM{responses: []string{`{"ready_to_answer":true,"summary":"The result is usable.","missing":[],"supplementary_criteria":[],"criterion_assessments":{}}`, `{"ready_to_answer":true,"summary":"The result is usable.","missing":[],"supplementary_criteria":[],"criterion_assessments":{}}`}}
+	worker := New(nil, model, tools.NewRegistry(), Options{MaxSteps: 12, MaxInputBytes: 8192, TaskTimeout: time.Minute, MaxOutputTokens: 128})
 	plan := domain.Plan{
 		SchemaVersion: 1, Goal: "Inspect supplied material", MaxSteps: 1, FinalDeliverable: "summary",
 		Subtasks: []domain.PlanStep{{ID: "step_1", Kind: "analysis", Description: "Inspect source", ExpectedOutput: "summary", SuccessCriteria: []string{"answer is supported"}}},
@@ -1062,7 +1062,7 @@ func TestExternalActionPausesForApprovalAndConsumesGrantOnce(t *testing.T) {
 	model := &scriptedLLM{responses: []string{
 		`{"schema_version":1,"goal":"submit request","subtasks":[{"id":"step_1","kind":"external_action","description":"Submit the prepared request","dependencies":[],"expected_output":"submission result","success_criteria":["request submitted"]}],"max_steps":1,"final_deliverable":"confirm result"}`,
 		`{"status":"continue","summary":"The request is ready to submit.","tool_call":{"name":"external.submit","arguments":{"payload":"prepared"}}}`,
-		`{"ready_to_answer":true,"summary":"The approved action completed.","missing":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The action result confirms submission."}}}`,
+		`{"ready_to_answer":true,"summary":"The approved action completed.","missing":[],"supplementary_criteria":[],"criterion_assessments":{"c0":{"met":true,"evidence_ids":[],"rationale":"The action result confirms submission."}}}`,
 		`The prepared request was submitted successfully.`,
 	}}
 	worker := New(store, model, registry, Options{MaxSteps: 12, TaskTimeout: time.Minute, MaxOutputTokens: 512})
@@ -1265,6 +1265,7 @@ func TestWorkerRetriesTransientFailureForUserProvidedURL(t *testing.T) {
 			}
 			response, err := json.Marshal(map[string]any{
 				"ready_to_answer": true, "summary": "The supplied page was fetched and stored.", "missing": []string{},
+				"supplementary_criteria": []string{},
 				"criterion_assessments": map[string]any{"c0": map[string]any{
 					"met":          true,
 					"evidence_ids": []string{evidenceID}, "rationale": "The fetch result contains task-owned page evidence.",
@@ -1443,7 +1444,7 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 			}
 			response, err := json.Marshal(map[string]any{
 				"ready_to_answer": true, "summary": "Two distinct sources were fetched for the protocol question.",
-				"missing": []string{}, "criterion_assessments": fixtureVerdicts(assessments),
+				"missing": []string{}, "supplementary_criteria": []string{}, "criterion_assessments": fixtureVerdicts(assessments),
 			})
 			return string(response), err
 		case 6:
@@ -1613,7 +1614,7 @@ func TestWorkerBroadensOnceAfterAnEmptySearchResult(t *testing.T) {
 			}
 			response, err := json.Marshal(map[string]any{
 				"ready_to_answer": true, "summary": "The empty first search was retried and the independent facets found distinct source sites.",
-				"missing": []string{}, "criterion_assessments": fixtureVerdicts(assessments),
+				"missing": []string{}, "supplementary_criteria": []string{}, "criterion_assessments": fixtureVerdicts(assessments),
 			})
 			return string(response), err
 		case 6:

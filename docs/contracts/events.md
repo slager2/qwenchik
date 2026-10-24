@@ -48,6 +48,8 @@ Provider states include `healthy`, `degraded`, `blocked`, `unavailable`, `malfor
 
 `task.failed` remains authoritative for failure. Its user-facing `message`, `error_code`, `verification_summary`, and string-array `missing` explain unmet criteria. The UI displays this failure prominently even when an earlier synthesis, partial evidence, or artifact exists.
 
+`verification.completed` reports evidence readiness independently from final citation review. Its `verdict` is `PASS`, `PARTIAL`, `RESEARCH`, `UNCERTAIN`, or `BLOCK`; `missing` contains critical blockers, while `supplementary_missing` contains non-blocking criteria that were not met. The bounded `criteria` array records each criterion's step/index, critical-or-supplementary classification, met state, and task-owned evidence IDs. A `PARTIAL` readiness verdict yields a completed run with `terminal_outcome: "partial"` when a safe answer is committed; it does not mean that citation review failed.
+
 ## Provider and readiness endpoints
 
 `GET /api/providers` is read-only and performs no probes. `search.providers` contains `searxng`, `tavily`, and `duckduckgo`. Each entry separates `configured` and `enabled` from `health`, nullable `last_checked`, nullable `last_outcome`, and observed latency/retryability. `status` retains the configuration status for compatibility. `health: "not_checked"` and null observation fields mean no actual attempt has been observed. A composite placeholder with `provider_not_checked` is not an observation. Disabled providers can retain historical outcomes without becoming enabled.

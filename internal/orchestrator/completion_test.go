@@ -31,11 +31,13 @@ func TestCompletionGovernorRunsBoundedTargetedContinuation(t *testing.T) {
 		blocked              bool
 		partialModelFails    bool
 		partialModelTimesOut bool
+		supplementaryPartial bool
 	}{
 		{name: "verified", blocked: false},
 		{name: "blocked_with_evidence", blocked: true},
 		{name: "blocked_model_failure_uses_excerpt_fallback", blocked: true, partialModelFails: true},
 		{name: "blocked_partial_model_timeout_pauses_for_resources", blocked: true, partialModelTimesOut: true},
+		{name: "unmet_supplementary_criterion_yields_partial", supplementaryPartial: true},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -68,19 +70,25 @@ func TestCompletionGovernorRunsBoundedTargetedContinuation(t *testing.T) {
 				if len(input.Catalog) > 0 {
 					reviews++
 					assessments := map[string]any{}
+					supplementaryIDs := []string{}
 					for _, criterion := range input.Catalog {
 						ids := criterion.EvidenceIDs
 						if ids == nil {
 							ids = []string{}
 						}
-						assessments[criterion.ID] = map[string]any{"met": true, "evidence_ids": ids, "rationale": "The recorded operation is supported"}
+						met := true
+						if testCase.supplementaryPartial && criterion.ID == "c0" {
+							met = false
+							supplementaryIDs = append(supplementaryIDs, criterion.ID)
+						}
+						assessments[criterion.ID] = map[string]any{"met": met, "evidence_ids": ids, "rationale": "The recorded operation is supported"}
 					}
 					ready := reviews > 1 && !blocked
 					missing := []string{}
 					if !ready {
 						missing = []string{"Inspect another independent path before stopping"}
 					}
-					data, err := json.Marshal(map[string]any{"ready_to_answer": ready, "summary": "Recorded sources checked", "missing": missing, "criterion_assessments": assessments})
+					data, err := json.Marshal(map[string]any{"ready_to_answer": ready, "summary": "Recorded sources checked", "missing": missing, "supplementary_criteria": supplementaryIDs, "criterion_assessments": assessments})
 					return string(data), err
 				}
 				if strings.Contains(input.Step, "new independent targeted query") {
@@ -161,7 +169,7 @@ func TestCompletionGovernorRunsBoundedTargetedContinuation(t *testing.T) {
 			if count != 1 {
 				t.Fatalf("continuations=%d", count)
 			}
-			if blocked {
+			if blocked || testCase.supplementaryPartial {
 				task, err := f.store.GetTask(ctx, f.task.ID)
 				if err != nil || task.TerminalOutcome != "partial" || task.Status != domain.StatusCompleted {
 					t.Fatalf("partial terminal state=%#v err=%v", task, err)
@@ -188,6 +196,45 @@ func TestCompletionGovernorRunsBoundedTargetedContinuation(t *testing.T) {
 				allowed := map[string]bool{}
 				for _, item := range evidence {
 					allowed[item.ID] = true
+				}
+				if testCase.supplementaryPartial {
+					verificationEvents, err := f.store.EventsAfter(ctx, f.task.ID, 0, 1000)
+					if err != nil {
+						t.Fatal(err)
+					}
+					var latest struct {
+						Verdict              string                               `json:"verdict"`
+						Missing              []string                             `json:"missing"`
+						SupplementaryMissing []string                             `json:"supplementary_missing"`
+						Criteria             []domain.VerificationCriterionResult `json:"criteria"`
+					}
+					for _, event := range verificationEvents {
+						if event.Type == "verification.completed" {
+							if err := json.Unmarshal(event.Payload, &latest); err != nil {
+								t.Fatal(err)
+							}
+						}
+					}
+					if latest.Verdict != "PARTIAL" || len(latest.Missing) != 0 || len(latest.SupplementaryMissing) == 0 || len(latest.Criteria) == 0 {
+						t.Fatalf("partial verification event lost classification: %+v", latest)
+					}
+					foundUnmetSupplementary, foundSupportedEvidence := false, false
+					for _, criterion := range latest.Criteria {
+						if criterion.Classification == "supplementary" && !criterion.Met {
+							foundUnmetSupplementary = true
+						}
+						if criterion.Met && len(criterion.EvidenceIDs) > 0 {
+							foundSupportedEvidence = true
+						}
+						for _, evidenceID := range criterion.EvidenceIDs {
+							if !allowed[evidenceID] {
+								t.Fatalf("verification event exposed unowned evidence ID %q", evidenceID)
+							}
+						}
+					}
+					if !foundUnmetSupplementary || !foundSupportedEvidence {
+						t.Fatalf("verification event omitted supplementary gap or supporting evidence: %+v", latest.Criteria)
+					}
 				}
 				for _, match := range citationPattern.FindAllStringSubmatch(partialMessage.Content, -1) {
 					if len(match) != 2 || !allowed[match[1]] {

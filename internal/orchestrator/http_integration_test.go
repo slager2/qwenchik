@@ -290,7 +290,7 @@ func integrationResearchModel() *scriptedLLM {
 			if index == 6 {
 				return answer, nil
 			}
-			encoded, err := json.Marshal(map[string]any{"ready_to_answer": true, "summary": "Two distinct sources inspected.", "missing": []string{}, "criterion_assessments": fixtureVerdicts(assessments)})
+			encoded, err := json.Marshal(map[string]any{"ready_to_answer": true, "summary": "Two distinct sources inspected.", "missing": []string{}, "supplementary_criteria": []string{}, "criterion_assessments": fixtureVerdicts(assessments)})
 			return string(encoded), err
 		default:
 			return "", errors.New("unexpected model request")
