@@ -375,6 +375,26 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 	if getErr != nil || current.Status == domain.StatusPaused || current.Status == domain.StatusWaitingApproval || current.Status == domain.StatusCancelled || current.Status.Terminal() {
 		return
 	}
+	if errors.Is(err, errCompletionBlocked) {
+		completed, partialErr := w.completeBlockedPartial(ctx, current, err)
+		if completed && partialErr == nil {
+			w.options.Logger.Info("completion blocked; committed evidence-bounded partial answer", "task_id", task.ID)
+			return
+		}
+		if partialErr != nil {
+			reason := guard.pauseReason()
+			if reason == "" && w.options.ResourcePolicy.Enabled {
+				reason = modelResourceReason(partialErr)
+			}
+			if reason != "" {
+				if pauseErr := w.persistResourcePause(ctx, task, reason, partialErr); pauseErr != nil && !errors.Is(pauseErr, sqlite.ErrLeaseLost) && !errors.Is(pauseErr, sqlite.ErrConflict) {
+					w.options.Logger.Error("resource pause persistence failed", "task_id", task.ID, "error", pauseErr)
+				}
+				return
+			}
+			w.options.Logger.Warn("evidence-bounded partial completion failed; preserving blocked outcome", "task_id", task.ID, "error", partialErr)
+		}
+	}
 	code := "worker_error"
 	timedOut := errors.Is(ctx.Err(), context.DeadlineExceeded)
 	if timedOut {
@@ -2725,7 +2745,12 @@ func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryC
 	if correction != "" {
 		role = "finalizer_correction"
 	}
-	ctx, snapshot, pinned, err := w.roleContext(ctx, task.ID, role, goal)
+	partial, partialMode := ctx.Value(partialSynthesisContextKey{}).(partialSynthesisContext)
+	var extra []string
+	if partialMode {
+		extra = []string{"Partial completion constraints: " + partial.VerificationSummary}
+	}
+	ctx, snapshot, pinned, err := w.roleContextWithConstraints(ctx, task.ID, role, goal, extra)
 	if err != nil {
 		return "", err
 	}
@@ -2733,13 +2758,22 @@ func (w *Worker) synthesize(ctx context.Context, task domain.Task, goal, memoryC
 	citationStream, enhanced := ctx.Value(citationStreamKey{}).(*citationStreamState)
 	if enhanced {
 		_, maxClaims := citationLimits(ctx)
-		system = researchSynthesisPrompt(maxClaims)
+		if partialMode {
+			system = partialResearchSynthesisPrompt(maxClaims)
+		} else {
+			system = researchSynthesisPrompt(maxClaims)
+		}
 	}
 	schema := finalizerOutputSchema()
 	input := pinned
 	if pinned == nil {
-		inputData := map[string]any{"task": task.Title, "goal": goal, "accepted_memories_untrusted": memoryContext, "tool_results": map[string]any{}, "analysis_summary": truncateRunes(state.Summary, 500), "verification": verificationSummary, "available_evidence_ids": evidenceIDs, "correction": correction}
-		if snapshot != nil {
+		analysisSummary := truncateRunes(state.Summary, 500)
+		if partialMode {
+			verificationSummary = partial.VerificationSummary
+			analysisSummary = ""
+		}
+		inputData := map[string]any{"task": task.Title, "goal": goal, "accepted_memories_untrusted": memoryContext, "tool_results": map[string]any{}, "analysis_summary": analysisSummary, "verification": verificationSummary, "available_evidence_ids": evidenceIDs, "correction": correction}
+		if snapshot != nil && !partialMode {
 			inputData["context_snapshot"] = snapshot
 		}
 		resultsBudget := toolResultsBudget(w.options.MaxInputBytes, system, schema, inputData, "tool_results")
