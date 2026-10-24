@@ -46,6 +46,12 @@ func TestSourceFailureSanitizerUsesTypedAllowlist(t *testing.T) {
 	}
 }
 
+func TestPDFFallbackAvailabilityRespectsWindowsCapability(t *testing.T) {
+	if pdfFallbackAvailable(false, "linux") || pdfFallbackAvailable(true, "windows") || !pdfFallbackAvailable(true, "linux") {
+		t.Fatal("PDF fallback status does not match configured policy and platform capability")
+	}
+}
+
 func TestPDFFailureProjectionAndReplayPreserveIdentityBytesAndEvidence(t *testing.T) {
 	ctx := context.Background()
 	s, store := newTestServer(t)

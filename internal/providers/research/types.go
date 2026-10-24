@@ -74,8 +74,9 @@ type DiagnosticSearchProvider interface {
 }
 
 type FetchOptions struct {
-	MaxBytes int64
-	TaskID   string
+	MaxBytes     int64
+	TaskID       string
+	PDFPreflight func(context.Context) error
 }
 
 type FetchFailure struct {

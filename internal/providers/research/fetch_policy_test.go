@@ -129,15 +129,21 @@ func TestPDFHeaderRejectNoReadNoFileAndPrimarySourceCode(t *testing.T) {
 func TestPDFMagicAndTaskRemaining(t *testing.T) {
 	for _, test := range []struct {
 		name, mime, body, code string
-		remaining              int64
+		remaining, pdfCap      int64
 	}{
-		{"wrong MIME PDF", "text/plain", "%PDF-" + strings.Repeat("x", 100), "", 0},
-		{"unknown MIME PDF", "application/octet-stream", "%PDF-" + strings.Repeat("x", 100), "", 0},
-		{"fake PDF", "application/pdf", "<html>not a pdf</html>", "pdf_malformed", 0},
-		{"remaining PDF", "application/pdf", "%PDF-" + strings.Repeat("x", 100), "task_fetch_budget_exceeded", 32},
+		{"wrong MIME PDF", "text/plain", "%PDF-" + strings.Repeat("x", 100), "", 0, 0},
+		{"unknown MIME PDF", "application/octet-stream", "%PDF-" + strings.Repeat("x", 100), "", 0, 0},
+		{"header after leading bytes", "text/plain", strings.Repeat("x", 513) + "%PDF-" + strings.Repeat("x", 100), "", 0, 0},
+		{"header at the last allowed offset", "application/octet-stream", strings.Repeat("x", 1023) + "%PDF-", "", 0, 2048},
+		{"header beyond accepted window", "application/pdf", strings.Repeat("x", 1024) + "%PDF-", "pdf_malformed", 0, 2048},
+		{"fake PDF", "application/pdf", "<html>not a pdf</html>", "pdf_malformed", 0, 0},
+		{"remaining PDF", "application/pdf", "%PDF-" + strings.Repeat("x", 100), "task_fetch_budget_exceeded", 32, 0},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			p := smallFetchPolicy(t)
+			if test.pdfCap > 0 {
+				p.PDFBytes = test.pdfCap
+			}
 			f := policyFetcher(t, p, strings.NewReader(test.body), test.mime, -1)
 			d, err := f.Fetch(context.Background(), "https://8.8.8.8/doc", FetchOptions{MaxBytes: test.remaining})
 			defer d.Cleanup()
@@ -151,6 +157,50 @@ func TestPDFMagicAndTaskRemaining(t *testing.T) {
 					t.Fatalf("failure: %#v %v", failure, err)
 				}
 			}
+		})
+	}
+}
+
+func TestPDFCapabilityPreflightStopsBeforeBodyDownload(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		mime     string
+		body     []byte
+		wantRead int
+		pdfCap   int64
+	}{
+		{name: "PDF media type", mime: "application/pdf", body: []byte("unused")},
+		{name: "sniffed PDF signature", mime: "application/octet-stream", body: []byte(strings.Repeat("x", 1023) + "%PDF-" + strings.Repeat("x", 200)), wantRead: 1028, pdfCap: 2048},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			p := smallFetchPolicy(t)
+			if test.pdfCap > 0 {
+				p.PDFBytes = test.pdfCap
+			}
+			readBytes, preflightCalls := 0, 0
+			reader := bodyReaderFunc(func(buffer []byte) (int, error) {
+				if test.name == "PDF media type" {
+					t.Fatal("PDF body read before capability preflight")
+				}
+				if readBytes >= len(test.body) {
+					return 0, io.EOF
+				}
+				n := copy(buffer, test.body[readBytes:])
+				readBytes += n
+				return n, nil
+			})
+			fetcher := policyFetcher(t, p, reader, test.mime, -1)
+			_, err := fetcher.Fetch(context.Background(), "https://8.8.8.8/download", FetchOptions{
+				PDFPreflight: func(context.Context) error {
+					preflightCalls++
+					return ErrPDFExtractorUnavailable
+				},
+			})
+			var failure *FetchFailure
+			if !errors.As(err, &failure) || failure.Code != "pdf_extractor_unavailable" || failure.Phase != "preflight" || failure.FetchedBytes != int64(test.wantRead) || readBytes != test.wantRead || preflightCalls != 1 {
+				t.Fatalf("preflight failure=%#v err=%v read=%d preflight=%d", failure, err, readBytes, preflightCalls)
+			}
+			assertNoFetchTemps(t, p.TempRoot)
 		})
 	}
 }

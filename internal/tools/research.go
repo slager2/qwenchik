@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
+	"path"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -23,6 +25,12 @@ type ResearchRepository interface {
 	SaveArtifact(context.Context, domain.Artifact, string) (domain.Artifact, error)
 	SaveEvidence(context.Context, domain.Evidence) (domain.Evidence, error)
 }
+
+type fetchPreflightError struct{ failure *research.FetchFailure }
+
+func (e fetchPreflightError) Error() string                      { return e.failure.Error() }
+func (e fetchPreflightError) Unwrap() error                      { return e.failure }
+func (e fetchPreflightError) OperationalValidationFailure() bool { return true }
 
 type ResearchTools struct {
 	SearchProvider research.SearchProvider
@@ -179,7 +187,25 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			if registry.urlLedger.WasFetched(taskID, args.URL) {
 				return ErrDuplicateResearchTarget
 			}
-			return runtime.Fetcher.ValidateURL(ctx, args.URL)
+			if err := runtime.Fetcher.ValidateURL(ctx, args.URL); err != nil {
+				return err
+			}
+			if isPDFURL(args.URL) {
+				if checker, ok := runtime.Extractor.(interface {
+					PreflightPDF(context.Context) error
+				}); ok {
+					if err := checker.PreflightPDF(ctx); err != nil {
+						if ctx.Err() != nil {
+							return ctx.Err()
+						}
+						if errors.Is(err, research.ErrPDFExtractorUnavailable) {
+							return fetchPreflightError{failure: &research.FetchFailure{Err: err, Code: "pdf_extractor_unavailable", Phase: "preflight"}}
+						}
+						return err
+					}
+				}
+			}
+			return nil
 		}, func(ctx context.Context, raw json.RawMessage) (any, error) {
 			var args fetchArgs
 			if err := decodeToolArgs(raw, &args); err != nil {
@@ -199,7 +225,15 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			if taskLimit := FetchByteLimit(ctx, fetchLimit); taskLimit > 0 && taskLimit < fetchLimit {
 				fetchLimit = taskLimit
 			}
-			fetched, err := runtime.Fetcher.Fetch(ctx, args.URL, research.FetchOptions{MaxBytes: fetchLimit, TaskID: taskID})
+			fetchOptions := research.FetchOptions{MaxBytes: fetchLimit, TaskID: taskID}
+			if !isPDFURL(args.URL) {
+				if checker, ok := runtime.Extractor.(interface {
+					PreflightPDF(context.Context) error
+				}); ok {
+					fetchOptions.PDFPreflight = checker.PreflightPDF
+				}
+			}
+			fetched, err := runtime.Fetcher.Fetch(ctx, args.URL, fetchOptions)
 			defer fetched.Cleanup()
 			if err != nil {
 				return nil, err
@@ -284,6 +318,11 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 		}
 	}
 	return nil
+}
+
+func isPDFURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	return err == nil && strings.EqualFold(path.Ext(parsed.Path), ".pdf")
 }
 
 func extractionFailure(ctx context.Context, fetched research.FetchedDocument, err error) error {

@@ -20,6 +20,9 @@ func TestWindowsPDFExtractionFailsClosedWithoutDockerOrPureGoFallback(t *testing
 	if err := extractor.Check(context.Background()); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("Check error = %v, want ErrUnavailable", err)
 	}
+	if extractor.FallbackAvailable() {
+		t.Fatal("Windows reported the pure-Go fallback as available")
+	}
 	if _, err := extractor.Extract(context.Background(), []byte("not a PDF")); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("Extract error = %v, want ErrUnavailable", err)
 	}

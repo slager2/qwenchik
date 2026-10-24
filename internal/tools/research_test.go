@@ -164,6 +164,63 @@ func (e pdfExtractorStub) Extract(context.Context, []byte) (pdfextract.Result, e
 	return e.result, e.err
 }
 
+type pdfPreflightExtractorStub struct {
+	preflightErr   error
+	preflightCalls int
+	extractCalls   int
+}
+
+func (e *pdfPreflightExtractorStub) PreflightPDF(context.Context) error {
+	e.preflightCalls++
+	return e.preflightErr
+}
+
+func (e *pdfPreflightExtractorStub) Extract(context.Context, research.FetchedDocument) (research.ExtractedDocument, error) {
+	e.extractCalls++
+	return research.ExtractedDocument{Text: "Fetched HTML source text.", Method: "test_html", Taint: research.TaintExternal}, nil
+}
+
+func TestPDFPreflightRejectsUnavailableExtractorBeforeDownload(t *testing.T) {
+	artifactStore, err := artifacts.New(filepath.Join(t.TempDir(), "artifacts"), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetcher := &fileFetchStub{doc: research.FetchedDocument{
+		Provider: "direct_http", OriginalURL: "https://docs.example.com/report.pdf", FinalURL: "https://docs.example.com/report.pdf",
+		ContentType: "application/pdf", ContentSHA256: "pdf-hash", Body: []byte("%PDF-1.7"),
+	}}
+	extractor := &pdfPreflightExtractorStub{preflightErr: errors.Join(research.ErrPDFExtractorUnavailable, pdfextract.ErrUnavailable)}
+	registry := NewRegistry()
+	if err := RegisterResearchTools(registry, ResearchTools{
+		Fetcher: fetcher, Extractor: extractor, Artifacts: artifactStore, Repository: &fileResearchRepo{},
+		MaxFetchBytes: 1 << 20, PDFPolicy: pdfextract.DefaultPolicy(), FetchPolicy: research.DefaultFetchPolicy(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	taskID := "pdf-preflight"
+	pdfURL := "https://docs.example.com/report.pdf"
+	registry.urlLedger.Add(taskID, pdfURL)
+	ctx := WithTaskID(context.Background(), taskID)
+	_, err = registry.Execute(ctx, "researcher", "fetch_url", json.RawMessage(`{"url":"https://docs.example.com/report.pdf","original_query":"protocol specification"}`))
+	var failure *research.FetchFailure
+	if !errors.As(err, &failure) || failure.Code != "pdf_extractor_unavailable" || fetcher.calls != 0 || extractor.extractCalls != 0 || extractor.preflightCalls != 1 {
+		t.Fatalf("PDF preflight: failure=%#v err=%v fetchCalls=%d extractCalls=%d preflightCalls=%d", failure, err, fetcher.calls, extractor.extractCalls, extractor.preflightCalls)
+	}
+
+	htmlURL := "https://docs.example.com/page.html"
+	registry.urlLedger.Add(taskID, htmlURL)
+	fetcher.doc = research.FetchedDocument{
+		Provider: "direct_http", OriginalURL: htmlURL, FinalURL: htmlURL, ContentType: "text/html",
+		ContentSHA256: "html-hash", Body: []byte("<html>page</html>"),
+	}
+	if _, err := registry.Execute(ctx, "researcher", "fetch_url", json.RawMessage(`{"url":"https://docs.example.com/page.html","original_query":"protocol specification"}`)); err != nil {
+		t.Fatalf("HTML fetch was blocked by PDF preflight: %v", err)
+	}
+	if fetcher.calls != 1 || extractor.extractCalls != 1 || extractor.preflightCalls != 1 {
+		t.Fatalf("HTML fetch counters: fetch=%d extract=%d preflight=%d", fetcher.calls, extractor.extractCalls, extractor.preflightCalls)
+	}
+}
+
 func TestResearchToolsRequireKnownURLAndPersistEvidence(t *testing.T) {
 	ctx := context.Background()
 	store, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "research.db"))

@@ -53,6 +53,7 @@ func TestPureGoParserRejectsEncryptedPDF(t *testing.T) {
 }
 
 func TestUnavailableDockerFallsBackToBoundedPureGoWorker(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	t.Setenv("DOCKER_CONTEXT", "")
 	t.Setenv("DOCKER_HOST", "")
 	runner := newFakeRunner()
@@ -73,6 +74,7 @@ func TestUnavailableDockerFallsBackToBoundedPureGoWorker(t *testing.T) {
 }
 
 func TestPureGoFallbackWorksWithoutConfiguredDockerImage(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	result := newOptInExtractor(t, "", newFakeRunner())
 	extracted, err := result.Extract(context.Background(), testPDF(1, "offline text"))
 	if err != nil {
@@ -98,6 +100,7 @@ func TestPureGoWorkerDoesNotInheritApplicationSecrets(t *testing.T) {
 }
 
 func TestRootfulDockerFallsBackToPureGoParser(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	t.Setenv("DOCKER_CONTEXT", "")
 	t.Setenv("DOCKER_HOST", "")
 	runner := newFakeRunner()

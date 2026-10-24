@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"mime"
 	"os"
+	"runtime"
 	"strings"
 	"unicode/utf8"
 
@@ -37,6 +39,10 @@ type FilePDFExtractor interface {
 	ExtractFile(context.Context, *os.File) (pdfextract.Result, error)
 }
 
+type PDFExtractorChecker interface {
+	Check(context.Context) error
+}
+
 func NewHTMLExtractor(maxChars int) *HTMLExtractor {
 	pdfExtractor, _ := pdfextract.New("", nil)
 	return NewHTMLExtractorWithPDF(maxChars, pdfExtractor)
@@ -57,9 +63,37 @@ func NewHTMLExtractorWithPDFPolicy(maxChars int, pdfExtractor IsolatedPDFExtract
 	return &HTMLExtractor{maxChars: maxChars, pdfExtractor: pdfExtractor, pdfPolicy: policy}, nil
 }
 
+func (e *HTMLExtractor) PreflightPDF(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if e == nil || e.pdfExtractor == nil || runtime.GOOS == "windows" {
+		return errors.Join(ErrPDFExtractorUnavailable, pdfextract.ErrUnavailable)
+	}
+	checker, ok := e.pdfExtractor.(PDFExtractorChecker)
+	if !ok {
+		return nil
+	}
+	if err := checker.Check(ctx); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if errors.Is(err, pdfextract.ErrUnavailable) && e.pdfPolicy.AllowUnsandboxedFallback {
+			if fallback, ok := e.pdfExtractor.(interface{ FallbackAvailable() bool }); ok && fallback.FallbackAvailable() {
+				return nil
+			}
+		}
+		return errors.Join(ErrPDFExtractorUnavailable, err)
+	}
+	return nil
+}
+
 func (e *HTMLExtractor) Extract(ctx context.Context, document FetchedDocument) (ExtractedDocument, error) {
 	if err := ctx.Err(); err != nil {
 		return ExtractedDocument{}, err
+	}
+	if mediaType, _, err := mime.ParseMediaType(document.ContentType); err == nil {
+		document.ContentType = strings.ToLower(mediaType)
 	}
 	switch document.ContentType {
 	case "application/pdf":
@@ -83,12 +117,24 @@ func (e *HTMLExtractor) Extract(ctx context.Context, document FetchedDocument) (
 			if !ok {
 				return ExtractedDocument{}, errors.Join(ErrPDFExtractorUnavailable, pdfextract.ErrUnavailable)
 			}
-			result, err = delegate.ExtractFile(ctx, document.File)
+			if policyAware, ok := e.pdfExtractor.(interface {
+				ExtractFileWithFallback(context.Context, *os.File, bool) (pdfextract.Result, error)
+			}); ok {
+				result, err = policyAware.ExtractFileWithFallback(ctx, document.File, e.pdfPolicy.AllowUnsandboxedFallback)
+			} else {
+				result, err = delegate.ExtractFile(ctx, document.File)
+			}
 		} else {
 			if int64(len(document.Body)) > e.pdfPolicy.MaxInputBytes {
 				return ExtractedDocument{}, errors.Join(ErrPDFTooLarge, pdfextract.ErrInputTooLarge)
 			}
-			result, err = e.pdfExtractor.Extract(ctx, document.Body)
+			if policyAware, ok := e.pdfExtractor.(interface {
+				ExtractWithFallback(context.Context, []byte, bool) (pdfextract.Result, error)
+			}); ok {
+				result, err = policyAware.ExtractWithFallback(ctx, document.Body, e.pdfPolicy.AllowUnsandboxedFallback)
+			} else {
+				result, err = e.pdfExtractor.Extract(ctx, document.Body)
+			}
 		}
 		if errors.Is(err, pdfextract.ErrUnavailable) {
 			return ExtractedDocument{}, errors.Join(ErrPDFExtractorUnavailable, err)

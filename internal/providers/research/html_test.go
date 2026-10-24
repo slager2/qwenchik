@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -28,7 +29,100 @@ func TestHTMLExtractorRemovesExecutableAndNavigationContent(t *testing.T) {
 	}
 }
 
+func TestHTMLExtractorNormalizesContentTypeParametersAndCase(t *testing.T) {
+	for _, contentType := range []string{"text/html; charset=utf-8", "TEXT/HTML; charset=UTF-8"} {
+		extracted, err := NewHTMLExtractor(1000).Extract(context.Background(), FetchedDocument{
+			ContentType: contentType, Body: []byte(`<html><head><title>Normalized MIME</title></head><body><main>Useful source text.</main></body></html>`),
+		})
+		if err != nil || extracted.Title != "Normalized MIME" || !strings.Contains(extracted.Text, "Useful source text") {
+			t.Fatalf("content type %q: extracted=%#v err=%v", contentType, extracted, err)
+		}
+	}
+}
+
+func TestHTMLPDFPreflightHonorsFallbackPolicyAndWindowsCapability(t *testing.T) {
+	policy := pdfextract.DefaultPolicy()
+	delegate, err := pdfextract.NewWithPolicy("", nil, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	extractor, err := NewHTMLExtractorWithPDFPolicy(1000, delegate, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := extractor.PreflightPDF(context.Background()); !errors.Is(err, ErrPDFExtractorUnavailable) {
+		t.Fatalf("disabled fallback preflight = %v, want unavailable", err)
+	}
+	policy.AllowUnsandboxedFallback = true
+	delegate, err = pdfextract.NewWithPolicy("", nil, pdfextract.DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	extractor, err = NewHTMLExtractorWithPDFPolicy(1000, delegate, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := extractor.PreflightPDF(context.Background()); !errors.Is(err, ErrPDFExtractorUnavailable) {
+		t.Fatalf("preflight trusted a mismatched HTML policy: %v", err)
+	}
+	delegate, err = pdfextract.NewWithPolicy("", nil, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	extractor, err = NewHTMLExtractorWithPDFPolicy(1000, delegate, pdfextract.DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := extractor.PreflightPDF(context.Background()); !errors.Is(err, ErrPDFExtractorUnavailable) {
+		t.Fatalf("preflight used delegate fallback forbidden by HTML policy: %v", err)
+	}
+	delegate, err = pdfextract.NewWithPolicy("", nil, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	extractor, err = NewHTMLExtractorWithPDFPolicy(1000, delegate, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = extractor.PreflightPDF(context.Background())
+	if runtime.GOOS == "windows" {
+		if !errors.Is(err, ErrPDFExtractorUnavailable) {
+			t.Fatalf("Windows fallback preflight = %v, want unavailable", err)
+		}
+	} else if err != nil {
+		t.Fatalf("permitted pure-Go fallback preflight = %v", err)
+	}
+}
+
+func TestHTMLExtractorEnforcesFallbackPolicyDuringFileExtraction(t *testing.T) {
+	delegatePolicy := pdfextract.DefaultPolicy()
+	delegatePolicy.AllowUnsandboxedFallback = true
+	delegate, err := pdfextract.NewWithPolicy("", nil, delegatePolicy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	htmlExtractor, err := NewHTMLExtractorWithPDFPolicy(1000, delegate, pdfextract.DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.CreateTemp(t.TempDir(), "mismatched-policy-*.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if _, err := file.Write(minimalPDFDocument("fallback must remain disabled")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := htmlExtractor.Extract(context.Background(), FetchedDocument{ContentType: "application/pdf", File: file})
+	if !errors.Is(err, ErrPDFExtractorUnavailable) || result.Text != "" {
+		t.Fatalf("delegate policy bypassed HTML policy: result=%#v err=%v", result, err)
+	}
+}
+
 func TestHTMLExtractorUsesPureGoFallbackWithoutDockerImage(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PDF extraction is intentionally unavailable on Windows")
+	}
 	t.Setenv("DOCKER_HOST", "tcp://unavailable.example:2376")
 	policy := pdfextract.DefaultPolicy()
 	policy.AllowUnsandboxedFallback = true

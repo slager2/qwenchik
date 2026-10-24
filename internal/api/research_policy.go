@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	goruntime "runtime"
 	"time"
 )
 
@@ -36,20 +37,27 @@ func (s *Server) researchPolicyStatus(ctx context.Context) (map[string]any, map[
 	}
 	check := s.pdfCheck
 	s.healthMu.RUnlock()
+	isWindows := goruntime.GOOS == "windows"
 	available := false
-	if check != nil {
+	if check != nil && !isWindows {
 		checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		available = check(checkCtx) == nil
 		cancel()
 	}
-	fallback := policy["pdf_allow_unsandboxed_fallback"] == true
-	runtime := map[string]any{"isolated_available": available, "isolated_status": "unavailable", "fallback_allowed": fallback}
+	fallback := pdfFallbackAvailable(policy["pdf_allow_unsandboxed_fallback"] == true, goruntime.GOOS)
+	runtimeStatus := map[string]any{"isolated_available": available, "isolated_status": "unavailable", "fallback_allowed": fallback}
 	readiness := map[string]string{"status": "warning", "message": "Isolated PDF runtime is unavailable; unsandboxed fallback is disabled"}
-	if available {
-		runtime["isolated_status"] = "available"
+	if isWindows {
+		readiness["message"] = "PDF extraction is unsupported on Windows; neither isolated execution nor the pure-Go fallback is available"
+	} else if available {
+		runtimeStatus["isolated_status"] = "available"
 		readiness = map[string]string{"status": "ok", "message": "Local isolated PDF runtime is available; document extraction has not been tested by doctor"}
 	} else if fallback {
 		readiness["message"] = "Isolated PDF runtime is unavailable; policy permits a process-bounded fallback without OS sandbox isolation"
 	}
-	return policy, runtime, readiness
+	return policy, runtimeStatus, readiness
+}
+
+func pdfFallbackAvailable(policyAllows bool, goos string) bool {
+	return policyAllows && goos != "windows"
 }

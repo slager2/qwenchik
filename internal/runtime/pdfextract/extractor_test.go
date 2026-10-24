@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -105,7 +106,15 @@ func newFakeExtractor(t *testing.T, runner Runner) *Extractor {
 	return extractor
 }
 
+func requirePDFExecutionPlatform(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the PDF execution runtime and pure-Go fallback are intentionally unavailable on Windows")
+	}
+}
+
 func TestExtractUsesFixedRootlessLocalContainerAndReturnsCompleteOutput(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	runner := newFakeRunner()
@@ -150,6 +159,7 @@ func TestExtractUsesFixedRootlessLocalContainerAndReturnsCompleteOutput(t *testi
 }
 
 func TestExtractSharesOnePolicyDeadlineAcrossContainerWork(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	runner := newFakeRunner()
@@ -178,6 +188,7 @@ func TestExtractSharesOnePolicyDeadlineAcrossContainerWork(t *testing.T) {
 }
 
 func TestOutputFailureIsBoundedAndCleansContainer(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	runner := newFakeRunner()
@@ -192,6 +203,7 @@ func TestOutputFailureIsBoundedAndCleansContainer(t *testing.T) {
 }
 
 func TestStderrFailureIsBoundedAndCleansContainer(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	runner := newFakeRunner()
@@ -206,6 +218,7 @@ func TestStderrFailureIsBoundedAndCleansContainer(t *testing.T) {
 }
 
 func TestExtractRejectsOversizedTextWithoutReturningPartialResult(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	runner := newFakeRunner()
@@ -220,6 +233,7 @@ func TestExtractRejectsOversizedTextWithoutReturningPartialResult(t *testing.T) 
 }
 
 func TestExtractRejectsPageCountAndMalformedOutput(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	for _, test := range []struct {
 		name   string
 		output string
@@ -246,6 +260,7 @@ func TestExtractRejectsPageCountAndMalformedOutput(t *testing.T) {
 }
 
 func TestExtractFailsClosedWithoutRootlessLocalDockerOrImage(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	t.Run("no configured image", func(t *testing.T) {
 		extractor, err := New("", newFakeRunner())
 		if err != nil {
@@ -305,6 +320,7 @@ func TestExtractFailsClosedWithoutRootlessLocalDockerOrImage(t *testing.T) {
 }
 
 func TestExtractRejectsInputAbovePolicyBeforeDocker(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	runner := newFakeRunner()
 	input := make([]byte, MaxInputBytes+1)
 	_, err := newFakeExtractor(t, runner).Extract(context.Background(), input)

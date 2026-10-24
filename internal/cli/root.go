@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	goruntime "runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -944,17 +945,21 @@ func doctor(ctx context.Context, cfg config.Config) doctorReport {
 	} else {
 		checks["sandbox"] = doctorCheck{Status: "warning", Message: status.Message}
 	}
-	pdfRuntime := map[string]any{"isolated_available": false, "isolated_status": "unavailable", "fallback_allowed": cfg.PDFPolicy.AllowUnsandboxedFallback}
+	pdfRuntime := map[string]any{"isolated_available": false, "isolated_status": "unavailable", "fallback_allowed": false}
 	pdfExtractor, pdfErr := pdfextract.NewWithPolicy(cfg.PDFExtractorImage, nil, cfg.PDFPolicy)
 	if pdfErr != nil {
 		checks["pdf_extractor"] = doctorCheck{Status: "error", Message: "PDF extractor image reference is invalid"}
 	} else {
+		fallbackAvailable := pdfExtractor.FallbackAvailable()
+		pdfRuntime["fallback_allowed"] = fallbackAvailable
 		pdfCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		err := pdfExtractor.Check(pdfCtx)
 		cancel()
 		if err != nil {
 			message := "isolated PDF extractor is unavailable; unsandboxed fallback is disabled by policy; PDF sources will be skipped"
-			if cfg.PDFPolicy.AllowUnsandboxedFallback {
+			if goruntime.GOOS == "windows" {
+				message = "PDF extraction is unsupported on Windows; neither isolated execution nor the pure-Go fallback is available"
+			} else if fallbackAvailable {
 				message = "isolated PDF extractor is unavailable; explicitly allowed pure-Go fallback has only a soft memory target, not OS isolation"
 			}
 			checks["pdf_extractor"] = doctorCheck{Status: "warning", Message: message}

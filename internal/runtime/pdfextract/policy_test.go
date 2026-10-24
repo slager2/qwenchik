@@ -55,6 +55,7 @@ func inputFile(t *testing.T, value []byte) *os.File {
 }
 
 func TestExtractFilePolicyBoundsOffsetOwnershipAndPermissions(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	p := DefaultPolicy()
@@ -97,6 +98,7 @@ func TestExtractFilePolicyBoundsOffsetOwnershipAndPermissions(t *testing.T) {
 }
 
 func TestCustomPolicyRemovesLegacyPageTextAndResourceCaps(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	p := DefaultPolicy()
@@ -138,6 +140,7 @@ func TestCustomPolicyRemovesLegacyPageTextAndResourceCaps(t *testing.T) {
 }
 
 func TestFileTimeoutAndParentCancellationAreDistinct(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	p := DefaultPolicy()
@@ -171,6 +174,7 @@ func TestFileTimeoutAndParentCancellationAreDistinct(t *testing.T) {
 }
 
 func TestDockerTempQuotaRejectsInputWithoutLeakingResult(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	p := DefaultPolicy()
@@ -187,6 +191,7 @@ func TestDockerTempQuotaRejectsInputWithoutLeakingResult(t *testing.T) {
 }
 
 func TestPureGoFileWorkerReceivesCustomPolicy(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	p := DefaultPolicy()
 	p.AllowUnsandboxedFallback = true
 	p.MaxPages, p.MaxTextRunes = 25, 100
@@ -215,6 +220,7 @@ func TestPureGoFileWorkerReceivesCustomPolicy(t *testing.T) {
 }
 
 func TestByteStagingUsesPrivatePermissions(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	dir, path, err := stageInput([]byte("test"))
 	if err != nil {
 		t.Fatal(err)
@@ -243,6 +249,7 @@ func (r *countingInputRunner) RunInput(ctx context.Context, name string, args []
 }
 
 func TestLargeFileTransportAndExactInputBoundary(t *testing.T) {
+	requirePDFExecutionPlatform(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	for _, size := range []int64{40_534_667, 64 << 20} {

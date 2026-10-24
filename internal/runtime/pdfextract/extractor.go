@@ -121,7 +121,15 @@ func (e *Extractor) Check(ctx context.Context) error {
 	return nil
 }
 
+func (e *Extractor) FallbackAvailable() bool {
+	return e != nil && runtime.GOOS != "windows" && e.policy.AllowUnsandboxedFallback
+}
+
 func (e *Extractor) Extract(ctx context.Context, document []byte) (Result, error) {
+	return e.ExtractWithFallback(ctx, document, true)
+}
+
+func (e *Extractor) ExtractWithFallback(ctx context.Context, document []byte, allowFallback bool) (Result, error) {
 	if e == nil {
 		return Result{}, ErrUnavailable
 	}
@@ -146,10 +154,14 @@ func (e *Extractor) Extract(ctx context.Context, document []byte) (Result, error
 		return Result{}, err
 	}
 	defer file.Close()
-	return e.extractFile(ctx, runCtx, file)
+	return e.extractFile(ctx, runCtx, file, allowFallback)
 }
 
 func (e *Extractor) ExtractFile(ctx context.Context, file *os.File) (Result, error) {
+	return e.ExtractFileWithFallback(ctx, file, true)
+}
+
+func (e *Extractor) ExtractFileWithFallback(ctx context.Context, file *os.File, allowFallback bool) (Result, error) {
 	if e == nil {
 		return Result{}, ErrUnavailable
 	}
@@ -158,10 +170,10 @@ func (e *Extractor) ExtractFile(ctx context.Context, file *os.File) (Result, err
 	}
 	runCtx, cancel := context.WithTimeout(ctx, e.policy.ExtractionTimeout)
 	defer cancel()
-	return e.extractFile(ctx, runCtx, file)
+	return e.extractFile(ctx, runCtx, file, allowFallback)
 }
 
-func (e *Extractor) extractFile(parent, ctx context.Context, file *os.File) (Result, error) {
+func (e *Extractor) extractFile(parent, ctx context.Context, file *os.File, allowFallback bool) (Result, error) {
 	if runtime.GOOS == "windows" {
 		return Result{}, ErrUnavailable
 	}
@@ -190,7 +202,7 @@ func (e *Extractor) extractFile(parent, ctx context.Context, file *os.File) (Res
 	if err == nil {
 		result, err = e.extractDocker(ctx, file, info.Size())
 	}
-	if errors.Is(err, ErrUnavailable) && e.policy.AllowUnsandboxedFallback && ctx.Err() == nil {
+	if errors.Is(err, ErrUnavailable) && allowFallback && e.policy.AllowUnsandboxedFallback && ctx.Err() == nil {
 		result, err = extractPureGoFile(ctx, file, info.Size(), e.policy)
 	}
 	if parent.Err() != nil {

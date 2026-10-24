@@ -273,11 +273,34 @@ func (f *SafeFetcher) Fetch(ctx context.Context, rawURL string, options FetchOpt
 		}
 		return FetchedDocument{}, &FetchFailure{Err: cause, Code: code, Phase: "fetch", DeclaredBytes: declared, EffectiveLimitBytes: limit, FetchedBytes: consumed, MIMEType: mediaType, LimitKind: kind}
 	}
+	pdfPreflightDone := false
+	checkPDFPreflight := func() error {
+		if pdfPreflightDone || options.PDFPreflight == nil {
+			return nil
+		}
+		pdfPreflightDone = true
+		if err := options.PDFPreflight(ctx); err != nil {
+			if parent.Err() != nil {
+				return parent.Err()
+			}
+			if ctx.Err() != nil {
+				_, failureErr := failure(ctx.Err(), "fetch_timeout")
+				return failureErr
+			}
+			return &FetchFailure{Err: err, Code: "pdf_extractor_unavailable", Phase: "preflight", DeclaredBytes: declared, EffectiveLimitBytes: limit, FetchedBytes: consumed, MIMEType: mediaType, LimitKind: "pdf"}
+		}
+		return nil
+	}
 	if comparableLength && declared != nil && *declared > limit && mediaType == "application/pdf" {
 		return failure(ErrResponseTooBig, "")
 	}
 	if comparableLength && declared != nil && *declared > limitFor(max(f.policy.PDFBytes, f.policy.SourceFetchBytes)) {
 		return failure(ErrResponseTooBig, "")
+	}
+	if mediaType == "application/pdf" {
+		if err := checkPDFPreflight(); err != nil {
+			return FetchedDocument{}, err
+		}
 	}
 	var reader io.Reader = response.Body
 	if encoding == "gzip" {
@@ -291,11 +314,18 @@ func (f *SafeFetcher) Fetch(ctx context.Context, rawURL string, options FetchOpt
 		return failure(ErrUnsupportedMIME, "unsupported_content")
 	}
 	reader = &fetchCountingReader{reader: reader, count: &consumed}
-	preview, err := io.ReadAll(io.LimitReader(&fetchContextReader{ctx: ctx, reader: reader}, min(int64(512), limitFor(min(f.policy.SourceFetchBytes, f.policy.PDFBytes))+1)))
+	// A PDF header may be preceded by bytes within the first 1024 bytes. Count
+	// that bounded sniff against the task allowance, then apply the MIME-specific
+	// source/PDF cap before retaining or spooling the response.
+	const pdfHeaderWindow = 1024
+	pdfHeader := []byte("%PDF-")
+	previewLimit := min(int64(pdfHeaderWindow+len(pdfHeader)-1), limitFor(max(f.policy.SourceFetchBytes, f.policy.PDFBytes))+1)
+	preview, err := io.ReadAll(io.LimitReader(&fetchContextReader{ctx: ctx, reader: reader}, previewLimit))
 	if err != nil {
 		return failure(err, "source_unavailable")
 	}
-	isPDF := bytes.HasPrefix(preview, []byte("%PDF-"))
+	pdfHeaderOffset := bytes.Index(preview, pdfHeader)
+	isPDF := pdfHeaderOffset >= 0 && pdfHeaderOffset < pdfHeaderWindow
 	if isPDF {
 		if mediaType != "application/pdf" {
 			sourceTimer.Stop()
@@ -308,6 +338,9 @@ func (f *SafeFetcher) Fetch(ctx context.Context, rawURL string, options FetchOpt
 		}
 		mediaType = "application/pdf"
 	} else if mediaType == "application/pdf" {
+		if consumed > limit {
+			return failure(ErrResponseTooBig, "")
+		}
 		return failure(ErrUnsupportedMIME, "pdf_malformed")
 	} else if parseErr != nil || mediaType == "" {
 		mediaType, _, _ = mime.ParseMediaType(http.DetectContentType(preview))
@@ -316,6 +349,11 @@ func (f *SafeFetcher) Fetch(ctx context.Context, rawURL string, options FetchOpt
 	limit = limitFor(policyCap)
 	if consumed > limit || comparableLength && declared != nil && *declared > limit {
 		return failure(ErrResponseTooBig, "")
+	}
+	if isPDF {
+		if err := checkPDFPreflight(); err != nil {
+			return FetchedDocument{}, err
+		}
 	}
 	if !allowedMIME(mediaType) {
 		return failure(ErrUnsupportedMIME, "unsupported_content")
