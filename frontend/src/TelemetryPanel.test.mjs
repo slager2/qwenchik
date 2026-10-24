@@ -71,6 +71,13 @@ test('hashes show first six and last four characters with accessible full clipbo
   assert.match(html, /Сжатия контекста/)
 })
 
+test('partial readiness verdict has a localized label', () => {
+  const html = render({ verdict: 'PARTIAL' })
+  assert.match(html, /Готовность evidence/)
+  assert.match(html, /Частичный результат/)
+  assert.doesNotMatch(html, /Статус неизвестен/)
+})
+
 test('guard warnings stay visible above disclosure and respect showWarnings', () => {
   const runtime = { pause_reason: 'resource_guard', resource_reason: 'low_ram', runtime_warnings: ['Memory below threshold'], runtime: { enabled: true, keep_awake: true, sleep: { active: false }, resources: { warnings: ['obsolete warning'] } } }
   const html = render(runtime)

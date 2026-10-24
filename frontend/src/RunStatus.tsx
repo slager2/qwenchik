@@ -2,7 +2,7 @@ import type { Run, RunRuntime } from './types'
 
 const outcomes: Record<string, string> = { completed: 'Завершено', partial: 'Частичный результат', blocked: 'Заблокировано проверкой', budget_exhausted: 'Бюджет исчерпан', failed: 'Ошибка запуска', cancelled: 'Отменено' }
 const reasons: Record<string, string> = { low_ram: 'Недостаточно свободной RAM', low_vram: 'Недостаточно свободной VRAM', high_rss: 'Превышен лимит памяти процесса', gpu_temperature: 'Высокая температура GPU', llama_unhealthy: 'Локальная модель недоступна', model_oom: 'Модели не хватило памяти', model_timeout: 'Превышено время ожидания модели', llama_timeout: 'Превышено время ожидания модели', recovery_required: 'Нужно проверить неизвестный исход вызова', manual: 'Пауза пользователя' }
-const verdicts: Record<string, string> = { PASS: 'Evidence достаточно для подготовки ответа', RESEARCH: 'Нужно дополнительное исследование', REPAIR: 'Нужно исправление', UNCERTAIN: 'Есть неразрешённые противоречия', BLOCK: 'Проверка блокирует завершение' }
+const verdicts: Record<string, string> = { PASS: 'Evidence достаточно для подготовки ответа', PARTIAL: 'Критические критерии выполнены; дополнительные не подтверждены', RESEARCH: 'Нужно дополнительное исследование', REPAIR: 'Нужно исправление', UNCERTAIN: 'Есть неразрешённые противоречия', BLOCK: 'Проверка блокирует завершение' }
 const duration = (value?: number) => Number.isFinite(value) ? `${Math.floor(value! / 60)} мин ${Math.floor(value! % 60)} с` : 'неизвестно'
 const bytes = (value?: number | null) => typeof value === 'number' && Number.isFinite(value) ? `${Math.round(value / 1048576)} MiB` : 'неизвестно'
 

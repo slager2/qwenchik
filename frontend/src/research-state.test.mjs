@@ -51,7 +51,7 @@ test('terminal research explains unfinished fetching and fallback, with a single
 test('unified inspector keeps guard controls and outcomes without legacy resource duplicates', () => {
   const resource = (data) => ({ data, error: '', loading: false, reload: async () => {} })
   const html = renderToStaticMarkup(createElement(ResearchPanel, {
-    run: { id: 'run-1', mode: 'research', status: 'paused' }, events: [], onResume: () => {},
+    run: { id: 'run-1', mode: 'research', status: 'paused', stage: 'verification' }, events: [], onResume: () => {},
     resources: { plan: resource(null), sources: resource([]), evidence: resource([]), providers: resource(null),
       runtime: resource({ task_id: 'run-1', pause_reason: 'resource_guard', terminal_outcome: 'partial', runtime: { resources: { free_ram_bytes: 999999999 } } }) },
   }))
@@ -59,8 +59,43 @@ test('unified inspector keeps guard controls and outcomes without legacy resourc
   assert.match(html, /disabled=""/)
   assert.match(html, /Возобновление разрешит backend/)
   assert.match(html, /Частичный результат/)
+  assert.match(html, /На паузе/)
+  assert.doesNotMatch(html, /Сверка утверждений/)
   assert.equal((html.match(/class="telemetry-panel"/g) || []).length, 1)
   assert.doesNotMatch(html, /chat-run-status|999999999/)
+})
+
+test('readiness shows supplementary gaps and owned evidence separately from citation review', () => {
+  const resource = (data) => ({ data, error: '', loading: false, reload: async () => {} })
+  const readiness = event(1, 'verification.completed', {
+    phase: 'evidence_readiness', verdict: 'PARTIAL', missing: [],
+    supplementary_missing: ['Supplementary criterion remains unverified.'],
+    criteria: [
+      { step_id: 'fetch_1', criterion_index: 0, classification: 'critical', met: true, evidence_ids: ['evidence-owned'] },
+      { step_id: 'fetch_1', criterion_index: 1, classification: 'supplementary', met: false, evidence_ids: [] },
+    ],
+  })
+  const html = renderToStaticMarkup(createElement(ResearchPanel, {
+    run: { id: 'run-partial', mode: 'research', status: 'completed', terminal_outcome: 'partial' }, events: [readiness],
+    resources: {
+      plan: resource({ subtasks: [{ id: 'fetch_1', description: 'Inspect source', success_criteria: ['Requested facts are supported', 'Extra detail is recorded'] }] }),
+      sources: resource([]), evidence: resource([]), providers: resource(null),
+    },
+  }))
+  for (const expected of ['Критические критерии выполнены; дополнительные не подтверждены', 'Дополнительные критерии', 'Supplementary criterion remains unverified.', 'Evidence IDs:', 'evidence-owned', 'Extra detail is recorded', 'проверка цитат выполняется отдельно']) assert.ok(html.includes(expected), expected)
+  assert.match(html, /Частичный результат/)
+})
+
+test('blocked readiness renders critical gaps', () => {
+  const resource = (data) => ({ data, error: '', loading: false, reload: async () => {} })
+  const html = renderToStaticMarkup(createElement(ResearchPanel, {
+    run: { id: 'run-blocked', mode: 'research', status: 'failed', terminal_outcome: 'blocked' },
+    events: [event(1, 'verification.completed', { phase: 'evidence_readiness', verdict: 'RESEARCH', missing: ['Acceptance criterion fetch_1.0 was not met.'], supplementary_missing: [], criteria: [] })],
+    resources: { plan: resource(null), sources: resource([]), evidence: resource([]), providers: resource(null) },
+  }))
+  assert.match(html, /Не хватает критических подтверждений/)
+  assert.match(html, /Acceptance criterion fetch_1\.0 was not met\./)
+  assert.match(html, /Заблокировано проверкой/)
 })
 
 test('source failures replay by attempt and sequence, retain discovery, and require a next attempt to confirm fallback', () => {

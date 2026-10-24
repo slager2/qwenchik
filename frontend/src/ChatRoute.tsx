@@ -286,10 +286,15 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
     })
   }
 
-  const status = currentRun ? terminal(currentRun.status) ? terminalLabels[currentRun.terminal_outcome || ''] || labels[currentRun.status] : labels[currentRun.phase || currentRun.stage || ''] || labels[currentRun.status] || currentRun.status : 'Готов к сообщению'
+  const status = currentRun ? currentRun.status === 'paused' ? labels.paused : terminal(currentRun.status) ? terminalLabels[currentRun.terminal_outcome || ''] || labels[currentRun.status] : labels[currentRun.phase || currentRun.stage || ''] || labels[currentRun.status] || currentRun.status : 'Готов к сообщению'
   const content = [...transcript.messages.filter((message) => ['user', 'assistant'].includes(message.role)), ...optimistic]
   const latestAssistant = [...content].reverse().find((message) => message.role === 'assistant')
   const hasPartial = !!latestAssistant?.content.trim()
+  const terminalFailure = [...transcript.stream.events].reverse().find((event) => event.type === 'task.failed')
+  const failurePayload = terminalFailure?.payload
+  const failureMessage = typeof failurePayload?.message === 'string' ? failurePayload.message.slice(0, 1000) : ''
+  const verificationSummary = typeof failurePayload?.verification_summary === 'string' ? failurePayload.verification_summary.slice(0, 1000) : ''
+  const missingCriteria = Array.isArray(failurePayload?.missing) ? failurePayload.missing.filter((item): item is string => typeof item === 'string').slice(0, 20) : []
   const research = useResearch(runID, details && mode === 'research')
   const scheduleFallback = useCallback(() => {
     if (fallbackTimerRef.current !== undefined) return
@@ -348,7 +353,9 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
         if (next.task_id !== runID || !Number.isSafeInteger(next.cursor)) return
         recordReload('chat.runtime', 'sse_open')
         runtimeSetterRef.current((previous) => mergeRuntimeSnapshot(previous, next, { replaceWarnings: true }))
-        runSetterRef.current((previous) => previous?.id === runID ? { ...previous, status: next.status, stage: next.stage, phase: next.stage, terminal_outcome: next.terminal_outcome, pause_reason: next.pause_reason, resource_reason: next.resource_reason } : previous)
+        if (currentRunRef.current?.id === runID) {
+          runSetterRef.current((previous) => previous?.id === runID ? { ...previous, status: next.status, stage: next.stage, phase: next.stage, terminal_outcome: next.terminal_outcome, pause_reason: next.pause_reason, resource_reason: next.resource_reason } : previous)
+        }
       } catch { setConnection('invalid') }
     })
     source.addEventListener('runtime_snapshot', (raw) => {
@@ -446,11 +453,11 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
     <div className="chat-body"><section className="chat-center" aria-label="Текущий разговор"><div className="chat-health" role="status"><span className={backendReady ? 'chat-online' : ''}>Backend: {health.error ? 'нет связи' : backendReady ? 'доступен' : 'не проверен'}</span><span className={modelReady && !doctor.error ? 'chat-online' : ''}>Qwen: {doctor.error ? 'не проверена' : modelReady ? 'доступна' : 'недоступна / не проверена'}</span></div>
       <ResourceStatus resource={conversation} /><ResourceStatus resource={snapshots} />{runID && <ResourceStatus resource={run} />}
       <div className="chat-transcript" ref={listRef} onScroll={() => { const el = listRef.current; if (el) setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 100) }}>
-        <ChatTranscript messages={content} loading={snapshots.loading} active={active} runID={runID} references={references} evidenceCache={evidenceCache} onExample={(nextMode, prompt) => { setMode(nextMode); setDetails(nextMode === 'research'); setText(prompt) }} />
+        <ChatTranscript messages={content} loading={snapshots.loading} active={active} runID={runID} run={currentRun} references={references} evidenceCache={evidenceCache} onExample={(nextMode, prompt) => { setMode(nextMode); setDetails(nextMode === 'research'); setText(prompt) }} />
         {busy && optimistic.length > 0 && <p className="chat-muted" role="status">Готовлю ответ…</p>}
       </div>
       {!follow && <button type="button" className="chat-to-bottom" onClick={() => setFollow(true)}>К последнему сообщению ↓</button>}
-      {currentRun?.status === 'failed' && <div className="chat-action-error" role="alert"><strong>Не удалось завершить ответ</strong><p>{currentRun.error_message || 'Сохранённый текст доступен. Можно повторить запрос.'}{currentRun.error_code ? ` Код: ${currentRun.error_code}` : ''}</p></div>}
+      {currentRun?.status === 'failed' && <div className="chat-action-error" role="alert"><strong>{currentRun.terminal_outcome === 'blocked' ? 'Ответ заблокирован проверкой' : 'Не удалось завершить ответ'}</strong><p>{failureMessage || currentRun.error_message || 'Сохранённый текст доступен. Можно повторить запрос.'}{currentRun.error_code ? ` Код: ${currentRun.error_code}` : ''}</p>{verificationSummary && <p>{verificationSummary}</p>}{missingCriteria.length > 0 && <div className="chat-failure-missing"><strong>Не хватает критических критериев</strong><ul>{missingCriteria.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></div>}</div>}
       {currentRun?.status === 'cancelled' && <p className="chat-muted" role="status">Генерация остановлена. Полученный текст сохранён.</p>}
       {currentRun?.status === 'waiting_approval' && <p role="status">Нужно ваше решение. <a href="#/workspace">Открыть подтверждения в рабочем пространстве</a></p>}
       {error && <div className="chat-action-error" role="alert"><p>{error}</p>{actionRetry && <button type="button" onClick={actionRetry} disabled={busy}>Повторить действие</button>}</div>}

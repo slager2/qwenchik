@@ -5,7 +5,7 @@ import type { ReloadReason } from './network-debug'
 import { safeURL } from './conversation-state.mjs'
 import { diagnosticSummary } from './observability.mjs'
 import { formatSourceBytes, publicResearchEvents, researchError, researchQueries, researchSources, researchSteps } from './research-state.mjs'
-import type { AgentEvent, Evidence, ProvidersResponse, ResearchPlan, Run, RunRuntime, SourceRecord } from './types'
+import type { AgentEvent, Evidence, ProvidersResponse, ResearchPlan, Run, RunRuntime, SourceRecord, VerificationCriterionRecord } from './types'
 
 interface Remote<T> { data?: T; error: string; loading: boolean; reload: (reason?: ReloadReason) => Promise<void> }
 interface Resources {
@@ -17,6 +17,31 @@ interface Resources {
 }
 const labels: Record<string, string> = { pending: 'Ожидает выполнения', running: 'Выполняется', planning: 'Планирование', queued: 'В очереди', paused: 'На паузе', verifying: 'Сверка утверждений', waiting_approval: 'Нужно решение', completed: 'Завершено', cancelled: 'Остановлено', failed: 'Недоступен', skipped: 'Пропущен', search: 'Поиск', fetch: 'Чтение страниц', extract: 'Извлечение текста', synthesis: 'Подготовка ответа', verification: 'Проверка', finalization: 'Завершение', found: 'Найден', discovered: 'Найден', validated: 'Адрес проверен', rejected: 'Отклонён', fetching: 'Загрузка', extracted: 'Текст извлечён', cited: 'Использован в ответе' }
 const stamp = (value: string) => new Date(value).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+const readinessLabels: Record<string, string> = {
+  PASS: 'Критические критерии выполнены',
+  PARTIAL: 'Критические критерии выполнены; дополнительные не подтверждены',
+  RESEARCH: 'Не хватает критических подтверждений',
+  UNCERTAIN: 'Есть неразрешённые противоречия',
+  BLOCK: 'Проверка заблокировала завершение',
+}
+
+function stringList(value: unknown, limit = 20): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string').slice(0, limit).map((item) => item.slice(0, 500)) : []
+}
+
+function verificationCriteria(value: unknown): VerificationCriterionRecord[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const candidate = item as Partial<VerificationCriterionRecord>
+    if (typeof candidate.step_id !== 'string' || !Number.isInteger(candidate.criterion_index) || (candidate.criterion_index ?? -1) < 0 || (candidate.criterion_index ?? 10) >= 10 || !['critical', 'supplementary'].includes(String(candidate.classification)) || typeof candidate.met !== 'boolean') return []
+    return [{
+      step_id: candidate.step_id.slice(0, 128), criterion_index: candidate.criterion_index!,
+      classification: candidate.classification as VerificationCriterionRecord['classification'], met: candidate.met,
+      evidence_ids: Array.isArray(candidate.evidence_ids) ? candidate.evidence_ids.filter((id): id is string => typeof id === 'string').slice(0, 16).map((id) => id.slice(0, 128)) : [],
+    }]
+  }).slice(0, 120)
+}
 
 function Status({ resource, empty }: { resource: Remote<unknown>; empty?: boolean }) {
   if (resource.error) return <div className="chat-resource-error" role="status"><p>{resource.error}{resource.data !== undefined ? ' Показаны последние загруженные данные.' : ''}</p><button type="button" onClick={() => void resource.reload()}>Повторить загрузку</button></div>
@@ -32,11 +57,17 @@ export default function ResearchInspector({ resources, events, run, showHeading 
   const queries = researchQueries(events)
   const activity = publicResearchEvents(events).filter((event) => ['search.provider', 'tool.started', 'tool.failed', 'plan.created', 'evidence.created', 'task.status_changed', 'context.compacted', 'continuation.requested', 'verification.completed', 'run.paused', 'run.resumed', 'run.blocked'].includes(event.type))
   const terminal = run && ['completed', 'cancelled', 'failed'].includes(run.status)
-  const state = run ? terminal ? run.status : run.phase || run.stage || run.status : ''
+  const state = run ? run.status === 'paused' ? 'paused' : terminal ? run.status : run.phase || run.stage || run.status : ''
   const warning = publicResearchEvents(events).filter((event) => event.type === 'research.warning').at(-1)
   const partial = warning?.payload.partial === true || sourceList.some((source) => ['rejected', 'failed'].includes(source.status || '') || (terminal && source.status === 'fetching'))
   const verification = publicResearchEvents(events).filter((event) => event.type === 'verification.updated').at(-1)
   const fallback = verification?.payload.status === 'fallback_excerpts'
+  const readiness = publicResearchEvents(events).filter((event) => event.type === 'verification.completed' && event.payload.phase === 'evidence_readiness').at(-1)
+  const readinessVerdict = typeof readiness?.payload.verdict === 'string' ? readiness.payload.verdict : ''
+  const criticalMissing = stringList(readiness?.payload.missing)
+  const supplementaryMissing = stringList(readiness?.payload.supplementary_missing)
+  const criteria = verificationCriteria(readiness?.payload.criteria)
+  const plannedSteps = plan.data?.plan?.subtasks ?? plan.data?.subtasks ?? []
   const completedSteps = steps.filter((step) => ['completed', 'skipped'].includes(step.status)).length
   const pauseReason = currentRuntime?.pause_reason || run?.pause_reason
   const outcome = currentRuntime?.terminal_outcome || run?.terminal_outcome
@@ -61,6 +92,10 @@ export default function ResearchInspector({ resources, events, run, showHeading 
     </nav>
     {fallback && <p className="chat-partial-note" role="status">Показаны дословные выдержки. Синтезированный вывод надёжно подтвердить не удалось.</p>}
     {partial && <p className="chat-partial-note" role="status">Часть источников недоступна или отклонена. Это может ограничить полноту ответа.</p>}
+    {readiness && <section className="chat-partial-note" aria-label="Проверка критериев"><h3>Готовность ответа</h3><p role="status">{readinessLabels[readinessVerdict] || 'Статус проверки неизвестен'}</p><p>Это оценка готовности evidence; проверка цитат выполняется отдельно.</p>{criticalMissing.length > 0 && <><h4>Критические пробелы</h4><ul>{criticalMissing.map((item, index) => <li key={`critical-${index}`}>{item}</li>)}</ul></>}{supplementaryMissing.length > 0 && <><h4>Дополнительные критерии</h4><ul>{supplementaryMissing.map((item, index) => <li key={`supplementary-${index}`}>{item}</li>)}</ul></>}{criteria.length > 0 && <details><summary>Оценки критериев · {criteria.length}</summary><ol>{criteria.map((item) => {
+      const title = plannedSteps.find((step) => step.id === item.step_id)?.success_criteria?.[item.criterion_index]
+      return <li key={`${item.step_id}-${item.criterion_index}`}><strong>{item.classification === 'critical' ? 'Критический' : 'Дополнительный'}</strong>: {title || `Критерий ${item.step_id}.${item.criterion_index + 1}`} · {item.met ? 'выполнен' : 'не подтверждён'}{item.evidence_ids.length > 0 && <p>Evidence IDs: {item.evidence_ids.map((id) => <code key={id}>{id} </code>)}</p>}</li>
+    })}</ol></details>}</section>}
     <section><h3>План</h3><Status resource={plan} empty={!steps.length} />
       {steps.length > 0 && <ol className="chat-plan-list">{steps.map((step) => {
         const lead = step.description.split(/[.!?](?:\s|$)|:\s/)[0]
@@ -106,7 +141,7 @@ export default function ResearchInspector({ resources, events, run, showHeading 
       <ol>{activity.slice(-30).reverse().map((event) => <li key={event.seq}>
         <strong>{({ 'context.compacted': 'Рабочий контекст сжат', 'continuation.requested': 'Ограниченное продолжение исследования', 'verification.completed': 'Проверка готовности evidence', 'run.paused': 'Запуск на паузе', 'run.resumed': 'Запуск возобновлён', 'run.blocked': 'Запуск заблокирован' } as Record<string, string>)[event.type] || (event.type === 'search.provider' ? 'Результат провайдера' : event.type === 'tool.failed' ? 'Не удалось выполнить действие' : event.type === 'tool.started' ? 'Выполняется действие' : event.type === 'plan.created' ? 'План сохранён' : event.type === 'evidence.created' ? 'Источник сохранён' : labels[String(event.payload.to || event.stage || '')] || 'Состояние обновлено')}</strong>
         {event.type === 'context.compacted' && typeof event.payload.reduced_bytes === 'number' && <p>Сокращено {formatSourceBytes(event.payload.reduced_bytes)}. Evidence и checkpoint сохранены.</p>}
-        {event.type === 'verification.completed' && typeof event.payload.verdict === 'string' && <p>{event.payload.verdict}</p>}
+        {event.type === 'verification.completed' && typeof event.payload.verdict === 'string' && <p>{readinessLabels[event.payload.verdict] || event.payload.verdict}</p>}
         {event.type === 'search.provider' && <p>{diagnosticSummary(event.payload)}</p>}
         {event.type === 'tool.failed' && <p>{researchError(typeof event.payload.error_code === 'string' ? event.payload.error_code : typeof event.payload.code === 'string' ? event.payload.code : '')}</p>}
         <time>{stamp(event.created_at)}</time>

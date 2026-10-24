@@ -41,7 +41,7 @@ const reasonLabels: Record<string, string> = {
   manual: 'Пауза пользователя',
 }
 
-const verdictLabels: Record<string, string> = { PASS: 'Evidence достаточно', RESEARCH: 'Нужно исследование', REPAIR: 'Нужно исправление', UNCERTAIN: 'Есть противоречия', BLOCK: 'Завершение заблокировано' }
+const verdictLabels: Record<string, string> = { PASS: 'Evidence достаточно', PARTIAL: 'Частичный результат', RESEARCH: 'Нужно исследование', REPAIR: 'Нужно исправление', UNCERTAIN: 'Есть противоречия', BLOCK: 'Завершение заблокировано' }
 const notificationLabels: Record<string, string> = { pending: 'В очереди', attempted: 'Доставка начата', failed: 'Повтор доставки запланирован', delivered: 'Принято провайдером', abandoned: 'Доставка недоступна' }
 
 const numberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 })

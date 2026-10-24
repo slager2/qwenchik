@@ -268,6 +268,14 @@ export interface Run {
   retry_count: number
 }
 
+export interface VerificationCriterionRecord {
+  step_id: string
+  criterion_index: number
+  classification: 'critical' | 'supplementary'
+  met: boolean
+  evidence_ids: string[]
+}
+
 export type MetricSource = 'exact' | 'estimated' | 'unavailable'
 export type TelemetryMetricValue = string | number | boolean
 
@@ -390,7 +398,7 @@ export interface RunRuntime {
   budget?: Record<string, number>
   counters?: Record<string, number>
   budget_remaining?: Record<string, number>
-  completion?: { continuations: number; verdict?: string }
+  completion?: { continuations: number; verdict?: string; missing?: string[] }
   max_continuations?: number
   compactions?: number
   context_snapshot_hash?: string

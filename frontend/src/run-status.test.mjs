@@ -28,3 +28,13 @@ test('terminal outcome and delivery failure do not pretend the report was comple
   assert.match(html, /доставка недоступна/)
   assert.doesNotMatch(html, />Завершено</)
 })
+
+test('partial evidence readiness is localized separately from terminal outcome', () => {
+  const html = renderToStaticMarkup(createElement(RunStatus, {
+    run: { id: 'r', status: 'completed', terminal_outcome: 'partial' },
+    data: { task_id: 'r', verdict: 'PARTIAL', terminal_outcome: 'partial' },
+  }))
+  assert.match(html, /Частичный результат/)
+  assert.match(html, /Критические критерии выполнены; дополнительные не подтверждены/)
+  assert.doesNotMatch(html, /Статус неизвестен/)
+})

@@ -42,13 +42,18 @@ const runtimeFixture = (task_id, cursor = 0) => ({
   runtime: { enabled: true, keep_awake: true, resources: { free_ram_bytes: 8192, rss_bytes: 1024, gpu_free_vram_mb: null, gpu_temp_c: null, power_source: 'unknown', snapshot_at: new Date().toISOString(), warnings: [] }, sleep: { active: false, available: false, provider: 'unavailable' } },
 })
 const conversation = (id, mode) => ({ id, title: id === 'a' ? 'Первый разговор' : 'Исследование', mode, created_at: now, updated_at: now, latest_run_id: `r-${id}` })
-const conversations = [conversation('a', 'chat'), conversation('b', 'research')]
+const conversations = [conversation('a', 'chat'), conversation('b', 'research'), { id: 'c', title: 'Заблокированная проверка', mode: 'research', created_at: now, updated_at: now, latest_run_id: 'r-c' }, { id: 'd', title: 'Ресурсная пауза', mode: 'research', created_at: now, updated_at: now, latest_run_id: 'r-d' }]
 const message = (id, conversation_id, run_id, role, content, status = 'completed', seq = 0) => ({ id, conversation_id, run_id, role, content, status, created_at: now, updated_at: now, last_event_seq: seq })
 const messages = {
   a: [message('u-a', 'a', 'r-a', 'user', 'Первый вопрос'), message('m-a', 'a', 'r-a', 'assistant', 'Ответ первого разговора')],
   b: [message('u-b', 'b', 'r-b', 'user', 'Второй вопрос'), message('m-b', 'b', 'r-b', 'assistant', '## Результат\n\nПроверяемый факт [ev-1].\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n```js\n' + 'veryLongIdentifier'.repeat(60) + '\n```')],
+  c: [message('u-c', 'c', 'r-c', 'user', 'Проверить критические критерии'), message('m-c', 'c', 'r-c', 'assistant', '', 'failed')],
+  d: [message('u-d', 'd', 'r-d', 'user', 'Исследование на паузе'), message('m-d', 'd', 'r-d', 'assistant', 'Сохранённый фрагмент', 'streaming')],
 }
 const runs = Object.fromEntries(conversations.map((item) => [item.latest_run_id, { id: item.latest_run_id, conversation_id: item.id, user_message_id: `u-${item.id}`, assistant_message_id: `m-${item.id}`, mode: item.mode, operation: 'message', status: 'completed', retry_count: 0 }]))
+runs['r-b'].terminal_outcome = 'partial'
+runs['r-c'] = { ...runs['r-c'], status: 'failed', terminal_outcome: 'blocked', error_code: 'completion_blocked', error_message: 'Проверка не смогла подтвердить обязательные критерии.' }
+runs['r-d'] = { ...runs['r-d'], status: 'paused', pause_reason: 'resource_guard', resource_reason: 'low_ram', stage: 'verification' }
 const events = {}
 events['r-b'] = [
   { type: 'plan.created', payload: {} },
@@ -62,6 +67,12 @@ events['r-b'] = [
   { type: 'tool.started', payload: { tool: 'fetch_url', step_id: 'step2', plan_attempt: 1, attempt_id: 'pdf-attempt', target_url: 'https://example.org/report.pdf' } },
   { type: 'tool.failed', payload: { tool: 'fetch_url', step_id: 'step2', plan_attempt: 1, attempt_id: 'pdf-attempt', source_fingerprint: 'pdf-rejected', target_url: 'https://example.org/report.pdf', status: 'rejected', error_code: 'pdf_source_too_large', declared_bytes: 40534667, effective_limit_bytes: 32000000, fetched_bytes: 0, remaining_candidates: 1, mime_type: 'application/pdf', try_next_source: true, fallback_attempted: false, timestamp: now } },
 ].map((event, index) => ({ ...event, id: `research-event-${index}`, task_id: 'r-b', seq: index + 1, visibility: 'user', schema_version: 1, created_at: now }))
+events['r-b'].push({
+  id: 'research-verification-partial', task_id: 'r-b', seq: events['r-b'].length + 1, type: 'verification.completed', schema_version: 1, visibility: 'user', created_at: now,
+  payload: { verdict: 'PARTIAL', phase: 'evidence_readiness', missing: [], supplementary_missing: ['Дополнительные параметры совместимости не подтверждены.'], criteria: [{ step_id: 'step1', criterion_index: 0, classification: 'critical', met: true, evidence_ids: ['ev-1'] }, { step_id: 'step1', criterion_index: 1, classification: 'supplementary', met: false, evidence_ids: [] }] },
+})
+events['r-c'] = [{ id: 'blocked-failure', task_id: 'r-c', seq: 1, type: 'task.failed', schema_version: 1, visibility: 'user', created_at: now, payload: { error_code: 'completion_blocked', message: 'Завершение заблокировано проверкой.', verification_summary: 'Обязательные требования пользователя не подтверждены источниками.', missing: ['Критическое требование: подтвердить запрошенный параметр.'] } }]
+events['r-d'] = [{ id: 'paused-event', task_id: 'r-d', seq: 1, type: 'run.paused', schema_version: 1, visibility: 'user', created_at: now, payload: { pause_reason: 'resource_guard', resource_reason: 'low_ram' } }]
 const streamCursors = []
 const submissionKeys = []
 const researchContextSubmissions = []
@@ -291,7 +302,7 @@ try {
       const run = runs[parts[2]]
       if (!run) return json({ error: { message: 'Run not found' } }, 404)
       if (!parts[3]) return json(run)
-      if (parts[3] === 'runtime') return runtimeGetUnavailable && run.id === 'r-b' ? json({ error: { message: 'Runtime snapshot unavailable' } }, 503) : json({ ...runtimeFixture(run.id, events[run.id]?.at(-1)?.seq || 0), status: run.status, terminal_outcome: run.terminal_outcome, pause_reason: run.status === 'paused' ? 'manual' : '', completed_steps: 1, compactions: 1, max_continuations: 1, completion: { continuations: 0 } })
+      if (parts[3] === 'runtime') return runtimeGetUnavailable && run.id === 'r-b' ? json({ error: { message: 'Runtime snapshot unavailable' } }, 503) : json({ ...runtimeFixture(run.id, events[run.id]?.at(-1)?.seq || 0), status: run.status, terminal_outcome: run.terminal_outcome, pause_reason: run.pause_reason || '', resource_reason: run.resource_reason || '', verdict: run.id === 'r-b' ? 'PARTIAL' : run.id === 'r-c' ? 'RESEARCH' : undefined, completed_steps: 1, compactions: 1, max_continuations: 1, completion: { continuations: 0 } })
       if (parts[3] === 'cancel') {
         run.status = 'cancelled'
         const conv = conversations.find((item) => item.id === run.conversation_id)
@@ -310,6 +321,8 @@ try {
           if (runtimeGetUnavailable) await new Promise((resolve) => setTimeout(resolve, 250))
           const runtime = runtimeFixture(run.id, events[run.id]?.at(-1)?.seq || 0)
           runtime.status = run.status
+          runtime.terminal_outcome = run.terminal_outcome
+          runtime.verdict = 'PARTIAL'
           runtime.telemetry.system.cpu_usage.value = 37
           runtime.telemetry.system.gpus[0].temperature.value = 63
           runtime.telemetry.system.ram_free.value = 6 * 1024 ** 3
@@ -352,8 +365,16 @@ try {
   await page.reload()
   await page.getByText('Backend: доступен', { exact: true }).waitFor()
   doctorBlocked = false
-  await page.getByRole('link', { name: /Исследование/ }).click()
+  await page.locator('a[href="#/chat/b"]').click()
   await page.getByRole('heading', { name: 'Результат', exact: true }).waitFor()
+  const chatRunStatus = page.locator('.chat-heading p')
+  await until(async () => (await chatRunStatus.innerText()).includes('Частичный результат'), 'partial terminal status')
+  assert.match(await chatRunStatus.innerText(), /Частичный результат/)
+  await page.locator('.chat-role-assistant .chat-message-meta').getByText('Частичный результат сохранён', { exact: true }).waitFor()
+  const readiness = page.getByRole('region', { name: 'Проверка критериев', exact: true })
+  await readiness.getByText('Дополнительные параметры совместимости не подтверждены.', { exact: true }).waitFor()
+  await readiness.getByText(/Оценки критериев/).click()
+  await readiness.getByText('ev-1', { exact: true }).waitFor()
   await page.getByText('Источники временно недоступны', { exact: true }).waitFor()
   for (const name of ['Поисковые запросы', 'Поисковые провайдеры', 'Действия']) {
     assert.equal(await page.locator('.chat-research').getByRole('button', { name, exact: true }).getAttribute('aria-expanded'), 'false', `${name} starts collapsed`)
@@ -395,8 +416,9 @@ try {
     await page.screenshot({ path: '/tmp/opencode/telemetry-desktop.png' })
   }
   await chatTelemetry.getByRole('list', { name: 'Предупреждения runtime', exact: true }).getByText('chat warning fixture', { exact: true }).waitFor()
+  const pdfFailure = events['r-b'].find((item) => item.type === 'tool.failed' && item.payload.error_code === 'pdf_source_too_large')
   for (const [type, payload] of [
-    ['source.updated', { ...events['r-b'].at(-1).payload, fallback_attempted: true }],
+    ['source.updated', { ...pdfFailure.payload, fallback_attempted: true }],
     ['tool.started', { tool: 'fetch_url', step_id: 'step2', target_url: 'https://example.org/source' }],
     ['source.extracted', { tool: 'fetch_url', step_id: 'step2', plan_attempt: 1, attempt_id: 'html-attempt', target_url: 'https://example.org/source' }],
   ]) events['r-b'].push({ id: `research-event-${events['r-b'].length}`, task_id: 'r-b', seq: events['r-b'].length + 1, visibility: 'user', schema_version: 1, created_at: now, type, payload })
@@ -405,9 +427,13 @@ try {
   await pdfCard.getByText('Попытка перехода к другому источнику подтверждена.', { exact: true }).waitFor()
   assert.equal(await pdfCard.count(), 1)
   assert.equal(await pdfCard.getByText('Код: pdf_source_too_large', { exact: true }).count(), 1)
-  sourcesFail = false
   const previousEvidenceRequests = evidenceRequests
-  await page.getByRole('button', { name: 'Повторить загрузку' }).click()
+  const retrySources = page.getByRole('button', { name: 'Повторить загрузку', exact: true })
+  await retrySources.waitFor()
+  await page.waitForTimeout(500)
+  await retrySources.waitFor()
+  sourcesFail = false
+  await retrySources.click()
   await page.getByRole('link', { name: 'Реальный источник', exact: true }).waitFor()
   assert.equal(evidenceRequests, previousEvidenceRequests)
   assert.ok(sourceRequests >= 2)
@@ -480,6 +506,23 @@ try {
   await page.getByRole('button', { name: 'Детали', exact: true }).click()
   await page.getByRole('link', { name: /Первый разговор/ }).click()
   await page.getByText('Ответ первого разговора', { exact: true }).waitFor()
+  await page.getByRole('link', { name: /Заблокированная проверка/ }).click()
+  await until(async () => (await chatRunStatus.innerText()).includes('Заблокировано проверкой'), 'blocked terminal status')
+  assert.match(await chatRunStatus.innerText(), /Заблокировано проверкой/)
+  await page.getByText('Обязательные требования пользователя не подтверждены источниками.', { exact: true }).waitFor()
+  await page.getByText('Критическое требование: подтвердить запрошенный параметр.', { exact: true }).waitFor()
+  await page.getByRole('link', { name: /Ресурсная пауза/ }).click()
+  await until(async () => (await chatRunStatus.innerText()).includes('На паузе'), 'resource pause status')
+  assert.match(await chatRunStatus.innerText(), /На паузе/)
+  await page.locator('.chat-role-assistant .chat-message-meta').getByText('Ответ на паузе. Полученный текст сохранён.', { exact: true }).waitFor()
+  assert.equal(await page.locator('.chat-role-assistant .chat-message-meta').getByText('Ответ поступает', { exact: true }).count(), 0)
+  const unsafeResume = page.getByRole('button', { name: 'Возобновить', exact: true })
+  await unsafeResume.waitFor()
+  assert.equal(await unsafeResume.isDisabled(), true)
+  await page.getByRole('link', { name: /Первый разговор/ }).click()
+  await page.getByText('Ответ первого разговора', { exact: true }).waitFor()
+  const chatDetails = page.getByRole('button', { name: 'Детали', exact: true })
+  if (await chatDetails.getAttribute('aria-expanded') === 'true') await chatDetails.click()
   const input = page.getByRole('textbox', { name: 'Сообщение', exact: true })
   await input.fill('Новый вопрос')
   await input.evaluate((element) => element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, isComposing: true })))
