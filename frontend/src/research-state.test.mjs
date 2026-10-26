@@ -30,6 +30,8 @@ test('planning diagnosis requires failed current run, public events, planning st
   assert.equal(planningFailure({ ...run, stage: 'fetch' }, []), null)
   assert.equal(planningFailure({ ...run, status: 'paused' }, []), null)
   assert.equal(planningFailure(run, [{ ...event(2, 'plan.created', {}), task_id: 'r' }]), null)
+  assert.equal(planningFailure(run, [], { subtasks: [{ id: 'saved', description: 'Persisted plan step' }] }), null)
+  assert.equal(planningFailure(run, [], { steps: [{ step_id: 'saved', description: 'Persisted plan step' }] }), null)
   const failed = { ...event(1, 'task.failed', { failure_stage: 'planning', validation_error: 'private' }, 'internal'), task_id: 'r' }
   assert.equal(planningFailure({ ...run, error_code: '', stage: '' }, [failed]), null)
   assert.equal(planningFailure({ ...run, error_code: '', stage: '' }, [{ ...failed, visibility: 'user', task_id: 'old' }]), null)

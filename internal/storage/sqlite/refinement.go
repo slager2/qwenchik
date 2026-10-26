@@ -11,6 +11,13 @@ import (
 	"github.com/slager2/qwenchik/internal/domain"
 )
 
+var ErrRefinementFrozen = errors.New("refinement is frozen for the research laboratory")
+
+// FreezeRefinement is applied before serving requests/claiming queued work. It
+// cannot be disabled by a model, request, approval or runtime feature flag.
+func (s *Store) FreezeRefinement()      { s.refinementFrozen.Store(true) }
+func (s *Store) RefinementFrozen() bool { return s.refinementFrozen.Load() }
+
 func (s *Store) EnsureBaselineBundle(ctx context.Context, bundle domain.AgentBundle) (domain.AgentBundle, error) {
 	if err := bundle.Validate(); err != nil {
 		return bundle, err
@@ -44,6 +51,9 @@ func (s *Store) ActiveBundle(ctx context.Context, base string) (domain.AgentBund
 }
 
 func (s *Store) StartRefinement(ctx context.Context, model domain.ModelProfileSnapshot, sources []string, key string) (domain.Task, error) {
+	if s.RefinementFrozen() {
+		return domain.Task{}, ErrRefinementFrozen
+	}
 	if err := validateModelProfileSnapshot(model); err != nil {
 		return domain.Task{}, err
 	}
@@ -108,6 +118,9 @@ func (s *Store) StartRefinement(ctx context.Context, model domain.ModelProfileSn
 }
 
 func (s *Store) ReserveRefinementHTTP(ctx context.Context, taskID string) error {
+	if s.RefinementFrozen() {
+		return ErrRefinementFrozen
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -257,6 +270,9 @@ func (s *Store) BundleCandidate(ctx context.Context, hash string) (domain.Bundle
 }
 
 func (s *Store) SaveCandidate(ctx context.Context, taskID string, job domain.RefinementJob, patch domain.CandidatePatch) (domain.BundleCandidate, error) {
+	if s.RefinementFrozen() {
+		return domain.BundleCandidate{}, ErrRefinementFrozen
+	}
 	if err := patch.Validate(); err != nil {
 		return domain.BundleCandidate{}, err
 	}
@@ -319,6 +335,9 @@ func (s *Store) SaveCandidate(ctx context.Context, taskID string, job domain.Ref
 }
 
 func (s *Store) SaveRefinementEvaluation(ctx context.Context, taskID, hash string, evaluation domain.RefinementEvaluation) error {
+	if s.RefinementFrozen() {
+		return ErrRefinementFrozen
+	}
 	if evaluation.Version != "heldout-v1" || evaluation.CaseCount != 4 || evaluation.BaselinePassed < 0 || evaluation.BaselinePassed > 4 || evaluation.CandidatePassed < 0 || evaluation.CandidatePassed > 4 || evaluation.BaselineMS < 0 || evaluation.CandidateMS < 0 {
 		return ErrConflict
 	}
@@ -351,6 +370,9 @@ func (s *Store) SaveRefinementEvaluation(ctx context.Context, taskID, hash strin
 }
 
 func (s *Store) PromoteRefinement(ctx context.Context, taskID, hash string) (domain.AgentBundle, error) {
+	if s.RefinementFrozen() {
+		return domain.AgentBundle{}, ErrRefinementFrozen
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.AgentBundle{}, err
@@ -407,6 +429,9 @@ func (s *Store) PromoteRefinement(ctx context.Context, taskID, hash string) (dom
 }
 
 func (s *Store) RollbackBundle(ctx context.Context, base, hash string) (domain.AgentBundle, error) {
+	if s.RefinementFrozen() {
+		return domain.AgentBundle{}, ErrRefinementFrozen
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.AgentBundle{}, err

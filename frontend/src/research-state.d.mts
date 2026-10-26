@@ -1,5 +1,5 @@
 import type { AgentEvent, ResearchPlan, SourceRecord, Run } from './types'
-export function planningFailure(run: Run | null, events: AgentEvent[]): Record<string, unknown> | null
+export function planningFailure(run: Run | null, events: AgentEvent[], plan?: ResearchPlan | null): Record<string, unknown> | null
 export function publicResearchEvents(events: AgentEvent[]): AgentEvent[]
 export function researchSources(sources: SourceRecord[], events: AgentEvent[]): SourceRecord[]
 export function researchQueries(events: AgentEvent[]): { queries: string[]; summaries: string[] }

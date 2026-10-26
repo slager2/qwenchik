@@ -81,6 +81,9 @@ type Repository interface {
 }
 
 type Options struct {
+	ReportArtifacts interface {
+		Put(context.Context, string, string, string, []byte) (domain.Artifact, string, error)
+	}
 	OnBundleChanged       func(domain.AgentBundle)
 	RuntimeBundleHash     string
 	MaxSteps              int
@@ -113,40 +116,44 @@ type Worker struct {
 	heartbeat        time.Time
 	runtimeMu        sync.RWMutex
 	sleepStatus      keepawake.Status
+	activeRunID      string
 	sleepWanted      bool
 	runTelemetry     *runTelemetrySource
 	telemetryMonitor resources.Monitor
 }
 
 type checkpointState struct {
-	Completion                 completionState    `json:"completion,omitempty"`
-	PlanAttempt                int                `json:"plan_attempt,omitempty"`
-	AttemptStartSeq            int64              `json:"attempt_start_seq,omitempty"`
-	HistoricalObservations     []planObservations `json:"historical_observations,omitempty"`
-	LifetimeSearchQueryHistory []string           `json:"lifetime_search_query_history,omitempty"`
-	PlanVersion                int                `json:"plan_version"`
-	SearchQueries              int                `json:"search_queries"`
-	SearchQueryHistory         []string           `json:"search_query_history,omitempty"`
-	SearchQueryByStep          map[string]string  `json:"search_query_by_step,omitempty"`
-	FetchedBytes               int64              `json:"fetched_bytes"`
-	SourceFailures             []sourceFailure    `json:"source_failures,omitempty"`
-	CurrentCandidate           int                `json:"current_candidate"`
-	Partial                    bool               `json:"partial,omitempty"`
-	PartialOutcome             bool               `json:"partial_outcome,omitempty"`
-	PendingTool                string             `json:"pending_tool,omitempty"`
-	PendingToolIdempotent      bool               `json:"pending_tool_idempotent,omitempty"`
-	PendingApproval            bool               `json:"pending_approval,omitempty"`
-	PendingArguments           json.RawMessage    `json:"pending_arguments,omitempty"`
-	PendingSummary             string             `json:"pending_summary,omitempty"`
-	PendingTarget              string             `json:"pending_target,omitempty"`
-	PendingRisk                string             `json:"pending_risk,omitempty"`
-	FailedFetchURLs            []string           `json:"failed_fetch_urls,omitempty"`
-	RejectedFetchURLs          []string           `json:"rejected_fetch_urls,omitempty"`
-	CurrentStep                string             `json:"current_step,omitempty"`
-	CompletedSteps             []string           `json:"completed_steps"`
-	SkippedSteps               []string           `json:"skipped_steps,omitempty"`
-	ToolResults                map[string]any     `json:"tool_results,omitempty"`
-	Summary                    string             `json:"summary,omitempty"`
+	Report                     *domain.ResearchReportState   `json:"research_report,omitempty"`
+	SourceNotes                []domain.SourceNote           `json:"source_notes,omitempty"`
+	Adaptive                   *domain.AdaptiveResearchState `json:"adaptive_research,omitempty"`
+	Completion                 completionState               `json:"completion,omitempty"`
+	PlanAttempt                int                           `json:"plan_attempt,omitempty"`
+	AttemptStartSeq            int64                         `json:"attempt_start_seq,omitempty"`
+	HistoricalObservations     []planObservations            `json:"historical_observations,omitempty"`
+	LifetimeSearchQueryHistory []string                      `json:"lifetime_search_query_history,omitempty"`
+	PlanVersion                int                           `json:"plan_version"`
+	SearchQueries              int                           `json:"search_queries"`
+	SearchQueryHistory         []string                      `json:"search_query_history,omitempty"`
+	SearchQueryByStep          map[string]string             `json:"search_query_by_step,omitempty"`
+	FetchedBytes               int64                         `json:"fetched_bytes"`
+	SourceFailures             []sourceFailure               `json:"source_failures,omitempty"`
+	CurrentCandidate           int                           `json:"current_candidate"`
+	Partial                    bool                          `json:"partial,omitempty"`
+	PartialOutcome             bool                          `json:"partial_outcome,omitempty"`
+	PendingTool                string                        `json:"pending_tool,omitempty"`
+	PendingToolIdempotent      bool                          `json:"pending_tool_idempotent,omitempty"`
+	PendingApproval            bool                          `json:"pending_approval,omitempty"`
+	PendingArguments           json.RawMessage               `json:"pending_arguments,omitempty"`
+	PendingSummary             string                        `json:"pending_summary,omitempty"`
+	PendingTarget              string                        `json:"pending_target,omitempty"`
+	PendingRisk                string                        `json:"pending_risk,omitempty"`
+	FailedFetchURLs            []string                      `json:"failed_fetch_urls,omitempty"`
+	RejectedFetchURLs          []string                      `json:"rejected_fetch_urls,omitempty"`
+	CurrentStep                string                        `json:"current_step,omitempty"`
+	CompletedSteps             []string                      `json:"completed_steps"`
+	SkippedSteps               []string                      `json:"skipped_steps,omitempty"`
+	ToolResults                map[string]any                `json:"tool_results,omitempty"`
+	Summary                    string                        `json:"summary,omitempty"`
 }
 
 type planObservations struct {
@@ -329,6 +336,10 @@ func (w *Worker) expireApprovalLoop(ctx context.Context) {
 }
 
 func (w *Worker) runTask(parent context.Context, task domain.Task) {
+	w.runtimeMu.Lock()
+	w.activeRunID = task.ID
+	w.runtimeMu.Unlock()
+	defer func() { w.runtimeMu.Lock(); w.activeRunID = ""; w.runtimeMu.Unlock() }()
 	deadline, researchDeadline := w.runDeadline(parent, task.ID)
 	ctx, cancel := context.WithDeadline(parent, deadline)
 	if task.Lease != nil {
@@ -379,7 +390,15 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 	if getErr != nil || current.Status == domain.StatusPaused || current.Status == domain.StatusWaitingApproval || current.Status == domain.StatusCancelled || current.Status.Terminal() {
 		return
 	}
-	if errors.Is(err, errCompletionBlocked) {
+	// Session-backed runs finalize inside executeRun's reserved model executor.
+	sessionBacked := false
+	if reader, ok := w.repo.(interface {
+		GetResearchSession(context.Context, string) (domain.ResearchSession, error)
+	}); ok {
+		_, sessionErr := reader.GetResearchSession(ctx, task.ID)
+		sessionBacked = sessionErr == nil
+	}
+	if errors.Is(err, errCompletionBlocked) && !sessionBacked {
 		completed, partialErr := w.completeBlockedPartial(ctx, current, err)
 		if completed && partialErr == nil {
 			w.options.Logger.Info("completion blocked; committed evidence-bounded partial answer", "task_id", task.ID)
@@ -419,6 +438,8 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 			code = "failed_recovery_required"
 		} else if errors.Is(err, errResearchRuntimeChanged) {
 			code = "research_runtime_changed"
+		} else if errors.Is(err, sqlite.ErrRefinementFrozen) {
+			code = "refinement_frozen"
 		} else if errors.Is(err, errRunDeadline) {
 			code = "run_deadline"
 		} else if errors.Is(err, errWorkerPanic) {
@@ -564,6 +585,27 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 	for {
 		err := w.executeAttempt(ctx, claimed)
+		if session, ok := ctx.Value(researchExecutionKey{}).(domain.ResearchSession); ok && session.Policy.AdaptiveEnabled && err != nil && ctx.Err() == nil {
+			var incomplete verificationIncompleteError
+			if errors.As(err, &incomplete) {
+				if assessmentErr := w.assessDeterministicAdaptiveGap(ctx, claimed.ID, incomplete); assessmentErr != nil {
+					return assessmentErr
+				}
+			} else if errors.Is(err, sqlite.ErrResearchBudgetExceeded) || errors.Is(err, errFetchBudgetExceeded) || errors.Is(err, errSearchBudgetExceeded) {
+				if stopper, ok := w.repo.(interface {
+					StopAdaptiveResearch(context.Context, string, string) error
+				}); ok {
+					if stopErr := stopper.StopAdaptiveResearch(ctx, claimed.ID, "research_budget"); stopErr != nil {
+						return err
+					}
+					stage := domain.StageVerification
+					if _, transitionErr := w.repo.TransitionTask(ctx, claimed.ID, domain.StatusVerifying, &stage, "task.status_changed", "user", nil); transitionErr != nil {
+						return transitionErr
+					}
+					return errors.Join(errCompletionBlocked, verificationIncompleteError{Summary: "Adaptive research stopped at the persisted budget.", Missing: []string{"The bounded research budget ended before all critical requirements could be verified."}})
+				}
+			}
+		}
 		if !errors.Is(err, errVerificationIncomplete) {
 			return err
 		}
@@ -575,6 +617,26 @@ func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 			return err
 		}
 	}
+}
+
+func (w *Worker) assessDeterministicAdaptiveGap(ctx context.Context, taskID string, gap verificationIncompleteError) error {
+	state, err := w.currentCheckpoint(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	if state.Adaptive != nil && len(state.Adaptive.Rounds) > 0 && state.Adaptive.Rounds[len(state.Adaptive.Rounds)-1].Number == state.Completion.Continuations+1 {
+		return nil
+	}
+	stage := domain.StageVerification
+	if _, err := w.repo.TransitionTask(ctx, taskID, domain.StatusVerifying, &stage, "task.status_changed", "user", nil); err != nil {
+		return err
+	}
+	if repo, ok := w.repo.(interface {
+		CommitVerification(context.Context, string, string, string, []string, []string, []domain.VerificationCriterionResult) error
+	}); ok {
+		return repo.CommitVerification(ctx, taskID, "RESEARCH", truncateRunes(gap.Summary, 1000), gap.Missing, nil, nil)
+	}
+	return ErrRecoveryRequired
 }
 
 func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error {
@@ -863,6 +925,12 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 			}
 			query := strings.TrimSpace(arguments.Query)
 			if duplicateResearchQuery(query, state.SearchQueryHistory) && !pendingSearchQueryMatches(state, step.ID, query) {
+				if session, ok := ctx.Value(researchExecutionKey{}).(domain.ResearchSession); ok && session.Policy.AdaptiveEnabled {
+					if err := w.skipPlanStep(ctx, task.ID, &stage, step, "Duplicate research query rejected before provider invocation.", &state); err != nil {
+						return err
+					}
+					continue
+				}
 				return fmt.Errorf("%w: search query repeats an earlier research question", errInvalidModelOutput)
 			}
 			if !duplicateResearchQuery(query, state.SearchQueryHistory) {
@@ -1047,6 +1115,9 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 	if err != nil {
 		return err
 	}
+	if err := w.refreshSourceNotes(ctx, task, &state); err != nil {
+		return err
+	}
 	if len(coverageMissing) > 0 {
 		return verificationIncompleteError{Summary: "The backend could not verify that every planned step produced task-owned results.", Missing: coverageMissing}
 	}
@@ -1065,6 +1136,15 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 	if err != nil {
 		return err
 	}
+	if session, ok := ctx.Value(researchExecutionKey{}).(domain.ResearchSession); ok && session.Policy.AdaptiveEnabled {
+		state, err = w.currentCheckpoint(ctx, task.ID)
+		if err != nil {
+			return err
+		}
+		if err := w.refreshSourceNotes(ctx, task, &state); err != nil {
+			return err
+		}
+	}
 	if verified.Status == verificationOutcomeBlocked || !verified.Complete || len(verified.Missing) != 0 {
 		return verificationIncompleteError{Summary: verified.Summary, Missing: verified.Missing}
 	}
@@ -1081,7 +1161,9 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 		return err
 	}
 	var answer string
-	if verified.Status == verificationOutcomePartial {
+	if session, ok := ctx.Value(researchExecutionKey{}).(domain.ResearchSession); ok && session.Policy.SectionedReportEnabled {
+		answer, err = w.writeResearchReport(ctx, task, goal, &state, verified.Missing, verified.SupplementaryMissing)
+	} else if verified.Status == verificationOutcomePartial {
 		partial := newPartialSynthesisContext("Core request requirements are satisfied, but supplementary criteria remain unverified.", verified.SupplementaryMissing, state.SourceFailures)
 		answer, err = w.synthesizePartialValidated(ctx, task, goal, memoryContext, state, verified.Summary, evidenceIDs, messageID, partial)
 	} else {
@@ -1846,7 +1928,13 @@ func (w *Worker) createPlan(ctx context.Context, task domain.Task, goal, memoryC
 	if err != nil {
 		return domain.Plan{}, err
 	}
-	schema := planOutputSchemaWithRequiredKinds(w.options.MaxSteps, planKinds, requiredResearchKinds(task.Title, goal))
+	// Admit bounded raw research proposals before lossless normalization. The
+	// execution limit is still enforced on the canonical plan below, not raised.
+	admissionSteps := w.options.MaxSteps
+	if requiresWebResearch(task.Title + "\n" + goal) {
+		admissionSteps = 12
+	}
+	schema := planOutputSchemaWithRequiredKinds(admissionSteps, planKinds, requiredResearchKinds(task.Title, goal))
 	if err := w.completeJSONWithRepair(initialCtx, system, user, schema, &plan); err != nil {
 		return domain.Plan{}, err
 	}
@@ -2652,6 +2740,9 @@ func (w *Worker) verify(ctx context.Context, task domain.Task, goal, memoryConte
 		}
 		planContext := map[string]any{"goal": goal, "final_deliverable": goal, "executed_steps": compactPlan(executedPlan)}
 		input := map[string]any{"task": task.Title, "goal": goal, "accepted_memories_untrusted": memoryContext, "plan": planContext, "criterion_catalog": catalog, "completed_steps": state.CompletedSteps, "skipped_steps": state.SkippedSteps, "tool_results": map[string]any{}}
+		if len(state.SourceNotes) > 0 {
+			input["source_notes"] = compactSourceNotes(state.SourceNotes)
+		}
 		if snapshot != nil {
 			input["context_snapshot"] = snapshot
 		}
@@ -2688,6 +2779,36 @@ func (w *Worker) verify(ctx context.Context, task domain.Task, goal, memoryConte
 	if err != nil {
 		return verification{}, err
 	}
+	if session, ok := ctx.Value(researchExecutionKey{}).(domain.ResearchSession); ok && session.Policy.AdaptiveEnabled && state.Adaptive != nil {
+		critical := map[string]bool{}
+		for _, round := range state.Adaptive.Rounds {
+			for _, criterion := range round.Coverage {
+				if criterion.Classification == "critical" {
+					critical[fmt.Sprintf("%s:%d", criterion.StepID, criterion.Criterion)] = true
+				}
+			}
+		}
+		for index := range result.CriterionAssessments {
+			criterion := &result.CriterionAssessments[index]
+			if critical[fmt.Sprintf("%s:%d", criterion.StepID, criterion.Criterion)] {
+				criterion.Classification = "critical"
+			}
+		}
+		for _, question := range state.Adaptive.Questions {
+			if question.Status != "open" || !strings.HasPrefix(question.ID, "criterion:") {
+				continue
+			}
+			met := false
+			for _, criterion := range result.CriterionAssessments {
+				if "criterion:"+fmt.Sprintf("%s:%d", criterion.StepID, criterion.Criterion) == question.ID && criterion.Met {
+					met = true
+				}
+			}
+			if !met {
+				result.Missing = appendVerificationMissing(result.Missing, "Previously accepted critical criterion remains unresolved: "+question.ID)
+			}
+		}
+	}
 	if len(result.Summary) > 1000 || len(result.Missing) > 20 || len(result.CriterionAssessments) > 120 {
 		return verification{}, errInvalidModelOutput
 	}
@@ -2703,6 +2824,52 @@ func (w *Worker) verify(ctx context.Context, task domain.Task, goal, memoryConte
 		}
 	}
 	criticalMissing, supplementaryMissing := verificationCriterionFindings(plan, state, result.CriterionAssessments)
+	if session, ok := ctx.Value(researchExecutionKey{}).(domain.ResearchSession); ok && session.Policy.AdaptiveEnabled {
+		prefix := fmt.Sprintf("continue_%d_fetch", state.Completion.Continuations)
+		searchPrefix := fmt.Sprintf("continue_%d_search", state.Completion.Continuations)
+		newQueries := map[string]bool{}
+		for key, query := range state.SearchQueryByStep {
+			initialSearch := false
+			if state.Completion.Continuations == 0 {
+				for _, step := range plan.Subtasks {
+					if step.ID == key && step.Kind == "search" && !isCompletionStep(key) {
+						initialSearch = true
+					}
+				}
+			}
+			if (initialSearch || strings.HasPrefix(key, searchPrefix)) && contains(state.CompletedSteps, key) && !contains(state.SkippedSteps, key) {
+				newQueries[normalizeResearchText(query)] = true
+			}
+		}
+		if len(newQueries) < 2 {
+			criticalMissing = appendVerificationMissing(criticalMissing, "The current adaptive round did not execute two new independent discovery queries.")
+		}
+		newSources := map[string]bool{}
+		priorSources := map[string]bool{}
+		if state.Adaptive != nil {
+			for _, round := range state.Adaptive.Rounds {
+				if round.Number < state.Completion.Continuations+1 {
+					for _, id := range round.AcceptedEvidence {
+						priorSources[id] = true
+					}
+				}
+			}
+		}
+		roundResults := map[string]any{}
+		for key, value := range state.ToolResults {
+			if strings.HasPrefix(key, prefix) {
+				roundResults[key] = value
+				for _, id := range collectEvidenceIDs(value) {
+					if !priorSources[id] {
+						newSources[id] = true
+					}
+				}
+			}
+		}
+		if state.Completion.Continuations > 0 && (len(newSources) < 2 || distinctResearchSourceCount(roundResults) < 2) {
+			criticalMissing = appendVerificationMissing(criticalMissing, "The current adaptive round did not collect two new task-owned source evidence records.")
+		}
+	}
 	for _, missing := range criticalMissing {
 		result.Missing = appendVerificationMissing(result.Missing, missing)
 	}

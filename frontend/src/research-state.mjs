@@ -3,8 +3,9 @@ import { normalizeSources, sourceErrorCode } from './conversation-state.mjs'
 const text = (value, limit = 600) => typeof value === 'string' ? value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').slice(0, limit) : ''
 export const publicResearchEvents = (events) => events.filter((event) => event?.visibility === 'user' && Number.isSafeInteger(event.seq) && event.seq >= 0 && event.payload && typeof event.payload === 'object').sort((a, b) => a.seq - b.seq)
 
-export function planningFailure(run, events) {
+export function planningFailure(run, events, plan) {
   if (run?.status !== 'failed') return null
+  if (plan?.steps?.length || plan?.subtasks?.length || plan?.plan?.subtasks?.length) return null
   const current = publicResearchEvents(events).filter((event) => event.task_id === run.id)
   if (current.some((event) => event.type === 'plan.created')) return null
   const failure = current.filter((event) => event.type === 'task.failed').at(-1)

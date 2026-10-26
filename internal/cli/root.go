@@ -61,6 +61,7 @@ func NewRoot() *cobra.Command {
 	root.AddCommand(newServeCommand())
 	root.AddCommand(newRuntimeCommand())
 	root.AddCommand(newDoctorCommand(&jsonMode))
+	root.AddCommand(newLabCommand(&jsonMode))
 	root.AddCommand(newSearchSmokeCommand(&jsonMode))
 	root.AddCommand(newTaskCommand(&jsonMode))
 	root.AddCommand(newRunCommand(&jsonMode))
@@ -664,7 +665,16 @@ func serve(parent context.Context) error {
 	if err != nil {
 		return err
 	}
-	fetcher, err := research.NewSafeFetcherWithFetchPolicy(cfg.FetchPolicy(), nil, cfg.AllowedDomains)
+	var fetcher research.Fetcher
+	if cfg.ResearchPrivacyMode == domain.PrivacyOffline {
+		corpus, ok := searchProvider.(*research.OfflineCorpus)
+		if !ok {
+			return errors.New("offline corpus provider is required")
+		}
+		fetcher = corpus
+	} else {
+		fetcher, err = research.NewSafeFetcherWithFetchPolicy(cfg.FetchPolicy(), nil, cfg.AllowedDomains)
+	}
 	if err != nil {
 		return err
 	}
@@ -672,10 +682,14 @@ func serve(parent context.Context) error {
 	if err != nil {
 		return err
 	}
+	var sourceExtractor research.Extractor = htmlExtractor
+	if corpus, ok := searchProvider.(*research.OfflineCorpus); ok {
+		sourceExtractor = corpus
+	}
 	if err := tools.RegisterResearchTools(registry, tools.ResearchTools{
 		SearchProvider: searchProvider,
 		Fetcher:        fetcher,
-		Extractor:      htmlExtractor, Artifacts: artifactStore,
+		Extractor:      sourceExtractor, Artifacts: artifactStore,
 		FetchPolicy: cfg.FetchPolicy(), PDFPolicy: cfg.PDFPolicy,
 		Repository: deps.store, MaxFetchBytes: cfg.MaxFetchBytes, AllowedDomains: cfg.AllowedDomains,
 	}); err != nil {
@@ -697,7 +711,9 @@ func serve(parent context.Context) error {
 	if err != nil {
 		return err
 	}
+	deps.store.FreezeRefinement()
 	deps.worker = orchestrator.New(deps.store, model, registry, orchestrator.Options{
+		ReportArtifacts:   artifactStore,
 		OnBundleChanged:   func(active domain.AgentBundle) { setResearchRunDefaultsForServe(deps.app, cfg, &active) },
 		RuntimeBundleHash: bundle.BundleHash,
 		ResourceMonitor:   resourceMonitor, ResourcePolicy: cfg.ResourcePolicy,
@@ -709,7 +725,11 @@ func serve(parent context.Context) error {
 		RuntimeResearchPolicy: &runtimeResearchPolicy, RuntimeModelContext: cfg.LLMContextLength,
 		UseWorkerLeases: true,
 	})
-	apiServer := api.New(deps.app, deps.worker, deps.store.Ping, cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.SearXNGURL, logger)
+	searchURL := cfg.SearXNGURL
+	if cfg.ResearchPrivacyMode == domain.PrivacyOffline {
+		searchURL = ""
+	}
+	apiServer := api.New(deps.app, deps.worker, deps.store.Ping, cfg.LLMBaseURL, cfg.LLMAPIKey, searchURL, logger)
 	apiServer.SetLLMModel(cfg.LLMModel)
 	apiServer.SetLLMClient(model)
 	apiServer.SetWorkerHeartbeat(deps.worker.Heartbeat)
@@ -722,8 +742,9 @@ func serve(parent context.Context) error {
 	apiServer.SetResearchPolicy(cfg.ResearchLimits(), pdfExtractor.Check)
 	apiServer.SetFetchTempCheck(func(ctx context.Context) error { return research.CheckFetchTemp(ctx, cfg.FetchPolicy()) })
 	setResearchRunDefaultsForServe(deps.app, cfg, &activeBundle)
-	apiServer.SetTavilyConfigured(cfg.TavilyAPIKey != "")
-	apiServer.SetDDGEnabled(cfg.SearchEnableDDG)
+	external := domain.EffectivePrivacyMode(cfg.ResearchPrivacyMode) == domain.PrivacyExternalSearch
+	apiServer.SetTavilyConfigured(external && cfg.TavilyAPIKey != "")
+	apiServer.SetDDGEnabled(external && cfg.SearchEnableDDG)
 	if diagnostic, ok := searchProvider.(interface {
 		HealthSnapshot() []research.ProviderOutcome
 	}); ok {
@@ -812,6 +833,25 @@ func providerStatusFromBool(configured bool) string {
 }
 
 func configuredSearchProvider(cfg config.Config) (research.SearchProvider, error) {
+	switch domain.EffectivePrivacyMode(cfg.ResearchPrivacyMode) {
+	case domain.PrivacyOffline:
+		corpus, err := research.LoadOfflineCorpus(cfg.OfflineCorpusPath)
+		if err != nil {
+			return nil, err
+		}
+		if corpus.SHA256() != cfg.OfflineCorpusSHA256 {
+			return nil, errors.New("offline corpus changed since configuration was loaded")
+		}
+		return corpus, nil
+	case domain.PrivacyLocalSearXNG:
+		if cfg.SearXNGURL == "" {
+			return nil, errors.New("local_searxng requires local SearXNG")
+		}
+		return research.NewSearXNG(cfg.SearXNGURL, nil)
+	case domain.PrivacyExternalSearch:
+	default:
+		return nil, errors.New("unknown research privacy mode")
+	}
 	providers := make([]research.SearchProvider, 0, 3)
 	var searxng, tavily, ddg research.SearchProvider
 	if cfg.SearXNGURL != "" {
@@ -953,6 +993,10 @@ func doctor(ctx context.Context, cfg config.Config) doctorReport {
 	} else {
 		fallbackAvailable := pdfExtractor.FallbackAvailable()
 		pdfRuntime["fallback_allowed"] = fallbackAvailable
+		pdfRuntime["pure_go_fallback_available"], pdfRuntime["state"], pdfRuntime["smoke_tested"] = fallbackAvailable, "unavailable", false
+		if fallbackAvailable {
+			pdfRuntime["state"] = "pure_go_fallback_available"
+		}
 		pdfCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		err := pdfExtractor.Check(pdfCtx)
 		cancel()
@@ -966,6 +1010,7 @@ func doctor(ctx context.Context, cfg config.Config) doctorReport {
 			checks["pdf_extractor"] = doctorCheck{Status: "warning", Message: message}
 		} else {
 			pdfRuntime["isolated_available"], pdfRuntime["isolated_status"] = true, "available"
+			pdfRuntime["state"] = "isolated_available"
 			checks["pdf_extractor"] = doctorCheck{Status: "ok", Message: "rootless Docker and local PDF extractor image are available"}
 		}
 	}
@@ -999,7 +1044,13 @@ func doctor(ctx context.Context, cfg config.Config) doctorReport {
 		checks["artifacts"] = doctorCheck{Status: "ok", Message: "artifact directory is writable"}
 	}
 	checks["search"] = doctorCheck{Status: "warning", Message: "External search health is not checked; Tavily checks are opt-in and may be billable"}
-	if cfg.SearXNGURL == "" && cfg.TavilyAPIKey == "" && !cfg.SearchEnableDDG {
+	if cfg.ResearchPrivacyMode == domain.PrivacyOffline {
+		_, err := configuredSearchProvider(cfg)
+		checks["search"] = doctorCheck{Status: "ok", Message: "Offline pinned corpus; search/fetch make no network requests"}
+		if err != nil {
+			checks["search"] = doctorCheck{Status: "error", Message: "Offline corpus is unavailable or changed"}
+		}
+	} else if cfg.SearXNGURL == "" && cfg.TavilyAPIKey == "" && !cfg.SearchEnableDDG {
 		checks["search"] = doctorCheck{Status: "warning", Message: "Web search is disabled; configure SearXNG/Tavily or explicitly enable SEARCH_ENABLE_DDG"}
 	} else if cfg.SearXNGURL != "" {
 		provider, providerErr := research.NewSearXNG(cfg.SearXNGURL, nil)

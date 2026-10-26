@@ -12,7 +12,7 @@ import (
 )
 
 func (s *Store) RequestResearchContinuation(ctx context.Context, taskID string, expected int, fingerprint, failure string, missing []string) error {
-	if expected < 0 || expected >= 2 || !roleContextSlot.MatchString(fingerprint) || !roleContextSlot.MatchString(failure) || len(missing) > 20 {
+	if expected < 0 || expected >= 10 || !roleContextSlot.MatchString(fingerprint) || !roleContextSlot.MatchString(failure) || len(missing) > 20 {
 		return ErrCheckpointInvalid
 	}
 	for _, value := range missing {
@@ -40,7 +40,13 @@ func (s *Store) RequestResearchContinuation(ctx context.Context, taskID string, 
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE task_id=? AND type='continuation.requested'`, taskID).Scan(&count); err != nil {
 		return err
 	}
-	if count != expected || count >= min(1, session.Policy.MaxContinuations) {
+	continuationLimit := min(1, session.Policy.MaxContinuations)
+	stepCount := 2
+	if session.Policy.AdaptiveEnabled {
+		continuationLimit = min(9, min(session.Policy.MaxContinuations, session.Budget.MaxRounds-1))
+		stepCount = 4
+	}
+	if count != expected || count >= continuationLimit {
 		return ErrConflict
 	}
 	var prior domain.CompletionState
@@ -48,7 +54,7 @@ func (s *Store) RequestResearchContinuation(ctx context.Context, taskID string, 
 	if err := json.Unmarshal(raw, &prior); err != nil {
 		return ErrCheckpointInvalid
 	}
-	if prior.Fingerprint == fingerprint || prior.FailureHash == failure {
+	if !session.Policy.AdaptiveEnabled && (prior.Fingerprint == fingerprint || prior.FailureHash == failure) {
 		return ErrConflict
 	}
 	if session.Counters.SearchQueries >= session.Budget.MaxSearchQueries || session.Counters.Fetches >= session.Budget.MaxFetches || session.Counters.LLMCalls+3 > session.Budget.MaxLLMCalls || session.Counters.Evidence >= session.Budget.MaxEvidence || session.Counters.FetchedBytes >= session.Policy.TaskFetchBudgetBytes || session.CurrentRound+1 >= session.Budget.MaxRounds {
@@ -68,13 +74,32 @@ func (s *Store) RequestResearchContinuation(ctx context.Context, taskID string, 
 		return ErrConflict
 	}
 	plan := *task.Plan
-	if len(plan.Subtasks)+2 > min(12, session.Budget.MaxSteps) {
+	if len(plan.Subtasks)+stepCount > min(12, session.Budget.MaxSteps) {
 		return ErrResearchBudgetExceeded
 	}
 	search := fmt.Sprintf("continue_%d_search", count+1)
 	steps := []domain.PlanStep{
 		{ID: search, Kind: "search", Description: "Address the unmet criteria in context_snapshot.open_questions with a new independent targeted query", SuccessCriteria: []string{"A new targeted discovery query is recorded"}},
 		{ID: fmt.Sprintf("continue_%d_fetch", count+1), Kind: "fetch", Description: "Inspect a new source addressing the unmet criteria in context_snapshot.open_questions", Dependencies: []string{search}, ExpectedOutput: "Task-owned extracted evidence", SuccessCriteria: []string{"New source evidence is stored"}},
+	}
+	if session.Policy.AdaptiveEnabled {
+		adaptive, err := adaptiveState(state)
+		if err != nil {
+			return err
+		}
+		if adaptive.StopReason != "" || len(adaptive.Frontier) == 0 {
+			return ErrResearchBudgetExceeded
+		}
+		if session.Counters.SearchQueries+2 > session.Budget.MaxSearchQueries || session.Counters.Fetches+2 > session.Budget.MaxFetches || session.Counters.LLMCalls+7 > session.Budget.MaxLLMCalls || session.Counters.Evidence+2 > session.Budget.MaxEvidence {
+			return ErrResearchBudgetExceeded
+		}
+		second := fmt.Sprintf("continue_%d_search_2", count+1)
+		steps = []domain.PlanStep{
+			{ID: search, Kind: "search", Description: "Address the critical open questions with a new independent targeted query focused on missing direct evidence", SuccessCriteria: []string{"A new targeted discovery query is recorded"}},
+			{ID: second, Kind: "search", Description: "Address the critical open questions with a different independent targeted query seeking corroboration or contradictions", SuccessCriteria: []string{"A distinct corroborating discovery query is recorded"}},
+			{ID: fmt.Sprintf("continue_%d_fetch", count+1), Kind: "fetch", Description: "Inspect a new source addressing the critical open questions", Dependencies: []string{search, second}, ExpectedOutput: "Task-owned extracted evidence", SuccessCriteria: []string{"New source evidence is stored"}},
+			{ID: fmt.Sprintf("continue_%d_fetch_2", count+1), Kind: "fetch", Description: "Inspect a different new source addressing the critical open questions", Dependencies: []string{search, second}, ExpectedOutput: "Task-owned extracted evidence", SuccessCriteria: []string{"New independent source evidence is stored"}},
+		}
 	}
 	position := len(plan.Subtasks)
 	for _, step := range plan.Subtasks {
@@ -112,7 +137,7 @@ func (s *Store) RequestResearchContinuation(ctx context.Context, taskID string, 
 	if err != nil {
 		return err
 	}
-	if _, err := saveCheckpointTx(ctx, tx, taskID, version, seq, state); err != nil {
+	if _, err := saveCheckpointTx(context.WithValue(ctx, adaptiveMutationKey{}, session.Policy.AdaptiveEnabled), tx, taskID, version, seq, state); err != nil {
 		return err
 	}
 	if err := fenceExecution(ctx, tx, taskID); err != nil {
@@ -170,6 +195,18 @@ func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary
 	if err != nil {
 		return err
 	}
+	if session, sessionErr := researchSession(ctx, tx, taskID); sessionErr == nil && session.Policy.AdaptiveEnabled {
+		adaptive, stateErr := adaptiveState(state)
+		if stateErr != nil {
+			return stateErr
+		}
+		if len(adaptive.Rounds) > 0 && adaptive.Rounds[len(adaptive.Rounds)-1].Number == session.CurrentRound+1 {
+			if adaptive.Rounds[len(adaptive.Rounds)-1].AssessmentHash != adaptiveAssessmentHash(verdict, missing, criteria) {
+				return ErrConflict
+			}
+			return tx.Commit()
+		}
+	}
 	var completion domain.CompletionState
 	raw, _ := json.Marshal(state["completion"])
 	if err := json.Unmarshal(raw, &completion); err != nil {
@@ -177,6 +214,9 @@ func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary
 	}
 	completion.Verdict = verdict
 	state["completion"] = completion
+	if err := assessAdaptiveRound(ctx, tx, taskID, state, verdict, missing, criteria); err != nil {
+		return err
+	}
 	payload := map[string]any{
 		"verdict": verdict, "phase": "evidence_readiness", "summary": summary,
 		"missing": missing, "supplementary_missing": supplementaryMissing, "criteria": criteria,
@@ -189,7 +229,7 @@ func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary
 	if err != nil {
 		return err
 	}
-	if _, err := saveCheckpointTx(ctx, tx, taskID, version, seq, state); err != nil {
+	if _, err := saveCheckpointTx(context.WithValue(ctx, adaptiveMutationKey{}, true), tx, taskID, version, seq, state); err != nil {
 		return err
 	}
 	if err := fenceExecution(ctx, tx, taskID); err != nil {

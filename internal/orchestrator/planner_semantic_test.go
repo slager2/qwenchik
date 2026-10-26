@@ -153,6 +153,75 @@ func TestPlannerSemanticMergeUsesAvailableStepCapacity(t *testing.T) {
 	}
 }
 
+func TestPlannerRawAdmissionIsSeparateFromExecutionBudget(t *testing.T) {
+	for _, count := range []int{4, 6} {
+		facets := []string{}
+		for index := 0; index < count; index++ {
+			facets = append(facets, fmt.Sprintf("Направление роадмапа %d: биоинформатика и информатика", index))
+		}
+		proposal := semanticTestPlan(facets...)
+		proposal.MaxSteps = 12
+		model := &scriptedLLM{responses: []string{semanticPlanJSON(t, proposal)}}
+		worker := New(nil, model, registerPlanValidationResearchTools(t), Options{MaxSteps: 4})
+		plan, err := worker.createPlan(context.Background(), domain.Task{Title: "Research"}, "сделай роадмап по биоинформатике, химии и информатике", "")
+		if err != nil || model.requests != 1 {
+			t.Fatalf("bounded raw proposal rejected before repair: count=%d err=%v calls=%d", count, err, model.requests)
+		}
+		assertSemanticResearchPlan(t, worker, plan, "Research roadmap", 2)
+		if plan.MaxSteps != 4 || worker.options.MaxSteps != 4 {
+			t.Fatalf("execution budget expanded: plan=%d configured=%d", plan.MaxSteps, worker.options.MaxSteps)
+		}
+		for _, facet := range facets {
+			if !strings.Contains(plan.Subtasks[0].Description+plan.Subtasks[1].Description, facet) {
+				t.Fatalf("raw admission lost facet %q", facet)
+			}
+		}
+	}
+}
+
+func TestPlannerRussianLengthContractUsesUnicodeCharacters(t *testing.T) {
+	facets := []string{strings.Repeat("а", 450) + " математика", strings.Repeat("б", 450) + " химия", strings.Repeat("в", 450) + " биология", strings.Repeat("г", 450) + " информатика"}
+	proposal := semanticTestPlan(facets...)
+	proposal.MaxSteps = 12
+	proposal.Goal = strings.Repeat("я", 600)
+	proposal.FinalDeliverable = strings.Repeat("ю", 600)
+	for index := range proposal.Subtasks {
+		proposal.Subtasks[index].ExpectedOutput = strings.Repeat("э", 200)
+		proposal.Subtasks[index].SuccessCriteria = []string{strings.Repeat("ё", 400)}
+	}
+	if err := tools.ValidateJSONSchema(planOutputSchema(12, []string{"search", "fetch"}), []byte(semanticPlanJSON(t, proposal))); err != nil {
+		t.Fatal(err)
+	}
+	if err := domain.ValidatePlan(proposal, 12); err != nil {
+		t.Fatalf("schema-valid Russian text rejected by domain: %v", err)
+	}
+	plan, err := normalizeResearchPlanWithinLimit(proposal, "Research", "Research roadmap", 4)
+	if err != nil {
+		t.Fatalf("schema-valid facets could not be packed losslessly: %v", err)
+	}
+	if err := domain.ValidatePlan(plan, 4); err != nil {
+		t.Fatal(err)
+	}
+	for _, facet := range facets {
+		if !strings.Contains(plan.Subtasks[0].Description+plan.Subtasks[1].Description, facet) {
+			t.Fatal("Russian facet was truncated")
+		}
+	}
+}
+
+func TestPlannerInvalidIdentifierIsStructuralNotSemantic(t *testing.T) {
+	proposal := semanticTestPlan("Биоинформатика", "Химия")
+	proposal.Subtasks[0].ID = "bad.id"
+	raw := semanticPlanJSON(t, proposal)
+	model := &scriptedLLM{responses: []string{raw, raw}}
+	worker := New(nil, model, registerPlanValidationResearchTools(t), Options{})
+	_, err := worker.createPlan(context.Background(), domain.Task{Title: "Research"}, "Research roadmap", "")
+	var failure *plannerFailureError
+	if !errors.Is(err, errInvalidModelOutput) || errors.Is(err, errResearchPlanIncomplete) || !errors.As(err, &failure) || failure.Role != "planner_initial" || model.requests != 2 {
+		t.Fatalf("invalid ID entered semantic correction: err=%v calls=%d", err, model.requests)
+	}
+}
+
 func TestPlannerSemanticCorrectionBoundedSafeAndComplete(t *testing.T) {
 	for _, scenario := range []struct {
 		name   string
@@ -414,20 +483,36 @@ func TestPlannerSemanticRussianFourFacetsRemainVerbatim(t *testing.T) {
 }
 
 func TestPlannerSemanticRussianFourSearchRunCommitsPlanBeforeProviderInvocation(t *testing.T) {
+	goal, facets := russianResearchFacets()
+	assertRussianPlanReachesProvider(t, goal, facets)
+}
+
+func TestPlannerSemanticBioinformaticsRoadmapReachesProvider(t *testing.T) {
+	assertRussianPlanReachesProvider(t, "сделай роадмап по биоинформатике, химии и информатике", []string{
+		"Биоинформатика: последовательность изучения геномики и анализа биологических данных.",
+		"Химия: базовые разделы, необходимые для изучения биоинформатики.",
+		"Информатика: программирование, алгоритмы и статистические методы.",
+		"Совместный учебный маршрут: зависимости тем и практические проекты по биоинформатике, химии и информатике.",
+	})
+}
+
+func assertRussianPlanReachesProvider(t *testing.T, goal string, facets []string) {
+	t.Helper()
 	ctx := context.Background()
 	f := newResearchRunStore(t)
-	goal, facets := russianResearchFacets()
 	saved := f.submit(t, goal, nil)
 	initial := semanticTestPlan(facets...)
 	initial.Goal = goal
+	initial.MaxSteps = 12 // Noncanonical model ceiling must not block normalization.
 	raw := semanticPlanJSON(t, initial)
 	schema := planOutputSchemaWithRequiredKinds(saved.Budget.MaxSteps, []string{"search", "fetch"}, requiredResearchKinds(f.task.Title, goal))
-	if err := tools.ValidateJSONSchema(schema, []byte(raw)); err != nil {
+	admissionSchema := planOutputSchemaWithRequiredKinds(12, []string{"search", "fetch"}, requiredResearchKinds(f.task.Title, goal))
+	if err := tools.ValidateJSONSchema(admissionSchema, []byte(raw)); err != nil {
 		t.Fatalf("initial four-search/zero-fetch plan must reach backend normalization: %v", err)
 	}
 	model := &scriptedLLM{responses: []string{
 		raw,
-		`{"status":"continue","summary":"Поиск университетов с полным грантом","tool_call":{"name":"search","arguments":{"query":"университеты полный грант математика программирование биоинженерия","language":null,"recency":null,"max_results":8}}}`,
+		fmt.Sprintf(`{"status":"continue","summary":"Поиск источников по запросу","tool_call":{"name":"search","arguments":{"query":%q,"language":null,"recency":null,"max_results":8}}}`, goal),
 	}}
 	// An actual provider failure stops execution after the first search. A
 	// failed search must not trigger the successful-empty-result broader retry.
@@ -447,6 +532,9 @@ func TestPlannerSemanticRussianFourSearchRunCommitsPlanBeforeProviderInvocation(
 	assertResearchRunTerminal(t, f, domain.StatusFailed, "search_unavailable")
 	if search.calls.Load() != 1 || fetcher.calls.Load() != 0 || model.requests != 2 {
 		t.Fatalf("expected planner, first search actor, and one provider call: model=%d search=%d fetch=%d", model.requests, search.calls.Load(), fetcher.calls.Load())
+	}
+	if !strings.Contains(model.seen[0].Messages[1].Content, goal) {
+		t.Fatal("the exact original request did not reach the planner")
 	}
 	if providerReadErr != nil {
 		t.Fatal(providerReadErr)
@@ -643,7 +731,7 @@ func TestPlannerSemanticPinnedCorrectionRetainsPreciseConstraints(t *testing.T) 
 		}
 		var reason string
 		_ = json.Unmarshal(input["backend_validation_error"], &reason)
-		if reason != "research plan is incomplete: search facets cannot fit losslessly within 3 searches and 1000 bytes per description" {
+		if reason != "research plan is incomplete: search facets cannot fit losslessly within 3 searches and 1000 characters per description" {
 			t.Fatalf("precise backend error missing: %q", reason)
 		}
 		var summary map[string]int

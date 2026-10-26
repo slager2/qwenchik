@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -34,9 +35,10 @@ var (
 )
 
 type Store struct {
-	db         *sql.DB
-	leaseOwner string
-	leaseTTL   time.Duration
+	refinementFrozen atomic.Bool
+	db               *sql.DB
+	leaseOwner       string
+	leaseTTL         time.Duration
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {

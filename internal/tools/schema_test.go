@@ -37,3 +37,20 @@ func TestValidateJSONSchemaChecksAnyOfBranches(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateJSONSchemaEnforcesIdentifierPattern(t *testing.T) {
+	schema := []byte(`{"type":"string","pattern":"^[a-zA-Z0-9_-]{1,64}$"}`)
+	for _, raw := range []string{`"search_1"`, `"source-2"`} {
+		if err := ValidateJSONSchema(schema, []byte(raw)); err != nil {
+			t.Fatalf("valid identifier rejected: %s: %v", raw, err)
+		}
+	}
+	for _, raw := range []string{`"bad.id"`, `"источник"`, `"search 1"`, `""`} {
+		if err := ValidateJSONSchema(schema, []byte(raw)); err == nil {
+			t.Fatalf("structurally invalid identifier accepted: %s", raw)
+		}
+	}
+	if err := ValidateJSONSchema([]byte(`{"type":"string","pattern":"["}`), []byte(`"x"`)); err == nil {
+		t.Fatal("invalid schema pattern did not fail closed")
+	}
+}

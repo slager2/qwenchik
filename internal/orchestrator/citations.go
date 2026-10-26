@@ -418,6 +418,9 @@ func (w *Worker) completeBlockedPartial(ctx context.Context, task domain.Task, c
 	if state.PendingTool != "" || state.PendingApproval {
 		return false, ErrRecoveryRequired
 	}
+	if err := w.refreshSourceNotes(ctx, task, &state); err != nil {
+		return false, err
+	}
 	messages, err := w.repo.Messages(ctx, task.ID)
 	if err != nil {
 		return false, err
@@ -432,7 +435,12 @@ func (w *Worker) completeBlockedPartial(ctx context.Context, task domain.Task, c
 		return false, err
 	}
 	partial := newPartialSynthesisContext("The bounded continuation was exhausted before verification was complete.", incomplete.Missing, state.SourceFailures)
-	answer, err := w.synthesizePartialResearchCitations(ctx, task, goal, state, evidenceIDs, messageID, partial)
+	var answer string
+	if session, ok := ctx.Value(researchExecutionKey{}).(domain.ResearchSession); ok && session.Policy.SectionedReportEnabled {
+		answer, err = w.writeResearchReport(ctx, task, goal, &state, incomplete.Missing, nil)
+	} else {
+		answer, err = w.synthesizePartialResearchCitations(ctx, task, goal, state, evidenceIDs, messageID, partial)
+	}
 	if err != nil {
 		return false, err
 	}

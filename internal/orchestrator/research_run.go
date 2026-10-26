@@ -102,10 +102,14 @@ func (w *Worker) researchExecutor(ctx context.Context, taskID string) (context.C
 	}
 	if w.options.RuntimeResearchPolicy != nil {
 		stored, current := session.Policy, *w.options.RuntimeResearchPolicy
+		stored.PrivacyMode, current.PrivacyMode = domain.EffectivePrivacyMode(stored.PrivacyMode), domain.EffectivePrivacyMode(current.PrivacyMode)
 		stored.Profile, current.Profile = "", ""
 		stored.Budget, current.Budget = domain.ResearchBudget{}, domain.ResearchBudget{}
 		stored.KeepAwake, current.KeepAwake = false, false
 		stored.MaxContinuations, current.MaxContinuations = 0, 0
+		// Opt-in is snapshotted at submission, not hot-swapped on recovery.
+		stored.AdaptiveEnabled, current.AdaptiveEnabled = false, false
+		stored.SectionedReportEnabled, current.SectionedReportEnabled = false, false
 		if stored != current {
 			return ctx, nil, errResearchRuntimeChanged
 		}

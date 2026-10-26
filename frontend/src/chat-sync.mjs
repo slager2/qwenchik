@@ -5,24 +5,24 @@ const runEvents = new Set(['task.status_changed', 'task.recovered', 'run.paused'
 const reasonPriority = { initial: 0, fallback_poll: 1, sse_event: 2, sse_open: 2, sse_resync: 3, manual_retry: 3, user_action: 3, terminal: 4 }
 
 export function runEventInvalidations(event, mode) {
-  if (!event || typeof event.type !== 'string' || event.type === 'message.delta') return { resources: [], reason: 'sse_event' }
+  if (!event || (event.visibility !== undefined && event.visibility !== 'user') || typeof event.type !== 'string' || event.type === 'message.delta') return { resources: [], reason: 'sse_event' }
   const resources = new Set()
   const terminal = terminalEvents.has(event.type)
   if (event.type === 'message.created') resources.add('messages')
-  if (runEvents.has(event.type)) { resources.add('run'); resources.add('runtime') }
+  if (runEvents.has(event.type) || ['research.round.assessed', 'research.round.stopped', 'report.section.updated', 'continuation.requested', 'verification.completed'].includes(event.type)) { resources.add('run'); resources.add('runtime') }
   if (event.type === 'plan.created' || stepEvents.has(event.type)) resources.add('plan')
   if (sourceEvents.has(event.type) || ['tool.started', 'tool.failed', 'tool.completed'].includes(event.type) && event.payload?.tool === 'fetch_url') resources.add('sources')
   if (event.type === 'evidence.created') resources.add('evidence')
   if (event.type === 'search.provider') resources.add('providers')
   if (terminal) {
-    for (const key of ['messages', 'conversation', 'run', 'runtime']) resources.add(key)
+    for (const key of ['messages', 'conversation', 'run', 'runtime', 'events']) resources.add(key)
     if (mode === 'research') for (const key of ['plan', 'sources', 'evidence']) resources.add(key)
   }
   return { resources: [...resources], reason: terminal ? 'terminal' : 'sse_event' }
 }
 
 export function runResyncResources(mode) {
-  const resources = ['messages', 'conversation', 'run', 'runtime']
+  const resources = ['messages', 'conversation', 'run', 'runtime', 'events']
   if (mode === 'research') resources.push('plan', 'sources', 'evidence')
   return resources
 }

@@ -1,4 +1,4 @@
-import type { AgentEvent, ConversationMessage, DraftMessage, Evidence, SourceRecord } from './types'
+import type { AgentEvent, ConversationMessage, DraftMessage, Evidence, SourceRecord, Run } from './types'
 export function terminal(status: string): boolean
 export function mergeMessages(current: ConversationMessage[], incoming: ConversationMessage[]): ConversationMessage[]
 export interface StreamState {
@@ -9,6 +9,7 @@ export interface StreamState {
   needsSync: boolean
 }
 export function createStreamState(runID: string): StreamState
+export function mergeRunEventHistory(state: StreamState, incoming: AgentEvent[]): StreamState
 export function applyRunEvent(state: StreamState, messages: ConversationMessage[], event: AgentEvent): { state: StreamState; messages: ConversationMessage[] }
 export function safeURL(value: unknown): string
 export function normalizeSources(value: unknown): SourceRecord[]
@@ -16,4 +17,5 @@ export function sourceErrorCode(code: string): string
 export interface CitationReference { id: string; label: string; title: string; url: string }
 export function citationReferences(evidence: (Evidence | SourceRecord)[]): CitationReference[]
 export function explicitResearchContextReferences(userMessage: ConversationMessage | null | undefined, conversationID: string): CitationReference[]
+export function canUseResearchContext(run: Run | null, answer: ConversationMessage | undefined, evidence: Evidence[]): boolean
 export function legacyDraft(events: AgentEvent[], savedIDs?: string[]): DraftMessage | null

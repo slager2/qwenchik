@@ -263,9 +263,11 @@ func (w *Worker) acquireSleep(ctx context.Context, task domain.Task) func() {
 
 func (w *Worker) RuntimeStatus() map[string]any {
 	w.runtimeMu.RLock()
-	status, wanted := w.sleepStatus, w.sleepWanted
+	status, wanted, active := w.sleepStatus, w.sleepWanted, w.activeRunID
 	w.runtimeMu.RUnlock()
 	result := map[string]any{"status": "ok", "enabled": w.options.ResourcePolicy.Enabled, "sleep_policy": "disabled", "keep_awake": wanted, "sleep": status, "max_resume_attempts": w.options.ResourcePolicy.MaxResumeAttempts}
+	result["resource_policy"] = w.options.ResourcePolicy
+	result["active_run_id"] = active
 	if wanted {
 		result["sleep_policy"] = "keep_awake"
 	}

@@ -31,6 +31,7 @@ func PlannerSemanticValidationReasons() []string {
 	}
 	for _, count := range []int{2, 3} {
 		reasons = append(reasons, fmt.Sprintf("research plan is incomplete: search facets cannot fit losslessly within %d searches and 1000 bytes per description", count))
+		reasons = append(reasons, fmt.Sprintf("research plan is incomplete: search facets cannot fit losslessly within %d searches and 1000 characters per description", count))
 	}
 	return reasons
 }

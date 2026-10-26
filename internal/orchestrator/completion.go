@@ -60,7 +60,20 @@ func (w *Worker) requestCompletionContinuation(ctx context.Context, taskID strin
 	if err != nil {
 		return false, err
 	}
+	stopAdaptive := func(reason string) (bool, error) {
+		if repo, ok := w.repo.(interface {
+			StopAdaptiveResearch(context.Context, string, string) error
+		}); ok {
+			if err := repo.StopAdaptiveResearch(ctx, taskID, reason); err != nil {
+				return false, err
+			}
+		}
+		return false, errors.Join(errCompletionBlocked, cause)
+	}
 	if session.Policy.MaxContinuations == 0 {
+		if session.Policy.AdaptiveEnabled {
+			return stopAdaptive("max_rounds")
+		}
 		return false, nil
 	}
 	if err := w.ensureActive(ctx, taskID); err != nil {
@@ -97,16 +110,38 @@ func (w *Worker) requestCompletionContinuation(ctx context.Context, taskID strin
 	if err != nil {
 		return false, err
 	}
-	if state.Completion.Continuations >= min(1, session.Policy.MaxContinuations) || state.Completion.Fingerprint == fingerprint || state.Completion.FailureHash == failure {
+	limit := min(1, session.Policy.MaxContinuations)
+	steps, modelReserve := 2, 3
+	if session.Policy.AdaptiveEnabled {
+		limit = min(9, min(session.Policy.MaxContinuations, session.Budget.MaxRounds-1))
+		steps, modelReserve = 4, 7
+		if state.Adaptive != nil && (state.Adaptive.StopReason != "" || len(state.Adaptive.Frontier) == 0) {
+			return false, errors.Join(errCompletionBlocked, cause)
+		}
+	}
+	if state.Completion.Continuations >= limit || !session.Policy.AdaptiveEnabled && (state.Completion.Fingerprint == fingerprint || state.Completion.FailureHash == failure) {
+		if session.Policy.AdaptiveEnabled {
+			return stopAdaptive("max_rounds")
+		}
 		return false, errors.Join(errCompletionBlocked, cause)
 	}
 	if !requiresWebResearch(task.Title+"\n"+task.Description) || !w.tools.Has("search") || !w.tools.Has("fetch_url") {
 		return false, errors.Join(errCompletionBlocked, cause)
 	}
-	if len(task.Plan.Subtasks)+2 > min(12, session.Budget.MaxSteps) {
+	if len(task.Plan.Subtasks)+steps > min(12, session.Budget.MaxSteps) {
+		if session.Policy.AdaptiveEnabled {
+			return stopAdaptive("step_budget")
+		}
 		return false, errResearchPlanBudget
 	}
-	if session.Counters.SearchQueries >= session.Budget.MaxSearchQueries || session.Counters.Fetches >= session.Budget.MaxFetches || session.Counters.LLMCalls+3 > session.Budget.MaxLLMCalls || session.Counters.Evidence >= session.Budget.MaxEvidence || session.Counters.FetchedBytes >= session.Policy.TaskFetchBudgetBytes {
+	searches, fetches := 1, 1
+	if session.Policy.AdaptiveEnabled {
+		searches, fetches = 2, 2
+	}
+	if session.Counters.SearchQueries+searches > session.Budget.MaxSearchQueries || session.Counters.Fetches+fetches > session.Budget.MaxFetches || session.Counters.LLMCalls+modelReserve > session.Budget.MaxLLMCalls || session.Counters.Evidence+fetches > session.Budget.MaxEvidence || session.Counters.FetchedBytes >= session.Policy.TaskFetchBudgetBytes {
+		if session.Policy.AdaptiveEnabled {
+			return stopAdaptive("research_budget")
+		}
 		return false, sqlite.ErrResearchBudgetExceeded
 	}
 	if err := repo.RequestResearchContinuation(ctx, taskID, state.Completion.Continuations, fingerprint, failure, missing); err != nil {

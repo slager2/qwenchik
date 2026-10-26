@@ -6,6 +6,14 @@ Historical Chat/PDF verification: Go tests/vet/race, 33 frontend tests, embedded
 
 ## Current implementation
 
+The laboratory roadmap now adds opt-in bounded adaptive rounds, compact owned
+source notes, checkpointed section reports/JSON+Markdown artifacts, three explicit
+privacy contracts, offline text imports, and `lab readiness` / `lab soak` /
+`lab benchmark` / `lab compare`. See the [laboratory status and verification
+boundaries](docs/research-lab-phase9-status.md). Live isolated-PDF extraction,
+15m/60m/4h soak, and a real-model baseline/adaptive benchmark are **not established**
+by the local regression suite. These checkout changes require a build/redeploy.
+
 The current implementation includes:
 
 - task create/list/show and lifecycle controls through the API and CLI;
@@ -18,7 +26,7 @@ The current implementation includes:
 - local durable memories with candidate review, explicit acceptance, task/global scopes, and bounded FTS5 retrieval;
 - code commands are exposed only through verified rootless Docker, with a read-only container root, task-only workspace mount, disabled network, and resource/output limits;
 - persisted conversation/message/run APIs, explicit `chat` and `research` modes, stop, retry, and answer continuation;
-- Phase 1 research sessions with immutable profile/policy/model snapshots, persisted absolute deadlines, and durable pre-call budget reservations on the existing fixed-plan execution path;
+- research sessions with immutable profile/privacy/model snapshots, persisted absolute deadlines, durable pre-call reservations and an opt-in adaptive controller on the existing worker;
 - SSE replay using `Last-Event-ID` or an initial `after` cursor, with canonical persisted message snapshots;
 - typed host/inference telemetry in Chat Details and Workspace, with provenance/freshness labels, live SSE updates, and bounded final inference summaries;
 - conversation sidebar, safe Markdown/GFM and evidence links, independent research details, mobile drawers, plus the retained Kanban, inspector, approvals, memories, and command palette.
@@ -87,7 +95,7 @@ docker compose -f compose.searxng.yml up -d
 export SEARXNG_URL=http://127.0.0.1:8081
 ```
 
-Optionally configure Tavily by setting `TAVILY_API_KEY` in `.env` or the process environment before starting `qagent serve`. The key is only used by the search adapter; CLI/API diagnostics expose configured status, not the key. When enabled, Tavily and SearXNG run alongside built-in DuckDuckGo, and results are merged/deduplicated. Search results remain untrusted leads and must be fetched before citation. Restart `qagent serve` after changing search settings; configuration is read at process startup. The bundled SearXNG container is bound to loopback and enables the JSON endpoint. Check `/api/doctor` and `/api/providers` to inspect configuration; doctor does not make a Tavily request. Stop SearXNG with `docker compose -f compose.searxng.yml down` while `SEARXNG_SECRET` is set in the shell. `ALLOWED_DOMAINS=example.org,docs.example.com` optionally narrows fetch and search results. The fetcher rejects loopback, private, link-local, reserved, credential-bearing, nonstandard-port, and redirect-to-private URLs.
+Optionally configure Tavily with `TAVILY_API_KEY` before starting `qagent serve`; diagnostics expose configured status, not the key. `SEARCH_PROVIDER_POLICY=local_primary` is the default routing policy; explicit `parallel` merges/deduplicates configured providers. `RESEARCH_PRIVACY_MODE=local_searxng` uses only the local gateway for search, whose engines still access the Web; `offline` uses only a SHA-pinned local text corpus and no network search/fetch. See [privacy contracts/import format](docs/research-lab-phase6-privacy.md). Search hits remain untrusted leads and must be fetched before citation. Configuration is read at startup. The bundled SearXNG service is loopback-bound and enables JSON; doctor does not call Tavily. Stop it with `docker compose -f compose.searxng.yml down` while `SEARXNG_SECRET` is set. `ALLOWED_DOMAINS` narrows search/fetch; the web fetcher rejects private/reserved/credential-bearing/nonstandard-port targets and unsafe redirects.
 
 `SEARXNG_SECRET` must remain available to Compose commands that interpolate the configuration. Keep it in your local `.env` or secret store, never in a commit. The top-level `use_default_settings` YAML setting enables the pinned image's defaults. Docker Desktop can run the loopback search service, but it does not satisfy the rootless requirement for code sandboxes or isolated PDF extraction. SearXNG forwards search queries to its enabled public search engines.
 
@@ -119,11 +127,11 @@ Check `/api/doctor` for `research_limits` and `pdf_extractor`: effective limits,
 
 Set `LLM_CONTEXT_LENGTH` to the actual server context, not the model's training capacity. The example uses `32768`; if the local `/v1/models` metadata reports a lower runtime `n_ctx`, startup caps the budget to it and logs the mismatch. Byte budgeting remains an estimate, not exact tokenization. Tool-result compaction reserves IDs/URLs/titles and minimum snippets for every result before distributing remaining space; insufficient space raises a budget error rather than sending an empty evidence set to verification.
 
-The planner uses a bounded step-array schema plus backend validation/normalization. The verifier evaluates the user's acceptance criteria against fetched evidence, with backend-owned assessment keys and per-step evidence-ID constraints. Conversation research uses the existing bounded citation critic and exact-excerpt checks. The typed Phase 1 budget allows at most 8 citation sources and 8 short claim paragraphs, with quick limited to 4 sources and 8 claims. These are limits for the legacy citation path; section-based report generation is not implemented. Unsupported or invalid synthesis falls back to explicitly labelled verbatim excerpts with limitations. Legacy task finalization can append a deterministic source list when markers are absent; that list alone does not establish sentence-level support. The critic uses the same local model and is not independent factual verification.
+The planner uses bounded structural/semantic validation and lossless facet normalization. The verifier evaluates the user's criteria against fetched evidence using fixed assessment keys and owned IDs. The legacy citation path remains bounded to 8 sources/8 claims (quick: 4 sources). Opt-in section reports distribute the same claim allowance across at most four checkpointed sections, each with a separate critic and at most one correction. Backend code assembles methodology, limitations, source links, coverage and JSON/Markdown artifacts. Unsupported synthesis falls back to explicit excerpts. A source list alone does not establish claim support, and the same-model critic is not independent factual verification.
 
-## Research Phase 1: fixed-plan sessions
+## Research profiles and saved sessions
 
-`RESEARCH_DEFAULT_PROFILE=standard` selects the default budget for a new research send. `research_settings.profile` can select `quick`, `standard`, `deep_laptop`, `long_laptop`, or `overnight_laptop`. `RESEARCH_ADAPTIVE_ENABLED=false` keeps the existing fixed-plan worker active; setting it to `true` is rejected until Phase 3. The larger profiles do not enable adaptive rounds or promise hours of execution.
+`RESEARCH_DEFAULT_PROFILE=standard` selects the default budget for a new research send. `research_settings.profile` can select `quick`, `standard`, `deep_laptop`, `long_laptop`, or `overnight_laptop`. `RESEARCH_ADAPTIVE_ENABLED=false` is the compatibility default; `true` enables bounded durable evidence-driven continuation rounds. `RESEARCH_SECTION_REPORT_ENABLED=true` independently enables section reports. Both flags are saved at submission. Larger wall ceilings do not promise hours of execution or a particular report length.
 
 Canonical nominal budgets are defined once in `internal/domain/research_defaults.go`. Query ceilings are additionally clamped by the trusted server's `MAX_SEARCH_QUERIES`, which defaults to 12:
 
@@ -135,13 +143,13 @@ Canonical nominal budgets are defined once in `internal/domain/research_defaults
 | `long_laptop` | 14400 | 8 | 32 / 12 | 24 | 72 | 24 | 60 / 20 | 2 |
 | `overnight_laptop` | 21600 | 10 | 48 / 12 | 36 | 96 | 32 | 80 / 24 | 2 |
 
-All profiles have a nominal 12-step ceiling, further bounded by `MAX_STEPS`. Round/question/stagnation fields are future-facing budget and checkpoint data, not claims that Phase 1 executes an adaptive loop. `research_settings.time_budget_seconds` accepts integral 60–21600 seconds and can shorten or extend only the wall ceiling; it does not increase query, fetch, LLM-call, evidence, or output-token limits. The absolute deadline starts at submission, so queued time and downtime consume it. Session-backed research uses that deadline rather than a fresh `TASK_TIMEOUT_SECONDS` interval on restart.
+All profiles retain a cumulative 12-step ceiling, further bounded by `MAX_STEPS`; this can stop adaptive research after only two or three realized rounds. Round/question/stagnation budgets bound the opt-in controller and do not guarantee the nominal round count. `research_settings.time_budget_seconds` accepts integral 60–21600 seconds and changes only the wall ceiling; it does not increase query, fetch, LLM-call, evidence, or output-token limits. The absolute deadline starts at submission, so queued time and downtime consume it. Session-backed research uses that deadline rather than a fresh `TASK_TIMEOUT_SECONDS` interval on restart.
 
 Migration `009_research_sessions.sql` adds exactly one table, `research_sessions`, plus its conversation index. New research sends create the task, messages, and session atomically. Logical model calls and initial HTTP-attempt reservations are persisted before invocation; an allowed JSON-schema-to-JSON-mode fallback reserves one additional HTTP attempt, with model HTTP attempts bounded by twice `MaxLLMCalls`. Failed or interrupted calls do not refund reservations. Existing tasks/runs without a session are not backfilled and keep the legacy execution path. Round/question frontier data belongs in versioned checkpoint JSON, not additional Phase 1 tables.
 
 The immutable session model snapshot pins the local endpoint and model identifier, effective context, output limit, sampling settings, empty stop sequences, `PromptVersion=local-research-v1`, and schema version 1. On execution or recovery, incompatible snapshotted fetch/PDF resource settings or a smaller available model context produce `research_runtime_changed` instead of silently adopting a different policy. Configuration is loaded at startup; this is an execution/recovery compatibility check, not hot reload. The worker constructor and config share the 128 MiB `DefaultTaskFetchBudgetBytes` default; the default fetch policy uses the same cumulative task limit.
 
-See [Research Phase 1](docs/research-phase1.md) for snapshot application, role-specific sampling, reservation accounting, migration compatibility and verification results. The existing web/PDF policy still requires rootless PDF isolation unless unsandboxed fallback is explicitly allowed. Adaptive research, section generation, an external judge, notifications, sleep/power guards, and session-specific API/UI exposure are outside Phase 1; session exposure belongs to Phase 6.
+See the historical [Research Phase 1](docs/research-phase1.md) for snapshot and migration foundations; its phase exclusions are not today's capability inventory. Current adaptive/report/privacy and acceptance boundaries are documented in the [laboratory status](docs/research-lab-phase9-status.md). Web/PDF policy still requires rootless PDF isolation unless unsandboxed fallback is explicitly allowed. There is no external factual judge. Production `serve` freezes refinement creation, candidate/evaluation/promotion and bundle rollback writes; historical reads remain available.
 
 ## Conversations and run semantics
 

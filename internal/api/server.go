@@ -888,6 +888,9 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	}
 	providerHealth := s.searchProviderStatus()
 	checks["search"] = map[string]string{"status": "warning", "message": "Search configuration is not a health check; Tavily and DuckDuckGo are not probed"}
+	if researchLimits["privacy_mode"] == domain.PrivacyOffline {
+		checks["search"] = map[string]string{"status": "ok", "message": "Pinned offline corpus loaded; network search and fetch disabled"}
+	}
 	for name, item := range providerHealth {
 		state, _ := item["health"].(string)
 		checks["search_"+name] = map[string]string{"status": "warning", "message": "Last observed state: " + state}
@@ -1140,6 +1143,43 @@ func (s *Server) searchProviderStatus() map[string]map[string]any {
 }
 
 func safePublicEvent(event domain.Event) domain.Event {
+	if event.Type == "report.section.updated" {
+		var input map[string]any
+		_ = json.Unmarshal(event.Payload, &input)
+		safe := map[string]any{}
+		if n, ok := boundedNumber(input["section"], 4, true); ok && n >= 1 {
+			safe["section"] = n
+		}
+		if status, ok := input["status"].(string); ok && (status == "supported" || status == "fallback_excerpts") {
+			safe["status"] = status
+		}
+		if used, ok := input["correction_used"].(bool); ok {
+			safe["correction_used"] = used
+		}
+		event.Payload, _ = json.Marshal(safe)
+		return event
+	}
+	if event.Type == "research.round.assessed" || event.Type == "research.round.stopped" {
+		var input map[string]any
+		_ = json.Unmarshal(event.Payload, &input)
+		safe := map[string]any{}
+		for _, key := range []string{"number", "frontier_count", "evidence_count", "critical_missing_count", "stagnant_rounds"} {
+			if value, ok := boundedNumber(input[key], 1000, true); ok {
+				safe[key] = value
+			}
+		}
+		for _, key := range []string{"outcome", "stop_reason", "reason"} {
+			if value, ok := input[key].(string); ok {
+				for _, allowed := range []string{"PASS", "PARTIAL", "RESEARCH", "UNCERTAIN", "BLOCK", "criteria_covered", "stagnation", "max_rounds", "question_budget_exhausted", "step_budget", "research_budget", "empty_frontier"} {
+					if value == allowed {
+						safe[key] = value
+					}
+				}
+			}
+		}
+		event.Payload, _ = json.Marshal(safe)
+		return event
+	}
 	if event.Type == "task.failed" {
 		event.Payload = safePlannerFailurePayload(event.Payload)
 		return event
@@ -1225,6 +1265,8 @@ func safePublicEvent(event domain.Event) domain.Event {
 
 func (s *Server) writeServiceError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, sqlite.ErrRefinementFrozen):
+		writeError(w, http.StatusConflict, "refinement_frozen", "Refinement заморожен на время работы исследовательской лаборатории.", false)
 	case errors.Is(err, sqlite.ErrWebDisabled):
 		writeError(w, http.StatusConflict, "web_disabled", "Веб-поиск отключён для этого разговора. Выберите Chat или измените настройки.", false)
 	case errors.Is(err, domain.ErrInvalidConversation):
@@ -1413,7 +1455,7 @@ func publicEvent(event domain.Event) bool {
 		return true
 	}
 	switch event.Type {
-	case "context.compacted", "continuation.requested", "verification.completed", "refinement.evaluated", "refinement.promoted", "refinement.rollback":
+	case "report.section.updated", "research.round.stopped", "research.round.assessed", "context.compacted", "continuation.requested", "verification.completed", "refinement.evaluated", "refinement.promoted", "refinement.rollback":
 		return true
 	case "research.warning", "source.updated", "source.fetch.started", "source.fetch.failed", "source.failed", "source.extracted", "search.hit", "query.updated", "verification.updated", "search.provider", "tool.failed", "task.created", "task.status_changed", "task.recovered", "message.created", "message.delta", "plan.created", "step.started", "step.completed", "step.skipped", "tool.started", "tool.completed", "approval.requested", "approval.approved", "approval.rejected", "approval.expired", "artifact.created", "evidence.created", "task.completed", "task.failed", "task.cancelled":
 		return true

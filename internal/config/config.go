@@ -19,49 +19,53 @@ import (
 )
 
 type Config struct {
-	NotificationChannel       string
-	NtfyURL                   string
-	NtfyToken                 string
-	ResourcePolicy            resources.Policy
-	KeepAwake                 bool
-	WorkerLeaseSeconds        int
-	BindAddr                  string
-	DatabasePath              string
-	ArtifactsPath             string
-	WorkspaceRoot             string
-	SandboxRuntime            string
-	SandboxImage              string
-	SandboxNetwork            string
-	PDFExtractorImage         string
-	LLMBaseURL                string
-	LLMAPIKey                 string
-	LLMModel                  string
-	LLMContextLength          int
-	LLMMaxOutputTokens        int
-	LLMTemperature            float64
-	LLMTopP                   float64
-	LLMEnableThinking         bool
-	LLMRequestTimeoutSecs     int
-	LLMMaxConcurrency         int
-	SearXNGURL                string
-	TavilyAPIKey              string
-	SearchEnableDDG           bool
-	SearchProviderPolicy      string
-	MaxSteps                  int
-	TaskTimeoutSeconds        int
-	MaxSearchQueries          int
-	MaxFetchBytes             int64
-	ResearchDefaultProfile    string
-	ResearchAdaptiveEnabled   bool
-	MaxSourceBytes            int64
-	PDFPolicy                 pdfextract.Policy
-	PDFDownloadTimeoutSeconds int
-	ArtifactMaxBytes          int64
-	SandboxMaxFileBytes       int64
-	FetchTempDir              string
-	FetchTempTaskBytes        int64
-	FetchTempGlobalBytes      int64
-	AllowedDomains            []string
+	NotificationChannel          string
+	NtfyURL                      string
+	NtfyToken                    string
+	ResourcePolicy               resources.Policy
+	KeepAwake                    bool
+	WorkerLeaseSeconds           int
+	BindAddr                     string
+	DatabasePath                 string
+	ArtifactsPath                string
+	WorkspaceRoot                string
+	SandboxRuntime               string
+	SandboxImage                 string
+	SandboxNetwork               string
+	PDFExtractorImage            string
+	LLMBaseURL                   string
+	LLMAPIKey                    string
+	LLMModel                     string
+	LLMContextLength             int
+	LLMMaxOutputTokens           int
+	LLMTemperature               float64
+	LLMTopP                      float64
+	LLMEnableThinking            bool
+	LLMRequestTimeoutSecs        int
+	LLMMaxConcurrency            int
+	SearXNGURL                   string
+	TavilyAPIKey                 string
+	SearchEnableDDG              bool
+	SearchProviderPolicy         string
+	MaxSteps                     int
+	TaskTimeoutSeconds           int
+	MaxSearchQueries             int
+	MaxFetchBytes                int64
+	ResearchDefaultProfile       string
+	ResearchPrivacyMode          string
+	OfflineCorpusPath            string
+	OfflineCorpusSHA256          string
+	ResearchAdaptiveEnabled      bool
+	ResearchSectionReportEnabled bool
+	MaxSourceBytes               int64
+	PDFPolicy                    pdfextract.Policy
+	PDFDownloadTimeoutSeconds    int
+	ArtifactMaxBytes             int64
+	SandboxMaxFileBytes          int64
+	FetchTempDir                 string
+	FetchTempTaskBytes           int64
+	FetchTempGlobalBytes         int64
+	AllowedDomains               []string
 }
 
 func Load() (Config, error) {
@@ -276,6 +280,9 @@ func dotEnvCommentStart(value string) int {
 }
 
 func (c Config) Validate() error {
+	if err := c.validatePrivacy(); err != nil {
+		return err
+	}
 	if c.SearchProviderPolicy != "" && c.SearchProviderPolicy != "local_primary" && c.SearchProviderPolicy != "parallel" {
 		return errors.New("SEARCH_PROVIDER_POLICY must be local_primary or parallel")
 	}
@@ -372,9 +379,6 @@ func (c Config) Validate() error {
 	}
 	if c.MaxSteps < 1 || c.MaxSteps > 12 || c.MaxSearchQueries < 1 || c.MaxFetchBytes < 1 {
 		return errors.New("task and tool budgets are invalid")
-	}
-	if c.ResearchAdaptiveEnabled {
-		return errors.New("RESEARCH_ADAPTIVE_ENABLED=true is unavailable until Phase 3")
 	}
 	if c.ResearchDefaultProfile != "" && !knownResearchProfile(c.ResearchDefaultProfile) {
 		return errors.New("RESEARCH_DEFAULT_PROFILE must be quick, standard, deep_laptop, long_laptop, or overnight_laptop")

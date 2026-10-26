@@ -554,6 +554,7 @@ func prepareResearchCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, p
 		return nil, 0, err
 	}
 	var prior string
+	var canonicalAdaptive json.RawMessage
 	err = tx.QueryRowContext(ctx, `SELECT state_json FROM checkpoints WHERE task_id=? ORDER BY last_event_seq DESC,rowid DESC LIMIT 1`, taskID).Scan(&prior)
 	if err == nil {
 		var previous map[string]json.RawMessage
@@ -563,6 +564,7 @@ func prepareResearchCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, p
 		if err := validateResearchCheckpointEnvelope(previous, session.ID); err != nil {
 			return nil, 0, err
 		}
+		canonicalAdaptive = previous["adaptive_research"]
 		for key, value := range previous {
 			if researchWorkerCheckpointField(key) {
 				continue
@@ -578,6 +580,16 @@ func prepareResearchCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, p
 		}
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, 0, err
+	}
+	if allowed, _ := ctx.Value(adaptiveMutationKey{}).(bool); !allowed {
+		if len(canonicalAdaptive) > 0 {
+			values["adaptive_research"] = canonicalAdaptive
+		} else {
+			delete(values, "adaptive_research")
+		}
+	}
+	if session.Policy.AdaptiveEnabled {
+		session.Counters.Rounds = max(session.Counters.Rounds, session.CurrentRound+1)
 	}
 	if err := reconcileResearchCounters(ctx, tx, &session, values); err != nil {
 		return nil, 0, err

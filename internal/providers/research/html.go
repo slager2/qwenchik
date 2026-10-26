@@ -83,6 +83,11 @@ func (e *HTMLExtractor) PreflightPDF(ctx context.Context) error {
 				return nil
 			}
 		}
+		if !e.pdfPolicy.AllowUnsandboxedFallback {
+			if fallback, ok := e.pdfExtractor.(interface{ FallbackAvailable() bool }); ok && fallback.FallbackAvailable() {
+				return errors.Join(ErrPDFExtractorUnavailable, pdfextract.ErrPolicyRejected, err)
+			}
+		}
 		return errors.Join(ErrPDFExtractorUnavailable, err)
 	}
 	return nil

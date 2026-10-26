@@ -15,12 +15,25 @@ export function createStreamState(runID) {
   return { runID, cursor: 0, streams: {}, events: [], needsSync: false }
 }
 
+export function mergeRunEventHistory(state, incoming) {
+  const bySequence = new Map()
+  for (const event of [...state.events, ...incoming]) {
+    if (event?.task_id === state.runID && event.visibility === 'user' && Number.isSafeInteger(event.seq) && event.seq > 0 && event.payload && typeof event.payload === 'object' && event.type !== 'message.delta') bySequence.set(event.seq, event)
+  }
+  const ordered = [...bySequence.values()].sort((a, b) => a.seq - b.seq)
+  // Keep diagnostic anchors even when a long run evicts the activity window.
+  const anchors = new Map()
+  for (const event of ordered) if (['plan.created', 'task.failed', 'verification.completed', 'research.warning'].includes(event.type)) anchors.set(event.type, event)
+  const retained = new Map([...anchors.values(), ...ordered.slice(-150)].map((event) => [event.seq, event]))
+  // REST history never changes delta-stream identity or its replay cursor.
+  return { ...state, events: [...retained.values()].sort((a, b) => a.seq - b.seq) }
+}
+
 export function applyRunEvent(state, messages, event) {
-  if (!event || event.task_id !== state.runID || !Number.isSafeInteger(event.seq) || event.seq <= state.cursor || typeof event.type !== 'string' || !event.payload || typeof event.payload !== 'object') return { state, messages }
+  if (!event || event.visibility !== 'user' || event.task_id !== state.runID || !Number.isSafeInteger(event.seq) || event.seq <= state.cursor || typeof event.type !== 'string' || !event.payload || typeof event.payload !== 'object') return { state, messages }
   const next = { ...state, cursor: event.seq }
   if (event.type !== 'message.delta') {
-    next.events = [...state.events, event].slice(-150)
-    return { state: next, messages }
+    return { state: mergeRunEventHistory(next, [event]), messages }
   }
   const { stream_id, message_id, chunk_index, delta } = event.payload
   if (typeof stream_id !== 'string' || typeof message_id !== 'string' || typeof delta !== 'string' || !Number.isSafeInteger(chunk_index) || chunk_index < 0) return { state: { ...next, needsSync: true }, messages }
@@ -87,6 +100,12 @@ export function explicitResearchContextReferences(userMessage, conversationID) {
   const context = userMessage.metadata.research_context
   if (typeof runID !== 'string' || !context || typeof context !== 'object' || context.run_id !== runID || !['supported', 'fallback_excerpts'].includes(context.verification_status) || !Array.isArray(context.sources)) return []
   return citationReferences(context.sources.map((source) => source && typeof source === 'object' ? ({ id: source.evidence_id, title: source.title, canonical_url: source.canonical_url, status: 'verified', quality_flags: [] }) : null))
+}
+
+export function canUseResearchContext(run, answer, evidence) {
+  if (run?.mode !== 'research' || run.status !== 'completed' || answer?.run_id !== run.id || answer.id !== run.assistant_message_id || answer.status !== 'completed' || !answer.content?.trim()) return false
+  if (!['supported', 'fallback_excerpts'].includes(answer.metadata?.verification?.status)) return false
+  return (evidence || []).some((item) => item.task_id === run.id && item.http_status >= 200 && item.http_status < 300 && !(item.quality_flags || []).length && item.excerpt?.trim() && safeURL(item.canonical_url) && (answer.citations || []).some((citation) => citation.evidence_id === item.id && safeURL(citation.url) === safeURL(item.canonical_url)))
 }
 
 export function legacyDraft(events, savedIDs = []) {

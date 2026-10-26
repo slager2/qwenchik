@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyRunEvent, createStreamState, mergeMessages, normalizeSources, safeURL, citationReferences, explicitResearchContextReferences, terminal, legacyDraft } from './conversation-state.mjs'
+import { applyRunEvent, canUseResearchContext, createStreamState, mergeMessages, mergeRunEventHistory, normalizeSources, safeURL, citationReferences, explicitResearchContextReferences, terminal, legacyDraft } from './conversation-state.mjs'
 
 const message = { id: 'm', run_id: 'r', conversation_id: 'c', role: 'assistant', content: '', status: 'streaming', last_event_seq: 0, created_at: '2026-10-19T10:00:00Z' }
-const delta = (seq, index, text, stream = 's') => ({ task_id: 'r', seq, type: 'message.delta', payload: { message_id: 'm', stream_id: stream, chunk_index: index, delta: text } })
+const delta = (seq, index, text, stream = 's') => ({ task_id: 'r', visibility: 'user', seq, type: 'message.delta', payload: { message_id: 'm', stream_id: stream, chunk_index: index, delta: text } })
 const apply = (current, event) => applyRunEvent(current.state, current.messages, event)
 
 test('replayed, duplicate and out-of-order events never duplicate text', () => {
@@ -79,4 +79,41 @@ test('legacy terminal tasks reconstruct persisted partial deltas without duplica
   assert.equal(legacyDraft(events).content, 'Partial answer')
   assert.equal(legacyDraft(events, ['m']), null)
   assert.equal(legacyDraft([...events, delta(4, 0, 'Repaired partial', 'repair')]).content, 'Repaired partial')
+})
+
+test('nonpublic deltas and lifecycle events never mutate the transcript or cursor', () => {
+  let current = { state: createStreamState('r'), messages: [message] }
+  for (const visibility of ['internal', 'audit', undefined]) {
+    current = apply(current, { ...delta(1, 0, 'PRIVATE'), visibility })
+    current = apply(current, { task_id: 'r', visibility, seq: 2, type: 'task.failed', payload: {} })
+  }
+  assert.equal(current.messages[0].content, '')
+  assert.equal(current.state.cursor, 0)
+  assert.equal(current.state.events.length, 0)
+  current = apply(current, delta(20, 0, 'Public text'))
+  assert.equal(current.messages[0].content, 'Public text')
+})
+
+test('REST history recovers diagnostic anchors without replaying text or moving SSE cursor', () => {
+  const diagnostic = { task_id: 'r', visibility: 'user', seq: 2, type: 'task.failed', payload: { failure_stage: 'planning', validation_error: 'known safe reason' } }
+  const state = { ...createStreamState('r'), cursor: 100, streams: { m: { id: 's', index: 3 } } }
+  const recovered = mergeRunEventHistory(state, [diagnostic, delta(1, 0, 'Old text'), { ...diagnostic, task_id: 'foreign' }, { ...diagnostic, seq: 3, visibility: 'internal' }])
+  assert.deepEqual(recovered.events, [diagnostic])
+  assert.equal(recovered.cursor, 100)
+  assert.deepEqual(recovered.streams, state.streams)
+  const plan = { task_id: 'r', visibility: 'user', seq: 1, type: 'plan.created', payload: {} }
+  const events = Array.from({ length: 200 }, (_, index) => ({ task_id: 'r', visibility: 'user', seq: index + 4, type: 'step.started', payload: {} }))
+  const retained = mergeRunEventHistory(recovered, [plan, ...events])
+  assert.ok(retained.events.some((event) => event.type === 'plan.created'))
+  assert.ok(retained.events.some((event) => event.type === 'task.failed'))
+  assert.ok(retained.events.length <= 154)
+})
+
+test('research context continuation requires current saved text and usable cited evidence', () => {
+  const run = { id: 'r', mode: 'research', status: 'completed', assistant_message_id: 'm' }
+  const answer = { ...message, status: 'completed', content: 'Supported answer', metadata: { verification: { status: 'supported' } }, citations: [{ evidence_id: 'e', url: 'https://example.org/source' }] }
+  const evidence = [{ id: 'e', task_id: 'r', http_status: 200, quality_flags: [], excerpt: 'Supporting excerpt', canonical_url: 'https://example.org/source' }]
+  assert.equal(canUseResearchContext(run, answer, evidence), true)
+  for (const invalid of [undefined, { ...answer, content: '' }, { ...answer, run_id: 'foreign' }, { ...answer, metadata: {} }]) assert.equal(canUseResearchContext(run, invalid, evidence), false)
+  for (const invalid of [[], [{ ...evidence[0], task_id: 'foreign' }], [{ ...evidence[0], quality_flags: ['rejected'] }], [{ ...evidence[0], http_status: 404 }]]) assert.equal(canUseResearchContext(run, answer, invalid), false)
 })

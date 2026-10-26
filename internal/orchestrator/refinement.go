@@ -174,6 +174,9 @@ func (w *Worker) executeRefinement(ctx context.Context, task domain.Task) (handl
 	if err != nil {
 		return true, err
 	}
+	if frozen, ok := w.repo.(interface{ RefinementFrozen() bool }); ok && frozen.RefinementFrozen() {
+		return true, sqlite.ErrRefinementFrozen
+	}
 	if job.Base.Validate() != nil || w.options.RuntimeBundleHash != "" && job.Base.BaseHash() != w.options.RuntimeBundleHash {
 		return true, errResearchRuntimeChanged
 	}

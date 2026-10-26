@@ -11,6 +11,7 @@ server.stdout.on('data', (data) => { serverOutput += data })
 server.stderr.on('data', (data) => { serverOutput += data })
 let browser
 const failures = []
+let chatWarningIssued = false
 const now = '2026-10-19T10:00:00Z'
 const bundleHash = '0123456789abcdef'.repeat(4)
 const contextHash = 'fedcba9876543210'.repeat(4)
@@ -39,11 +40,12 @@ const telemetryFixture = () => {
 }
 const runtimeFixture = (task_id, cursor = 0) => ({
   task_id, cursor, status: 'running', telemetry: telemetryFixture(), telemetry_revision: 1, bundle_hash: bundleHash, context_snapshot_hash: contextHash,
-  runtime: { enabled: true, keep_awake: true, resources: { free_ram_bytes: 8192, rss_bytes: 1024, gpu_free_vram_mb: null, gpu_temp_c: null, power_source: 'unknown', snapshot_at: new Date().toISOString(), warnings: [] }, sleep: { active: false, available: false, provider: 'unavailable' } },
+  runtime: { enabled: true, keep_awake: true, resources: { free_ram_bytes: 8192, rss_bytes: 1024, gpu_free_vram_mb: null, gpu_temp_c: null, power_source: 'unknown', snapshot_at: new Date().toISOString(), warnings: task_id === 'r-b' && chatWarningIssued ? ['chat warning fixture'] : [] }, sleep: { active: false, available: false, provider: 'unavailable' } },
 })
 const conversation = (id, mode) => ({ id, title: id === 'a' ? 'Первый разговор' : 'Исследование', mode, created_at: now, updated_at: now, latest_run_id: `r-${id}` })
 const conversations = [conversation('a', 'chat'), conversation('b', 'research'), { id: 'c', title: 'Заблокированная проверка', mode: 'research', created_at: now, updated_at: now, latest_run_id: 'r-c' }, { id: 'd', title: 'Ресурсная пауза', mode: 'research', created_at: now, updated_at: now, latest_run_id: 'r-d' }]
 conversations.push({ ...conversation('e', 'research'), title: 'Сбой планирования' })
+conversations.push({ ...conversation('f', 'research'), title: 'Поздний сбой планирования' })
 const message = (id, conversation_id, run_id, role, content, status = 'completed', seq = 0) => ({ id, conversation_id, run_id, role, content, status, created_at: now, updated_at: now, last_event_seq: seq })
 const messages = {
   a: [message('u-a', 'a', 'r-a', 'user', 'Первый вопрос'), message('m-a', 'a', 'r-a', 'assistant', 'Ответ первого разговора')],
@@ -51,13 +53,18 @@ const messages = {
   c: [message('u-c', 'c', 'r-c', 'user', 'Проверить критические критерии'), message('m-c', 'c', 'r-c', 'assistant', '', 'failed')],
   d: [message('u-d', 'd', 'r-d', 'user', 'Исследование на паузе'), message('m-d', 'd', 'r-d', 'assistant', 'Сохранённый фрагмент', 'streaming')],
   e: [message('old-e', 'e', 'old-e-run', 'assistant', 'Предыдущий непустой ответ'), message('u-e', 'e', 'r-e', 'user', 'Составить план'), message('m-e', 'e', 'r-e', 'assistant', '', 'failed')],
+  f: [message('u-f', 'f', 'r-f', 'user', 'Составить роадмап'), message('m-f', 'f', 'r-f', 'assistant', '', 'streaming')],
 }
 const runs = Object.fromEntries(conversations.map((item) => [item.latest_run_id, { id: item.latest_run_id, conversation_id: item.id, user_message_id: `u-${item.id}`, assistant_message_id: `m-${item.id}`, mode: item.mode, operation: 'message', status: 'completed', retry_count: 0 }]))
+messages.b[1].metadata = { verification: { status: 'supported' } }
+messages.b[1].citations = [{ evidence_id: 'ev-1', url: 'https://example.org/source' }]
 runs['r-b'].terminal_outcome = 'partial'
 runs['r-c'] = { ...runs['r-c'], status: 'failed', terminal_outcome: 'blocked', error_code: 'completion_blocked', error_message: 'Проверка не смогла подтвердить обязательные критерии.' }
 runs['r-d'] = { ...runs['r-d'], status: 'paused', pause_reason: 'resource_guard', resource_reason: 'low_ram', stage: 'verification' }
 runs['r-e'] = { ...runs['r-e'], status: 'failed', stage: 'planning', error_code: 'research_plan_incomplete' }
+runs['r-f'] = { ...runs['r-f'], status: 'planning', stage: 'planning' }
 const events = {}
+events['r-f'] = []
 events['r-b'] = [
   { type: 'plan.created', payload: {} },
   { type: 'step.started', payload: { step_id: 'step1' } },
@@ -81,6 +88,9 @@ const streamCursors = []
 const submissionKeys = []
 const researchContextSubmissions = []
 let counter = 0
+let planningStreamMode = 'resync'
+let planningHistoryRequests = 0
+let latePlanningHistoryRequests = 0
 let rejectNext = false
 let sourcesFail = true
 let planFail = false
@@ -306,10 +316,28 @@ try {
       const run = runs[parts[2]]
       if (!run) return json({ error: { message: 'Run not found' } }, 404)
       if (!parts[3]) return json(run)
+      if (run.id === 'r-f') {
+        if (parts[3] === 'events' && parts[4] === 'stream') {
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          run.status = 'failed'
+          run.error_code = 'research_plan_incomplete'
+          run.terminal_outcome = 'blocked'
+          events[run.id] = [{ id: 'late-failure', task_id: run.id, seq: 1, type: 'task.failed', visibility: 'user', schema_version: 1, created_at: now, payload: { failure_stage: 'planning', failure_role: 'planner_correction', planner_attempt: 2, validation_error: 'Поздняя диагностическая причина', error_code: 'research_plan_incomplete' } }]
+          const snapshot = { task_id: run.id, cursor: 1, status: 'failed', stage: 'planning', terminal_outcome: 'blocked' }
+          return route.fulfill({ contentType: 'text/event-stream', body: `event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n` })
+        }
+        if (parts[3] === 'events') latePlanningHistoryRequests++
+        if (parts[3] === 'plan') return json({ error: { message: 'План не создан' } }, 404)
+      }
       if (run.id === 'r-e') {
         if (parts[3] === 'runtime') return json({ task_id: run.id, cursor: 1, status: 'failed', stage: 'planning', counters: { llm_calls: 2, search_queries: 0, fetches: 0 } })
         if (parts[3] === 'plan') return json({ error: { message: 'Детали исследования недоступны' } }, 404)
         if (['sources', 'evidence'].includes(parts[3])) return json([])
+        if (parts[3] === 'events' && parts[4] === 'stream') {
+          if (planningStreamMode === 'offline') return route.abort('connectionfailed')
+          if (planningStreamMode === 'resync') return route.fulfill({ contentType: 'text/event-stream', body: 'event: resync\ndata: {"cursor":1}\n\n' })
+        }
+        if (parts[3] === 'events') planningHistoryRequests++
       }
       if (parts[3] === 'runtime') return runtimeGetUnavailable && run.id === 'r-b' ? json({ error: { message: 'Runtime snapshot unavailable' } }, 503) : json({ ...runtimeFixture(run.id, events[run.id]?.at(-1)?.seq || 0), status: run.status, terminal_outcome: run.terminal_outcome, pause_reason: run.pause_reason || '', resource_reason: run.resource_reason || '', verdict: run.id === 'r-b' ? 'PARTIAL' : run.id === 'r-c' ? 'RESEARCH' : undefined, completed_steps: 1, compactions: 1, max_continuations: 1, completion: { continuations: 0 } })
       if (parts[3] === 'cancel') {
@@ -337,6 +365,8 @@ try {
           runtime.telemetry.system.ram_free.value = 6 * 1024 ** 3
           runtime.telemetry.inference.output_tokens.value = 5
           const inference = { ...runtime.telemetry.inference, output_tokens: { ...runtime.telemetry.inference.output_tokens, value: 9 } }
+          // REST snapshots and SSE describe the same current warning state.
+          chatWarningIssued = true
           telemetryFrames = `event: snapshot\ndata: ${JSON.stringify(runtime)}\n\n` +
             `event: runtime_snapshot\ndata: ${JSON.stringify({ telemetry: runtime.telemetry, telemetry_revision: 2 })}\n\n` +
             `event: inference_progress\ndata: ${JSON.stringify({ inference, telemetry_revision: 3 })}\n\n` +
@@ -349,7 +379,7 @@ try {
       }
       if (parts[3] === 'events') return json((events[run.id] || []).filter((event) => event.seq > Number(url.searchParams.get('after') || 0)))
       if (parts[3] === 'sources') { sourceRequests++; return sourcesFail ? json({ error: { message: 'Источники временно недоступны' } }, 503) : json([{ id: 's-1', title: 'Реальный источник', url: 'https://example.org/source', status: 'extracted', provider: 'searxng' }]) }
-      if (parts[3] === 'evidence') { evidenceRequests++; return json(run.mode === 'research' ? [{ id: 'ev-1', title: 'Реальный источник', canonical_url: 'https://example.org/source', excerpt: 'Проверенный фрагмент', provider: 'searxng', extraction_method: 'html', retrieved_at: now, content_sha256: 'abc', quality_flags: [] }] : []) }
+      if (parts[3] === 'evidence') { evidenceRequests++; return json(run.mode === 'research' ? [{ id: 'ev-1', task_id: run.id, http_status: 200, title: 'Реальный источник', canonical_url: 'https://example.org/source', excerpt: 'Проверенный фрагмент', provider: 'searxng', extraction_method: 'html', retrieved_at: now, content_sha256: 'abc', quality_flags: [] }] : []) }
       if (parts[3] === 'plan') return planFail ? json({ error: { message: 'План недоступен' } }, 503) : json({ goal: 'Сравнить', subtasks: [{ id: 'step1', description: 'Проверить источники' }] })
     }
     return json({ error: { message: `Unmocked: ${method} ${url.pathname}` } }, 404)
@@ -436,11 +466,11 @@ try {
   await pdfCard.getByText('Попытка перехода к другому источнику подтверждена.', { exact: true }).waitFor()
   assert.equal(await pdfCard.count(), 1)
   assert.equal(await pdfCard.getByText('Код: pdf_source_too_large', { exact: true }).count(), 1)
-  const previousEvidenceRequests = evidenceRequests
   const retrySources = page.getByRole('button', { name: 'Повторить загрузку', exact: true })
   await retrySources.waitFor()
   await page.waitForTimeout(500)
   await retrySources.waitFor()
+  const previousEvidenceRequests = evidenceRequests
   sourcesFail = false
   await retrySources.click()
   await page.getByRole('link', { name: 'Реальный источник', exact: true }).waitFor()
@@ -466,7 +496,11 @@ try {
   await page.reload()
   await page.getByText('Сеть недоступна', { exact: true }).waitFor()
   await expandResearchSections(page)
+  assert.equal(await page.getByRole('button', { name: 'Продолжить с контекстом исследования', exact: true }).isDisabled(), true, 'missing current answer must not enable research context')
   messagesFail = false
+  await page.reload()
+  await page.getByRole('heading', { name: 'Результат', exact: true }).waitFor()
+  await expandResearchSections(page)
 
   const detailsToggle = page.getByRole('button', { name: 'Детали', exact: true })
   if (await detailsToggle.getAttribute('aria-expanded') === 'false') await detailsToggle.click()
@@ -498,7 +532,10 @@ try {
       await page.getByRole('button', { name: 'Детали', exact: true }).click()
     }
   }
-  await page.getByRole('button', { name: 'Продолжить с контекстом исследования', exact: true }).click()
+  if (await detailsToggle.getAttribute('aria-expanded') === 'true') await detailsToggle.click()
+  const contextContinue = page.getByRole('button', { name: 'Продолжить с контекстом исследования', exact: true })
+  await until(() => contextContinue.isEnabled(), 'research context remains eligible with Details collapsed')
+  await contextContinue.click()
   await page.getByText(/Research context: ON/, { exact: false }).waitFor()
   const bridgeInput = page.getByRole('textbox', { name: 'Сообщение', exact: true })
   await bridgeInput.fill('Explain the checked findings, briefly.')
@@ -533,6 +570,7 @@ try {
   await planningDiagnostic.waitFor()
   await planningDiagnostic.getByText('План не был сохранён: ошибка произошла до начала поиска', { exact: true }).waitFor()
   await planningDiagnostic.getByText('Причина: Не задан шаг поиска', { exact: true }).waitFor()
+  assert.ok(planningHistoryRequests > 0, 'resync must recover planning diagnostics from REST history')
   assert.match(await page.locator('.chat-action-error[role="alert"]').innerText(), /Не задан шаг поиска[\s\S]*planning[\s\S]*planner[\s\S]*2[\s\S]*steps: 2/)
   assert.match(await planningDiagnostic.innerText(), /Вызовы LLM\s+2\s+Поиски\s+0\s+Загрузки\s+0/)
   assert.equal(await page.getByRole('button', { name: 'Продолжить ответ', exact: true }).isDisabled(), true, 'previous run text must not enable continue for an empty failed assistant')
@@ -542,6 +580,7 @@ try {
   events['r-e'][0].stage = 'planning'
   events['r-e'][0].payload.error_code = 'invalid_model_output'
   runs['r-e'].error_code = 'invalid_model_output'
+  planningStreamMode = 'offline'
   await page.reload()
   await planningDiagnostic.waitFor()
   await planningDiagnostic.getByText('Код: invalid_model_output', { exact: true }).waitFor()
@@ -550,6 +589,15 @@ try {
   await planningDiagnostic.getByRole('button', { name: 'Повторить ответ', exact: true }).click()
   assert.ok((await retryRequest).headers()['idempotency-key'])
   await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor()
+  await page.getByRole('link', { name: /Поздний сбой планирования/ }).click()
+  await until(async () => (await chatRunStatus.innerText()).includes('Планирование'), 'late planning run begins')
+  const lateDetailsToggle = page.getByRole('button', { name: 'Детали', exact: true })
+  if (await lateDetailsToggle.getAttribute('aria-expanded') === 'true') await lateDetailsToggle.click()
+  await page.locator('.chat-action-error[role="alert"]').getByText('Причина: Поздняя диагностическая причина', { exact: true }).waitFor()
+  assert.ok(latePlanningHistoryRequests >= 2, 'terminal snapshot must trigger final history reconciliation after initial empty history')
+  assert.equal(await page.getByRole('button', { name: 'Продолжить ответ', exact: true }).isDisabled(), true)
+  await lateDetailsToggle.click()
+  await page.getByRole('heading', { name: 'Планирование не завершено', exact: true }).waitFor()
   await page.getByRole('link', { name: /Первый разговор/ }).click()
   await page.getByText('Ответ первого разговора', { exact: true }).waitFor()
   const chatDetails = page.getByRole('button', { name: 'Детали', exact: true })

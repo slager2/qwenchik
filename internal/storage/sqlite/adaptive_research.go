@@ -1,0 +1,284 @@
+package sqlite
+
+import (
+	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/slager2/qwenchik/internal/domain"
+)
+
+type adaptiveMutationKey struct{}
+
+func adaptiveAssessmentHash(verdict string, missing []string, criteria []domain.VerificationCriterionResult) string {
+	raw, _ := json.Marshal([]any{verdict, missing, criteria})
+	hash := sha256.Sum256(raw)
+	return hex.EncodeToString(hash[:])
+}
+
+func adaptiveState(state map[string]any) (domain.AdaptiveResearchState, error) {
+	var adaptive domain.AdaptiveResearchState
+	if raw, exists := state["adaptive_research"]; exists {
+		encoded, err := json.Marshal(raw)
+		if err != nil || len(encoded) > 512<<10 {
+			return adaptive, ErrCheckpointInvalid
+		}
+		if err := json.Unmarshal(encoded, &adaptive); err != nil || adaptive.Version != 1 || len(adaptive.Rounds) > 10 || len(adaptive.Questions) > 80 {
+			return adaptive, ErrCheckpointInvalid
+		}
+	} else {
+		adaptive.Version = 1
+	}
+	return adaptive, nil
+}
+
+func (s *Store) StopAdaptiveResearch(ctx context.Context, taskID, reason string) error {
+	switch reason {
+	case "max_rounds", "step_budget", "research_budget", "stagnation", "question_budget_exhausted", "empty_frontier":
+	default:
+		return ErrCheckpointInvalid
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := invocationAllowed(ctx, tx, taskID, true); err != nil {
+		return err
+	}
+	session, err := researchSession(ctx, tx, taskID)
+	if err != nil {
+		return err
+	}
+	if !session.Policy.AdaptiveEnabled {
+		return ErrConflict
+	}
+	state, version, err := invocationCheckpointState(ctx, tx, taskID)
+	if err != nil {
+		return err
+	}
+	if _, pending := state["pending_invocation_id"]; pending {
+		return ErrConflict
+	}
+	if approval, _ := state["pending_approval"].(bool); approval {
+		return ErrConflict
+	}
+	if tool, _ := state["pending_tool"].(string); tool != "" {
+		idempotent, _ := state["pending_tool_idempotent"].(bool)
+		if !idempotent || (tool != "search" && tool != "fetch_url") {
+			return ErrConflict
+		}
+		state["pending_tool"] = ""
+		state["pending_arguments"] = nil
+		state["pending_summary"] = ""
+		state["pending_target"] = ""
+		state["pending_risk"] = ""
+	}
+	adaptive, err := adaptiveState(state)
+	if err != nil {
+		return err
+	}
+	adaptive.StopReason = reason
+	state["adaptive_research"] = adaptive
+	seq, err := appendEvent(ctx, tx, taskID, "research.round.stopped", stagePointer(domain.StageVerification), "user", map[string]any{"reason": reason, "number": session.CurrentRound + 1})
+	if err != nil {
+		return err
+	}
+	if _, err := saveCheckpointTx(context.WithValue(ctx, adaptiveMutationKey{}, true), tx, taskID, version, seq, state); err != nil {
+		return err
+	}
+	if err := fenceExecution(ctx, tx, taskID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state map[string]any, verdict string, missing []string, criteria []domain.VerificationCriterionResult) error {
+	session, err := researchSession(ctx, tx, taskID)
+	if err == ErrNotFound {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !session.Policy.AdaptiveEnabled {
+		return nil
+	}
+	adaptive, err := adaptiveState(state)
+	if err != nil {
+		return err
+	}
+	number := session.CurrentRound + 1
+	if number > min(10, session.Budget.MaxRounds) {
+		return ErrResearchBudgetExceeded
+	}
+	if len(adaptive.Rounds) > 0 && adaptive.Rounds[len(adaptive.Rounds)-1].Number == number {
+		return nil
+	}
+	ids := map[string]bool{}
+	var walk func(any)
+	walk = func(value any) {
+		switch item := value.(type) {
+		case map[string]any:
+			if id, ok := item["evidence_id"].(string); ok {
+				ids[id] = true
+			}
+			for _, child := range item {
+				walk(child)
+			}
+		case []any:
+			for _, child := range item {
+				walk(child)
+			}
+		}
+	}
+	walk(state["tool_results"])
+	evidence := []string{}
+	for id := range ids {
+		evidence = append(evidence, id)
+	}
+	sort.Strings(evidence)
+	if err := validateSnapshotEvidence(ctx, tx, taskID, evidence); err != nil {
+		return err
+	}
+	prior := map[string]bool{}
+	priorCoverage := map[string]bool{}
+	if len(adaptive.Rounds) > 0 {
+		for _, id := range adaptive.Rounds[len(adaptive.Rounds)-1].AcceptedEvidence {
+			prior[id] = true
+		}
+		for _, criterion := range adaptive.Rounds[len(adaptive.Rounds)-1].Coverage {
+			if criterion.Met {
+				priorCoverage[fmt.Sprintf("criterion:%s:%d", criterion.StepID, criterion.Criterion)] = true
+			}
+		}
+	}
+	progress := false
+	for _, id := range evidence {
+		if !prior[id] {
+			progress = true
+		}
+	}
+	for _, criterion := range criteria {
+		if criterion.Met && len(criterion.EvidenceIDs) > 0 && !priorCoverage[fmt.Sprintf("criterion:%s:%d", criterion.StepID, criterion.Criterion)] {
+			progress = true
+		}
+	}
+	if progress {
+		adaptive.StagnantRounds = 0
+	} else {
+		adaptive.StagnantRounds++
+	}
+	open := map[string]string{}
+	resolved := map[string]bool{}
+	for _, criterion := range criteria {
+		id := fmt.Sprintf("criterion:%s:%d", criterion.StepID, criterion.Criterion)
+		if criterion.Classification == "critical" && !criterion.Met {
+			open[id] = "Unresolved critical " + id
+		} else if criterion.Met {
+			resolved[id] = true
+		}
+	}
+	if len(missing) > 0 {
+		open["goal:critical_coverage"] = truncateResearchQuestion(strings.Join(missing, "; "))
+	}
+	if verdict == "PASS" || verdict == "PARTIAL" {
+		resolved["goal:critical_coverage"] = true
+	}
+	questionIDs := []string{}
+	for id := range open {
+		questionIDs = append(questionIDs, id)
+	}
+	sort.Strings(questionIDs)
+	for _, id := range questionIDs {
+		text := open[id]
+		found := false
+		for index := range adaptive.Questions {
+			if adaptive.Questions[index].ID == id {
+				adaptive.Questions[index].Status = "open"
+				adaptive.Questions[index].Text = text
+				found = true
+				break
+			}
+		}
+		if !found {
+			if len(adaptive.Questions) >= min(80, session.Budget.MaxQuestionsCreated) || session.Counters.QuestionsAccepted >= session.Budget.MaxQuestionsAccepted {
+				adaptive.StopReason = "question_budget_exhausted"
+				continue
+			}
+			adaptive.Questions = append(adaptive.Questions, domain.ResearchQuestion{ID: id, Text: text, Status: "open", AcceptedOnce: true})
+			session.Counters.QuestionsAccepted++
+		}
+	}
+	adaptive.Frontier = []string{}
+	for index := range adaptive.Questions {
+		question := &adaptive.Questions[index]
+		if resolved[question.ID] {
+			question.Status = "resolved"
+		} else if question.Status == "open" {
+			adaptive.Frontier = append(adaptive.Frontier, question.ID)
+		}
+	}
+	session.Counters.QuestionsCreated = max(session.Counters.QuestionsCreated, len(adaptive.Questions))
+	session.Counters.Rounds = max(session.Counters.Rounds, number)
+	session.Counters.StagnantRounds = adaptive.StagnantRounds
+	if verdict == "PASS" || verdict == "PARTIAL" {
+		if len(adaptive.Frontier) > 0 {
+			return ErrConflict
+		}
+		adaptive.StopReason = "criteria_covered"
+	}
+	if verdict != "PASS" && verdict != "PARTIAL" && adaptive.StagnantRounds >= session.Budget.MaxStagnantRounds {
+		adaptive.StopReason = "stagnation"
+	}
+	if len(missing) > 0 && number >= session.Budget.MaxRounds {
+		adaptive.StopReason = "max_rounds"
+	}
+	adaptive.CurrentRound = number
+	round := domain.ResearchRound{Number: number, Goal: session.Goal, AcceptedEvidence: evidence, CriticalMissing: append([]string{}, missing...), OpenQuestions: append([]string{}, missing...), Frontier: append([]string{}, adaptive.Frontier...), Outcome: verdict}
+	round.AssessmentHash = adaptiveAssessmentHash(verdict, missing, criteria)
+	round.Coverage = append([]domain.VerificationCriterionResult{}, criteria...)
+	encoded, _ := json.Marshal(state["completed_steps"])
+	_ = json.Unmarshal(encoded, &round.CompletedSteps)
+	encoded, _ = json.Marshal(state["source_failures"])
+	_ = json.Unmarshal(encoded, &round.SourceFailures)
+	if len(round.SourceFailures) > 64 {
+		round.SourceFailures = round.SourceFailures[:64]
+	}
+	for _, failure := range round.SourceFailures {
+		if identity, ok := failure["source_fingerprint"].(string); ok {
+			round.FailedSources = append(round.FailedSources, identity)
+		}
+	}
+	covered := []string{}
+	for _, criterion := range criteria {
+		if criterion.Met && len(criterion.EvidenceIDs) > 0 {
+			covered = append(covered, fmt.Sprintf("%s:%d", criterion.StepID, criterion.Criterion))
+		}
+	}
+	sort.Strings(covered)
+	fingerprint, _ := json.Marshal([]any{evidence, covered})
+	digest := sha256.Sum256(fingerprint)
+	round.ProgressFingerprint = hex.EncodeToString(digest[:])
+	round.RemainingBudgets, err = snapshotBudget(ctx, tx, session)
+	if err != nil {
+		return err
+	}
+	adaptive.Rounds = append(adaptive.Rounds, round)
+	state["adaptive_research"] = adaptive
+	if err := writeResearchCounters(ctx, tx, taskID, session.Counters); err != nil {
+		return err
+	}
+	_, err = appendEvent(ctx, tx, taskID, "research.round.assessed", stagePointer(domain.StageVerification), "user", map[string]any{"number": number, "outcome": verdict, "stop_reason": adaptive.StopReason, "frontier_count": len(adaptive.Frontier), "evidence_count": len(evidence), "critical_missing_count": len(missing), "stagnant_rounds": adaptive.StagnantRounds})
+	return err
+}
+
+func truncateResearchQuestion(text string) string {
+	runes := []rune(text)
+	return string(runes[:min(500, len(runes))])
+}

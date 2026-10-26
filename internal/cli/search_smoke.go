@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/slager2/qwenchik/internal/config"
+	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/providers/research"
 	"github.com/spf13/cobra"
 )
@@ -23,7 +24,9 @@ func newSearchSmokeCommand(jsonMode *bool) *cobra.Command {
 			allowExternal, _ := cmd.Flags().GetBool("allow-external")
 			query, _ := cmd.Flags().GetString("query")
 			var provider research.SearchProvider
-			if allowExternal {
+			if cfg.ResearchPrivacyMode == domain.PrivacyOffline || cfg.ResearchPrivacyMode == domain.PrivacyLocalSearXNG {
+				provider, err = configuredSearchProvider(cfg)
+			} else if allowExternal {
 				fmt.Fprintln(cmd.ErrOrStderr(), "External search is enabled for this probe; Tavily may charge for the request.")
 				provider, err = configuredSearchProvider(cfg)
 			} else if cfg.SearXNGURL != "" {

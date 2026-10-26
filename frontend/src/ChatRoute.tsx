@@ -5,7 +5,7 @@ import { createRunEvidenceCache } from './evidence-cache.mjs'
 import { mergeRuntimeSnapshot } from './telemetry-state.mjs'
 import ChatComposer from './ChatComposer'
 import ChatTranscript from './ChatTranscript'
-import { applyRunEvent, citationReferences, explicitResearchContextReferences, createStreamState, mergeMessages, normalizeSources, terminal, type StreamState } from './conversation-state.mjs'
+import { applyRunEvent, canUseResearchContext, citationReferences, explicitResearchContextReferences, createStreamState, mergeMessages, mergeRunEventHistory, normalizeSources, terminal, type StreamState } from './conversation-state.mjs'
 import ResearchInspector from './ResearchInspector'
 import FailureDetails from './FailureDetails'
 import { publicResearchEvents } from './research-state.mjs'
@@ -111,11 +111,12 @@ export default function ChatRoute() {
 }
 
 interface Transcript { messages: ConversationMessage[]; stream: StreamState }
-type TranscriptAction = { type: 'snapshot'; messages: ConversationMessage[] } | { type: 'run'; id: string } | { type: 'event'; event: AgentEvent } | { type: 'resync'; id: string; cursor: number }
+type TranscriptAction = { type: 'snapshot'; messages: ConversationMessage[] } | { type: 'run'; id: string } | { type: 'event'; event: AgentEvent } | { type: 'history'; id: string; events: AgentEvent[] } | { type: 'resync'; id: string; cursor: number }
 function transcriptReducer(state: Transcript, action: TranscriptAction): Transcript {
   if (action.type === 'snapshot') return { ...state, stream: { ...state.stream, needsSync: false }, messages: mergeMessages(state.messages, action.messages) }
   if (action.type === 'run') return state.stream.runID === action.id ? state : { ...state, stream: createStreamState(action.id) }
-  if (action.type === 'resync') return { ...state, stream: { ...createStreamState(action.id), cursor: action.cursor } }
+  if (action.type === 'history') return state.stream.runID === action.id ? { ...state, stream: mergeRunEventHistory(state.stream, action.events) } : state
+  if (action.type === 'resync') return { ...state, stream: { ...createStreamState(action.id), events: state.stream.runID === action.id ? state.stream.events : [], cursor: action.cursor } }
   const result = applyRunEvent(state.stream, state.messages, action.event)
   return { stream: result.state, messages: result.messages }
 }
@@ -129,6 +130,21 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const run = useRemote(useCallback((signal) => runID ? api.conversationRun(runID, signal) : Promise.resolve<Run | null>(null), [runID]), 0, 'chat.run')
   const mergeRunRuntime = useCallback((previous: RunRuntime | null | undefined, next: RunRuntime | null) => previous && next ? mergeRuntimeSnapshot(previous, next) : next, [])
   const runtime = useRemote(useCallback((signal) => runID ? api.runRuntime(runID, signal) : Promise.resolve<RunRuntime | null>(null), [runID]), 0, 'chat.runtime', mergeRunRuntime)
+  const history = useRemote(useCallback(async (signal) => {
+    const events: AgentEvent[] = []
+    let after = 0
+    if (runID) for (let page = 0; page < 20; page++) {
+      const batch = await api.runEvents(runID, after, signal)
+      if (!Array.isArray(batch)) throw new Error('Не удалось прочитать историю запуска.')
+      const accepted = batch.filter((event) => event.task_id === runID && event.visibility === 'user' && Number.isSafeInteger(event.seq) && event.seq > after)
+      events.push(...accepted)
+      const next = accepted.reduce((cursor, event) => Math.max(cursor, event.seq), after)
+      if (batch.length < 500 || next === after) break
+      after = next
+      if (page === 19) throw new Error('История запуска превышает лимит синхронизации. Показаны доступные сведения.')
+    }
+    return { id: runID, events }
+  }, [runID]), 0, 'chat.events')
   const runSetterRef = useRef(run.setData)
   const runtimeSetterRef = useRef(runtime.setData)
   runSetterRef.current = run.setData
@@ -190,6 +206,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   useEffect(() => { if (!editing && conversation.data) setTitle(conversation.data.title) }, [conversation.data, editing])
   useEffect(() => { if (snapshots.data) dispatch({ type: 'snapshot', messages: snapshots.data }) }, [snapshots.data])
   useEffect(() => { dispatch({ type: 'run', id: runID }) }, [runID])
+  useEffect(() => { if (history.data?.id === runID) dispatch({ type: 'history', id: runID, events: history.data.events }) }, [history.data, runID])
   useEffect(() => { if (currentRun?.mode === 'research') setDetails(true) }, [currentRun?.id, currentRun?.mode])
   useEffect(() => {
     if (!follow || !listRef.current) return
@@ -272,7 +289,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   }
 
   function enableResearchContext() {
-    if (!currentRun || !id) return
+    if (!currentRun || !id || !researchContextReady) return
     const sourceRunID = currentRun.id
     void action(async () => {
       const updated = await api.updateConversation(id, { mode: 'chat' })
@@ -297,7 +314,8 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const failureMessage = typeof failurePayload?.message === 'string' ? failurePayload.message.slice(0, 1000) : ''
   const verificationSummary = typeof failurePayload?.verification_summary === 'string' ? failurePayload.verification_summary.slice(0, 1000) : ''
   const missingCriteria = Array.isArray(failurePayload?.missing) ? failurePayload.missing.filter((item): item is string => typeof item === 'string').slice(0, 20) : []
-  const research = useResearch(runID, details && mode === 'research')
+  const research = useResearch(runID, details && mode === 'research', currentRun?.mode === 'research')
+  const researchContextReady = canUseResearchContext(currentRun, latestAssistant, research.evidence.data ?? [])
   const scheduleFallback = useCallback(() => {
     if (fallbackTimerRef.current !== undefined) return
     fallbackTimerRef.current = window.setTimeout(() => {
@@ -306,7 +324,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
       const latestRun = currentRunRef.current
       if (latestRun && terminal(latestRun.status)) { closeEventStreamRef.current(); setConnection('terminal'); return }
       setConnection('degraded')
-      const resources = ['messages', 'run', 'runtime', 'conversation']
+      const resources = ['messages', 'run', 'runtime', 'conversation', 'events']
       if (details && mode === 'research') resources.push('plan', 'sources', 'evidence')
       syncSchedulerRef.current(resources, 'fallback_poll')
       fallbackDelayRef.current = nextFallbackDelay(fallbackDelayRef.current)
@@ -334,7 +352,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
       if (disposed) return
       try {
         const event = JSON.parse((raw as MessageEvent<string>).data) as AgentEvent
-        if (event.task_id !== runID) return
+        if (event.task_id !== runID || event.visibility !== 'user') return
         if (event.type !== 'message.delta') recordReload('chat.transcript', ['task.completed', 'task.failed', 'task.cancelled'].includes(event.type) ? 'terminal' : 'sse_event')
         dispatch({ type: 'event', event })
         const invalidation = runEventInvalidations(event, modeRef.current)
@@ -347,7 +365,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
         if (invalidation.resources.length) syncSchedulerRef.current(invalidation.resources, invalidation.reason)
       } catch { setConnection('invalid'); setError('Не удалось прочитать событие. Сохранённые сообщения продолжают обновляться.') }
     }
-    for (const type of eventTypes) source.addEventListener(type, receive)
+    for (const type of [...eventTypes, 'research.round.assessed', 'research.round.stopped', 'report.section.updated']) source.addEventListener(type, receive)
     source.addEventListener('snapshot', (raw) => {
       if (disposed) return
       try {
@@ -429,16 +447,27 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
       else if (resource === 'conversation') void conversation.reload(syncReason as ReloadReason)
       else if (resource === 'run') void run.reload(syncReason as ReloadReason)
       else if (resource === 'runtime') void runtime.reload(syncReason as ReloadReason)
+      else if (resource === 'events') void history.reload(syncReason as ReloadReason)
       else if (resource === 'plan' && details && mode === 'research') void research.plan.reload(syncReason as ReloadReason)
       else if (resource === 'sources' && details && mode === 'research') void research.sources.reload(syncReason as ReloadReason)
-      else if (resource === 'evidence' && details && mode === 'research') void research.evidence.reload(syncReason as ReloadReason)
+      else if (resource === 'evidence' && currentRunRef.current?.mode === 'research') void research.evidence.reload(syncReason as ReloadReason)
       else if (resource === 'providers' && details && mode === 'research') void research.providers.reload(syncReason as ReloadReason)
     }
-  }, [conversation.reload, details, mode, research.evidence.reload, research.plan.reload, research.providers.reload, research.sources.reload, run.reload, runtime.reload, snapshots.reload])
+  }, [conversation.reload, details, mode, research.evidence.reload, research.plan.reload, research.providers.reload, research.sources.reload, run.reload, runtime.reload, snapshots.reload, history.reload])
   syncFlushRef.current = flushSync
   if (!coalescedSyncRef.current) coalescedSyncRef.current = createCoalescedScheduler((resources, reason) => syncFlushRef.current(resources, reason), 300)
   const scheduleSync = useCallback((resources: string[], reason: ReloadReason) => coalescedSyncRef.current?.schedule(resources, reason), [])
   syncSchedulerRef.current = scheduleSync
+  const terminalSyncRef = useRef('')
+  useEffect(() => {
+    if (!currentRun || !terminal(currentRun.status)) { terminalSyncRef.current = ''; return }
+    const key = `${currentRun.id}:${currentRun.status}`
+    if (terminalSyncRef.current === key) return
+    terminalSyncRef.current = key
+    // A terminal run may be discovered by polling/snapshot after history was
+    // fetched. Always reconcile canonical text and diagnostics once more.
+    syncSchedulerRef.current(runResyncResources(currentRun.mode), 'terminal')
+  }, [currentRun?.id, currentRun?.status, currentRun?.mode])
   useEffect(() => () => coalescedSyncRef.current?.cancel(), [])
   useEffect(() => {
     if (!transcript.stream.needsSync) return
@@ -448,12 +477,12 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   }, [transcript.stream.needsSync, mode, scheduleSync])
   const backendReady = health.data?.status === 'ok' && health.data.database === 'ok' && !health.error
   const modelReady = doctor.data?.checks.llm?.status === 'ok'
-  const detailsContent = <ResearchInspector resources={{ ...research, runtime }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onRetry={() => operate('retry')} onPause={() => void action(async () => { await api.pause(runID); await run.reload('user_action'); await runtime.reload('user_action') })} onResume={() => void action(async () => { await api.resume(runID); await run.reload('user_action'); await runtime.reload('user_action') })} />
+  const detailsContent = <ResearchInspector resources={{ ...research, runtime, pdfCapability: doctor.data?.pdf_extractor }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onRetry={() => operate('retry')} onPause={() => void action(async () => { await api.pause(runID); await run.reload('user_action'); await runtime.reload('user_action') })} onResume={() => void action(async () => { await api.resume(runID); await run.reload('user_action'); await runtime.reload('user_action') })} />
 
   return <main className={`chat-main ${details ? 'chat-has-details' : ''}`}>
     <header className="chat-header"><button className="chat-mobile-menu" type="button" aria-label="Открыть разговоры" onClick={onSidebar}>☰</button><div className="chat-heading">{editing ? <form onSubmit={(event) => { event.preventDefault(); if (title.trim()) void action(async () => { const next = await api.updateConversation(id, { title: title.trim() }); if (alive.current) { conversation.setData(next); setEditing(false); void onChanged() } }) }}><input aria-label="Название разговора" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} autoFocus /><button type="submit" disabled={busy || !title.trim()}>Сохранить</button><button type="button" onClick={() => setEditing(false)}>Отмена</button></form> : <><h1>{conversation.data?.title || 'Новый разговор'}</h1><p>{mode === 'research' ? 'Deep Research' : 'Локальный чат'}<span aria-hidden="true"> · </span>{status}</p></>}</div><div className="chat-header-actions">{id && <><button type="button" onClick={() => setEditing(true)} disabled={busy} aria-label="Переименовать разговор">Название</button><button type="button" onClick={() => void action(async () => { await api.deleteConversation(id); if (alive.current) { void onChanged(); onSelect('') } })} disabled={busy || active} title={active ? 'Сначала остановите текущую генерацию' : 'Архивировать разговор'}>Удалить</button></>}<button type="button" aria-expanded={details} onClick={() => setDetails((value) => !value)}>Детали</button></div></header>
     <div className="chat-body"><section className="chat-center" aria-label="Текущий разговор"><div className="chat-health" role="status"><span className={backendReady ? 'chat-online' : ''}>Backend: {health.error ? 'нет связи' : backendReady ? 'доступен' : 'не проверен'}</span><span className={modelReady && !doctor.error ? 'chat-online' : ''}>Qwen: {doctor.error ? 'не проверена' : modelReady ? 'доступна' : 'недоступна / не проверена'}</span></div>
-      <ResourceStatus resource={conversation} /><ResourceStatus resource={snapshots} />{runID && <ResourceStatus resource={run} />}
+      <ResourceStatus resource={conversation} /><ResourceStatus resource={snapshots} />{runID && <ResourceStatus resource={run} />}{history.error && <ResourceStatus resource={history} />}
       <div className="chat-transcript" ref={listRef} onScroll={() => { const el = listRef.current; if (el) setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 100) }}>
         <ChatTranscript messages={content} loading={snapshots.loading} active={active} runID={runID} run={currentRun} references={references} evidenceCache={evidenceCache} onExample={(nextMode, prompt) => { setMode(nextMode); setDetails(nextMode === 'research'); setText(prompt) }} />
         {busy && optimistic.length > 0 && <p className="chat-muted" role="status">Готовлю ответ…</p>}
@@ -464,20 +493,20 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
       {currentRun?.status === 'waiting_approval' && <p role="status">Нужно ваше решение. <a href="#/workspace">Открыть подтверждения в рабочем пространстве</a></p>}
       {error && <div className="chat-action-error" role="alert"><p>{error}</p>{actionRetry && <button type="button" onClick={actionRetry} disabled={busy}>Повторить действие</button>}</div>}
       {currentRun && !active && <div className="chat-answer-actions"><button type="button" disabled={busy} onClick={() => operate('retry')}>Повторить ответ</button><button type="button" disabled={busy || !hasPartial} title={!hasPartial ? 'Нет текста для продолжения' : 'Продолжить ответ новым запуском'} onClick={() => operate('continue')}>Продолжить ответ</button></div>}
-        <ChatComposer mode={mode} onModeChange={changeMode} text={text} onTextChange={setText} onSend={send} busy={busy} active={active} run={currentRun} onStop={stopRun} researchContextRunID={researchContextRunID} onEnableResearchContext={enableResearchContext} onClearResearchContext={() => { setResearchContextRunID(''); submissionKey.current = null }} />
+        <ChatComposer mode={mode} privacyMode={doctor.data?.research_limits?.privacy_mode} onModeChange={changeMode} text={text} onTextChange={setText} onSend={send} busy={busy} active={active} run={currentRun} onStop={stopRun} researchContextRunID={researchContextRunID} researchContextReady={researchContextReady} onEnableResearchContext={enableResearchContext} onClearResearchContext={() => { setResearchContextRunID(''); submissionKey.current = null }} />
       <div className="chat-composer-note"><span>{active ? 'Новый запрос доступен после завершения или остановки.' : 'Enter — отправить · Shift+Enter — новая строка'}</span>{runID && <span role="status">{connection === 'live' ? 'Поток подключён' : connection === 'connecting' ? 'Подключение…' : connection === 'reconnecting' ? 'Переподключение…' : connection === 'degraded' ? 'Резервная синхронизация' : connection === 'invalid' ? 'Ошибка потока' : connection === 'terminal' ? 'Поток завершён' : 'Нет активного потока'}</span>}{active && <button type="button" onClick={() => { recordReload('chat.stream', 'manual_retry'); setReconnect((value) => value + 1) }}>Переподключить</button>}</div>
     </section>{details && !mobile && <aside className="chat-research-desktop" aria-label="Детали исследования">{detailsContent}</aside>}</div>{details && mobile && <Drawer title="Детали исследования" onClose={() => setDetails(false)}>{detailsContent}</Drawer>}
   </main>
 }
 
-function useResearch(runID: string, enabled: boolean) {
+function useResearch(runID: string, enabled: boolean, evidenceEnabled = enabled) {
   const plan = useRemote(useCallback((signal) => enabled && runID ? api.runPlan(runID, signal) : Promise.resolve<ResearchPlan | null>(null), [enabled, runID]), 0, 'research.plan')
   const sources = useRemote(useCallback(async (signal) => enabled && runID ? normalizeSources(await api.runSources(runID, signal)) : [], [enabled, runID]), 0, 'research.sources')
   const evidence = useRemote(useCallback(async (signal) => {
-    if (!enabled || !runID) return []
+    if (!evidenceEnabled || !runID) return []
     const result = await api.runEvidence(runID, signal)
     return (Array.isArray(result) ? result : []) as Evidence[]
-  }, [enabled, runID]), 0, 'research.evidence')
+  }, [evidenceEnabled, runID]), 0, 'research.evidence')
   const providers = useRemote(useCallback((signal) => enabled ? api.providers(signal) : Promise.resolve(null), [enabled]), 0, 'research.providers')
   return { plan, sources, evidence, providers }
 }

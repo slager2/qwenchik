@@ -61,7 +61,9 @@ func publicPlannerError(reason string) string {
 	case "research plan is incomplete: required research steps exceed the configured step capacity":
 		return "План исследования не прошёл проверку: обязательные поисковые шаги и загрузки источников не помещаются в доступное число шагов."
 	case "research plan is incomplete: search facets cannot fit losslessly within 2 searches and 1000 bytes per description",
-		"research plan is incomplete: search facets cannot fit losslessly within 3 searches and 1000 bytes per description":
+		"research plan is incomplete: search facets cannot fit losslessly within 3 searches and 1000 bytes per description",
+		"research plan is incomplete: search facets cannot fit losslessly within 2 searches and 1000 characters per description",
+		"research plan is incomplete: search facets cannot fit losslessly within 3 searches and 1000 characters per description":
 		return "План исследования не прошёл проверку: все направления поиска невозможно объединить в допустимое число шагов без потери исходного текста."
 	default:
 		return publicError("research_plan_incomplete")

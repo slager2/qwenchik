@@ -153,6 +153,19 @@ func (w *Worker) executeRun(ctx context.Context, task domain.Task) (err error) {
 		err = runner.executeChat(ctx, task, run, repo)
 	} else {
 		err = runner.execute(ctx, task)
+		if errors.Is(err, errCompletionBlocked) && ctx.Err() == nil {
+			current, getErr := runner.repo.GetTask(ctx, task.ID)
+			if getErr != nil {
+				return getErr
+			}
+			completed, partialErr := runner.completeBlockedPartial(ctx, current, err)
+			if partialErr != nil {
+				return partialErr
+			}
+			if completed {
+				return nil
+			}
+		}
 	}
 	if err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return fmt.Errorf("%w: %w", errRunDeadline, err)

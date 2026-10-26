@@ -17,6 +17,41 @@ import (
 
 type interruptRefinementEvaluation struct{ *sqlite.Store }
 
+func TestLaboratoryFreezeStopsQueuedRefinementBeforeInference(t *testing.T) {
+	ctx := context.Background()
+	f := newResearchRunStore(t)
+	f.submit(t, "Historical research", nil)
+	if _, err := f.store.TransitionTask(ctx, f.task.ID, domain.StatusFailed, nil, "task.failed", "user", nil); err != nil {
+		t.Fatal(err)
+	}
+	registry := tools.NewRegistry()
+	model := researchRunDefaults().ModelSnapshot
+	base := ResearchAgentBundle(model.Model, registry)
+	model.Bundle = &base
+	if _, err := f.store.EnsureBaselineBundle(ctx, base); err != nil {
+		t.Fatal(err)
+	}
+	task, err := f.store.StartRefinement(ctx, model, []string{f.task.ID}, "pre-freeze-job")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimed, ok, err := f.store.ClaimNext(ctx)
+	if err != nil || !ok || claimed.ID != task.ID {
+		t.Fatal("claim failed", err)
+	}
+	f.store.FreezeRefinement()
+	calls := 0
+	client := &researchRunModel{respond: func(context.Context, llm.ChatRequest, int, bool) (string, error) {
+		calls++
+		return "", errors.New("must not infer")
+	}}
+	w := New(f.store, client, registry, Options{})
+	handled, err := w.executeRefinement(ctx, claimed)
+	if !handled || !errors.Is(err, sqlite.ErrRefinementFrozen) || calls != 0 {
+		t.Fatalf("handled=%v err=%v calls=%d", handled, err, calls)
+	}
+}
+
 func (s interruptRefinementEvaluation) SaveRefinementEvaluation(ctx context.Context, id, hash string, e domain.RefinementEvaluation) error {
 	if err := s.Store.SaveRefinementEvaluation(ctx, id, hash, e); err != nil {
 		return err

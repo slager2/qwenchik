@@ -29,6 +29,7 @@ func ResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 func DefaultResearchPolicy() ResearchPolicy {
 	b, _ := ResearchBudgetForProfile(ResearchProfileStandard)
 	return ResearchPolicy{
+		PrivacyMode:      PrivacyExternalSearch,
 		MaxContinuations: 1,
 		Version:          1, Profile: ResearchProfileStandard, Budget: b,
 		TaskFetchBudgetBytes: DefaultTaskFetchBudgetBytes, SourceFetchBytes: 16 << 20, PDFBytes: 64 << 20,

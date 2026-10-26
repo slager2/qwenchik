@@ -13,6 +13,15 @@ import (
 )
 
 func loadResearchPolicy(c *Config) error {
+	c.ResearchPrivacyMode = env("RESEARCH_PRIVACY_MODE", domain.PrivacyExternalSearch)
+	c.OfflineCorpusPath = env("RESEARCH_OFFLINE_CORPUS", "")
+	if c.ResearchPrivacyMode == domain.PrivacyOffline {
+		corpus, err := research.LoadOfflineCorpus(c.OfflineCorpusPath)
+		if err != nil {
+			return fmt.Errorf("RESEARCH_OFFLINE_CORPUS: %w", err)
+		}
+		c.OfflineCorpusSHA256 = corpus.SHA256()
+	}
 	c.SearchProviderPolicy = env("SEARCH_PROVIDER_POLICY", "local_primary")
 	if c.SearchProviderPolicy != "local_primary" && c.SearchProviderPolicy != "parallel" {
 		return errors.New("SEARCH_PROVIDER_POLICY must be local_primary or parallel")
@@ -26,8 +35,8 @@ func loadResearchPolicy(c *Config) error {
 	if c.ResearchAdaptiveEnabled, err = boolEnv("RESEARCH_ADAPTIVE_ENABLED", false); err != nil {
 		return err
 	}
-	if c.ResearchAdaptiveEnabled {
-		return errors.New("RESEARCH_ADAPTIVE_ENABLED=true is unavailable until Phase 3")
+	if c.ResearchSectionReportEnabled, err = boolEnv("RESEARCH_SECTION_REPORT_ENABLED", false); err != nil {
+		return err
 	}
 	if c.MaxSourceBytes, err = int64Env("MAX_SOURCE_BYTES", min(int64(16<<20), c.MaxFetchBytes)); err != nil {
 		return err
@@ -129,9 +138,11 @@ func (c Config) ResearchProfile(name string) (domain.ResearchPolicy, error) {
 	budget.MaxSearchQueries = min(budget.MaxSearchQueries, c.MaxSearchQueries)
 
 	policy := domain.ResearchPolicy{
-		MaxContinuations: min(1, budget.MaxRounds-1),
-		KeepAwake:        c.KeepAwake,
-		Version:          1, Profile: name, AdaptiveEnabled: c.ResearchAdaptiveEnabled, Budget: budget,
+		PrivacyMode: domain.EffectivePrivacyMode(c.ResearchPrivacyMode), OfflineCorpusSHA256: c.OfflineCorpusSHA256,
+		SectionedReportEnabled: c.ResearchSectionReportEnabled,
+		MaxContinuations:       min(1, budget.MaxRounds-1),
+		KeepAwake:              c.KeepAwake,
+		Version:                1, Profile: name, AdaptiveEnabled: c.ResearchAdaptiveEnabled, Budget: budget,
 		TaskFetchBudgetBytes: c.MaxFetchBytes, SourceFetchBytes: c.MaxSourceBytes, PDFBytes: c.PDFPolicy.MaxInputBytes,
 		PDFPages: c.PDFPolicy.MaxPages, PDFTextRunes: c.PDFPolicy.MaxTextRunes,
 		PDFDownloadTimeoutSec: c.PDFDownloadTimeoutSeconds,
@@ -139,6 +150,9 @@ func (c Config) ResearchProfile(name string) (domain.ResearchPolicy, error) {
 		PDFMemoryBytes:        c.PDFPolicy.MemoryBytes, PDFTempBytes: c.PDFPolicy.TempBytes,
 		PDFCPULimit: c.PDFPolicy.CPUs, PDFPIDLimit: c.PDFPolicy.PIDs,
 		AllowUnsandboxedPDF: c.PDFPolicy.AllowUnsandboxedFallback,
+	}
+	if policy.AdaptiveEnabled {
+		policy.MaxContinuations = max(0, budget.MaxRounds-1)
 	}
 	return policy, ValidateResearchPolicy(policy)
 }
@@ -155,9 +169,6 @@ func (c Config) ResearchPolicies() map[string]domain.ResearchPolicy {
 }
 
 func (c Config) validateResearchLimits() error {
-	if c.ResearchAdaptiveEnabled {
-		return errors.New("RESEARCH_ADAPTIVE_ENABLED=true is unavailable until Phase 3")
-	}
 	if c.MaxSteps < 1 || c.MaxSteps > 12 || c.MaxSearchQueries < 1 {
 		return errors.New("research step and search caps are invalid")
 	}
@@ -171,10 +182,30 @@ func (c Config) validateResearchLimits() error {
 }
 
 func ValidateResearchPolicy(policy domain.ResearchPolicy) error {
-	if policy.MaxContinuations < 0 || policy.MaxContinuations > 1 {
-		return errors.New("max_continuations must be 0..1 for the single targeted-research round")
+	mode := domain.EffectivePrivacyMode(policy.PrivacyMode)
+	if mode != domain.PrivacyExternalSearch && mode != domain.PrivacyLocalSearXNG && mode != domain.PrivacyOffline {
+		return errors.New("unknown research privacy mode")
 	}
-	if policy.Version != 1 || !knownResearchProfile(policy.Profile) || policy.AdaptiveEnabled {
+	if mode == domain.PrivacyOffline {
+		if len(policy.OfflineCorpusSHA256) != 64 {
+			return errors.New("offline policy requires a pinned corpus hash")
+		}
+		for _, ch := range policy.OfflineCorpusSHA256 {
+			if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')) {
+				return errors.New("invalid offline corpus hash")
+			}
+		}
+	} else if policy.OfflineCorpusSHA256 != "" {
+		return errors.New("offline corpus hash requires offline mode")
+	}
+	maxContinuations := 1
+	if policy.AdaptiveEnabled {
+		maxContinuations = min(9, policy.Budget.MaxRounds-1)
+	}
+	if policy.MaxContinuations < 0 || policy.MaxContinuations > maxContinuations {
+		return errors.New("max_continuations exceeds the bounded research round allowance")
+	}
+	if policy.Version != 1 || !knownResearchProfile(policy.Profile) {
 		return errors.New("research policy version, profile, or adaptive setting is invalid")
 	}
 	b := policy.Budget
@@ -220,6 +251,8 @@ func (c Config) FetchPolicy() research.FetchPolicy {
 
 func (c Config) ResearchLimits() map[string]any {
 	return map[string]any{
+		"adaptive_enabled": c.ResearchAdaptiveEnabled, "sectioned_report_enabled": c.ResearchSectionReportEnabled,
+		"privacy_mode": domain.EffectivePrivacyMode(c.ResearchPrivacyMode), "offline_corpus_sha256": c.OfflineCorpusSHA256,
 		"task_fetch_budget_bytes": c.MaxFetchBytes, "source_fetch_bytes": c.MaxSourceBytes, "pdf_bytes": c.PDFPolicy.MaxInputBytes,
 		"pdf_pages": c.PDFPolicy.MaxPages, "pdf_text_runes": c.PDFPolicy.MaxTextRunes,
 		"pdf_extraction_timeout_seconds": int(c.PDFPolicy.ExtractionTimeout / time.Second), "pdf_download_timeout_seconds": c.PDFDownloadTimeoutSeconds,

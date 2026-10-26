@@ -26,24 +26,27 @@ type ResearchBudget struct {
 }
 
 type ResearchPolicy struct {
-	MaxContinuations      int            `json:"max_continuations,omitempty"`
-	KeepAwake             bool           `json:"keep_awake"`
-	Version               int            `json:"version"`
-	Profile               string         `json:"profile"`
-	AdaptiveEnabled       bool           `json:"adaptive_enabled"`
-	Budget                ResearchBudget `json:"budget"`
-	TaskFetchBudgetBytes  int64          `json:"task_fetch_budget_bytes"`
-	SourceFetchBytes      int64          `json:"source_fetch_bytes"`
-	PDFBytes              int64          `json:"pdf_bytes"`
-	PDFPages              int            `json:"pdf_pages"`
-	PDFTextRunes          int            `json:"pdf_text_runes"`
-	PDFDownloadTimeoutSec int            `json:"pdf_download_timeout_seconds"`
-	PDFExtractTimeoutSec  int            `json:"pdf_extraction_timeout_seconds"`
-	PDFMemoryBytes        int64          `json:"pdf_memory_bytes"`
-	PDFTempBytes          int64          `json:"pdf_temp_bytes"`
-	PDFCPULimit           float64        `json:"pdf_cpu_limit"`
-	PDFPIDLimit           int            `json:"pdf_pid_limit"`
-	AllowUnsandboxedPDF   bool           `json:"allow_unsandboxed_pdf"`
+	PrivacyMode            string         `json:"privacy_mode,omitempty"`
+	OfflineCorpusSHA256    string         `json:"offline_corpus_sha256,omitempty"`
+	SectionedReportEnabled bool           `json:"sectioned_report_enabled,omitempty"`
+	MaxContinuations       int            `json:"max_continuations,omitempty"`
+	KeepAwake              bool           `json:"keep_awake"`
+	Version                int            `json:"version"`
+	Profile                string         `json:"profile"`
+	AdaptiveEnabled        bool           `json:"adaptive_enabled"`
+	Budget                 ResearchBudget `json:"budget"`
+	TaskFetchBudgetBytes   int64          `json:"task_fetch_budget_bytes"`
+	SourceFetchBytes       int64          `json:"source_fetch_bytes"`
+	PDFBytes               int64          `json:"pdf_bytes"`
+	PDFPages               int            `json:"pdf_pages"`
+	PDFTextRunes           int            `json:"pdf_text_runes"`
+	PDFDownloadTimeoutSec  int            `json:"pdf_download_timeout_seconds"`
+	PDFExtractTimeoutSec   int            `json:"pdf_extraction_timeout_seconds"`
+	PDFMemoryBytes         int64          `json:"pdf_memory_bytes"`
+	PDFTempBytes           int64          `json:"pdf_temp_bytes"`
+	PDFCPULimit            float64        `json:"pdf_cpu_limit"`
+	PDFPIDLimit            int            `json:"pdf_pid_limit"`
+	AllowUnsandboxedPDF    bool           `json:"allow_unsandboxed_pdf"`
 }
 
 type ModelProfileSnapshot struct {

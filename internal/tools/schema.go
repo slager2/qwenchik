@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"regexp"
 	"strconv"
 	"unicode/utf8"
 )
@@ -115,6 +116,15 @@ func validateSchemaNode(schema map[string]any, value any, path string, depth int
 		}
 		if min, ok := schemaNumber(schema["minLength"]); ok && runeLength < min {
 			return fmt.Errorf("%s is below minLength", path)
+		}
+		if pattern, ok := schema["pattern"].(string); ok {
+			compiled, err := regexp.Compile(pattern)
+			if err != nil {
+				return fmt.Errorf("%s has an unsupported schema pattern", path)
+			}
+			if !compiled.MatchString(typed) {
+				return fmt.Errorf("%s does not match pattern", path)
+			}
 		}
 	case json.Number:
 		number, err := typed.Float64()

@@ -72,7 +72,7 @@ func runningAppDoctor(ctx context.Context, cfg config.Config) doctorReport {
 		return unavailableAppDoctor()
 	}
 	checks := map[string]doctorCheck{}
-	for _, name := range []string{"app", "worker", "database", "artifacts", "frontend", "sandbox", "llm", "pdf_extractor", "search", "search_probe", "search_searxng", "search_tavily", "search_duckduckgo"} {
+	for _, name := range []string{"app", "worker", "database", "artifacts", "frontend", "sandbox", "llm", "pdf_extractor", "fetch_temp", "search", "search_probe", "search_searxng", "search_tavily", "search_duckduckgo"} {
 		if check, ok := raw.Checks[name]; ok && (check.Status == "ok" || check.Status == "warning" || check.Status == "error") {
 			checks[name] = doctorCheck{Status: check.Status, Message: "Running application reported " + check.Status}
 		}
@@ -95,6 +95,14 @@ func runningAppDoctor(ctx context.Context, cfg config.Config) doctorReport {
 				state = "available"
 			}
 			pdf = map[string]any{"isolated_available": available, "isolated_status": state, "fallback_allowed": fallback}
+			if effective, ok := raw.PDFExtractor["state"].(string); ok && (effective == "isolated_available" || effective == "pure_go_fallback_available" || effective == "unavailable") {
+				pdf["state"] = effective
+			}
+			for _, key := range []string{"pure_go_fallback_available", "smoke_tested"} {
+				if value, ok := raw.PDFExtractor[key].(bool); ok {
+					pdf[key] = value
+				}
+			}
 		}
 	}
 	if pdf == nil {
@@ -115,7 +123,10 @@ func safeDoctorLimits(input map[string]any) map[string]any {
 		return nil
 	}
 	result := map[string]any{"configured": false, "pdf_allow_unsandboxed_fallback": false}
-	for _, key := range []string{"configured", "pdf_allow_unsandboxed_fallback"} {
+	if mode, ok := input["privacy_mode"].(string); ok && (mode == "offline" || mode == "local_searxng" || mode == "local_inference_external_search") {
+		result["privacy_mode"] = mode
+	}
+	for _, key := range []string{"configured", "pdf_allow_unsandboxed_fallback", "adaptive_enabled", "sectioned_report_enabled"} {
 		if value, ok := input[key].(bool); ok {
 			result[key] = value
 		}

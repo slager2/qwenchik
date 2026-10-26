@@ -280,6 +280,7 @@ func TestResearchDefaultsRejectInvalidTrustedModelAndPolicy(t *testing.T) {
 	policies := cfg.ResearchPolicies()
 	policy := policies["standard"]
 	policy.AdaptiveEnabled = true
+	policy.MaxContinuations = 10 // Trusted opt-in still cannot exceed round bounds.
 	policies["standard"] = policy
 	service := New(nil)
 	service.SetResearchRunDefaults("standard", policies, cfg.ResearchModelSnapshot())

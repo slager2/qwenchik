@@ -2,7 +2,9 @@ package sqlite
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,16 +51,30 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 	}
 	if raw != "" {
 		var state struct {
-			Refinement  *domain.RefinementJob   `json:"refinement_job"`
-			CurrentStep string                  `json:"current_step"`
-			Completed   []string                `json:"completed_steps"`
-			Completion  domain.CompletionState  `json:"completion"`
-			Snapshot    *domain.ContextSnapshot `json:"context_snapshot"`
+			Report      *domain.ResearchReportState   `json:"research_report"`
+			Adaptive    *domain.AdaptiveResearchState `json:"adaptive_research"`
+			Refinement  *domain.RefinementJob         `json:"refinement_job"`
+			CurrentStep string                        `json:"current_step"`
+			Completed   []string                      `json:"completed_steps"`
+			Completion  domain.CompletionState        `json:"completion"`
+			Snapshot    *domain.ContextSnapshot       `json:"context_snapshot"`
 		}
 		if json.Unmarshal([]byte(raw), &state) != nil {
 			return nil, ErrCheckpointInvalid
 		}
 		result["step"], result["completed_steps"], result["completion"] = state.CurrentStep, len(state.Completed), state.Completion
+		if state.Report != nil && state.Report.Version == 1 && len(state.Report.Sections) <= 4 {
+			result["research_report"] = map[string]any{"artifact_id": state.Report.ArtifactID, "markdown_artifact_id": state.Report.MarkdownArtifactID, "outcome": state.Report.Outcome, "sections": len(state.Report.Sections), "unrepresented_criteria": state.Report.UnrepresentedCriteria}
+		}
+		if state.Adaptive != nil && state.Adaptive.Version == 1 && len(state.Adaptive.Rounds) <= 10 {
+			rounds := []map[string]any{}
+			for _, round := range state.Adaptive.Rounds {
+				rounds = append(rounds, map[string]any{"number": round.Number, "outcome": round.Outcome, "evidence_count": len(round.AcceptedEvidence), "critical_missing": round.CriticalMissing, "frontier_count": len(round.Frontier), "progress_fingerprint": round.ProgressFingerprint})
+			}
+			result["research_rounds"] = rounds
+			result["research_stop_reason"] = state.Adaptive.StopReason
+			result["research_stagnant_rounds"] = state.Adaptive.StagnantRounds
+		}
 		if state.Refinement != nil {
 			if state.Refinement.Base.Validate() != nil || state.Refinement.CandidateHash != "" && !roleContextSlot.MatchString(state.Refinement.CandidateHash) {
 				return nil, ErrCheckpointInvalid
@@ -77,6 +93,17 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 		}
 	}
 	if session, err := researchSession(ctx, tx, taskID); err == nil {
+		modelRaw, err := json.Marshal(session.ModelSnapshot)
+		if err != nil {
+			return nil, err
+		}
+		modelHash := sha256.Sum256(modelRaw)
+		result["model_profile_hash"] = hex.EncodeToString(modelHash[:])
+		result["sectioned_report_enabled"] = session.Policy.SectionedReportEnabled
+		result["research_session_id"] = session.ID
+		result["privacy_mode"] = domain.EffectivePrivacyMode(session.Policy.PrivacyMode)
+		result["offline_corpus_sha256"] = session.Policy.OfflineCorpusSHA256
+		result["adaptive_enabled"], result["current_round"] = session.Policy.AdaptiveEnabled, session.CurrentRound+1
 		remaining, err := snapshotBudget(ctx, tx, session)
 		if err != nil {
 			return nil, err

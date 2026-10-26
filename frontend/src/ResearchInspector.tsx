@@ -1,15 +1,17 @@
 import { ProviderCard } from './diagnostic-ui.mjs'
 import TelemetryPanel from './TelemetryPanel'
+import PrivacyNotice from './PrivacyNotice'
 import Expandable from './Expandable'
 import FailureDetails, { safeCount } from './FailureDetails'
 import type { ReloadReason } from './network-debug'
 import { safeURL } from './conversation-state.mjs'
 import { diagnosticSummary } from './observability.mjs'
 import { formatSourceBytes, planningFailure, publicResearchEvents, researchError, researchQueries, researchSources, researchSteps } from './research-state.mjs'
-import type { AgentEvent, Evidence, ProvidersResponse, ResearchPlan, Run, RunRuntime, SourceRecord, VerificationCriterionRecord } from './types'
+import type { AgentEvent, DoctorResponse, Evidence, ProvidersResponse, ResearchPlan, Run, RunRuntime, SourceRecord, VerificationCriterionRecord } from './types'
 
 interface Remote<T> { data?: T; error: string; loading: boolean; reload: (reason?: ReloadReason) => Promise<void> }
 interface Resources {
+	 pdfCapability?: DoctorResponse['pdf_extractor']
   plan: Remote<ResearchPlan | null>
   sources: Remote<SourceRecord[]>
   evidence: Remote<Evidence[]>
@@ -53,7 +55,7 @@ function Status({ resource, empty }: { resource: Remote<unknown>; empty?: boolea
 export default function ResearchInspector({ resources, events, run, showHeading = true, busy, onPause, onResume, onRetry }: { resources: Resources; events: AgentEvent[]; run: Run | null; showHeading?: boolean; busy?: boolean; onPause?: () => void; onResume?: () => void; onRetry?: () => void }) {
   const { plan, sources, evidence, providers } = resources
   const currentRuntime = run && resources.runtime?.data?.task_id === run.id ? resources.runtime?.data ?? null : null
-  const failedPlanning = planningFailure(run, events)
+  const failedPlanning = planningFailure(run, events, plan.data)
   const steps = researchSteps(plan.data, events)
   const sourceList = researchSources(sources.data ?? [], events)
   const queries = researchQueries(events)
@@ -75,7 +77,12 @@ export default function ResearchInspector({ resources, events, run, showHeading 
   const outcome = currentRuntime?.terminal_outcome || run?.terminal_outcome
   const outcomes: Record<string, string> = { partial: 'Частичный результат', blocked: 'Заблокировано проверкой', budget_exhausted: 'Бюджет исчерпан', cancelled: 'Остановлено', failed: 'Ошибка запуска' }
   return <div className="chat-research">
+    {currentRuntime?.privacy_mode && <PrivacyNotice mode={currentRuntime.privacy_mode} />}
     <TelemetryPanel runtime={currentRuntime} />
+    {resources.pdfCapability && <p role="status">PDF: {resources.pdfCapability.state==='isolated_available'?'изолированная среда доступна':resources.pdfCapability.state==='pure_go_fallback_available'?'разрешён process-bounded fallback без OS-изоляции':'извлечение недоступно'}. {resources.pdfCapability.smoke_tested?'Fixture smoke подтверждён.':'Наличие capability не подтверждает извлечение конкретного PDF.'}</p>}
+    {currentRuntime?.research_report?.artifact_id && <section aria-label="Аналитический отчёт"><h3>Аналитический отчёт</h3><p>Секций: {currentRuntime.research_report.sections} · Итог: {currentRuntime.research_report.outcome}</p><a href={`/api/tasks/${encodeURIComponent(currentRuntime.task_id)}/artifacts/${encodeURIComponent(currentRuntime.research_report.artifact_id)}`}>Скачать отчёт с metadata (JSON)</a>{currentRuntime.research_report.markdown_artifact_id && <p><a href={`/api/tasks/${encodeURIComponent(currentRuntime.task_id)}/artifacts/${encodeURIComponent(currentRuntime.research_report.markdown_artifact_id)}`}>Скачать Markdown</a></p>}</section>}
+    {currentRuntime?.adaptive_enabled && <p role="status">Adaptive research · Раунд {currentRuntime.current_round}</p>}
+    {!!currentRuntime?.research_rounds?.length && <section aria-label="Раунды исследования"><h3>Раунды исследования</h3><ol>{currentRuntime.research_rounds.map((round) => <li key={round.number}><strong>Раунд {round.number}</strong><p>Evidence: {round.evidence_count} · Открытых вопросов: {round.frontier_count}</p><ul>{round.critical_missing.map((item,index)=><li key={index}>{item}</li>)}</ul></li>)}</ol>{currentRuntime.research_stop_reason && <p>Причина остановки: {currentRuntime.research_stop_reason}</p>}</section>}
     <header className="research-heading">{showHeading && <h2>{run?.mode === 'chat' ? 'Детали запуска' : 'Детали исследования'}</h2>}<p>{labels[state] || 'Исследование ещё не запущено'}</p></header>
     {failedPlanning && <section className="chat-action-error" aria-label="Ошибка планирования" role="status">
       <h3>Планирование не завершено</h3>

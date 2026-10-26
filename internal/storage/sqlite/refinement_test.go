@@ -37,6 +37,38 @@ func refinementStoreFixture(t *testing.T) (*Store, domain.Task, domain.AgentBund
 	return s, claimed, bundle
 }
 
+func TestLaboratoryFreezeBlocksWritesForAlreadyExistingRefinement(t *testing.T) {
+	ctx := context.Background()
+	s, task, base := refinementStoreFixture(t)
+	s.FreezeRefinement()
+	job, err := s.RefinementJob(ctx, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checks := []func() error{
+		func() error { _, err := s.StartRefinement(ctx, domain.ModelProfileSnapshot{}, nil, "new"); return err },
+		func() error { return s.ReserveRefinementHTTP(ctx, task.ID) },
+		func() error { _, err := s.SaveCandidate(ctx, task.ID, job, domain.CandidatePatch{}); return err },
+		func() error {
+			return s.SaveRefinementEvaluation(ctx, task.ID, "candidate", domain.RefinementEvaluation{})
+		},
+		func() error { _, err := s.PromoteRefinement(ctx, task.ID, "candidate"); return err },
+		func() error { _, err := s.RollbackBundle(ctx, base.BundleHash, base.BundleHash); return err },
+	}
+	for i, check := range checks {
+		if err := check(); !errors.Is(err, ErrRefinementFrozen) {
+			t.Fatalf("write %d bypassed freeze: %v", i, err)
+		}
+	}
+	active, err := s.ActiveBundle(ctx, base.BundleHash)
+	if err != nil || active.BundleHash != base.BundleHash {
+		t.Fatalf("active changed: %+v %v", active, err)
+	}
+	if _, err := s.RefinementJob(ctx, task.ID); err != nil {
+		t.Fatalf("historical job read blocked: %v", err)
+	}
+}
+
 func TestRefinementBudgetsAndImmutableJobSurviveCheckpointWrites(t *testing.T) {
 	ctx := context.Background()
 	s, task, _ := refinementStoreFixture(t)

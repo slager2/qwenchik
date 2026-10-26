@@ -374,6 +374,14 @@ export interface RuntimeTelemetry {
 }
 
 export interface RunRuntime {
+	 privacy_mode?: string
+	 offline_corpus_sha256?: string
+	 research_report?: { artifact_id: string; markdown_artifact_id: string; outcome: string; sections: number; unrepresented_criteria: string[] }
+	 adaptive_enabled?: boolean
+	 current_round?: number
+	 research_rounds?: { number: number; outcome: string; evidence_count: number; critical_missing: string[]; frontier_count: number; progress_fingerprint: string }[]
+	 research_stop_reason?: string
+	 research_stagnant_rounds?: number
   bundle_hash?: string
   bundle_version?: number
   telemetry?: RuntimeTelemetry
@@ -472,6 +480,7 @@ export interface DoctorResponse {
   status: string
   checks: Record<string, { status: string; message: string }>
   research_limits?: {
+	 privacy_mode?: string
     configured: boolean
     pdf_allow_unsandboxed_fallback: boolean
     task_fetch_budget_bytes?: number
@@ -490,5 +499,5 @@ export interface DoctorResponse {
     fetch_temp_task_bytes?: number
     fetch_temp_global_bytes?: number
   }
-  pdf_extractor?: { isolated_available: boolean; isolated_status: 'available' | 'unavailable'; fallback_allowed: boolean }
+  pdf_extractor?: { isolated_available: boolean; isolated_status: 'available' | 'unavailable'; fallback_allowed: boolean; state?: 'isolated_available' | 'pure_go_fallback_available' | 'unavailable'; pure_go_fallback_available?: boolean; smoke_tested?: boolean }
 }

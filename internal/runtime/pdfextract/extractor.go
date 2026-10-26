@@ -45,6 +45,7 @@ const (
 
 var (
 	ErrUnavailable      = errors.New("isolated PDF extraction is unavailable")
+	ErrPolicyRejected   = errors.New("PDF extraction fallback is forbidden by policy")
 	ErrMalformed        = errors.New("PDF is malformed or could not be extracted")
 	ErrEncrypted        = errors.New("encrypted PDFs are not supported")
 	ErrTooManyPages     = errors.New("PDF exceeds the configured page limit")

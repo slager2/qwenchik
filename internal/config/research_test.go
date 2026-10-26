@@ -35,6 +35,8 @@ func TestResearchLoadDefaultsAndSafeEffectiveSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]any{
+		"adaptive_enabled": false, "sectioned_report_enabled": false,
+		"privacy_mode": domain.PrivacyExternalSearch, "offline_corpus_sha256": "",
 		"task_fetch_budget_bytes": int64(128 << 20), "source_fetch_bytes": int64(16 << 20), "pdf_bytes": int64(64 << 20),
 		"pdf_pages": 20, "pdf_text_runes": 50000, "pdf_extraction_timeout_seconds": 30, "pdf_download_timeout_seconds": 120,
 		"pdf_memory_bytes": int64(512 << 20), "pdf_temp_bytes": int64(64 << 20), "pdf_cpu_limit": float64(1), "pdf_pid_limit": 32,
@@ -146,7 +148,7 @@ func TestResearchDefaultProfileAndTaskTimeoutValidation(t *testing.T) {
 	}
 }
 
-func TestResearchAdaptiveIsExplicitlyOffUntilPhase3(t *testing.T) {
+func TestResearchAdaptiveIsExplicitlyOptIn(t *testing.T) {
 	isolatedResearchEnv(t)
 	t.Setenv("RESEARCH_ADAPTIVE_ENABLED", "false")
 	cfg, err := Load()
@@ -160,8 +162,14 @@ func TestResearchAdaptiveIsExplicitlyOffUntilPhase3(t *testing.T) {
 		}
 	}
 	t.Setenv("RESEARCH_ADAPTIVE_ENABLED", "true")
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "Phase 3") {
-		t.Fatalf("unsupported adaptive config err=%v", err)
+	adaptive, err := Load()
+	if err != nil || !adaptive.ResearchAdaptiveEnabled {
+		t.Fatalf("opt-in adaptive config err=%v", err)
+	}
+	for _, policy := range adaptive.ResearchPolicies() {
+		if !policy.AdaptiveEnabled || policy.MaxContinuations != policy.Budget.MaxRounds-1 {
+			t.Fatalf("incorrect adaptive allowance: %+v", policy)
+		}
 	}
 }
 
@@ -348,7 +356,7 @@ func TestResearchPolicyValidationRejectsImpossibleRelationships(t *testing.T) {
 		func(p *domain.ResearchPolicy) { p.PDFBytes = p.TaskFetchBudgetBytes + 1 },
 		func(p *domain.ResearchPolicy) { p.PDFCPULimit = math.NaN() },
 		func(p *domain.ResearchPolicy) { p.PDFExtractTimeoutSec = math.MaxInt },
-		func(p *domain.ResearchPolicy) { p.AdaptiveEnabled = true },
+		func(p *domain.ResearchPolicy) { p.AdaptiveEnabled = true; p.MaxContinuations = 10 },
 	} {
 		invalid := valid
 		mutate(&invalid)

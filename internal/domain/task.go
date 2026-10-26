@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type ApprovalStatus string
@@ -253,7 +254,7 @@ func validatePlan(plan Plan, maxSteps int) error {
 	if plan.SchemaVersion != 1 {
 		return fmt.Errorf("unsupported plan schema_version %d", plan.SchemaVersion)
 	}
-	if strings.TrimSpace(plan.Goal) == "" || len(plan.Goal) > 1000 {
+	if strings.TrimSpace(plan.Goal) == "" || utf8.RuneCountInString(plan.Goal) > 1000 {
 		return errors.New("plan goal must contain 1 to 1000 characters")
 	}
 	if len(plan.Subtasks) == 0 || len(plan.Subtasks) > maxSteps || len(plan.Subtasks) > 12 {
@@ -262,7 +263,7 @@ func validatePlan(plan Plan, maxSteps int) error {
 	if plan.MaxSteps < len(plan.Subtasks) || plan.MaxSteps > maxSteps || plan.MaxSteps > 12 {
 		return fmt.Errorf("plan max_steps must be between %d and %d", len(plan.Subtasks), min(maxSteps, 12))
 	}
-	if strings.TrimSpace(plan.FinalDeliverable) == "" || len(plan.FinalDeliverable) > 1000 {
+	if strings.TrimSpace(plan.FinalDeliverable) == "" || utf8.RuneCountInString(plan.FinalDeliverable) > 1000 {
 		return errors.New("plan final_deliverable must contain 1 to 1000 characters")
 	}
 	steps := make(map[string]PlanStep, len(plan.Subtasks))
@@ -276,17 +277,17 @@ func validatePlan(plan Plan, maxSteps int) error {
 		if step.Kind != "analysis" && step.Kind != "search" && step.Kind != "fetch" && step.Kind != "code_execution" && step.Kind != "external_action" {
 			return fmt.Errorf("%w: %q", ErrUnsupportedPlanKind, step.Kind)
 		}
-		if strings.TrimSpace(step.Description) == "" || len(step.Description) > 1000 {
+		if strings.TrimSpace(step.Description) == "" || utf8.RuneCountInString(step.Description) > 1000 {
 			return fmt.Errorf("step %q description must contain 1 to 1000 characters", step.ID)
 		}
-		if len(step.ExpectedOutput) > 500 {
+		if utf8.RuneCountInString(step.ExpectedOutput) > 500 {
 			return fmt.Errorf("step %q expected_output exceeds 500 characters", step.ID)
 		}
 		if len(step.SuccessCriteria) == 0 || len(step.SuccessCriteria) > 10 {
 			return fmt.Errorf("step %q must have between 1 and 10 success criteria", step.ID)
 		}
 		for _, criterion := range step.SuccessCriteria {
-			if strings.TrimSpace(criterion) == "" || len(criterion) > 500 {
+			if strings.TrimSpace(criterion) == "" || utf8.RuneCountInString(criterion) > 500 {
 				return fmt.Errorf("step %q success criteria must contain 1 to 500 non-whitespace characters", step.ID)
 			}
 		}

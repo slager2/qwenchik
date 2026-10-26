@@ -8,9 +8,10 @@ test('Chat SSE invalidates only resources affected by committed events', () => {
   assert.deepEqual(runEventInvalidations({ type: 'evidence.created' }, 'research').resources, ['evidence'])
   assert.deepEqual(runEventInvalidations({ type: 'tool.started', payload: { tool: 'fetch_url' } }, 'research').resources, ['sources'])
   assert.deepEqual(runEventInvalidations({ type: 'tool.started', payload: { tool: 'search' } }, 'research').resources, [])
-  assert.deepEqual(runEventInvalidations({ type: 'task.completed' }, 'research').resources, ['messages', 'conversation', 'run', 'runtime', 'plan', 'sources', 'evidence'])
-  assert.deepEqual(runEventInvalidations({ type: 'task.completed' }, 'chat').resources, ['messages', 'conversation', 'run', 'runtime'])
-  assert.deepEqual(runResyncResources('chat'), ['messages', 'conversation', 'run', 'runtime'])
+  assert.deepEqual(runEventInvalidations({ type: 'task.completed' }, 'research').resources, ['messages', 'conversation', 'run', 'runtime', 'events', 'plan', 'sources', 'evidence'])
+  assert.deepEqual(runEventInvalidations({ type: 'task.completed' }, 'chat').resources, ['messages', 'conversation', 'run', 'runtime', 'events'])
+  assert.deepEqual(runResyncResources('chat'), ['messages', 'conversation', 'run', 'runtime', 'events'])
+  assert.deepEqual(runEventInvalidations({ type: 'task.failed', visibility: 'internal' }, 'research'), { resources: [], reason: 'sse_event' })
 })
 
 test('fallback uses a finite bounded 15/30/60 second backoff', () => {

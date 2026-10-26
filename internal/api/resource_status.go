@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/slager2/qwenchik/internal/domain"
+	"github.com/slager2/qwenchik/internal/runtime/resources"
 )
 
 const (
@@ -116,6 +117,23 @@ func safeRuntimeFields(input map[string]any) map[string]any {
 
 func SafeRuntimeStatus(input map[string]any) map[string]any {
 	result := safeRuntimeFields(runtimeObject(input))
+	if id, ok := input["active_run_id"].(string); ok && len(id) <= 128 {
+		valid := true
+		for _, r := range id {
+			if !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_') {
+				valid = false
+			}
+		}
+		if valid {
+			result["active_run_id"] = id
+		}
+	}
+	if raw, err := json.Marshal(input["resource_policy"]); err == nil && len(raw) < 4096 {
+		var p resources.Policy
+		if json.Unmarshal(raw, &p) == nil && p.Validate() == nil {
+			result["resource_policy"] = p
+		}
+	}
 	for _, key := range []string{"resources", "last_snapshot", "snapshot", "sleep", "keep_awake", "sleep_policy"} {
 		if object := runtimeObject(input[key]); object != nil {
 			result[key] = safeRuntimeFields(object)
