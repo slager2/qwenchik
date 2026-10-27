@@ -64,7 +64,7 @@ func (s *Service) researchDefaults() researchRunDefaults {
 }
 
 func defaultResearchPolicy() domain.ResearchPolicy {
-	return domain.DefaultResearchPolicy()
+	return domain.DefaultRoundResearchPolicy()
 }
 
 func knownResearchProfile(profile string) bool {

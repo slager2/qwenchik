@@ -39,7 +39,7 @@ func adaptiveState(state map[string]any) (domain.AdaptiveResearchState, error) {
 
 func (s *Store) StopAdaptiveResearch(ctx context.Context, taskID, reason string) error {
 	switch reason {
-	case "max_rounds", "step_budget", "research_budget", "stagnation", "question_budget_exhausted", "empty_frontier":
+	case "max_rounds", "step_budget", "research_budget", "stagnation", "question_budget_exhausted", "empty_frontier", "total_steps", "search_budget", "fetch_budget", "evidence_budget", "llm_budget", "fetch_bytes", "deadline":
 	default:
 		return ErrCheckpointInvalid
 	}
@@ -84,6 +84,9 @@ func (s *Store) StopAdaptiveResearch(ctx context.Context, taskID, reason string)
 		return err
 	}
 	adaptive.StopReason = reason
+	if _, err := tx.ExecContext(ctx, `UPDATE research_sessions SET stop_reason=? WHERE task_id=?`, reason, taskID); err != nil {
+		return err
+	}
 	state["adaptive_research"] = adaptive
 	seq, err := appendEvent(ctx, tx, taskID, "research.round.stopped", stagePointer(domain.StageVerification), "user", map[string]any{"reason": reason, "number": session.CurrentRound + 1})
 	if err != nil {
@@ -165,6 +168,9 @@ func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state m
 		}
 	}
 	for _, criterion := range criteria {
+		if session.Policy.Version == 2 && criterion.StepID != "goal" {
+			continue
+		}
 		if criterion.Met && len(criterion.EvidenceIDs) > 0 && !priorCoverage[fmt.Sprintf("criterion:%s:%d", criterion.StepID, criterion.Criterion)] {
 			progress = true
 		}
@@ -178,6 +184,9 @@ func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state m
 	resolved := map[string]bool{}
 	for _, criterion := range criteria {
 		id := fmt.Sprintf("criterion:%s:%d", criterion.StepID, criterion.Criterion)
+		if session.Policy.Version == 2 && criterion.StepID != "goal" {
+			continue
+		}
 		if criterion.Classification == "critical" && !criterion.Met {
 			open[id] = "Unresolved critical " + id
 		} else if criterion.Met {

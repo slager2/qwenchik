@@ -30,6 +30,11 @@ func (s *Store) SaveResearchReportArtifact(ctx context.Context, artifact domain.
 	if task.Status != domain.StatusVerifying {
 		return domain.Artifact{}, ErrConflict
 	}
+	if session, err := researchSession(ctx, tx, artifact.TaskID); err == nil && session.Policy.Version == 2 && artifact.SizeBytes > int64(session.Budget.MaxReportBytes) {
+		return domain.Artifact{}, ErrResearchBudgetExceeded
+	} else if err != nil && err != ErrNotFound {
+		return domain.Artifact{}, err
+	}
 	if err := saveResearchArtifact(ctx, tx, artifact, ref); err != nil {
 		return domain.Artifact{}, err
 	}

@@ -177,7 +177,7 @@ func TestRepeatLeavesSnapshotCloningToStorage(t *testing.T) {
 }
 
 func TestResearchFallbackIsDeterministicAndWellFormed(t *testing.T) {
-	wantPolicy := domain.DefaultResearchPolicy()
+	wantPolicy := domain.DefaultRoundResearchPolicy()
 	configuredPolicy, err := researchTestConfig().ResearchProfile("standard")
 	if err != nil || configuredPolicy != wantPolicy {
 		t.Fatalf("configured standard=%#v canonical fallback=%#v err=%v", configuredPolicy, wantPolicy, err)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
@@ -127,6 +128,22 @@ func (w *Worker) requestCompletionContinuation(ctx context.Context, taskID strin
 	}
 	if !requiresWebResearch(task.Title+"\n"+task.Description) || !w.tools.Has("search") || !w.tools.Has("fetch_url") {
 		return false, errors.Join(errCompletionBlocked, cause)
+	}
+	if session.Policy.Version == 2 {
+		steps, searches, fetches, modelReserve := domain.NextResearchRoundShape(session)
+		if reason := domain.ContinuationStopReason(session, steps, searches, fetches, modelReserve, time.Now()); reason != "" {
+			if session.Policy.AdaptiveEnabled {
+				return stopAdaptive(reason)
+			}
+			return false, errors.Join(errCompletionBlocked, cause)
+		}
+		if state.ResearchPlans == nil {
+			return false, ErrRecoveryRequired
+		}
+		if err := repo.RequestResearchContinuation(ctx, taskID, state.Completion.Continuations, fingerprint, failure, missing); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
 	if len(task.Plan.Subtasks)+steps > min(12, session.Budget.MaxSteps) {
 		if session.Policy.AdaptiveEnabled {

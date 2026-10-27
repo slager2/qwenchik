@@ -32,6 +32,22 @@ func loadResearchPolicy(c *Config) error {
 	}
 	c.PDFPolicy = pdfextract.DefaultPolicy()
 	var err error
+	c.ResearchCaps = defaultResearchCaps(c.MaxSteps, c.MaxSearchQueries)
+	for _, item := range []struct {
+		name   string
+		target *int
+	}{
+		{"MAX_INITIAL_PLAN_STEPS", &c.ResearchCaps.MaxInitialPlanSteps}, {"MAX_ROUND_STEPS", &c.ResearchCaps.MaxRoundSteps}, {"MAX_TOTAL_ROUNDS", &c.ResearchCaps.MaxRounds}, {"MAX_TOTAL_STEPS", &c.ResearchCaps.MaxTotalSteps},
+		{"MAX_FETCHES", &c.ResearchCaps.MaxFetches}, {"MAX_LLM_CALLS", &c.ResearchCaps.MaxLLMCalls}, {"MAX_EVIDENCE", &c.ResearchCaps.MaxEvidence}, {"MAX_QUESTIONS", &c.ResearchCaps.MaxQuestionsCreated}, {"MAX_QUESTIONS_ACCEPTED", &c.ResearchCaps.MaxQuestionsAccepted},
+		{"MAX_CITATION_SOURCES", &c.ResearchCaps.MaxCitationSources}, {"MAX_CITATION_CLAIMS", &c.ResearchCaps.MaxCitationClaims}, {"MAX_REPORT_SECTIONS", &c.ResearchCaps.MaxReportSections}, {"MAX_REPORT_PARAGRAPHS", &c.ResearchCaps.MaxReportParagraphs}, {"MAX_REPORT_BYTES", &c.ResearchCaps.MaxReportBytes},
+	} {
+		if *item.target, err = intEnv(item.name, *item.target); err != nil {
+			return err
+		}
+	}
+	if err := validateResearchCaps(c.ResearchCaps); err != nil {
+		return err
+	}
 	if c.ResearchAdaptiveEnabled, err = boolEnv("RESEARCH_ADAPTIVE_ENABLED", false); err != nil {
 		return err
 	}
@@ -126,7 +142,7 @@ func knownResearchProfile(name string) bool {
 }
 
 func (c Config) ResearchProfile(name string) (domain.ResearchPolicy, error) {
-	budget, ok := researchProfileBudget(name)
+	budget, ok := domain.RoundResearchBudgetForProfile(name)
 	if !ok {
 		return domain.ResearchPolicy{}, fmt.Errorf("unknown research profile %q", name)
 	}
@@ -134,15 +150,37 @@ func (c Config) ResearchProfile(name string) (domain.ResearchPolicy, error) {
 		return domain.ResearchPolicy{}, err
 	}
 
-	budget.MaxSteps = min(budget.MaxSteps, c.MaxSteps)
+	caps := c.ResearchCaps
+	if caps == (domain.ResearchBudget{}) {
+		caps = defaultResearchCaps(c.MaxSteps, c.MaxSearchQueries)
+	}
+	if err := validateResearchCaps(caps); err != nil {
+		return domain.ResearchPolicy{}, err
+	}
+	budget.MaxInitialPlanSteps = min(c.MaxSteps, min(budget.MaxInitialPlanSteps, caps.MaxInitialPlanSteps))
+	budget.MaxSteps = budget.MaxInitialPlanSteps // compatibility alias; never a total-run ceiling in v2.
+	budget.MaxRoundSteps = min(budget.MaxRoundSteps, caps.MaxRoundSteps)
+	budget.MaxTotalSteps = min(budget.MaxTotalSteps, caps.MaxTotalSteps)
+	budget.MaxRounds = min(budget.MaxRounds, caps.MaxRounds)
 	budget.MaxSearchQueries = min(budget.MaxSearchQueries, c.MaxSearchQueries)
+	budget.MaxFetches = min(budget.MaxFetches, caps.MaxFetches)
+	budget.MaxLLMCalls = min(budget.MaxLLMCalls, caps.MaxLLMCalls)
+	budget.MaxEvidence = min(budget.MaxEvidence, caps.MaxEvidence)
+	budget.MaxQuestionsCreated = min(budget.MaxQuestionsCreated, caps.MaxQuestionsCreated)
+	budget.MaxQuestionsAccepted = min(budget.MaxQuestionsAccepted, min(caps.MaxQuestionsAccepted, budget.MaxQuestionsCreated))
+	budget.MaxCitationSources = min(budget.MaxCitationSources, min(caps.MaxCitationSources, budget.MaxEvidence))
+	budget.MaxCitationClaims = min(budget.MaxCitationClaims, caps.MaxCitationClaims)
+	budget.MaxReportSections = min(budget.MaxReportSections, caps.MaxReportSections)
+	budget.MaxReportParagraphs = min(budget.MaxReportParagraphs, caps.MaxReportParagraphs)
+	budget.MaxReportBytes = min(budget.MaxReportBytes, caps.MaxReportBytes)
+	budget.MaxStagnantRounds = min(budget.MaxStagnantRounds, budget.MaxRounds)
 
 	policy := domain.ResearchPolicy{
 		PrivacyMode: domain.EffectivePrivacyMode(c.ResearchPrivacyMode), OfflineCorpusSHA256: c.OfflineCorpusSHA256,
 		SectionedReportEnabled: c.ResearchSectionReportEnabled,
 		MaxContinuations:       min(1, budget.MaxRounds-1),
 		KeepAwake:              c.KeepAwake,
-		Version:                1, Profile: name, AdaptiveEnabled: c.ResearchAdaptiveEnabled, Budget: budget,
+		Version:                2, Profile: name, AdaptiveEnabled: c.ResearchAdaptiveEnabled, Budget: budget,
 		TaskFetchBudgetBytes: c.MaxFetchBytes, SourceFetchBytes: c.MaxSourceBytes, PDFBytes: c.PDFPolicy.MaxInputBytes,
 		PDFPages: c.PDFPolicy.MaxPages, PDFTextRunes: c.PDFPolicy.MaxTextRunes,
 		PDFDownloadTimeoutSec: c.PDFDownloadTimeoutSeconds,
@@ -205,14 +243,24 @@ func ValidateResearchPolicy(policy domain.ResearchPolicy) error {
 	if policy.MaxContinuations < 0 || policy.MaxContinuations > maxContinuations {
 		return errors.New("max_continuations exceeds the bounded research round allowance")
 	}
-	if policy.Version != 1 || !knownResearchProfile(policy.Profile) {
+	if (policy.Version != 1 && policy.Version != 2) || !knownResearchProfile(policy.Profile) {
 		return errors.New("research policy version, profile, or adaptive setting is invalid")
 	}
 	b := policy.Budget
 	if b.WallTimeSeconds < 60 || b.WallTimeSeconds > 21600 || b.MaxRounds < 1 || b.MaxSteps < 1 || b.MaxSteps > 12 || b.MaxSearchQueries < 1 || b.MaxFetches < 1 || b.MaxLLMCalls < 1 || b.MaxEvidence < 1 || b.MaxQuestionsCreated < 1 || b.MaxQuestionsAccepted < 1 || b.MaxStagnantRounds < 1 || b.MaxCitationSources < 1 || b.MaxCitationClaims < 1 {
 		return errors.New("research budget limits are invalid")
 	}
-	if b.MaxQuestionsAccepted > b.MaxQuestionsCreated || b.MaxStagnantRounds > b.MaxRounds || b.MaxCitationSources > b.MaxEvidence || b.MaxCitationSources > 8 || b.MaxCitationClaims > 8 {
+	claimLimit := 8
+	if policy.Version == 2 {
+		claimLimit = 32
+		if err := validateResearchCaps(b); err != nil {
+			return err
+		}
+		if b.MaxSteps != b.MaxInitialPlanSteps {
+			return errors.New("v2 max_steps must alias initial plan capacity")
+		}
+	}
+	if b.MaxQuestionsAccepted > b.MaxQuestionsCreated || b.MaxStagnantRounds > b.MaxRounds || b.MaxCitationSources > b.MaxEvidence || b.MaxCitationSources > 8 || b.MaxCitationClaims > claimLimit {
 		return errors.New("research budget relationships are invalid")
 	}
 	if policy.TaskFetchBudgetBytes < 1 || policy.TaskFetchBudgetBytes == math.MaxInt64 || policy.SourceFetchBytes < 1 || policy.PDFBytes < 1 || policy.SourceFetchBytes > policy.TaskFetchBudgetBytes || policy.PDFBytes > policy.TaskFetchBudgetBytes {

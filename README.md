@@ -127,23 +127,41 @@ Check `/api/doctor` for `research_limits` and `pdf_extractor`: effective limits,
 
 Set `LLM_CONTEXT_LENGTH` to the actual server context, not the model's training capacity. The example uses `32768`; if the local `/v1/models` metadata reports a lower runtime `n_ctx`, startup caps the budget to it and logs the mismatch. Byte budgeting remains an estimate, not exact tokenization. Tool-result compaction reserves IDs/URLs/titles and minimum snippets for every result before distributing remaining space; insufficient space raises a budget error rather than sending an empty evidence set to verification.
 
-The planner uses bounded structural/semantic validation and lossless facet normalization. The verifier evaluates the user's criteria against fetched evidence using fixed assessment keys and owned IDs. The legacy citation path remains bounded to 8 sources/8 claims (quick: 4 sources). Opt-in section reports distribute the same claim allowance across at most four checkpointed sections, each with a separate critic and at most one correction. Backend code assembles methodology, limitations, source links, coverage and JSON/Markdown artifacts. Unsupported synthesis falls back to explicit excerpts. A source list alone does not establish claim support, and the same-model critic is not independent factual verification.
+The planner uses bounded structural/semantic validation and lossless facet normalization. New version-two sessions preserve substantive user-deliverable criteria independently of acquisition steps; report coverage cannot substitute “source stored” for those criteria. Saved version-one sessions retain their original budgets. New section reports have explicit section/paragraph/claim/byte budgets and at most one correction per section; byte exhaustion produces deterministic partial excerpts and bounded JSON/Markdown artifacts. A source list or same-model critic does not establish independent factual truth. See [Deep Research Phase 1](docs/deep-research-phase1-round-budgets.md).
 
 ## Research profiles and saved sessions
 
 `RESEARCH_DEFAULT_PROFILE=standard` selects the default budget for a new research send. `research_settings.profile` can select `quick`, `standard`, `deep_laptop`, `long_laptop`, or `overnight_laptop`. `RESEARCH_ADAPTIVE_ENABLED=false` is the compatibility default; `true` enables bounded durable evidence-driven continuation rounds. `RESEARCH_SECTION_REPORT_ENABLED=true` independently enables section reports. Both flags are saved at submission. Larger wall ceilings do not promise hours of execution or a particular report length.
 
-Canonical nominal budgets are defined once in `internal/domain/research_defaults.go`. Query ceilings are additionally clamped by the trusted server's `MAX_SEARCH_QUERIES`, which defaults to 12:
+New session budgets are defined in `internal/domain/round_plans.go`; historical
+version-one defaults remain in `research_defaults.go` for recovery compatibility.
+`MAX_SEARCH_QUERIES` now defaults to 48, so longer profiles are not silently clamped
+to 12 queries. All values below are ceilings, not work quotas:
 
-| Profile | Wall ceiling, seconds | Rounds ceiling | Queries nominal / default effective | Fetches | Logical LLM calls | Evidence | Questions created / accepted | Stagnant rounds ceiling |
+| Profile | Wall seconds | Rounds | Total steps | Search | Fetch | LLM calls | Evidence | Questions created/accepted |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `quick` | 300 | 1 | 4 / 4 | 4 | 10 | 4 | 6 / 2 | 1 |
-| `standard` | 1800 | 3 | 8 / 8 | 8 | 24 | 8 | 16 / 6 | 2 |
-| `deep_laptop` | 7200 | 5 | 16 / 12 | 12 | 40 | 12 | 30 / 10 | 2 |
-| `long_laptop` | 14400 | 8 | 32 / 12 | 24 | 72 | 24 | 60 / 20 | 2 |
-| `overnight_laptop` | 21600 | 10 | 48 / 12 | 36 | 96 | 32 | 80 / 24 | 2 |
+| `quick` | 300 | 1 | 12 | 4 | 4 | 24 | 4 | 8 / 8 |
+| `standard` | 1800 | 3 | 20 | 8 | 8 | 48 | 8 | 24 / 16 |
+| `deep_laptop` | 7200 | 5 | 32 | 16 | 12 | 64 | 12 | 40 / 24 |
+| `long_laptop` | 14400 | 8 | 64 | 32 | 24 | 96 | 24 | 64 / 32 |
+| `overnight_laptop` | 21600 | 10 | 96 | 48 | 36 | 128 | 32 | 80 / 40 |
 
-All profiles retain a cumulative 12-step ceiling, further bounded by `MAX_STEPS`; this can stop adaptive research after only two or three realized rounds. Round/question/stagnation budgets bound the opt-in controller and do not guarantee the nominal round count. `research_settings.time_budget_seconds` accepts integral 60–21600 seconds and changes only the wall ceiling; it does not increase query, fetch, LLM-call, evidence, or output-token limits. The absolute deadline starts at submission, so queued time and downtime consume it. Session-backed research uses that deadline rather than a fresh `TASK_TIMEOUT_SECONDS` interval on restart.
+For version-two sessions, the initial plan stays in `tasks.plan_json`; bounded
+round plans live in the existing checkpoint, and `task_steps`/events retain their
+execution history. Initial and individual round plans default to at most 12 steps;
+there is no cumulative 12-step plan bottleneck. Round sizes use remaining budgets
+and remaining rounds; an explicit lower `MAX_ROUND_STEPS` remains respected.
+`MAX_STEPS` is a compatibility/initial-plan alias, not the total-run limit.
+`MAX_TOTAL_STEPS` and the other explicit caps in `.env.example` can reduce profiles.
+Reaching readiness stops work immediately; time, resource, stagnation and evidence
+budgets can stop it earlier. `research_settings.time_budget_seconds` changes only
+the wall ceiling. The deadline starts at submission and includes downtime; restart
+does not refund consumed calls, operations or admitted steps. Saved v1 sessions
+are not silently upgraded and keep their original 12-step allowance.
+
+**No artificial plan-step ceiling. Still bounded by explicit time, search, fetch,
+LLM, evidence and resource budgets.** This is implemented/scripted-test scope;
+real-model/context-ladder/overnight acceptance remains separate.
 
 Migration `009_research_sessions.sql` adds exactly one table, `research_sessions`, plus its conversation index. New research sends create the task, messages, and session atomically. Logical model calls and initial HTTP-attempt reservations are persisted before invocation; an allowed JSON-schema-to-JSON-mode fallback reserves one additional HTTP attempt, with model HTTP attempts bounded by twice `MaxLLMCalls`. Failed or interrupted calls do not refund reservations. Existing tasks/runs without a session are not backfilled and keep the legacy execution path. Round/question frontier data belongs in versioned checkpoint JSON, not additional Phase 1 tables.
 

@@ -16,6 +16,7 @@ type ReportSection struct {
 }
 
 type ResearchReportState struct {
+	ByteBudgetFallback    bool                     `json:"byte_budget_fallback,omitempty"`
 	PrivacyMode           string                   `json:"privacy_mode"`
 	OfflineCorpusSHA256   string                   `json:"offline_corpus_sha256,omitempty"`
 	ExecutionCriteria     []string                 `json:"execution_criteria"`

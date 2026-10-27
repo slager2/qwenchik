@@ -213,11 +213,12 @@ type Checkpoint struct {
 }
 
 type Plan struct {
-	SchemaVersion    int        `json:"schema_version"`
-	Goal             string     `json:"goal"`
-	Subtasks         []PlanStep `json:"subtasks"`
-	MaxSteps         int        `json:"max_steps"`
-	FinalDeliverable string     `json:"final_deliverable"`
+	DeliverableCriteria []string   `json:"deliverable_criteria,omitempty"`
+	SchemaVersion       int        `json:"schema_version"`
+	Goal                string     `json:"goal"`
+	Subtasks            []PlanStep `json:"subtasks"`
+	MaxSteps            int        `json:"max_steps"`
+	FinalDeliverable    string     `json:"final_deliverable"`
 }
 
 type PlanStep struct {
@@ -251,6 +252,14 @@ func ValidatePlan(plan Plan, maxSteps int) error {
 }
 
 func validatePlan(plan Plan, maxSteps int) error {
+	if len(plan.DeliverableCriteria) > 9 {
+		return errors.New("plan has too many deliverable criteria")
+	}
+	for _, criterion := range plan.DeliverableCriteria {
+		if strings.TrimSpace(criterion) == "" || utf8.RuneCountInString(criterion) > 500 {
+			return errors.New("invalid deliverable criterion")
+		}
+	}
 	if plan.SchemaVersion != 1 {
 		return fmt.Errorf("unsupported plan schema_version %d", plan.SchemaVersion)
 	}
@@ -268,6 +277,9 @@ func validatePlan(plan Plan, maxSteps int) error {
 	}
 	steps := make(map[string]PlanStep, len(plan.Subtasks))
 	for _, step := range plan.Subtasks {
+		if len(plan.DeliverableCriteria) > 0 && step.ID == "goal" {
+			return errors.New("goal is reserved for user-deliverable criteria")
+		}
 		if !planStepIDPattern.MatchString(step.ID) {
 			return fmt.Errorf("%w: plan step id %q must match ^[a-zA-Z0-9_-]{1,64}$", ErrInvalidPlan, step.ID)
 		}

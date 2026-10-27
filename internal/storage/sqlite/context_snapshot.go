@@ -341,6 +341,12 @@ func snapshotBudget(ctx context.Context, tx *sql.Tx, session domain.ResearchSess
 		"questions_accepted": int64(b.MaxQuestionsAccepted - c.QuestionsAccepted), "stagnant_rounds": int64(b.MaxStagnantRounds - c.StagnantRounds),
 		"fetched_bytes": session.Policy.TaskFetchBudgetBytes - c.FetchedBytes,
 	}
+	if session.Policy.Version == 2 {
+		remaining["steps"] = int64(b.MaxTotalSteps - c.Steps)
+		remaining["total_steps"] = remaining["steps"]
+		remaining["initial_plan_steps"] = int64(b.MaxInitialPlanSteps)
+		remaining["round_steps"] = int64(b.MaxRoundSteps)
+	}
 	for key, value := range remaining {
 		remaining[key] = max(0, value)
 	}

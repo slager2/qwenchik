@@ -605,6 +605,39 @@ func (s *Store) SavePlan(ctx context.Context, taskID string, plan domain.Plan, c
 	if status != domain.StatusPlanning {
 		return 0, fmt.Errorf("%w: plan can only be saved while planning", ErrConflict)
 	}
+	if session, err := researchSession(ctx, tx, taskID); err == nil && session.Policy.Version == 2 {
+		if len(plan.DeliverableCriteria) == 0 {
+			return 0, domain.ErrInvalidPlan
+		}
+		var previous string
+		_ = tx.QueryRowContext(ctx, `SELECT COALESCE(plan_json,'') FROM tasks WHERE id=?`, taskID).Scan(&previous)
+		if previous != "" && previous != "null" {
+			return 0, ErrConflict
+		}
+		if len(plan.Subtasks) > session.Budget.MaxInitialPlanSteps || session.Counters.Steps+len(plan.Subtasks) > session.Budget.MaxTotalSteps {
+			return 0, ErrResearchBudgetExceeded
+		}
+		if !time.Now().Before(session.DeadlineAt) {
+			return 0, ErrResearchBudgetExceeded
+		}
+		encoded, err := json.Marshal(checkpointState)
+		if err != nil {
+			return 0, err
+		}
+		values := map[string]any{}
+		if err := json.Unmarshal(encoded, &values); err != nil {
+			return 0, err
+		}
+		values["research_plans"] = domain.ResearchPlans{Version: 1, InitialPlan: plan, CurrentRound: 1, Rounds: []domain.RoundPlan{{Number: 1, Plan: plan}}}
+		checkpointState = values
+		session.Counters.Steps += len(plan.Subtasks)
+		if err := writeResearchCounters(ctx, tx, taskID, session.Counters); err != nil {
+			return 0, err
+		}
+		ctx = context.WithValue(ctx, adaptiveMutationKey{}, true)
+	} else if err != nil && !errors.Is(err, ErrNotFound) {
+		return 0, err
+	}
 	_, err = tx.ExecContext(ctx, `UPDATE tasks SET plan_json=?,version=version+1,updated_at=? WHERE id=?`, string(planJSON), stamp(time.Now().UTC()), taskID)
 	if err != nil {
 		return 0, err
@@ -1430,11 +1463,16 @@ func (s *Store) Checkpoints(ctx context.Context, taskID string) ([]domain.Checkp
 		return nil, err
 	}
 	defer tx.Rollback()
-	return verifiedCheckpoints(ctx, tx, taskID)
+	return verifiedCheckpointChain(ctx, tx, taskID, true)
 }
 
 func (s *Store) LatestCheckpoint(ctx context.Context, taskID string) (domain.Checkpoint, error) {
-	items, err := s.Checkpoints(ctx, taskID)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return domain.Checkpoint{}, err
+	}
+	defer tx.Rollback()
+	items, err := verifiedCheckpoints(ctx, tx, taskID)
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
@@ -1891,7 +1929,7 @@ func saveCheckpointTx(ctx context.Context, tx *sql.Tx, taskID string, planVersio
 	if err := verifyContextSnapshotCheckpoint(checkpoint, prior); err != nil {
 		return domain.Checkpoint{}, err
 	}
-	if err := verifyRoleInputsCheckpoint(ctx, tx, checkpoint, prior); err != nil {
+	if err := verifyRoleInputsCheckpoint(ctx, tx, checkpoint, prior, nil); err != nil {
 		return domain.Checkpoint{}, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO checkpoints(id,task_id,plan_version,state_json,last_event_seq,created_at,parent_id,state_schema_version,state_hash,context_snapshot_hash) VALUES(?,?,?,?,?,?,?,?,?,?)`, checkpoint.ID, taskID, planVersion, string(encoded), seq, stamp(checkpoint.CreatedAt), checkpoint.ParentID, checkpoint.StateSchemaVersion, checkpoint.StateHash, checkpoint.ContextSnapshotHash)

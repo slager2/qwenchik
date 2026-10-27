@@ -81,7 +81,7 @@ func TestResearchProfilesAndModelSnapshotAreTypedEffectiveCopies(t *testing.T) {
 	}
 	for _, name := range wantNames {
 		policy, ok := policies[name]
-		if !ok || policy.Profile != name || policy.Version != 1 || policy.AdaptiveEnabled || policy.Budget.WallTimeSeconds < 60 || policy.Budget.MaxSteps > cfg.MaxSteps || policy.Budget.MaxSearchQueries > cfg.MaxSearchQueries || policy.SourceFetchBytes != cfg.MaxSourceBytes || policy.PDFBytes != cfg.PDFPolicy.MaxInputBytes {
+		if !ok || policy.Profile != name || policy.Version != 2 || policy.AdaptiveEnabled || policy.Budget.WallTimeSeconds < 60 || policy.Budget.MaxSteps > cfg.MaxSteps || policy.Budget.MaxSearchQueries > cfg.MaxSearchQueries || policy.SourceFetchBytes != cfg.MaxSourceBytes || policy.PDFBytes != cfg.PDFPolicy.MaxInputBytes {
 			t.Fatalf("profile %q not effective/clamped: %#v", name, policy)
 		}
 		selected, err := cfg.ResearchProfile(name)
@@ -255,10 +255,11 @@ func TestResearchProfileBudgetsMatchCanonicalAndExactBrief(t *testing.T) {
 				t.Fatalf("config wrapper budget=%#v canonical=%#v found=%v", wrapped, canonical, ok)
 			}
 			nominal, err := uncapped.ResearchProfile(test.profile)
-			if err != nil || nominal.Budget != test.budget {
-				t.Fatalf("nominal budget=%#v want=%#v err=%v", nominal.Budget, test.budget, err)
+			roundBudget, _ := domain.RoundResearchBudgetForProfile(test.profile)
+			if err != nil || nominal.Version != 2 || nominal.Budget != roundBudget {
+				t.Fatalf("nominal v2 budget=%#v want=%#v err=%v", nominal.Budget, roundBudget, err)
 			}
-			wantEffective := test.budget
+			wantEffective := roundBudget
 			wantEffective.MaxSearchQueries = min(wantEffective.MaxSearchQueries, cfg.MaxSearchQueries)
 			effective, err := cfg.ResearchProfile(test.profile)
 			if err != nil || effective.Budget != wantEffective || cfg.ResearchPolicies()[test.profile] != effective {
@@ -281,6 +282,7 @@ func TestResearchBudgetsClampOnlyServerCapsAndPreserveWallTimes(t *testing.T) {
 	for name, want := range uncapped.ResearchPolicies() {
 		got, err := limited.ResearchProfile(name)
 		want.Budget.MaxSteps = 2
+		want.Budget.MaxInitialPlanSteps = 2
 		want.Budget.MaxSearchQueries = 3
 		if err != nil || got != want {
 			t.Fatalf("server caps changed unrelated profile limits for %s: got=%#v want=%#v err=%v", name, got, want, err)

@@ -52,6 +52,7 @@ type Config struct {
 	MaxSearchQueries             int
 	MaxFetchBytes                int64
 	ResearchDefaultProfile       string
+	ResearchCaps                 domain.ResearchBudget
 	ResearchPrivacyMode          string
 	OfflineCorpusPath            string
 	OfflineCorpusSHA256          string
@@ -125,7 +126,7 @@ func Load() (Config, error) {
 	if cfg.TaskTimeoutSeconds, err = intEnv("TASK_TIMEOUT_SECONDS", 7200); err != nil {
 		return Config{}, err
 	}
-	if cfg.MaxSearchQueries, err = intEnv("MAX_SEARCH_QUERIES", 12); err != nil {
+	if cfg.MaxSearchQueries, err = intEnv("MAX_SEARCH_QUERIES", 48); err != nil {
 		return Config{}, err
 	}
 	if cfg.MaxFetchBytes, err = int64Env("MAX_FETCH_BYTES", domain.DefaultTaskFetchBudgetBytes); err != nil {

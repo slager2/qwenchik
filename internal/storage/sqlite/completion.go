@@ -49,6 +49,9 @@ func (s *Store) RequestResearchContinuation(ctx context.Context, taskID string, 
 	if count != expected || count >= continuationLimit {
 		return ErrConflict
 	}
+	if session.Policy.Version == 2 {
+		return requestBoundedRoundTx(ctx, tx, session, state, version, count, fingerprint, failure, missing)
+	}
 	var prior domain.CompletionState
 	raw, _ := json.Marshal(state["completion"])
 	if err := json.Unmarshal(raw, &prior); err != nil {

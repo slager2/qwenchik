@@ -25,9 +25,9 @@ const (
 var roleContextSlot = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type pinnedRoleInput struct {
-	Version   int             `json:"version"`
-	InputHash string          `json:"input_hash"`
 	Input     json.RawMessage `json:"input"`
+	InputHash string          `json:"input_hash"`
+	Version   int             `json:"version"`
 }
 
 func canonicalRoleJSON(raw []byte) (json.RawMessage, error) {
@@ -106,6 +106,13 @@ func roleInputHash(raw []byte) string {
 }
 
 func decodeRoleInputs(raw json.RawMessage) (map[string]pinnedRoleInput, error) {
+	return decodeRoleInputsCached(raw, nil)
+}
+
+// Validate the envelope without recursively canonicalizing every nested input
+// twice. The optional cache lives for ONE complete chain verification only;
+// byte-identical pins previously validated in that chain need no second parse.
+func decodeRoleInputsCached(raw json.RawMessage, known map[string]pinnedRoleInput) (map[string]pinnedRoleInput, error) {
 	values := make(map[string]pinnedRoleInput)
 	if raw == nil {
 		return values, nil
@@ -113,14 +120,60 @@ func decodeRoleInputs(raw json.RawMessage) (map[string]pinnedRoleInput, error) {
 	if len(raw) > MaxRoleContextTotalBytes {
 		return nil, ErrContextSnapshotTooLarge
 	}
-	canonical, err := canonicalRoleJSON(raw)
-	if err != nil {
-		return nil, fmt.Errorf("%w: role inputs: %v", ErrCheckpointInvalid, err)
+	if !utf8.Valid(raw) {
+		return nil, ErrCheckpointInvalid
 	}
-	decoder := json.NewDecoder(bytes.NewReader(canonical))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&values); err != nil {
-		return nil, fmt.Errorf("%w: role inputs: %v", ErrCheckpointInvalid, err)
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') {
+		return nil, ErrCheckpointInvalid
+	}
+	for decoder.More() {
+		token, err := decoder.Token()
+		slot, ok := token.(string)
+		if err != nil || !ok {
+			return nil, ErrCheckpointInvalid
+		}
+		if _, duplicate := values[slot]; duplicate {
+			return nil, ErrCheckpointInvalid
+		}
+		var pin pinnedRoleInput
+		token, err = decoder.Token()
+		if err != nil || token != json.Delim('{') {
+			return nil, ErrCheckpointInvalid
+		}
+		seen := map[string]bool{}
+		for decoder.More() {
+			token, err = decoder.Token()
+			key, ok := token.(string)
+			if err != nil || !ok || seen[key] {
+				return nil, ErrCheckpointInvalid
+			}
+			seen[key] = true
+			switch key {
+			case "version":
+				err = decoder.Decode(&pin.Version)
+			case "input_hash":
+				err = decoder.Decode(&pin.InputHash)
+			case "input":
+				err = decoder.Decode(&pin.Input)
+			default:
+				return nil, ErrCheckpointInvalid
+			}
+			if err != nil {
+				return nil, ErrCheckpointInvalid
+			}
+		}
+		if token, err = decoder.Token(); err != nil || token != json.Delim('}') {
+			return nil, ErrCheckpointInvalid
+		}
+		values[slot] = pin
+	}
+	if token, err = decoder.Token(); err != nil || token != json.Delim('}') {
+		return nil, ErrCheckpointInvalid
+	}
+	if _, err = decoder.Token(); !errors.Is(err, io.EOF) {
+		return nil, ErrCheckpointInvalid
 	}
 	if len(values) > MaxRoleContextPins {
 		return nil, ErrContextSnapshotTooLarge
@@ -132,12 +185,18 @@ func decodeRoleInputs(raw json.RawMessage) (map[string]pinnedRoleInput, error) {
 		if len(pin.Input) > MaxRoleContextInputBytes {
 			return nil, ErrContextSnapshotTooLarge
 		}
+		if old, ok := known[slot]; ok && pin.Version == old.Version && pin.InputHash == old.InputHash && bytes.Equal(pin.Input, old.Input) {
+			continue
+		}
 		input, err := canonicalRoleJSON(pin.Input)
 		if err != nil || pin.InputHash != roleInputHash(input) {
 			return nil, ErrCheckpointInvalid
 		}
 		pin.Input = input
 		values[slot] = pin
+		if known != nil {
+			known[slot] = pin
+		}
 	}
 	return values, nil
 }
@@ -169,11 +228,30 @@ func mergeRoleInputs(values, previous map[string]pinnedRoleInput) error {
 	if err != nil {
 		return err
 	}
-	_, err = decodeRoleInputs(encoded)
-	return err
+	// Both maps came from the strict decoder. Merging cannot invalidate a pin;
+	// check aggregate limits without re-parsing all immutable nested inputs.
+	if len(encoded) > MaxRoleContextTotalBytes || len(values) > MaxRoleContextPins {
+		return ErrContextSnapshotTooLarge
+	}
+	return nil
 }
 
 func validateRoleInputsState(state any, prior []domain.Checkpoint) error {
+	if len(prior) > 0 {
+		raw, err := json.Marshal(state)
+		if err != nil {
+			return err
+		}
+		current := checkpointObject(raw)
+		if _, present := current["role_inputs"]; !present {
+			return nil
+		} // prepareContextSnapshotCheckpoint preserves the verified prior pins.
+		if previous, ok := prior[len(prior)-1].State.(map[string]any); ok {
+			if old, ok := previous["role_inputs"].(json.RawMessage); ok && bytes.Equal(current["role_inputs"], old) {
+				return nil
+			}
+		}
+	}
 	values, err := roleInputsFromState(state)
 	if err != nil {
 		return err
@@ -188,7 +266,7 @@ func validateRoleInputsState(state any, prior []domain.Checkpoint) error {
 	return mergeRoleInputs(values, previous)
 }
 
-func verifyRoleInputsCheckpoint(ctx context.Context, tx *sql.Tx, item domain.Checkpoint, prior []domain.Checkpoint) error {
+func verifyRoleInputsCheckpoint(ctx context.Context, tx *sql.Tx, item domain.Checkpoint, prior []domain.Checkpoint, known map[string]pinnedRoleInput) error {
 	if len(prior) > 0 {
 		current, currentOK := item.State.(map[string]any)
 		previous, previousOK := prior[len(prior)-1].State.(map[string]any)
@@ -200,13 +278,21 @@ func verifyRoleInputsCheckpoint(ctx context.Context, tx *sql.Tx, item domain.Che
 			}
 		}
 	}
-	values, err := roleInputsFromState(item.State)
+	decode := func(state any) (map[string]pinnedRoleInput, error) {
+		if object, ok := state.(map[string]any); ok {
+			if raw, ok := object["role_inputs"].(json.RawMessage); ok {
+				return decodeRoleInputsCached(raw, known)
+			}
+		}
+		return roleInputsFromState(state)
+	}
+	values, err := decode(item.State)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrCheckpointInvalid, err)
 	}
 	previous := make(map[string]pinnedRoleInput)
 	if len(prior) > 0 {
-		previous, err = roleInputsFromState(prior[len(prior)-1].State)
+		previous, err = decode(prior[len(prior)-1].State)
 		if err != nil {
 			return ErrCheckpointInvalid
 		}

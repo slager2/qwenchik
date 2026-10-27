@@ -51,6 +51,7 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 	}
 	if raw != "" {
 		var state struct {
+			Plans       *domain.ResearchPlans         `json:"research_plans"`
 			Report      *domain.ResearchReportState   `json:"research_report"`
 			Adaptive    *domain.AdaptiveResearchState `json:"adaptive_research"`
 			Refinement  *domain.RefinementJob         `json:"refinement_job"`
@@ -63,7 +64,16 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 			return nil, ErrCheckpointInvalid
 		}
 		result["step"], result["completed_steps"], result["completion"] = state.CurrentStep, len(state.Completed), state.Completion
-		if state.Report != nil && state.Report.Version == 1 && len(state.Report.Sections) <= 4 {
+		if state.Plans != nil {
+			plan, err := state.Plans.Current()
+			if err != nil {
+				return nil, ErrCheckpointInvalid
+			}
+			result["active_round_plan"] = plan
+			result["initial_plan"] = state.Plans.InitialPlan
+			result["round_plan_count"] = len(state.Plans.Rounds)
+		}
+		if state.Report != nil && state.Report.Version == 1 && len(state.Report.Sections) <= 8 {
 			result["research_report"] = map[string]any{"artifact_id": state.Report.ArtifactID, "markdown_artifact_id": state.Report.MarkdownArtifactID, "outcome": state.Report.Outcome, "sections": len(state.Report.Sections), "unrepresented_criteria": state.Report.UnrepresentedCriteria}
 		}
 		if state.Adaptive != nil && state.Adaptive.Version == 1 && len(state.Adaptive.Rounds) <= 10 {

@@ -55,6 +55,18 @@ func TestPDFFallbackAvailabilityRespectsWindowsCapability(t *testing.T) {
 func TestDoctorProjectsFetchTempReadinessWithoutConfiguredPath(t *testing.T) {
 	server, store := newTestServer(t)
 	defer store.Close()
+	// Fetch-temp projection must not depend on an unrelated real model process.
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models" {
+			t.Errorf("unexpected model request: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"data":[]}`)
+	}))
+	defer model.Close()
+	server.llmURL = model.URL
 	server.SetFetchTempCheck(func(context.Context) error { return fmt.Errorf("private path /sensitive/fetch-temp") })
 	request := httptest.NewRequest(http.MethodGet, "/api/doctor", nil)
 	request.Host = "127.0.0.1"

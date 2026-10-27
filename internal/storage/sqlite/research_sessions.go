@@ -268,7 +268,7 @@ func validateResearchSession(session domain.ResearchSession) error {
 	default:
 		return invalid("profile")
 	}
-	if policy.Version != 1 || policy.Profile != session.Profile || policy.Budget != budget {
+	if (policy.Version != 1 && policy.Version != 2) || policy.Profile != session.Profile || policy.Budget != budget {
 		return invalid("snapshot version or profile")
 	}
 	if budget.WallTimeSeconds <= 0 || budget.WallTimeSeconds > math.MaxInt64/int64(time.Second) || budget.MaxLLMCalls > int(^uint(0)>>1)/2 {
@@ -292,6 +292,9 @@ func validateResearchSession(session domain.ResearchSession) error {
 		return invalid("state")
 	}
 	c := session.Counters
+	if policy.Version == 2 && (budget.MaxInitialPlanSteps < 1 || budget.MaxInitialPlanSteps > 12 || budget.MaxSteps != budget.MaxInitialPlanSteps || budget.MaxRoundSteps < 4 || budget.MaxRoundSteps > 12 || budget.MaxTotalSteps < 1 || budget.MaxTotalSteps > 128 || budget.MaxRounds < 1 || budget.MaxRounds > 10 || budget.MaxEvidence < 1 || budget.MaxEvidence > 32 || budget.MaxQuestionsCreated > 80 || budget.MaxQuestionsAccepted > budget.MaxQuestionsCreated || budget.MaxReportSections < 1 || budget.MaxReportSections > 8 || budget.MaxReportParagraphs < 1 || budget.MaxReportParagraphs > 32 || budget.MaxReportBytes < 4096 || budget.MaxReportBytes > 1<<20 || budget.MaxCitationClaims < 1 || budget.MaxCitationClaims > 32 || budget.MaxCitationSources < 1 || budget.MaxCitationSources > 8 || c.Steps < 0 || c.Steps > budget.MaxTotalSteps) {
+		return invalid("round budgets")
+	}
 	for _, value := range []int{c.LLMCalls, c.HTTPAttempts, c.SearchQueries, c.Fetches, c.Evidence, c.QuestionsCreated, c.QuestionsAccepted, c.Rounds, c.StagnantRounds} {
 		if value < 0 {
 			return invalid("counters")
@@ -555,6 +558,7 @@ func prepareResearchCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, p
 	}
 	var prior string
 	var canonicalAdaptive json.RawMessage
+	var canonicalPlans, canonicalCompletion json.RawMessage
 	err = tx.QueryRowContext(ctx, `SELECT state_json FROM checkpoints WHERE task_id=? ORDER BY last_event_seq DESC,rowid DESC LIMIT 1`, taskID).Scan(&prior)
 	if err == nil {
 		var previous map[string]json.RawMessage
@@ -565,6 +569,7 @@ func prepareResearchCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, p
 			return nil, 0, err
 		}
 		canonicalAdaptive = previous["adaptive_research"]
+		canonicalPlans, canonicalCompletion = previous["research_plans"], previous["completion"]
 		for key, value := range previous {
 			if researchWorkerCheckpointField(key) {
 				continue
@@ -590,6 +595,28 @@ func prepareResearchCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, p
 	}
 	if session.Policy.AdaptiveEnabled {
 		session.Counters.Rounds = max(session.Counters.Rounds, session.CurrentRound+1)
+	}
+	if session.Policy.Version == 2 {
+		allowed, _ := ctx.Value(adaptiveMutationKey{}).(bool)
+		if !allowed && len(canonicalPlans) > 0 {
+			var old, current domain.ResearchPlans
+			_ = json.Unmarshal(canonicalPlans, &old)
+			if raw, ok := values["research_plans"]; ok && string(raw) != "null" {
+				if json.Unmarshal(raw, &current) != nil || current.CurrentRound != old.CurrentRound {
+					return nil, 0, ErrConflict
+				}
+			}
+		}
+		if !allowed {
+			if len(canonicalPlans) > 0 {
+				values["research_plans"] = canonicalPlans
+			} else {
+				delete(values, "research_plans")
+			}
+			if len(canonicalCompletion) > 0 {
+				values["completion"] = canonicalCompletion
+			}
+		}
 	}
 	if err := reconcileResearchCounters(ctx, tx, &session, values); err != nil {
 		return nil, 0, err
@@ -655,6 +682,9 @@ func validateResearchCheckpointEnvelope(values map[string]json.RawMessage, sessi
 }
 
 func mergeResearchFutureField(prior, current json.RawMessage) json.RawMessage {
+	if bytes.Equal(prior, current) {
+		return prior
+	}
 	previous, values := checkpointObject(prior), checkpointObject(current)
 	if previous == nil || values == nil {
 		return current
@@ -690,6 +720,13 @@ func reconcileResearchCounters(ctx context.Context, tx *sql.Tx, session *domain.
 		return err
 	}
 	c := &session.Counters
+	if session.Policy.Version == 2 {
+		var planned int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM task_steps WHERE task_id=?`, session.TaskID).Scan(&planned); err != nil {
+			return err
+		}
+		c.Steps = max(c.Steps, planned)
+	}
 	c.LLMCalls = max(c.LLMCalls, events.LLMCalls)
 	c.HTTPAttempts = max(c.HTTPAttempts, events.HTTPAttempts)
 	c.SearchQueries = max(c.SearchQueries, events.SearchQueries)
@@ -740,7 +777,7 @@ func reconcileResearchCounters(ctx context.Context, tx *sql.Tx, session *domain.
 		c.QuestionsCreated = max(c.QuestionsCreated, created)
 		c.QuestionsAccepted = max(c.QuestionsAccepted, accepted)
 	}
-	if value, ok := checkpointInteger(values, "current_round"); ok && value <= int64(session.Budget.MaxRounds) {
+	if value, ok := checkpointInteger(values, "current_round"); session.Policy.Version == 1 && ok && value <= int64(session.Budget.MaxRounds) {
 		session.CurrentRound = max(session.CurrentRound, int(value))
 	}
 	c.Rounds = max(c.Rounds, session.CurrentRound)

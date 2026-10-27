@@ -42,6 +42,9 @@ type verificationResponse struct {
 
 func verificationCatalog(plan domain.Plan, state checkpointState) []verificationCriterion {
 	catalog := make([]verificationCriterion, 0)
+	for i, text := range plan.DeliverableCriteria {
+		catalog = append(catalog, verificationCriterion{ID: fmt.Sprintf("c%d", len(catalog)), StepID: "goal", Index: i, Text: text, Kind: "deliverable", ResultKey: "goal", EvidenceIDs: collectEvidenceIDs(researchWorkingResults(state))})
+	}
 	for _, step := range plan.Subtasks {
 		if contains(state.SkippedSteps, step.ID) {
 			continue
@@ -77,6 +80,9 @@ func addressedVerification(response verificationResponse, catalog []verification
 		classification := "critical"
 		if supplementary[criterion.ID] {
 			classification = "supplementary"
+		}
+		if criterion.Kind == "deliverable" {
+			classification = "critical"
 		}
 		result.CriterionAssessments = append(result.CriterionAssessments, criterionAssessment{StepID: criterion.StepID, Criterion: criterion.Index, Classification: classification, Met: verdict.Met, EvidenceIDs: verdict.EvidenceIDs, Rationale: verdict.Rationale})
 	}

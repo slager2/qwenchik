@@ -11,6 +11,12 @@ const (
 )
 
 type ResearchBudget struct {
+	MaxInitialPlanSteps  int   `json:"max_initial_plan_steps,omitempty"`
+	MaxRoundSteps        int   `json:"max_round_steps,omitempty"`
+	MaxTotalSteps        int   `json:"max_total_steps,omitempty"`
+	MaxReportSections    int   `json:"max_report_sections,omitempty"`
+	MaxReportParagraphs  int   `json:"max_report_paragraphs,omitempty"`
+	MaxReportBytes       int   `json:"max_report_bytes,omitempty"`
 	WallTimeSeconds      int64 `json:"wall_time_seconds"`
 	MaxRounds            int   `json:"max_rounds"`
 	MaxSteps             int   `json:"max_steps"`
@@ -64,6 +70,7 @@ type ModelProfileSnapshot struct {
 }
 
 type ResearchCounters struct {
+	Steps             int   `json:"steps_reserved,omitempty"`
 	LLMCalls          int   `json:"llm_calls"`
 	HTTPAttempts      int   `json:"http_attempts"`
 	SearchQueries     int   `json:"search_queries"`

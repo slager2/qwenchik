@@ -116,6 +116,9 @@ func (w *Worker) roleContextWithConstraints(ctx context.Context, taskID, role, g
 	snapshot.Constraints = uniqueContextValues(append(snapshot.Constraints, constraints...))
 	snapshot.CompletedSteps = append([]string{}, state.CompletedSteps...)
 	snapshot.OpenQuestions = uniqueContextValues(append(snapshot.OpenQuestions, state.Completion.Missing...))
+	if state.ResearchPlans != nil {
+		snapshot.OpenQuestions = uniqueContextValues(state.Completion.Missing)
+	}
 	snapshot.FailedAttempts = uniqueContextValues(append(snapshot.FailedAttempts, failures...))
 	snapshot.NextAction = role
 	if reader, ok := w.repo.(interface {
@@ -140,6 +143,7 @@ func (w *Worker) roleContextWithConstraints(ctx context.Context, taskID, role, g
 	}
 	if task.Plan != nil && !strings.HasPrefix(role, "planner_") {
 		snapshot.DoneCriteria = []string{task.Plan.FinalDeliverable}
+		snapshot.DoneCriteria = append(snapshot.DoneCriteria, task.Plan.DeliverableCriteria...)
 		for _, step := range task.Plan.Subtasks {
 			snapshot.DoneCriteria = append(snapshot.DoneCriteria, step.SuccessCriteria...)
 		}
