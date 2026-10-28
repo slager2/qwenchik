@@ -1,0 +1,2791 @@
+{
+  "runtime": {
+    "accepted_evidence": 2,
+    "active_round_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Compare checkpoint recovery mechanisms against journal recovery mechanisms.",
+        "Identify idempotency guarantees in both checkpoint and journal recovery approaches.",
+        "Analyze limitations preventing exactly-once semantics in these recovery methods.",
+        "Synthesize findings from the two imported recovery references."
+      ],
+      "schema_version": 1,
+      "goal": "Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+      "subtasks": [
+        {
+          "id": "search_1",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for documentation or papers comparing checkpoint and journal recovery mechanisms in distributed systems.. User request: Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+          "dependencies": [],
+          "expected_output": "List of relevant search results comparing the two recovery methods.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_2",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for specific references or case studies regarding idempotency challenges in recovery systems.. User request: Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+          "dependencies": [],
+          "expected_output": "List of relevant search results focusing on idempotency issues.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_3",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for limitations of exactly-once semantics in distributed recovery.. User request: Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+          "dependencies": [],
+          "expected_output": "List of relevant search results detailing exactly-once limitations.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "fetch_1",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 1 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_2",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 2 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        }
+      ],
+      "max_steps": 5,
+      "final_deliverable": "A comparative analysis report detailing checkpoint vs. journal recovery, idempotency status, and exactly-once limitations based on the two provided references."
+    },
+    "adaptive_enabled": false,
+    "budget": {
+      "max_initial_plan_steps": 12,
+      "max_round_steps": 12,
+      "max_total_steps": 20,
+      "max_report_sections": 6,
+      "max_report_paragraphs": 16,
+      "max_report_bytes": 524288,
+      "wall_time_seconds": 1800,
+      "max_rounds": 3,
+      "max_steps": 12,
+      "max_search_queries": 8,
+      "max_fetches": 8,
+      "max_llm_calls": 48,
+      "max_evidence": 8,
+      "max_questions_created": 24,
+      "max_questions_accepted": 16,
+      "max_stagnant_rounds": 2,
+      "max_citation_sources": 8,
+      "max_citation_claims": 16
+    },
+    "budget_remaining": {
+      "evidence": 6,
+      "fetched_bytes": 134216944,
+      "fetches": 6,
+      "http_attempts": 87,
+      "initial_plan_steps": 12,
+      "llm_calls": 39,
+      "questions_accepted": 16,
+      "questions_created": 24,
+      "round_steps": 12,
+      "rounds": 3,
+      "search_queries": 6,
+      "stagnant_rounds": 2,
+      "steps": 15,
+      "total_steps": 15
+    },
+    "bundle_hash": "e27b07fb099039c84672d3db8b38e46d62d0a813a7da342ed2f8484d990f03bf",
+    "bundle_version": 1,
+    "compactions": 4,
+    "completed_steps": 4,
+    "completion": {
+      "continuations": 0,
+      "verdict": "PASS"
+    },
+    "context_budget": {
+      "version": 1,
+      "configured_context": 32768,
+      "server_reported_context": 32768,
+      "training_context": 262144,
+      "session_context": 32768,
+      "max_output_tokens": 4096,
+      "reserved_output_tokens": 4096,
+      "reserved_system_tokens": 2048,
+      "available_input_tokens": 26624,
+      "prompt_tokens": null,
+      "context_status": "matched",
+      "count_method": "unavailable",
+      "decision": "not_counted",
+      "server_source": "props.default_generation_settings.n_ctx:single_slot",
+      "runtime_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+      "runtime_build": "b11426-cda0f9256",
+      "chat_template_sha256": "7f0e529032c25183bcd66c7f238da2d377f43be754a94e2725a58c4e16d2ed67",
+      "model_quantization": "Q4_K - Medium",
+      "observed_at": "2026-10-28T15:36:47.74107748Z"
+    },
+    "context_snapshot_hash": "fdc9a5be9ceea8c43f565a0a322ba1c71cb078e0d18ccbdc96e0e42d003c1ba3",
+    "context_snapshot_number": 9,
+    "contradictions": null,
+    "counters": {
+      "steps_reserved": 5,
+      "llm_calls": 9,
+      "http_attempts": 9,
+      "search_queries": 2,
+      "fetches": 2,
+      "fetched_bytes": 784,
+      "evidence": 2,
+      "questions_created": 0,
+      "questions_accepted": 0,
+      "rounds": 0,
+      "stagnant_rounds": 0
+    },
+    "current_round": 1,
+    "cursor": 142,
+    "deadline_at": "2026-10-28T16:05:03.57409841Z",
+    "done_criteria": 8,
+    "elapsed_seconds": 104,
+    "inference_summary": {
+      "invocation_id": "invocation-228435b9a130db6b04c357a0051dd650be5062d802df23559b327f952c93d09b",
+      "invocation_status": "failed",
+      "snapshot_at": "2026-10-28T15:36:45.621027196Z",
+      "inference": {
+        "status": "cancelled",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:36:45.621027196Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "output_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "total_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "cached_prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "output_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "prompt_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "generation_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "context_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        }
+      }
+    },
+    "initial_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Compare checkpoint recovery mechanisms against journal recovery mechanisms.",
+        "Identify idempotency guarantees in both checkpoint and journal recovery approaches.",
+        "Analyze limitations preventing exactly-once semantics in these recovery methods.",
+        "Synthesize findings from the two imported recovery references."
+      ],
+      "schema_version": 1,
+      "goal": "Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+      "subtasks": [
+        {
+          "id": "search_1",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for documentation or papers comparing checkpoint and journal recovery mechanisms in distributed systems.. User request: Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+          "dependencies": [],
+          "expected_output": "List of relevant search results comparing the two recovery methods.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_2",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for specific references or case studies regarding idempotency challenges in recovery systems.. User request: Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+          "dependencies": [],
+          "expected_output": "List of relevant search results focusing on idempotency issues.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_3",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for limitations of exactly-once semantics in distributed recovery.. User request: Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+          "dependencies": [],
+          "expected_output": "List of relevant search results detailing exactly-once limitations.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "fetch_1",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 1 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_2",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 2 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        }
+      ],
+      "max_steps": 5,
+      "final_deliverable": "A comparative analysis report detailing checkpoint vs. journal recovery, idempotency status, and exactly-once limitations based on the two provided references."
+    },
+    "keep_awake_requested": true,
+    "max_continuations": 1,
+    "model_profile_hash": "1b3d9bd1717af420d357a0aaef2b79a9e80c4f65a5e5f8a3f07e2dbfbb65e4c3",
+    "offline_corpus_sha256": "9814cb53c048545010e91bb6ee7e50be66e8c3852eb3380c8c435a86f03fd43b",
+    "open_questions": [],
+    "pause_reason": "manual",
+    "privacy_mode": "offline",
+    "profile": "standard",
+    "remaining_seconds": 1695,
+    "research_report": {
+      "artifact_id": "",
+      "markdown_artifact_id": "",
+      "outcome": "completed",
+      "sections": 6,
+      "unrepresented_criteria": null
+    },
+    "research_session_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+    "resource_probe_attempts": 0,
+    "resource_reason": "high_model_rss",
+    "resume_after": "2026-10-28T15:36:50.684027102Z",
+    "round_plan_count": 1,
+    "runtime": {
+      "active_run_id": "",
+      "enabled": true,
+      "keep_awake": true,
+      "max_resume_attempts": 5,
+      "resource_policy": {
+        "enabled": true,
+        "min_free_ram_bytes": 536870912,
+        "min_free_vram_mb": 256,
+        "gpu_temp_max_c": 85,
+        "process_rss_max_bytes": 2147483648,
+        "model_rss_max_bytes": 3221225472,
+        "recovery_ram_margin_percent": 10,
+        "recovery_vram_margin_percent": 10,
+        "recovery_gpu_temp_margin_c": 5,
+        "recovery_rss_margin_percent": 10,
+        "llama_health_timeout": 2000000000,
+        "check_interval": 1000000000,
+        "max_resume_attempts": 5,
+        "backoff_base": 5000000000,
+        "backoff_max": 60000000000
+      },
+      "resources": {
+        "free_ram_bytes": 8170917888,
+        "gpu_free_vram_mb": 2433,
+        "gpu_temp_c": 65,
+        "heap_alloc_bytes": 3860848,
+        "llama_health_latency": 335604,
+        "llama_healthy": true,
+        "model_rss_bytes": 3256819712,
+        "power_source": "AC",
+        "rss_bytes": 76283904,
+        "snapshot_at": "2026-10-28T15:36:45.620926046Z",
+        "warnings": []
+      },
+      "sleep": {
+        "active": false,
+        "available": true,
+        "power_source": "unknown",
+        "provider": "systemd-inhibit"
+      },
+      "sleep_policy": "keep_awake",
+      "status": "ok"
+    },
+    "runtime_model_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+    "sectioned_report_enabled": true,
+    "stage": null,
+    "status": "paused",
+    "step": "",
+    "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+    "telemetry": {
+      "timestamp": "2026-10-28T15:36:45.621027196Z",
+      "stale_after_ms": 39000,
+      "capabilities": {
+        "cpu": true,
+        "ram": true,
+        "gpu": true,
+        "gpu_temperature": true,
+        "gpu_utilization": true,
+        "power": true,
+        "battery": false,
+        "process_rss": true,
+        "llama_health": true,
+        "llama_timings": false,
+        "llama_metrics": false,
+        "llama_slots": false
+      },
+      "system": {
+        "metadata": {
+          "os": "linux",
+          "uptime_seconds": {
+            "value": 7130.61,
+            "source": "exact",
+            "unit": "seconds",
+            "updated_at": "2026-10-28T15:36:45.582362557Z"
+          }
+        },
+        "cpu_usage": {
+          "value": 15.659955257270694,
+          "source": "exact",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:36:45.582362557Z"
+        },
+        "cpu_temperature": {
+          "value": 77.25,
+          "source": "exact",
+          "unit": "celsius",
+          "updated_at": "2026-10-28T15:36:45.582362557Z"
+        },
+        "ram_used": {
+          "value": 7778811904,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:36:45.582362557Z"
+        },
+        "ram_free": {
+          "value": 8170917888,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:36:45.582362557Z"
+        },
+        "ram_total": {
+          "value": 15949729792,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:36:45.582362557Z"
+        },
+        "gpus": [
+          {
+            "name": {
+              "value": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+              "source": "exact",
+              "unit": "name",
+              "updated_at": "2026-10-28T15:36:45.582362557Z"
+            },
+            "utilization": {
+              "value": 79,
+              "source": "exact",
+              "unit": "percent",
+              "updated_at": "2026-10-28T15:36:45.582362557Z"
+            },
+            "temperature": {
+              "value": 65,
+              "source": "exact",
+              "unit": "celsius",
+              "updated_at": "2026-10-28T15:36:45.582362557Z"
+            },
+            "vram_used": {
+              "value": 3537895424,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:36:45.582362557Z"
+            },
+            "vram_free": {
+              "value": 2551185408,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:36:45.582362557Z"
+            },
+            "vram_total": {
+              "value": 6442450944,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:36:45.582362557Z"
+            },
+            "power_watts": {
+              "value": 39.11,
+              "source": "exact",
+              "unit": "watts",
+              "updated_at": "2026-10-28T15:36:45.582362557Z"
+            }
+          }
+        ],
+        "agent_rss": {
+          "value": 76283904,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:36:45.582362557Z"
+        },
+        "llama_server_rss": {
+          "value": 3256819712,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:36:45.582362557Z"
+        },
+        "power_source": {
+          "value": "AC",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:36:37.776991105Z"
+        },
+        "power_watts": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "watts",
+          "updated_at": "2026-10-28T15:36:45.582362557Z",
+          "error": "unsupported"
+        },
+        "battery_percent": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:36:45.582362557Z",
+          "error": "unsupported"
+        },
+        "battery_charging": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "boolean",
+          "updated_at": "2026-10-28T15:36:45.582362557Z",
+          "error": "unsupported"
+        },
+        "llama_health": {
+          "value": "healthy",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:36:45.582362557Z"
+        },
+        "llama_slots_active": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:36:45.582362557Z",
+          "error": "temporarily_unavailable"
+        },
+        "llama_slots_total": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:36:45.582362557Z",
+          "error": "temporarily_unavailable"
+        }
+      },
+      "inference": {
+        "status": "cancelled",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:36:45.621027196Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "output_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "total_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "cached_prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "output_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "prompt_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "generation_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "context_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:36:45.621027196Z"
+        }
+      }
+    },
+    "telemetry_revision": 45,
+    "terminal_outcome": "",
+    "updated_at": "2026-10-28T15:36:45.697993316Z",
+    "verdict": "PASS"
+  },
+  "run": {
+    "pause_reason": "manual",
+    "resource_reason": "high_model_rss",
+    "resume_after": "2026-10-28T15:36:50.684027102Z",
+    "resource_probe_attempts": 0,
+    "id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+    "conversation_id": "b4d079de-aa0d-4f54-85ed-ea889e832301",
+    "user_message_id": "08faeb6c-8390-48bd-a276-003abdc82fd5",
+    "assistant_message_id": "f089d340-ba75-4b78-b393-0509544781e6",
+    "mode": "research",
+    "operation": "send",
+    "status": "paused",
+    "retry_count": 0,
+    "cancel_requested": false,
+    "created_at": "2026-10-28T15:35:03.57409841Z",
+    "updated_at": "2026-10-28T15:36:45.697993316Z",
+    "started_at": "2026-10-28T15:35:03.577372314Z",
+    "heartbeat_at": "2026-10-28T15:36:43.809257301Z",
+    "deadline_at": "2026-10-28T16:05:03.57409841Z"
+  },
+  "artifacts": [
+    {
+      "id": "49bc53f21ee7b0a6a314421da36c9b638c786159af5d0224abaa51ca5fc920b1",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "name": "source-66b0fabdafae.txt",
+      "mime_type": "text/plain; charset=utf-8",
+      "sha256": "66b0fabdafae99bd00221217666d4c56eff597d853a5aed6811d2fbee5feb94d",
+      "size_bytes": 405,
+      "created_at": "2026-10-28T15:35:37.452224832Z"
+    },
+    {
+      "id": "6492a50b4d480fde9e30fcf2d4dd3261ebc224cccfff58be43baf35ef34ed094",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "name": "source-66b0fabdafae.raw",
+      "mime_type": "text/plain",
+      "sha256": "66b0fabdafae99bd00221217666d4c56eff597d853a5aed6811d2fbee5feb94d",
+      "size_bytes": 405,
+      "created_at": "2026-10-28T15:35:37.451628144Z"
+    },
+    {
+      "id": "e6e5977960ff73d758780b17864986bbe835adf83204bf63fe8cded6900e7bfd",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "name": "source-0fb4b425fd0a.txt",
+      "mime_type": "text/plain; charset=utf-8",
+      "sha256": "0fb4b425fd0a2aad70f9b45f8ab40826f1d3a5191811302583ca9614dd69bd4d",
+      "size_bytes": 379,
+      "created_at": "2026-10-28T15:35:33.396023469Z"
+    },
+    {
+      "id": "9c4df43c9357a6400f021b258b910f3548fa6a7b750c4f1cf10985443f4e39fb",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "name": "source-0fb4b425fd0a.raw",
+      "mime_type": "text/plain",
+      "sha256": "0fb4b425fd0a2aad70f9b45f8ab40826f1d3a5191811302583ca9614dd69bd4d",
+      "size_bytes": 379,
+      "created_at": "2026-10-28T15:35:33.395460468Z"
+    }
+  ],
+  "public_events_complete": true,
+  "events": [
+    {
+      "id": "8b2c895a-458e-41f5-8d2a-c407fcbed38e",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 1,
+      "type": "task.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:03.575614894Z",
+      "visibility": "user",
+      "payload": {
+        "mode": "research",
+        "status": "queued"
+      }
+    },
+    {
+      "id": "e464b883-d7e9-464f-9857-0a4c002d5b6c",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 2,
+      "type": "message.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:03.575996921Z",
+      "visibility": "user",
+      "payload": {
+        "message_id": "f089d340-ba75-4b78-b393-0509544781e6",
+        "role": "assistant",
+        "status": "pending"
+      }
+    },
+    {
+      "id": "47040104-6849-4984-980f-e2b0eb6fbe91",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 3,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:03.578128372Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "from": "queued",
+        "to": "planning"
+      }
+    },
+    {
+      "id": "b3109aea-8fc2-4723-89fc-f474521ccfd5",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 10,
+      "type": "plan.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:18.975560814Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "goal": "Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+        "steps": 5
+      }
+    },
+    {
+      "id": "2f3e7974-a78e-43db-99f7-75da8e092347",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 11,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:18.979931906Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "from": "planning",
+        "plan_steps": 5,
+        "to": "running"
+      }
+    },
+    {
+      "id": "e9e7b873-922b-4416-9cfe-b8ead313cd8b",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 12,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:18.98206347Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for documentation or papers comparing checkpoint and journal recovery mechanisms in distributed systems.. User request: Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "87699508-2e3c-48db-bfea-70b46d621510",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 22,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:22.341418367Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1",
+        "summary": "Searching for academic literature comparing checkpoint and journal recovery mechanisms in distributed systems to identify idempotency guarantees and exactly-once limitations.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "c4e297b4-90af-4d8f-a80b-6b03885c84b1",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 25,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:22.382014812Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "checkpoint vs journal recovery idempotency exactly-once distributed systems",
+        "query_fingerprint": "9d76e36cf501fd512cc5b72b92054f67b4ccd15a09202c81fccd1dba4f47b65a",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "8422d256-a097-4daf-b3f5-de6235158c83",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 26,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:22.382597399Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:35:22.382428638Z",
+        "code": "search_ok",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:35:22.382428638Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider is unavailable",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "9d76e36cf501fd512cc5b72b92054f67b4ccd15a09202c81fccd1dba4f47b65a",
+        "result_count": 3,
+        "retryable": false,
+        "started_at": "2026-10-28T15:35:22.382428638Z",
+        "state": "unavailable",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "9d907d3e-e3ab-4316-bafe-017b6c53d9e1",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 27,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:22.383407259Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "fingerprint": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "url": "https://reference.example.net/recovery",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic recovery reference",
+          "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+          "provider": "search",
+          "query_fingerprint": "9d76e36cf501fd512cc5b72b92054f67b4ccd15a09202c81fccd1dba4f47b65a",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:35:22.382858045Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "105e4af3-1386-4192-8d01-87d53006e4fa",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 28,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:22.383774557Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "9d76e36cf501fd512cc5b72b92054f67b4ccd15a09202c81fccd1dba4f47b65a",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:35:22.383621366Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "0769ed2a-6d65-4b66-915d-6e73326b156a",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 29,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:22.384087382Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "9d76e36cf501fd512cc5b72b92054f67b4ccd15a09202c81fccd1dba4f47b65a",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:35:22.383966852Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "23eee22b-1d37-431b-ba19-f6c92ab5f9ee",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 30,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:22.38441294Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "fingerprint": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "url": "https://reference.example.net/recovery",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic recovery reference",
+          "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+          "provider": "search",
+          "query_fingerprint": "9d76e36cf501fd512cc5b72b92054f67b4ccd15a09202c81fccd1dba4f47b65a",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:35:22.384303312Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "d8b26bcd-b6aa-4d0e-a902-8a4e18e1503b",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 31,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:22.384872704Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "9d76e36cf501fd512cc5b72b92054f67b4ccd15a09202c81fccd1dba4f47b65a",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:35:22.384757495Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "66678315-32fc-4986-83e3-f13af1652940",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 32,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:22.385435795Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "9d76e36cf501fd512cc5b72b92054f67b4ccd15a09202c81fccd1dba4f47b65a",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:35:22.385331196Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "28631f99-a7fc-469b-be49-c9547aead247",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 34,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:22.393111667Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [
+          {
+            "provider": "search",
+            "query": "checkpoint vs journal recovery idempotency exactly-once distributed systems",
+            "url": "https://reference.example.net/recovery",
+            "title": "Independent synthetic recovery reference",
+            "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+            "score": 7,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "checkpoint vs journal recovery idempotency exactly-once distributed systems",
+            "url": "https://docs.example.com/recovery",
+            "title": "Synthetic recovery and provenance reference",
+            "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+            "score": 6,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "checkpoint vs journal recovery idempotency exactly-once distributed systems",
+            "url": "https://reference.example.net/computing",
+            "title": "Independent synthetic computing reference",
+            "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          }
+        ],
+        "step_id": "search_1",
+        "summary": "Searching for academic literature comparing checkpoint and journal recovery mechanisms in distributed systems to identify idempotency guarantees and exactly-once limitations.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "ca772618-0ef1-4594-aad5-2a1d83f7257c",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 35,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:22.393227076Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "a01c235e-b49b-4d63-a95b-198c1a895329",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 36,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:22.397880573Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for specific references or case studies regarding idempotency challenges in recovery systems.. User request: Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "ba8c756c-edf0-45a8-8eff-5fd3887e2f44",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 39,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:22.415235685Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 0,
+        "contradictions": 0,
+        "done_criteria": 8,
+        "hash": "1b90a7e2f7490de8692661198ef8e95a1dcf961da208457e86bbd3762d4e1b3a",
+        "original_tool_result_bytes": 2081,
+        "reason": "role_tool_results",
+        "reduced_bytes": 144,
+        "retained_tool_result_bytes": 1937,
+        "slot": "adf4c533cc7518a2a826be3585c6d9107b4f592be4b6758444d122028ee66df2"
+      }
+    },
+    {
+      "id": "6e242eab-35ce-41c3-a0bd-3ebc10c8c101",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 47,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.284801458Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_2",
+        "summary": "Searching for specific case studies and references detailing idempotency challenges in recovery systems to complement the existing search on general checkpoint vs journal mechanisms.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "1af8fb3f-347c-4857-a1d5-db1bb8a13777",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 50,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.328958684Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "idempotency challenges recovery systems case studies exactly-once limitations",
+        "query_fingerprint": "0a98350b012745e811b1cdfaa8c19c8c3a5f5c077c180023ce8df04ace9021f0",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "b8035a60-282d-400a-bf23-f929485b35f0",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 51,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.329406771Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:35:29.329308724Z",
+        "code": "search_ok",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:35:29.329308724Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider is unavailable",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "0a98350b012745e811b1cdfaa8c19c8c3a5f5c077c180023ce8df04ace9021f0",
+        "result_count": 4,
+        "retryable": false,
+        "started_at": "2026-10-28T15:35:29.329308724Z",
+        "state": "unavailable",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "11ea9e68-3cc8-4ca1-b2fd-b2fa64960b53",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 52,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.329646109Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "0a98350b012745e811b1cdfaa8c19c8c3a5f5c077c180023ce8df04ace9021f0",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:35:29.329519567Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "ae058b49-6eed-43c1-a716-854d7cba01c0",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 53,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.329849959Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "fingerprint": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "url": "https://reference.example.net/recovery",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic recovery reference",
+          "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+          "provider": "search",
+          "query_fingerprint": "0a98350b012745e811b1cdfaa8c19c8c3a5f5c077c180023ce8df04ace9021f0",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:35:29.329741732Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "237f9c63-ae36-4dd3-bc49-a6148da6a167",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 54,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.330074018Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "0a98350b012745e811b1cdfaa8c19c8c3a5f5c077c180023ce8df04ace9021f0",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:35:29.329964669Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "c578880d-3000-4c29-b3ea-dd8ce8878fe3",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 55,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.330299449Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "fingerprint": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "url": "https://docs.example.com/protocol",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic protocol architecture reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+          "provider": "search",
+          "query_fingerprint": "0a98350b012745e811b1cdfaa8c19c8c3a5f5c077c180023ce8df04ace9021f0",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:35:29.330191323Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "edd3690d-6a77-4d71-953c-9ef0523bef95",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 56,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.330554788Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "0a98350b012745e811b1cdfaa8c19c8c3a5f5c077c180023ce8df04ace9021f0",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:35:29.330431232Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "3d1bd47f-0e6a-4e80-95a1-502ef32f8366",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 57,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.330839583Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "fingerprint": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "url": "https://reference.example.net/recovery",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic recovery reference",
+          "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+          "provider": "search",
+          "query_fingerprint": "0a98350b012745e811b1cdfaa8c19c8c3a5f5c077c180023ce8df04ace9021f0",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:35:29.330726867Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "00586cd8-f59b-4813-861a-9658071a3161",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 58,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.33115141Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "0a98350b012745e811b1cdfaa8c19c8c3a5f5c077c180023ce8df04ace9021f0",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:35:29.331040768Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "f5f35373-d447-40cd-b7f8-6f1b90bdf53c",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 59,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.331476442Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "fingerprint": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "url": "https://docs.example.com/protocol",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic protocol architecture reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+          "provider": "search",
+          "query_fingerprint": "0a98350b012745e811b1cdfaa8c19c8c3a5f5c077c180023ce8df04ace9021f0",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:35:29.331367383Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "01c107a8-b68b-4afb-bd6f-918d39745e85",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 61,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.343512563Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [
+          {
+            "provider": "search",
+            "query": "idempotency challenges recovery systems case studies exactly-once limitations",
+            "url": "https://docs.example.com/recovery",
+            "title": "Synthetic recovery and provenance reference",
+            "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+            "score": 5,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "idempotency challenges recovery systems case studies exactly-once limitations",
+            "url": "https://reference.example.net/recovery",
+            "title": "Independent synthetic recovery reference",
+            "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+            "score": 5,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "idempotency challenges recovery systems case studies exactly-once limitations",
+            "url": "https://reference.example.net/computing",
+            "title": "Independent synthetic computing reference",
+            "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "idempotency challenges recovery systems case studies exactly-once limitations",
+            "url": "https://docs.example.com/protocol",
+            "title": "Synthetic protocol architecture reference",
+            "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          }
+        ],
+        "step_id": "search_2",
+        "summary": "Searching for specific case studies and references detailing idempotency challenges in recovery systems to complement the existing search on general checkpoint vs journal mechanisms.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "b6718007-3b12-4bf4-ac4c-d57dfd4ec8cb",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 62,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.343561296Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "d0164127-a446-42a8-8b51-41c2c294acaa",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 63,
+      "type": "step.skipped",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.348618794Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "reason": "the completed search facets already produced enough distinct candidate sites",
+        "step_id": "search_3"
+      }
+    },
+    {
+      "id": "e1d45849-a5e7-41c1-b64a-60b5da36f1c1",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 65,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.355642704Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "92b60d0e-5c17-4414-be2a-c6b9218517e5",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 66,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.356075232Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Inspect distinct approved source 1 for the exact user request",
+        "step_id": "fetch_1"
+      }
+    },
+    {
+      "id": "88e563fc-5184-4eb1-8b6e-a1c932f0a996",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 69,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:29.383866331Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 0,
+        "contradictions": 0,
+        "done_criteria": 8,
+        "hash": "acb6897dfd09d0075f20764c14a07e136d38c55459036a89effa9e8de6a1c285",
+        "original_tool_result_bytes": 4776,
+        "reason": "role_tool_results",
+        "reduced_bytes": 336,
+        "retained_tool_result_bytes": 4440,
+        "slot": "82bbe5e604ec03614887a30c32c633de35fcacbb764b3068b86a07c59c492545"
+      }
+    },
+    {
+      "id": "04219177-21d1-43ce-8cbb-a58e959d5033",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 77,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:33.375965337Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "source_fingerprint": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+        "status": "fetching",
+        "step_id": "fetch_1",
+        "target_url": "https://reference.example.net/recovery",
+        "timestamp": "2026-10-28T15:35:33.375965337Z",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "5bd52e2e-c15f-4a69-a674-38ad901462f4",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 80,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:33.394357391Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "78d1968e-818e-49c1-a9bc-fd2a27a836ab",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 81,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:33.397169339Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "9c4df43c9357a6400f021b258b910f3548fa6a7b750c4f1cf10985443f4e39fb",
+        "mime_type": "text/plain",
+        "name": "source-0fb4b425fd0a.raw",
+        "sha256": "0fb4b425fd0a2aad70f9b45f8ab40826f1d3a5191811302583ca9614dd69bd4d",
+        "size_bytes": 379
+      }
+    },
+    {
+      "id": "1e524e73-2ff1-46c1-9682-6e692d4d5adc",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 82,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:33.397759932Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "e6e5977960ff73d758780b17864986bbe835adf83204bf63fe8cded6900e7bfd",
+        "mime_type": "text/plain; charset=utf-8",
+        "name": "source-0fb4b425fd0a.txt",
+        "sha256": "0fb4b425fd0a2aad70f9b45f8ab40826f1d3a5191811302583ca9614dd69bd4d",
+        "size_bytes": 379
+      }
+    },
+    {
+      "id": "1e853584-69f6-4edd-9363-cd558d36050f",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 83,
+      "type": "evidence.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:33.398356488Z",
+      "visibility": "user",
+      "payload": {
+        "canonical_url": "https://reference.example.net/recovery",
+        "evidence_id": "71211c6f-4306-49c4-a388-560f78a93505",
+        "title": "Independent synthetic recovery reference"
+      }
+    },
+    {
+      "id": "2321e4fc-7e34-49ac-940c-a1d0cbaaf01f",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 85,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:33.414746889Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "result": {
+          "content_sha256": "0fb4b425fd0a2aad70f9b45f8ab40826f1d3a5191811302583ca9614dd69bd4d",
+          "evidence_id": "71211c6f-4306-49c4-a388-560f78a93505",
+          "excerpt": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+          "fetched_bytes": 379,
+          "requested_url": "https://reference.example.net/recovery",
+          "taint": "untrusted_external_content",
+          "title": "Independent synthetic recovery reference",
+          "url": "https://reference.example.net/recovery"
+        },
+        "step_id": "fetch_1",
+        "summary": "Inspecting the first approved recovery reference to extract details on checkpoint vs journal mechanisms, idempotency guarantees, and exactly-once limitations.",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "5a3223fd-bccf-495f-976d-ae79f38ad1a1",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 86,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:33.414805401Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "step_id": "fetch_1"
+      }
+    },
+    {
+      "id": "f8bf90de-ba15-4e20-a2ce-dc2eda688402",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 87,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:33.420845485Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "7d62a77b-abe8-48b3-a684-247ecc705d42",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 88,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:33.421230705Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Inspect distinct approved source 2 for the exact user request",
+        "step_id": "fetch_2"
+      }
+    },
+    {
+      "id": "415dce1e-2af3-42c5-8523-7b50fbfe43b6",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 91,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:33.455822204Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 1,
+        "contradictions": 0,
+        "done_criteria": 8,
+        "hash": "b4f4002e3d25d0f9bc505be7f0c037293953e58d040f95a2767f180aeedd23a6",
+        "original_tool_result_bytes": 5529,
+        "reason": "role_tool_results",
+        "reduced_bytes": 336,
+        "retained_tool_result_bytes": 5193,
+        "slot": "3ec8fba3bd5d0e6e1682e4b3985e4049c8d96ba00a1ef9f7a9d378342ce2c278"
+      }
+    },
+    {
+      "id": "58a07858-3ea9-42e7-a4e6-2df32448cfdb",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 99,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:37.425640663Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "source_fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+        "status": "fetching",
+        "step_id": "fetch_2",
+        "target_url": "https://docs.example.com/recovery",
+        "timestamp": "2026-10-28T15:35:37.425640663Z",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "73fef238-c301-47e5-b918-f10e25d620a3",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 102,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:37.45053491Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "157abf6b-7865-4d48-b364-ba57d7ea63b5",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 103,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:37.453474397Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "6492a50b4d480fde9e30fcf2d4dd3261ebc224cccfff58be43baf35ef34ed094",
+        "mime_type": "text/plain",
+        "name": "source-66b0fabdafae.raw",
+        "sha256": "66b0fabdafae99bd00221217666d4c56eff597d853a5aed6811d2fbee5feb94d",
+        "size_bytes": 405
+      }
+    },
+    {
+      "id": "51faaee7-d9a6-427d-b72e-9ea10d3aeed6",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 104,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:37.453681616Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "49bc53f21ee7b0a6a314421da36c9b638c786159af5d0224abaa51ca5fc920b1",
+        "mime_type": "text/plain; charset=utf-8",
+        "name": "source-66b0fabdafae.txt",
+        "sha256": "66b0fabdafae99bd00221217666d4c56eff597d853a5aed6811d2fbee5feb94d",
+        "size_bytes": 405
+      }
+    },
+    {
+      "id": "be54098c-381c-49fd-8d66-f5be325bef45",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 105,
+      "type": "evidence.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:37.453963709Z",
+      "visibility": "user",
+      "payload": {
+        "canonical_url": "https://docs.example.com/recovery",
+        "evidence_id": "b28d6053-cc60-49d2-a330-4db0537f9285",
+        "title": "Synthetic recovery and provenance reference"
+      }
+    },
+    {
+      "id": "9d0d1d15-2c44-4d5a-a88f-db35731ee682",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 107,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:37.476385326Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "result": {
+          "content_sha256": "66b0fabdafae99bd00221217666d4c56eff597d853a5aed6811d2fbee5feb94d",
+          "evidence_id": "b28d6053-cc60-49d2-a330-4db0537f9285",
+          "excerpt": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitations.",
+          "fetched_bytes": 405,
+          "requested_url": "https://docs.example.com/recovery",
+          "taint": "untrusted_external_content",
+          "title": "Synthetic recovery and provenance reference",
+          "url": "https://docs.example.com/recovery"
+        },
+        "step_id": "fetch_2",
+        "summary": "Fetching the second approved recovery reference to extract details on checkpoint vs journal mechanisms, idempotency guarantees, and exactly-once limitations for comparative analysis.",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "4d38cd32-cd4e-4161-a12a-aa6259344ca9",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 108,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:37.476562507Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "step_id": "fetch_2"
+      }
+    },
+    {
+      "id": "040dab56-a9e8-415a-bece-52a696286873",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 110,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:37.495309261Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "verifying"
+      }
+    },
+    {
+      "id": "245279b3-965b-4944-9855-18e318b9fc6c",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 112,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:35:37.535168272Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 2,
+        "contradictions": 0,
+        "done_criteria": 8,
+        "hash": "5efd28ae796199e17c03cfa5bba65d72480067bad8363425c0c1a8fe38a4c5f5",
+        "original_tool_result_bytes": 6301,
+        "reason": "role_tool_results",
+        "reduced_bytes": 336,
+        "retained_tool_result_bytes": 5965,
+        "slot": "b02557674bdd8718adcbe98c1bbc7a698144f7aa1d0b5a2ccaf04881d63bbece"
+      }
+    },
+    {
+      "id": "b17b6955-e6a4-4f3e-b08d-33347bcbadc2",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 118,
+      "type": "verification.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:36:12.954352145Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "criteria": [
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "71211c6f-4306-49c4-a388-560f78a93505",
+              "b28d6053-cc60-49d2-a330-4db0537f9285"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 1,
+            "evidence_ids": [
+              "71211c6f-4306-49c4-a388-560f78a93505",
+              "b28d6053-cc60-49d2-a330-4db0537f9285"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 2,
+            "evidence_ids": [
+              "71211c6f-4306-49c4-a388-560f78a93505",
+              "b28d6053-cc60-49d2-a330-4db0537f9285"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 3,
+            "evidence_ids": [
+              "71211c6f-4306-49c4-a388-560f78a93505",
+              "b28d6053-cc60-49d2-a330-4db0537f9285"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 4,
+            "evidence_ids": [
+              "71211c6f-4306-49c4-a388-560f78a93505",
+              "b28d6053-cc60-49d2-a330-4db0537f9285"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "met": true,
+            "step_id": "search_1"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "met": true,
+            "step_id": "search_2"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "71211c6f-4306-49c4-a388-560f78a93505"
+            ],
+            "met": true,
+            "step_id": "fetch_1"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "b28d6053-cc60-49d2-a330-4db0537f9285"
+            ],
+            "met": true,
+            "step_id": "fetch_2"
+          }
+        ],
+        "missing": [],
+        "phase": "evidence_readiness",
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "49d414ac-096e-4af1-a13d-aba47698ecd6",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 119,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:36:12.968974884Z",
+      "stage": "finalization",
+      "visibility": "user",
+      "payload": {
+        "from": "verifying",
+        "to": "verifying"
+      }
+    },
+    {
+      "id": "9705c580-d704-4e4c-ae95-56a6120bac63",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "seq": 142,
+      "type": "run.paused",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:36:45.698230636Z",
+      "visibility": "user",
+      "payload": {
+        "pause_reason": "manual",
+        "resource_probe_attempts": 0,
+        "resource_reason": "high_model_rss",
+        "resume_after": "2026-10-28T15:36:50.684027102Z",
+        "status": "paused"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "85337f08-157d-467d-8594-78016f1271bf",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "step_id": "search_1",
+      "position": 0,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for documentation or papers comparing checkpoint and journal recovery mechanisms in distributed systems.. User request: Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+      "dependencies": [],
+      "expected_output": "List of relevant search results comparing the two recovery methods.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:35:18.974725062Z",
+      "updated_at": "2026-10-28T15:35:22.393039239Z"
+    },
+    {
+      "id": "8c8ae38b-29e0-4fc5-9c7c-161ee216608f",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "step_id": "search_2",
+      "position": 1,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for specific references or case studies regarding idempotency challenges in recovery systems.. User request: Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+      "dependencies": [],
+      "expected_output": "List of relevant search results focusing on idempotency issues.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:35:18.975054846Z",
+      "updated_at": "2026-10-28T15:35:29.343414275Z"
+    },
+    {
+      "id": "09868b6f-c1ab-4e60-91d4-700bdc530790",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "step_id": "search_3",
+      "position": 2,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for limitations of exactly-once semantics in distributed recovery.. User request: Research checkpoint versus journal recovery, idempotency and exactly-once limitations using the two imported recovery references.",
+      "dependencies": [],
+      "expected_output": "List of relevant search results detailing exactly-once limitations.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "skipped",
+      "attempts": 0,
+      "created_at": "2026-10-28T15:35:18.975079002Z",
+      "updated_at": "2026-10-28T15:35:29.34895636Z"
+    },
+    {
+      "id": "75086655-8f9c-4bc3-8140-c1de32bbcb76",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "step_id": "fetch_1",
+      "position": 3,
+      "kind": "fetch",
+      "description": "Inspect distinct approved source 1 for the exact user request",
+      "dependencies": [
+        "search_1",
+        "search_2",
+        "search_3"
+      ],
+      "expected_output": "Source text with stored evidence ID",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:35:18.975196625Z",
+      "updated_at": "2026-10-28T15:35:33.414646717Z"
+    },
+    {
+      "id": "5278fb90-858f-42fb-80d3-32571ca4cd7c",
+      "task_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "step_id": "fetch_2",
+      "position": 4,
+      "kind": "fetch",
+      "description": "Inspect distinct approved source 2 for the exact user request",
+      "dependencies": [
+        "search_1",
+        "search_2",
+        "search_3"
+      ],
+      "expected_output": "Source text with stored evidence ID",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:35:18.975455725Z",
+      "updated_at": "2026-10-28T15:35:37.476143301Z"
+    }
+  ],
+  "inference_summaries_complete": true,
+  "inference_summaries": [
+    {
+      "seq": 8,
+      "summary": {
+        "invocation_id": "invocation-5fe6a3d778fc048843b83810762db649b70e82e9478edcd3198183ed9803236a",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:35:18.967428533Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:35:18.967428533Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:03.641754048Z"
+          },
+          "prompt_tokens": {
+            "value": 781,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:18.967388197Z"
+          },
+          "output_tokens": {
+            "value": 496,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:18.967388197Z"
+          },
+          "total_tokens": {
+            "value": 1277,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:18.967388197Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:18.967388197Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 891.7998942629063,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:35:18.967388197Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.3504934593821,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:35:18.967388197Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:03.641754048Z"
+          },
+          "prompt_ms": {
+            "value": 875.757,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:18.967388197Z"
+          },
+          "generation_ms": {
+            "value": 14439.385,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:18.967388197Z"
+          },
+          "context_tokens": {
+            "value": 1277,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:18.967388197Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:03.641754048Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 18,
+      "summary": {
+        "invocation_id": "invocation-09ec96ba12946469ee55d483e3fc4fdcb123b3f77cc89d0c8c73f1a88465920a",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:35:22.329441679Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:35:22.329441679Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:19.041593253Z"
+          },
+          "prompt_tokens": {
+            "value": 1046,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:22.329247971Z"
+          },
+          "output_tokens": {
+            "value": 73,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:22.329247971Z"
+          },
+          "total_tokens": {
+            "value": 1119,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:22.329247971Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:22.329247971Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 960.1157279072414,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:35:22.329247971Z"
+          },
+          "output_tokens_per_second": {
+            "value": 35.4091674819668,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:35:22.329247971Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:19.041593253Z"
+          },
+          "prompt_ms": {
+            "value": 1089.452,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:22.329247971Z"
+          },
+          "generation_ms": {
+            "value": 2061.613,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:22.329247971Z"
+          },
+          "context_tokens": {
+            "value": 1119,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:22.329247971Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:19.041593253Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 43,
+      "summary": {
+        "invocation_id": "invocation-49fe511d04a46f993bfaaa8eee89871f8ad0806fcd1557aa7886392d6d46a704",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:35:29.266475922Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:35:29.266475922Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:22.434903604Z"
+          },
+          "prompt_tokens": {
+            "value": 1431,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:29.266434082Z"
+          },
+          "output_tokens": {
+            "value": 75,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:29.266434082Z"
+          },
+          "total_tokens": {
+            "value": 1506,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:29.266434082Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 397,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:29.266434082Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 226.33551635471107,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:35:29.266434082Z"
+          },
+          "output_tokens_per_second": {
+            "value": 35.249462798186954,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:35:29.266434082Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:22.434903604Z"
+          },
+          "prompt_ms": {
+            "value": 4568.439,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:29.266434082Z"
+          },
+          "generation_ms": {
+            "value": 2127.692,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:29.266434082Z"
+          },
+          "context_tokens": {
+            "value": 1506,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:29.266434082Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:22.434903604Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 73,
+      "summary": {
+        "invocation_id": "invocation-c006f07da6d9ed6c3f5711d892096feffe2f601db0347b04e5a20d41f020dd33",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:35:33.354061122Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:35:33.354061122Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:29.411919862Z"
+          },
+          "prompt_tokens": {
+            "value": 1823,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:33.354029691Z"
+          },
+          "output_tokens": {
+            "value": 72,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:33.354029691Z"
+          },
+          "total_tokens": {
+            "value": 1895,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:33.354029691Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:33.354029691Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1063.488452137186,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:35:33.354029691Z"
+          },
+          "output_tokens_per_second": {
+            "value": 35.0818894131141,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:35:33.354029691Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:29.411919862Z"
+          },
+          "prompt_ms": {
+            "value": 1714.17,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:33.354029691Z"
+          },
+          "generation_ms": {
+            "value": 2052.341,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:33.354029691Z"
+          },
+          "context_tokens": {
+            "value": 1895,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:33.354029691Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:29.411919862Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 95,
+      "summary": {
+        "invocation_id": "invocation-b68113b92c67f1838261613d90ffbf66ac82610591a136fb3f7eb1be2e3a63c8",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:35:37.399182927Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:35:37.399182927Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:33.49535102Z"
+          },
+          "prompt_tokens": {
+            "value": 2061,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:37.399150806Z"
+          },
+          "output_tokens": {
+            "value": 74,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:37.399150806Z"
+          },
+          "total_tokens": {
+            "value": 2135,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:37.399150806Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 348,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:37.399150806Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1038.7358106141457,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:35:37.399150806Z"
+          },
+          "output_tokens_per_second": {
+            "value": 35.24672229298028,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:35:37.399150806Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:33.49535102Z"
+          },
+          "prompt_ms": {
+            "value": 1649.12,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:37.399150806Z"
+          },
+          "generation_ms": {
+            "value": 2099.486,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:37.399150806Z"
+          },
+          "context_tokens": {
+            "value": 2135,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:37.399150806Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:33.49535102Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 116,
+      "summary": {
+        "invocation_id": "invocation-54e6233c0f9d7ca304fbfc25cc2b72e83b2a362ee0549444b85d6976e9e74464",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:36:12.922251794Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:36:12.922251794Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:37.582854197Z"
+          },
+          "prompt_tokens": {
+            "value": 4538,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:12.922231594Z"
+          },
+          "output_tokens": {
+            "value": 1055,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:12.922231594Z"
+          },
+          "total_tokens": {
+            "value": 5593,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:12.922231594Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:12.922231594Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1091.6166582915118,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:36:12.922231594Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.0593660238034,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:36:12.922231594Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:35:37.582854197Z"
+          },
+          "prompt_ms": {
+            "value": 4157.137,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:36:12.922231594Z"
+          },
+          "generation_ms": {
+            "value": 30975.327,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:36:12.922231594Z"
+          },
+          "context_tokens": {
+            "value": 5593,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:12.922231594Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:35:37.582854197Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 126,
+      "summary": {
+        "invocation_id": "invocation-1bb61138c2e511095fb38d0d83a9c4a381314e833aab0adca240908ba5e2ee01",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:36:37.60203064Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:36:37.60203064Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:13.126329626Z"
+          },
+          "prompt_tokens": {
+            "value": 1717,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:37.602009749Z"
+          },
+          "output_tokens": {
+            "value": 784,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:37.602009749Z"
+          },
+          "total_tokens": {
+            "value": 2501,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:37.602009749Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:37.602009749Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1018.5165961258404,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:36:37.602009749Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.73136837072759,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:36:37.602009749Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:36:13.126329626Z"
+          },
+          "prompt_ms": {
+            "value": 1685.785,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:36:37.602009749Z"
+          },
+          "generation_ms": {
+            "value": 22573.254,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:36:37.602009749Z"
+          },
+          "context_tokens": {
+            "value": 2501,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:37.602009749Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:13.126329626Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 133,
+      "summary": {
+        "invocation_id": "invocation-2c5ed2f0c83d200cf15b5c0e475302dabe9534dada611ab183484fb9bbe6c299",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:36:43.520668196Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:36:43.520668196Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:37.833421296Z"
+          },
+          "prompt_tokens": {
+            "value": 1262,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:43.520612054Z"
+          },
+          "output_tokens": {
+            "value": 150,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:43.520612054Z"
+          },
+          "total_tokens": {
+            "value": 1412,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:43.520612054Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:43.520612054Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 968.5512484103709,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:36:43.520612054Z"
+          },
+          "output_tokens_per_second": {
+            "value": 35.26062420237529,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:36:43.520612054Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:36:37.833421296Z"
+          },
+          "prompt_ms": {
+            "value": 1302.977,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:36:43.520612054Z"
+          },
+          "generation_ms": {
+            "value": 4254.037,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:36:43.520612054Z"
+          },
+          "context_tokens": {
+            "value": 1412,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:43.520612054Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:37.833421296Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 140,
+      "summary": {
+        "invocation_id": "invocation-228435b9a130db6b04c357a0051dd650be5062d802df23559b327f952c93d09b",
+        "invocation_status": "failed",
+        "snapshot_at": "2026-10-28T15:36:45.621027196Z",
+        "inference": {
+          "status": "cancelled",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:36:45.621027196Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:45.621027196Z"
+          },
+          "prompt_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:45.621027196Z"
+          },
+          "output_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:45.621027196Z"
+          },
+          "total_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:45.621027196Z"
+          },
+          "cached_prompt_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:45.621027196Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:36:45.621027196Z"
+          },
+          "output_tokens_per_second": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:36:45.621027196Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:36:45.621027196Z"
+          },
+          "prompt_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:36:45.621027196Z"
+          },
+          "generation_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:36:45.621027196Z"
+          },
+          "context_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:45.621027196Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:36:45.621027196Z"
+          }
+        }
+      }
+    }
+  ]
+}

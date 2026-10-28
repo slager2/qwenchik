@@ -1,0 +1,10 @@
+{
+  "case_id": "dev-catalyst",
+  "variant": "adaptive",
+  "state": "attempted",
+  "started_at": "2026-10-28T15:17:25.330Z",
+  "run_id": "67ffdf72-5745-4dcf-a604-8cbb2255ecfd",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused"
+}

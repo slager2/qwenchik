@@ -1,0 +1,11 @@
+{
+  "case_id": "dev-fasta",
+  "variant": "adaptive",
+  "state": "measured",
+  "started_at": "2026-10-28T15:05:34.935Z",
+  "run_id": "306a102f-cb74-4143-9e9f-892d5da6d923",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused",
+  "finished_at": "2026-10-28T15:08:39.273Z"
+}

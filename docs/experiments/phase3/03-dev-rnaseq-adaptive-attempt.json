@@ -1,0 +1,10 @@
+{
+  "case_id": "dev-rnaseq",
+  "variant": "adaptive",
+  "state": "attempted",
+  "started_at": "2026-10-28T15:08:40.777Z",
+  "run_id": "256ed2b7-879e-41a6-9244-b82385955db8",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused"
+}

@@ -1,0 +1,3045 @@
+{
+  "runtime": {
+    "accepted_evidence": 2,
+    "active_round_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Determine if the imported bioinformatics corpus contains data sufficient to support a specific clinical treatment choice.",
+        "Identify and list specific gaps or absent clinical evidence within the corpus regarding treatment efficacy or safety.",
+        "Cite the specific references (sources) from the corpus that support or lack support for the treatment decision.",
+        "Explicitly retain and state any unknowns regarding the treatment outcome that cannot be resolved by the provided data."
+      ],
+      "schema_version": 1,
+      "goal": "Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+      "subtasks": [
+        {
+          "id": "search_1",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for the definition and scope of the 'imported bioinformatics corpus' to understand its data structure and intended use.. User request: Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+          "dependencies": [],
+          "expected_output": "Definition of the corpus and its data types.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_2",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for clinical treatment decision-making frameworks and requirements to establish the standard against which the corpus should be evaluated.. User request: Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+          "dependencies": [],
+          "expected_output": "Criteria for clinical treatment support.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_3",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for methods to evaluate bioinformatics data against clinical evidence standards to identify gaps.. User request: Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+          "dependencies": [],
+          "expected_output": "Evaluation methodology.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "fetch_1",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 1 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_2",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 2 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        }
+      ],
+      "max_steps": 5,
+      "final_deliverable": "A report detailing the sufficiency of the corpus for clinical treatment selection, listing absent evidence with citations, and explicitly stating unresolved unknowns."
+    },
+    "adaptive_enabled": true,
+    "budget": {
+      "max_initial_plan_steps": 12,
+      "max_round_steps": 12,
+      "max_total_steps": 20,
+      "max_report_sections": 6,
+      "max_report_paragraphs": 16,
+      "max_report_bytes": 524288,
+      "wall_time_seconds": 1800,
+      "max_rounds": 3,
+      "max_steps": 12,
+      "max_search_queries": 8,
+      "max_fetches": 8,
+      "max_llm_calls": 48,
+      "max_evidence": 8,
+      "max_questions_created": 24,
+      "max_questions_accepted": 16,
+      "max_stagnant_rounds": 2,
+      "max_citation_sources": 8,
+      "max_citation_claims": 16
+    },
+    "budget_remaining": {
+      "evidence": 6,
+      "fetched_bytes": 134216959,
+      "fetches": 6,
+      "http_attempts": 86,
+      "initial_plan_steps": 12,
+      "llm_calls": 38,
+      "questions_accepted": 16,
+      "questions_created": 24,
+      "round_steps": 12,
+      "rounds": 2,
+      "search_queries": 6,
+      "stagnant_rounds": 2,
+      "steps": 15,
+      "total_steps": 15
+    },
+    "bundle_hash": "e27b07fb099039c84672d3db8b38e46d62d0a813a7da342ed2f8484d990f03bf",
+    "bundle_version": 1,
+    "compactions": 4,
+    "completed_steps": 4,
+    "completion": {
+      "continuations": 0,
+      "verdict": "PASS"
+    },
+    "context_budget": {
+      "version": 1,
+      "configured_context": 32768,
+      "server_reported_context": 32768,
+      "training_context": 262144,
+      "session_context": 32768,
+      "max_output_tokens": 4096,
+      "reserved_output_tokens": 4096,
+      "reserved_system_tokens": 2048,
+      "available_input_tokens": 26624,
+      "prompt_tokens": null,
+      "context_status": "matched",
+      "count_method": "unavailable",
+      "decision": "not_counted",
+      "server_source": "props.default_generation_settings.n_ctx:single_slot",
+      "runtime_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+      "runtime_build": "b11426-cda0f9256",
+      "chat_template_sha256": "7f0e529032c25183bcd66c7f238da2d377f43be754a94e2725a58c4e16d2ed67",
+      "model_quantization": "Q4_K - Medium",
+      "observed_at": "2026-10-28T15:51:54.94222667Z"
+    },
+    "context_snapshot_hash": "e2c7816bf788e2fc77294c760ddb767468c4a822b389c19679206cb8d1b947de",
+    "context_snapshot_number": 10,
+    "contradictions": null,
+    "counters": {
+      "steps_reserved": 5,
+      "llm_calls": 10,
+      "http_attempts": 10,
+      "search_queries": 2,
+      "fetches": 2,
+      "fetched_bytes": 769,
+      "evidence": 2,
+      "questions_created": 0,
+      "questions_accepted": 0,
+      "rounds": 1,
+      "stagnant_rounds": 0
+    },
+    "current_round": 1,
+    "cursor": 156,
+    "deadline_at": "2026-10-28T16:19:46.39132918Z",
+    "done_criteria": 8,
+    "elapsed_seconds": 128,
+    "inference_summary": {
+      "invocation_id": "invocation-7d1dc47b0cdf12e6ed4be399021ef0021cec228ef0619418f48d5d95eff8e903",
+      "invocation_status": "failed",
+      "snapshot_at": "2026-10-28T15:51:52.461157035Z",
+      "inference": {
+        "status": "cancelled",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:51:52.461157035Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "output_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "total_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "cached_prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "output_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "prompt_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "generation_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "context_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        }
+      }
+    },
+    "initial_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Determine if the imported bioinformatics corpus contains data sufficient to support a specific clinical treatment choice.",
+        "Identify and list specific gaps or absent clinical evidence within the corpus regarding treatment efficacy or safety.",
+        "Cite the specific references (sources) from the corpus that support or lack support for the treatment decision.",
+        "Explicitly retain and state any unknowns regarding the treatment outcome that cannot be resolved by the provided data."
+      ],
+      "schema_version": 1,
+      "goal": "Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+      "subtasks": [
+        {
+          "id": "search_1",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for the definition and scope of the 'imported bioinformatics corpus' to understand its data structure and intended use.. User request: Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+          "dependencies": [],
+          "expected_output": "Definition of the corpus and its data types.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_2",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for clinical treatment decision-making frameworks and requirements to establish the standard against which the corpus should be evaluated.. User request: Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+          "dependencies": [],
+          "expected_output": "Criteria for clinical treatment support.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_3",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for methods to evaluate bioinformatics data against clinical evidence standards to identify gaps.. User request: Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+          "dependencies": [],
+          "expected_output": "Evaluation methodology.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "fetch_1",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 1 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_2",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 2 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        }
+      ],
+      "max_steps": 5,
+      "final_deliverable": "A report detailing the sufficiency of the corpus for clinical treatment selection, listing absent evidence with citations, and explicitly stating unresolved unknowns."
+    },
+    "keep_awake_requested": true,
+    "max_continuations": 2,
+    "model_profile_hash": "1b3d9bd1717af420d357a0aaef2b79a9e80c4f65a5e5f8a3f07e2dbfbb65e4c3",
+    "offline_corpus_sha256": "9814cb53c048545010e91bb6ee7e50be66e8c3852eb3380c8c435a86f03fd43b",
+    "open_questions": [],
+    "pause_reason": "manual",
+    "privacy_mode": "offline",
+    "profile": "standard",
+    "remaining_seconds": 1671,
+    "research_report": {
+      "artifact_id": "",
+      "markdown_artifact_id": "",
+      "outcome": "completed",
+      "sections": 6,
+      "unrepresented_criteria": null
+    },
+    "research_rounds": [
+      {
+        "critical_missing": [],
+        "evidence_count": 2,
+        "frontier_count": 0,
+        "number": 1,
+        "outcome": "PASS",
+        "progress_fingerprint": "20fb5ce06bc85fd3eba87af21d5aa8821e2d291f0b915356ee414abbbf8e8a66"
+      }
+    ],
+    "research_session_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+    "research_stagnant_rounds": 0,
+    "research_stop_reason": "criteria_covered",
+    "resource_probe_attempts": 0,
+    "resource_reason": "high_model_rss",
+    "resume_after": "2026-10-28T15:51:57.520234672Z",
+    "round_plan_count": 1,
+    "runtime": {
+      "active_run_id": "",
+      "enabled": true,
+      "keep_awake": true,
+      "max_resume_attempts": 5,
+      "resource_policy": {
+        "enabled": true,
+        "min_free_ram_bytes": 536870912,
+        "min_free_vram_mb": 256,
+        "gpu_temp_max_c": 85,
+        "process_rss_max_bytes": 2147483648,
+        "model_rss_max_bytes": 3221225472,
+        "recovery_ram_margin_percent": 10,
+        "recovery_vram_margin_percent": 10,
+        "recovery_gpu_temp_margin_c": 5,
+        "recovery_rss_margin_percent": 10,
+        "llama_health_timeout": 2000000000,
+        "check_interval": 1000000000,
+        "max_resume_attempts": 5,
+        "backoff_base": 5000000000,
+        "backoff_max": 60000000000
+      },
+      "resources": {
+        "free_ram_bytes": 7128358912,
+        "gpu_free_vram_mb": 2433,
+        "gpu_temp_c": 67,
+        "heap_alloc_bytes": 3640928,
+        "llama_health_latency": 762063,
+        "llama_healthy": true,
+        "model_rss_bytes": 3358347264,
+        "power_source": "AC",
+        "rss_bytes": 84291584,
+        "snapshot_at": "2026-10-28T15:51:52.460973144Z",
+        "warnings": []
+      },
+      "sleep": {
+        "active": false,
+        "available": true,
+        "power_source": "unknown",
+        "provider": "systemd-inhibit"
+      },
+      "sleep_policy": "keep_awake",
+      "status": "ok"
+    },
+    "runtime_model_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+    "sectioned_report_enabled": true,
+    "stage": null,
+    "status": "paused",
+    "step": "",
+    "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+    "telemetry": {
+      "timestamp": "2026-10-28T15:51:52.461157035Z",
+      "stale_after_ms": 39000,
+      "capabilities": {
+        "cpu": true,
+        "ram": true,
+        "gpu": true,
+        "gpu_temperature": true,
+        "gpu_utilization": true,
+        "power": true,
+        "battery": false,
+        "process_rss": true,
+        "llama_health": true,
+        "llama_timings": false,
+        "llama_metrics": false,
+        "llama_slots": false
+      },
+      "system": {
+        "metadata": {
+          "os": "linux",
+          "uptime_seconds": {
+            "value": 8037.45,
+            "source": "exact",
+            "unit": "seconds",
+            "updated_at": "2026-10-28T15:51:52.421651834Z"
+          }
+        },
+        "cpu_usage": {
+          "value": 39.721401435204726,
+          "source": "exact",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:51:52.421651834Z"
+        },
+        "cpu_temperature": {
+          "value": 100,
+          "source": "exact",
+          "unit": "celsius",
+          "updated_at": "2026-10-28T15:51:52.421651834Z"
+        },
+        "ram_used": {
+          "value": 8821370880,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:51:52.421651834Z"
+        },
+        "ram_free": {
+          "value": 7128358912,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:51:52.421651834Z"
+        },
+        "ram_total": {
+          "value": 15949729792,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:51:52.421651834Z"
+        },
+        "gpus": [
+          {
+            "name": {
+              "value": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+              "source": "exact",
+              "unit": "name",
+              "updated_at": "2026-10-28T15:51:52.421651834Z"
+            },
+            "utilization": {
+              "value": 84,
+              "source": "exact",
+              "unit": "percent",
+              "updated_at": "2026-10-28T15:51:52.421651834Z"
+            },
+            "temperature": {
+              "value": 67,
+              "source": "exact",
+              "unit": "celsius",
+              "updated_at": "2026-10-28T15:51:52.421651834Z"
+            },
+            "vram_used": {
+              "value": 3537895424,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:51:52.421651834Z"
+            },
+            "vram_free": {
+              "value": 2551185408,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:51:52.421651834Z"
+            },
+            "vram_total": {
+              "value": 6442450944,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:51:52.421651834Z"
+            },
+            "power_watts": {
+              "value": 39.97,
+              "source": "exact",
+              "unit": "watts",
+              "updated_at": "2026-10-28T15:51:52.421651834Z"
+            }
+          }
+        ],
+        "agent_rss": {
+          "value": 84291584,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:51:52.421651834Z"
+        },
+        "llama_server_rss": {
+          "value": 3358347264,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:51:52.421651834Z"
+        },
+        "power_source": {
+          "value": "AC",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:51:50.467117116Z"
+        },
+        "power_watts": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "watts",
+          "updated_at": "2026-10-28T15:51:52.421651834Z",
+          "error": "unsupported"
+        },
+        "battery_percent": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:51:52.421651834Z",
+          "error": "unsupported"
+        },
+        "battery_charging": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "boolean",
+          "updated_at": "2026-10-28T15:51:52.421651834Z",
+          "error": "unsupported"
+        },
+        "llama_health": {
+          "value": "healthy",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:51:52.421651834Z"
+        },
+        "llama_slots_active": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:51:52.421651834Z",
+          "error": "temporarily_unavailable"
+        },
+        "llama_slots_total": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:51:52.421651834Z",
+          "error": "temporarily_unavailable"
+        }
+      },
+      "inference": {
+        "status": "cancelled",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:51:52.461157035Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "output_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "total_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "cached_prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "output_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "prompt_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "generation_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "context_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:51:52.461157035Z"
+        }
+      }
+    },
+    "telemetry_revision": 51,
+    "terminal_outcome": "",
+    "updated_at": "2026-10-28T15:51:52.545662075Z",
+    "verdict": "PASS"
+  },
+  "run": {
+    "pause_reason": "manual",
+    "resource_reason": "high_model_rss",
+    "resume_after": "2026-10-28T15:51:57.520234672Z",
+    "resource_probe_attempts": 0,
+    "id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+    "conversation_id": "1fac99a9-7a6f-447b-81ce-347f3c8fdc7c",
+    "user_message_id": "94f62ffe-9e94-4b2e-9b2e-323681e3bd2c",
+    "assistant_message_id": "3b1854f7-74d8-49e2-b161-a296fddb4e4c",
+    "mode": "research",
+    "operation": "send",
+    "status": "paused",
+    "retry_count": 0,
+    "cancel_requested": false,
+    "created_at": "2026-10-28T15:49:46.39132918Z",
+    "updated_at": "2026-10-28T15:51:52.545662075Z",
+    "started_at": "2026-10-28T15:49:46.414458917Z",
+    "heartbeat_at": "2026-10-28T15:51:51.60391634Z",
+    "deadline_at": "2026-10-28T16:19:46.39132918Z"
+  },
+  "artifacts": [
+    {
+      "id": "56cc23d62b8f8982333444c0943154635a55a7f638f181c133eea1ef7668a203",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "name": "source-237e32b8f748.txt",
+      "mime_type": "text/plain; charset=utf-8",
+      "sha256": "237e32b8f74824730e434e5b42d34c66f2abb4abfdee366d3b71f3998e917b77",
+      "size_bytes": 345,
+      "created_at": "2026-10-28T15:50:29.369279937Z"
+    },
+    {
+      "id": "d2bfe4ddaf8a82f1c600e8c0670e336ad646eae6d7b8b6aab886bdca15ddbf47",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "name": "source-237e32b8f748.raw",
+      "mime_type": "text/plain",
+      "sha256": "237e32b8f74824730e434e5b42d34c66f2abb4abfdee366d3b71f3998e917b77",
+      "size_bytes": 345,
+      "created_at": "2026-10-28T15:50:29.368586715Z"
+    },
+    {
+      "id": "d47408da577e3aa0c15d9f9c2a375d90987edf2e747c322a50d2c65634cf7594",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "name": "source-5c13e8906992.txt",
+      "mime_type": "text/plain; charset=utf-8",
+      "sha256": "5c13e89069925fb888980da6c1f26591cf8bc26c0925bbe50a04e14e006ca916",
+      "size_bytes": 424,
+      "created_at": "2026-10-28T15:50:24.230962932Z"
+    },
+    {
+      "id": "2af062dad914f5897fbe89f752a9d4cb35b57c6cfa1b4760ae6e54a398f0aa7b",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "name": "source-5c13e8906992.raw",
+      "mime_type": "text/plain",
+      "sha256": "5c13e89069925fb888980da6c1f26591cf8bc26c0925bbe50a04e14e006ca916",
+      "size_bytes": 424,
+      "created_at": "2026-10-28T15:50:24.229506599Z"
+    }
+  ],
+  "public_events_complete": true,
+  "events": [
+    {
+      "id": "f06ac6c9-c2b3-4818-940c-2db6fc890ec6",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 1,
+      "type": "task.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:49:46.401980676Z",
+      "visibility": "user",
+      "payload": {
+        "mode": "research",
+        "status": "queued"
+      }
+    },
+    {
+      "id": "940176fe-840c-4890-8936-294f6038d535",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 2,
+      "type": "message.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:49:46.404151138Z",
+      "visibility": "user",
+      "payload": {
+        "message_id": "3b1854f7-74d8-49e2-b161-a296fddb4e4c",
+        "role": "assistant",
+        "status": "pending"
+      }
+    },
+    {
+      "id": "878a7d86-f4f5-4e1d-be43-b231a34bd762",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 3,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:49:46.415917153Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "from": "queued",
+        "to": "planning"
+      }
+    },
+    {
+      "id": "6ec20d2d-52b4-452f-abf6-da8ae7331aa0",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 10,
+      "type": "plan.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:12.928330352Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "goal": "Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+        "steps": 5
+      }
+    },
+    {
+      "id": "9c7f5894-239e-46e5-988e-9283bde71ac9",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 11,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:12.933259525Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "from": "planning",
+        "plan_steps": 5,
+        "to": "running"
+      }
+    },
+    {
+      "id": "ebee1276-4a7e-46b8-94de-274dd76ead91",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 12,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:12.937274759Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for the definition and scope of the 'imported bioinformatics corpus' to understand its data structure and intended use.. User request: Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "293da031-8432-47e8-8607-dcc44ebe4fa1",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 22,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.222312338Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1",
+        "summary": "Searching for documentation defining the 'imported bioinformatics corpus' to understand its data structure and scope.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "6638cd9c-f843-477d-acea-35319cb97416",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 25,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.268660007Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "imported bioinformatics corpus definition scope data structure clinical treatment",
+        "query_fingerprint": "317b692681eb7aff0fedb8388f5627fe526c7e80c0d3c7938376ca92e384715b",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "b1b8e88e-5d42-4596-807f-94bc0a499658",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 26,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.269181715Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:50:16.269015973Z",
+        "code": "search_ok",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:50:16.269015973Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider is unavailable",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "317b692681eb7aff0fedb8388f5627fe526c7e80c0d3c7938376ca92e384715b",
+        "result_count": 5,
+        "retryable": false,
+        "started_at": "2026-10-28T15:50:16.269015973Z",
+        "state": "unavailable",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "02f1f09b-d30a-4ddd-afba-041c33e7a855",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 27,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.269675855Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "url": "https://docs.example.com/bioinformatics",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+          "provider": "search",
+          "query_fingerprint": "317b692681eb7aff0fedb8388f5627fe526c7e80c0d3c7938376ca92e384715b",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:50:16.269450672Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "2a0590e7-9685-4a46-ad73-6157bbab98ad",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 28,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.270058766Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "url": "https://reference.example.net/bioinformatics",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic bioinformatics reference",
+          "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "provider": "search",
+          "query_fingerprint": "317b692681eb7aff0fedb8388f5627fe526c7e80c0d3c7938376ca92e384715b",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:50:16.269908992Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "fad9abca-1e31-4a59-aae2-f2a8140a5dc4",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 29,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.270335367Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "url": "https://docs.example.com/computing",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic computing laboratory reference",
+          "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+          "provider": "search",
+          "query_fingerprint": "317b692681eb7aff0fedb8388f5627fe526c7e80c0d3c7938376ca92e384715b",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:50:16.270194727Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "4a57e5a9-876e-4835-a6a3-f05f0734aab2",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 30,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.270688417Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "317b692681eb7aff0fedb8388f5627fe526c7e80c0d3c7938376ca92e384715b",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:50:16.270549902Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "5472a004-2f91-4c95-ae8a-79edde51feb7",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 31,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.271057485Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "fingerprint": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "url": "https://docs.example.com/protocol",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic protocol architecture reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+          "provider": "search",
+          "query_fingerprint": "317b692681eb7aff0fedb8388f5627fe526c7e80c0d3c7938376ca92e384715b",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:50:16.270900568Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "64e5b4a0-a928-40ef-b227-6f4aba64d053",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 32,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.271519029Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "url": "https://docs.example.com/bioinformatics",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+          "provider": "search",
+          "query_fingerprint": "317b692681eb7aff0fedb8388f5627fe526c7e80c0d3c7938376ca92e384715b",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:50:16.271335708Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "a3c2a806-5262-4dec-a4e1-6a9d645f2348",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 33,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.272041598Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "url": "https://reference.example.net/bioinformatics",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic bioinformatics reference",
+          "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "provider": "search",
+          "query_fingerprint": "317b692681eb7aff0fedb8388f5627fe526c7e80c0d3c7938376ca92e384715b",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:50:16.271852517Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "8e62bb71-4280-4ba8-ad1a-a6e9410838ef",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 34,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.272620052Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "url": "https://docs.example.com/computing",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic computing laboratory reference",
+          "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+          "provider": "search",
+          "query_fingerprint": "317b692681eb7aff0fedb8388f5627fe526c7e80c0d3c7938376ca92e384715b",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:50:16.272449822Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "00f7c477-c5e0-4b01-a259-690e9a53c184",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 35,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.27302466Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "317b692681eb7aff0fedb8388f5627fe526c7e80c0d3c7938376ca92e384715b",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:50:16.272856053Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "4d285f46-292e-4a43-a13c-95d4b85c93da",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 36,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.273302322Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "fingerprint": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "url": "https://docs.example.com/protocol",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic protocol architecture reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+          "provider": "search",
+          "query_fingerprint": "317b692681eb7aff0fedb8388f5627fe526c7e80c0d3c7938376ca92e384715b",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:50:16.273178872Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "78761162-3b28-4f3b-8af3-00701d552ba5",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 38,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.282617273Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [
+          {
+            "provider": "search",
+            "query": "imported bioinformatics corpus definition scope data structure clinical treatment",
+            "url": "https://docs.example.com/bioinformatics",
+            "title": "Synthetic bioinformatics laboratory reference",
+            "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+            "score": 4,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "imported bioinformatics corpus definition scope data structure clinical treatment",
+            "url": "https://reference.example.net/bioinformatics",
+            "title": "Independent synthetic bioinformatics reference",
+            "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+            "score": 3,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "imported bioinformatics corpus definition scope data structure clinical treatment",
+            "url": "https://docs.example.com/computing",
+            "title": "Synthetic computing laboratory reference",
+            "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+            "score": 2,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "imported bioinformatics corpus definition scope data structure clinical treatment",
+            "url": "https://reference.example.net/computing",
+            "title": "Independent synthetic computing reference",
+            "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+            "score": 2,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "imported bioinformatics corpus definition scope data structure clinical treatment",
+            "url": "https://docs.example.com/protocol",
+            "title": "Synthetic protocol architecture reference",
+            "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+            "score": 2,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          }
+        ],
+        "step_id": "search_1",
+        "summary": "Searching for documentation defining the 'imported bioinformatics corpus' to understand its data structure and scope.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "ded006a3-72d3-4ec5-8d9a-95d7316f2913",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 39,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.282666497Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "b19ab6fe-38b1-4bce-8dcd-03c3eff39c25",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 40,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.287250112Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for clinical treatment decision-making frameworks and requirements to establish the standard against which the corpus should be evaluated.. User request: Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "b39f3f90-fa03-4b68-9f49-62ffa4aae5d8",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 43,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:16.308422338Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 0,
+        "contradictions": 0,
+        "done_criteria": 8,
+        "hash": "cc37e53fa7783df41897b2266ae3293b125ef86cf42500111f32efc7fe81c621",
+        "original_tool_result_bytes": 3404,
+        "reason": "role_tool_results",
+        "reduced_bytes": 240,
+        "retained_tool_result_bytes": 3164,
+        "slot": "9f7ed332bbe8f4d609a84bbdc3a315c3ebb9ec48111a1ab6e7de123bfc50e302"
+      }
+    },
+    {
+      "id": "9fe2e17e-555b-4dd5-af0b-8ce83c7f4179",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 51,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.650415861Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_2",
+        "summary": "Searching for clinical treatment decision-making frameworks and requirements to establish the standard against which the bioinformatics corpus should be evaluated.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "ba51fdea-134c-4fcc-a73b-69284bff9182",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 54,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.66704271Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "clinical treatment decision making framework requirements evidence standards",
+        "query_fingerprint": "11d4b45527c48dd6ee4aa0d2b38b68cd19f1bcad06586abf99759bb8ef6a0318",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "62eb2a6c-4627-4022-8b33-b135577863f0",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 55,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.667695263Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:50:19.667510879Z",
+        "code": "search_ok",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:50:19.667510879Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider is unavailable",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "11d4b45527c48dd6ee4aa0d2b38b68cd19f1bcad06586abf99759bb8ef6a0318",
+        "result_count": 4,
+        "retryable": false,
+        "started_at": "2026-10-28T15:50:19.667510879Z",
+        "state": "unavailable",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "a71a9ef2-f9d5-43cf-8062-40341128141b",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 56,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.668097088Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "url": "https://reference.example.net/bioinformatics",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic bioinformatics reference",
+          "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "provider": "search",
+          "query_fingerprint": "11d4b45527c48dd6ee4aa0d2b38b68cd19f1bcad06586abf99759bb8ef6a0318",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:50:19.667938428Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "6cf61369-a527-4ee9-a15b-aae20f18cb5a",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 57,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.668729406Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "url": "https://docs.example.com/bioinformatics",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+          "provider": "search",
+          "query_fingerprint": "11d4b45527c48dd6ee4aa0d2b38b68cd19f1bcad06586abf99759bb8ef6a0318",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:50:19.66828011Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "df5c9f2d-c293-40b4-a543-94d2ea78a2d7",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 58,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.669272092Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "11d4b45527c48dd6ee4aa0d2b38b68cd19f1bcad06586abf99759bb8ef6a0318",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:50:19.669099157Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "e0bd4324-02e1-4e3f-ba08-7c6361827003",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 59,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.669580988Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "fingerprint": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "url": "https://docs.example.com/protocol",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic protocol architecture reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+          "provider": "search",
+          "query_fingerprint": "11d4b45527c48dd6ee4aa0d2b38b68cd19f1bcad06586abf99759bb8ef6a0318",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:50:19.669436071Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "63b7be2e-d973-482a-a924-79e8c616724a",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 60,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.669880178Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "url": "https://reference.example.net/bioinformatics",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic bioinformatics reference",
+          "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "provider": "search",
+          "query_fingerprint": "11d4b45527c48dd6ee4aa0d2b38b68cd19f1bcad06586abf99759bb8ef6a0318",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:50:19.669747743Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "b9fe8371-4f7b-42e8-b854-ad38ea16089e",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 61,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.67030361Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "url": "https://docs.example.com/bioinformatics",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+          "provider": "search",
+          "query_fingerprint": "11d4b45527c48dd6ee4aa0d2b38b68cd19f1bcad06586abf99759bb8ef6a0318",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:50:19.670156069Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "b4ecc0f1-62ba-4e59-9d55-182a02cc28d3",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 62,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.670604584Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "11d4b45527c48dd6ee4aa0d2b38b68cd19f1bcad06586abf99759bb8ef6a0318",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:50:19.670454478Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "fc024ea0-8814-432b-b601-3d8313379642",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 63,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.670917968Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "fingerprint": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "url": "https://docs.example.com/protocol",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic protocol architecture reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+          "provider": "search",
+          "query_fingerprint": "11d4b45527c48dd6ee4aa0d2b38b68cd19f1bcad06586abf99759bb8ef6a0318",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:50:19.670768733Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "ed77782d-6337-44a7-bcde-723b7df60c00",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 65,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.684702121Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [
+          {
+            "provider": "search",
+            "query": "clinical treatment decision making framework requirements evidence standards",
+            "url": "https://reference.example.net/bioinformatics",
+            "title": "Independent synthetic bioinformatics reference",
+            "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+            "score": 3,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "clinical treatment decision making framework requirements evidence standards",
+            "url": "https://docs.example.com/bioinformatics",
+            "title": "Synthetic bioinformatics laboratory reference",
+            "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+            "score": 2,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "clinical treatment decision making framework requirements evidence standards",
+            "url": "https://docs.example.com/recovery",
+            "title": "Synthetic recovery and provenance reference",
+            "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "clinical treatment decision making framework requirements evidence standards",
+            "url": "https://docs.example.com/protocol",
+            "title": "Synthetic protocol architecture reference",
+            "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          }
+        ],
+        "step_id": "search_2",
+        "summary": "Searching for clinical treatment decision-making frameworks and requirements to establish the standard against which the bioinformatics corpus should be evaluated.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "6b4aa30e-0bb9-46e6-b35f-d09afbe7513c",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 66,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.68479563Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "29050f10-a067-48fc-846b-0e6a47bd9559",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 67,
+      "type": "step.skipped",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.691683795Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "reason": "the completed search facets already produced enough distinct candidate sites",
+        "step_id": "search_3"
+      }
+    },
+    {
+      "id": "ac86b99a-a183-483b-9f2f-af1ab73f8993",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 69,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.698593806Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "80c397fd-5b5c-4889-a697-f5b5e1174eeb",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 70,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.699136031Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Inspect distinct approved source 1 for the exact user request",
+        "step_id": "fetch_1"
+      }
+    },
+    {
+      "id": "666f917d-8ba6-4cc8-9e06-73c3629c1bec",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 73,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:19.73124026Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 0,
+        "contradictions": 0,
+        "done_criteria": 8,
+        "hash": "ea704929e4af9bc7f811cc2b6c21592086e88c4c63d06254eb2263ef3f3011bb",
+        "original_tool_result_bytes": 6101,
+        "reason": "role_tool_results",
+        "reduced_bytes": 432,
+        "retained_tool_result_bytes": 5669,
+        "slot": "84a6ad14fc8b38a585809a1a9fe2c44d183abb9ea45f66254533d2b5f4a85947"
+      }
+    },
+    {
+      "id": "e5a2108f-4d09-4966-be31-3e8aaef969ff",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 81,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:24.077216658Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "source_fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+        "status": "fetching",
+        "step_id": "fetch_1",
+        "target_url": "https://docs.example.com/bioinformatics",
+        "timestamp": "2026-10-28T15:50:24.077216658Z",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "fc6f251d-c5ca-456b-9e1b-2406a051cf05",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 84,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:24.21891849Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "266afa76-10bc-4033-85fc-cdca58539520",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 85,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:24.238601601Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "2af062dad914f5897fbe89f752a9d4cb35b57c6cfa1b4760ae6e54a398f0aa7b",
+        "mime_type": "text/plain",
+        "name": "source-5c13e8906992.raw",
+        "sha256": "5c13e89069925fb888980da6c1f26591cf8bc26c0925bbe50a04e14e006ca916",
+        "size_bytes": 424
+      }
+    },
+    {
+      "id": "a7ce6221-7ee8-4ee2-8e8a-af91cd70d6ac",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 86,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:24.239928012Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "d47408da577e3aa0c15d9f9c2a375d90987edf2e747c322a50d2c65634cf7594",
+        "mime_type": "text/plain; charset=utf-8",
+        "name": "source-5c13e8906992.txt",
+        "sha256": "5c13e89069925fb888980da6c1f26591cf8bc26c0925bbe50a04e14e006ca916",
+        "size_bytes": 424
+      }
+    },
+    {
+      "id": "b1c05775-46bb-496b-be47-2eaa03f25751",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 87,
+      "type": "evidence.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:24.243282566Z",
+      "visibility": "user",
+      "payload": {
+        "canonical_url": "https://docs.example.com/bioinformatics",
+        "evidence_id": "27798471-ba29-4003-a993-d31022ac2b2e",
+        "title": "Synthetic bioinformatics laboratory reference"
+      }
+    },
+    {
+      "id": "bf052c95-422f-495d-af37-0a1c64cd33b8",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 89,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:24.320716658Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "result": {
+          "content_sha256": "5c13e89069925fb888980da6c1f26591cf8bc26c0925bbe50a04e14e006ca916",
+          "evidence_id": "27798471-ba29-4003-a993-d31022ac2b2e",
+          "excerpt": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by this educational corpus.",
+          "fetched_bytes": 424,
+          "requested_url": "https://docs.example.com/bioinformatics",
+          "taint": "untrusted_external_content",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "url": "https://docs.example.com/bioinformatics"
+        },
+        "step_id": "fetch_1",
+        "summary": "Inspecting the first approved bioinformatics reference to determine if it contains clinical treatment evidence or explicitly states its lack thereof.",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "3d3e3c8e-e25e-4313-b843-ca637cdce7e7",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 90,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:24.321729453Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "step_id": "fetch_1"
+      }
+    },
+    {
+      "id": "1e2904e8-6ff7-4aaa-8736-43957a54292a",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 91,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:24.343122402Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "d4173844-266b-4773-bc2a-0bbdf0340289",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 92,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:24.345377282Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Inspect distinct approved source 2 for the exact user request",
+        "step_id": "fetch_2"
+      }
+    },
+    {
+      "id": "4f84265f-3a0d-4b63-9f5c-104bea0aa30f",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 95,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:24.485108921Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 1,
+        "contradictions": 0,
+        "done_criteria": 8,
+        "hash": "0bdd6c54c1300629b7827311a3585afd778be32e7e3a95ec2517eb015ed93733",
+        "original_tool_result_bytes": 6906,
+        "reason": "role_tool_results",
+        "reduced_bytes": 432,
+        "retained_tool_result_bytes": 6474,
+        "slot": "c13b4d0a84eb2ca4314279a85e87f47070a712e095ab859d36455527b3ec9696"
+      }
+    },
+    {
+      "id": "ab090fbe-de05-4e00-a48b-d9a214f19286",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 103,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:29.197335872Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "source_fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+        "status": "fetching",
+        "step_id": "fetch_2",
+        "target_url": "https://reference.example.net/bioinformatics",
+        "timestamp": "2026-10-28T15:50:29.197335872Z",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "e9866a79-66e3-46c2-9831-ef74d9fa7a58",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 106,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:29.362750242Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "df850340-9e85-4a4f-b90c-4025c22291e2",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 107,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:29.370397268Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "d2bfe4ddaf8a82f1c600e8c0670e336ad646eae6d7b8b6aab886bdca15ddbf47",
+        "mime_type": "text/plain",
+        "name": "source-237e32b8f748.raw",
+        "sha256": "237e32b8f74824730e434e5b42d34c66f2abb4abfdee366d3b71f3998e917b77",
+        "size_bytes": 345
+      }
+    },
+    {
+      "id": "8f004bdf-5133-489c-804f-23bcedab9350",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 108,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:29.374333174Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "56cc23d62b8f8982333444c0943154635a55a7f638f181c133eea1ef7668a203",
+        "mime_type": "text/plain; charset=utf-8",
+        "name": "source-237e32b8f748.txt",
+        "sha256": "237e32b8f74824730e434e5b42d34c66f2abb4abfdee366d3b71f3998e917b77",
+        "size_bytes": 345
+      }
+    },
+    {
+      "id": "73aec414-b7da-46e9-9f64-075b5f4008d9",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 109,
+      "type": "evidence.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:29.374699564Z",
+      "visibility": "user",
+      "payload": {
+        "canonical_url": "https://reference.example.net/bioinformatics",
+        "evidence_id": "5986ffec-7315-49a2-8d75-70f64b0c7de7",
+        "title": "Independent synthetic bioinformatics reference"
+      }
+    },
+    {
+      "id": "6a0e13d5-332d-4647-adab-0d40b15b720e",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 111,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:29.445833167Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "result": {
+          "content_sha256": "237e32b8f74824730e434e5b42d34c66f2abb4abfdee366d3b71f3998e917b77",
+          "evidence_id": "5986ffec-7315-49a2-8d75-70f64b0c7de7",
+          "excerpt": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "fetched_bytes": 345,
+          "requested_url": "https://reference.example.net/bioinformatics",
+          "taint": "untrusted_external_content",
+          "title": "Independent synthetic bioinformatics reference",
+          "url": "https://reference.example.net/bioinformatics"
+        },
+        "step_id": "fetch_2",
+        "summary": "Inspecting the second approved bioinformatics reference to determine if it contains clinical treatment evidence or explicitly states its lack thereof.",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "54e56e25-8fa3-48fe-83b8-cf33e226879f",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 112,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:29.449709782Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "step_id": "fetch_2"
+      }
+    },
+    {
+      "id": "ce7b814f-28f6-4065-b4e4-67183b33c981",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 114,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:29.507224914Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "verifying"
+      }
+    },
+    {
+      "id": "77b348c5-6ce8-4713-a1d9-0795c6668e1b",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 116,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:50:29.649875191Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 2,
+        "contradictions": 0,
+        "done_criteria": 8,
+        "hash": "489ca237758af6e3a82ea3eacaaa917ad673d12fc3271e81b56261ed20edd23e",
+        "original_tool_result_bytes": 7643,
+        "reason": "role_tool_results",
+        "reduced_bytes": 432,
+        "retained_tool_result_bytes": 7211,
+        "slot": "fd3a78206c0f6c366a18194e4e5928232e67ef860fc41fa93f1b50645fea8769"
+      }
+    },
+    {
+      "id": "9d72a92f-4bfe-4fdd-bdb2-a3c085beef3a",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 122,
+      "type": "research.round.assessed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:51:09.133920264Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "critical_missing_count": 0,
+        "evidence_count": 2,
+        "frontier_count": 0,
+        "number": 1,
+        "outcome": "PASS",
+        "stagnant_rounds": 0,
+        "stop_reason": "criteria_covered"
+      }
+    },
+    {
+      "id": "3c3fb2dd-a972-4dde-baa8-0dc110cb5635",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 123,
+      "type": "verification.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:51:09.134224952Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "criteria": [
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "27798471-ba29-4003-a993-d31022ac2b2e",
+              "5986ffec-7315-49a2-8d75-70f64b0c7de7"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 1,
+            "evidence_ids": [
+              "27798471-ba29-4003-a993-d31022ac2b2e",
+              "5986ffec-7315-49a2-8d75-70f64b0c7de7"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 2,
+            "evidence_ids": [
+              "27798471-ba29-4003-a993-d31022ac2b2e",
+              "5986ffec-7315-49a2-8d75-70f64b0c7de7"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 3,
+            "evidence_ids": [
+              "27798471-ba29-4003-a993-d31022ac2b2e",
+              "5986ffec-7315-49a2-8d75-70f64b0c7de7"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 4,
+            "evidence_ids": [
+              "27798471-ba29-4003-a993-d31022ac2b2e",
+              "5986ffec-7315-49a2-8d75-70f64b0c7de7"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "met": true,
+            "step_id": "search_1"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "met": true,
+            "step_id": "search_2"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "27798471-ba29-4003-a993-d31022ac2b2e"
+            ],
+            "met": true,
+            "step_id": "fetch_1"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "5986ffec-7315-49a2-8d75-70f64b0c7de7"
+            ],
+            "met": true,
+            "step_id": "fetch_2"
+          }
+        ],
+        "missing": [],
+        "phase": "evidence_readiness",
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "08a7e81d-88ce-4886-b689-8d4c1b1d115c",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 125,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:51:09.26035146Z",
+      "stage": "finalization",
+      "visibility": "user",
+      "payload": {
+        "from": "verifying",
+        "to": "verifying"
+      }
+    },
+    {
+      "id": "cc737ed7-d357-458c-8c71-3d9eb028494f",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 149,
+      "type": "report.section.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:51:50.671151946Z",
+      "visibility": "user",
+      "payload": {
+        "correction_used": true,
+        "section": 1,
+        "status": "fallback_excerpts"
+      }
+    },
+    {
+      "id": "7efe2216-7bf0-4171-a1b8-2bb61e42c449",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "seq": 156,
+      "type": "run.paused",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:51:52.545966182Z",
+      "visibility": "user",
+      "payload": {
+        "pause_reason": "manual",
+        "resource_probe_attempts": 0,
+        "resource_reason": "high_model_rss",
+        "resume_after": "2026-10-28T15:51:57.520234672Z",
+        "status": "paused"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "059f30ea-8584-4732-b6f0-bd2bfb3dd2cb",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "step_id": "search_1",
+      "position": 0,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for the definition and scope of the 'imported bioinformatics corpus' to understand its data structure and intended use.. User request: Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+      "dependencies": [],
+      "expected_output": "Definition of the corpus and its data types.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:50:12.927100849Z",
+      "updated_at": "2026-10-28T15:50:16.282536196Z"
+    },
+    {
+      "id": "a83f7eca-8a6d-4b51-a1d5-a960d98f8875",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "step_id": "search_2",
+      "position": 1,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for clinical treatment decision-making frameworks and requirements to establish the standard against which the corpus should be evaluated.. User request: Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+      "dependencies": [],
+      "expected_output": "Criteria for clinical treatment support.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:50:12.927826669Z",
+      "updated_at": "2026-10-28T15:50:19.684542549Z"
+    },
+    {
+      "id": "79250bcf-7380-4dd6-a1fc-da333f56d71e",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "step_id": "search_3",
+      "position": 2,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for methods to evaluate bioinformatics data against clinical evidence standards to identify gaps.. User request: Research whether this imported bioinformatics corpus supports choosing a clinical treatment. Identify absent clinical evidence, cite both references and explicitly retain unknowns instead of inventing a treatment.",
+      "dependencies": [],
+      "expected_output": "Evaluation methodology.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "skipped",
+      "attempts": 0,
+      "created_at": "2026-10-28T15:50:12.928132026Z",
+      "updated_at": "2026-10-28T15:50:19.692110111Z"
+    },
+    {
+      "id": "f33ef958-0a18-4b53-9b0a-355cb4706788",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "step_id": "fetch_1",
+      "position": 3,
+      "kind": "fetch",
+      "description": "Inspect distinct approved source 1 for the exact user request",
+      "dependencies": [
+        "search_1",
+        "search_2",
+        "search_3"
+      ],
+      "expected_output": "Source text with stored evidence ID",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:50:12.928167125Z",
+      "updated_at": "2026-10-28T15:50:24.320514913Z"
+    },
+    {
+      "id": "f1661983-f377-4572-acf0-53929a45e215",
+      "task_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "step_id": "fetch_2",
+      "position": 4,
+      "kind": "fetch",
+      "description": "Inspect distinct approved source 2 for the exact user request",
+      "dependencies": [
+        "search_1",
+        "search_2",
+        "search_3"
+      ],
+      "expected_output": "Source text with stored evidence ID",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:50:12.928265142Z",
+      "updated_at": "2026-10-28T15:50:29.445548087Z"
+    }
+  ],
+  "inference_summaries_complete": true,
+  "inference_summaries": [
+    {
+      "seq": 8,
+      "summary": {
+        "invocation_id": "invocation-332cb10cab0874d80f609bdc9833dc709e3f82996e086513b46a403cbc1a1c51",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:50:12.917609264Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:50:12.917609264Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:49:46.725426172Z"
+          },
+          "prompt_tokens": {
+            "value": 810,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:12.917588409Z"
+          },
+          "output_tokens": {
+            "value": 638,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:12.917588409Z"
+          },
+          "total_tokens": {
+            "value": 1448,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:12.917588409Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:12.917588409Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 580.2454366561817,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:50:12.917588409Z"
+          },
+          "output_tokens_per_second": {
+            "value": 25.82153040487229,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:50:12.917588409Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:49:46.725426172Z"
+          },
+          "prompt_ms": {
+            "value": 1395.961,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:12.917588409Z"
+          },
+          "generation_ms": {
+            "value": 24708.063,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:12.917588409Z"
+          },
+          "context_tokens": {
+            "value": 1448,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:12.917588409Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:49:46.725426172Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 18,
+      "summary": {
+        "invocation_id": "invocation-fc06cbe297aa7554bac3de4ee60b4cf892843c456f83d552d90b0bbfd337c35a",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:50:16.178484894Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:50:16.178484894Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:12.966962797Z"
+          },
+          "prompt_tokens": {
+            "value": 1122,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:16.17845339Z"
+          },
+          "output_tokens": {
+            "value": 65,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:16.17845339Z"
+          },
+          "total_tokens": {
+            "value": 1187,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:16.17845339Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:16.17845339Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 985.6431673054607,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:50:16.17845339Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.51835739351352,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:50:16.17845339Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:12.966962797Z"
+          },
+          "prompt_ms": {
+            "value": 1138.343,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:16.17845339Z"
+          },
+          "generation_ms": {
+            "value": 1883.056,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:16.17845339Z"
+          },
+          "context_tokens": {
+            "value": 1187,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:16.17845339Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:12.966962797Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 47,
+      "summary": {
+        "invocation_id": "invocation-d0327ed5b60e11503f3c259529f318bf8bc69761bcfd136a7e58599cf2498fbc",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:50:19.634227569Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:50:19.634227569Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:16.328967598Z"
+          },
+          "prompt_tokens": {
+            "value": 1692,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:19.63418121Z"
+          },
+          "output_tokens": {
+            "value": 65,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:19.63418121Z"
+          },
+          "total_tokens": {
+            "value": 1757,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:19.63418121Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 397,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:19.63418121Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1002.9367847782852,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:50:19.63418121Z"
+          },
+          "output_tokens_per_second": {
+            "value": 35.1600512579455,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:50:19.63418121Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:16.328967598Z"
+          },
+          "prompt_ms": {
+            "value": 1291.208,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:19.63418121Z"
+          },
+          "generation_ms": {
+            "value": 1848.689,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:19.63418121Z"
+          },
+          "context_tokens": {
+            "value": 1757,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:19.63418121Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:16.328967598Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 77,
+      "summary": {
+        "invocation_id": "invocation-6f18d1fc59e4877903a3a02ff2b7c4a2aac85531e78c9cf766f6d3161d2e6b0a",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:50:23.988476735Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:50:23.988476735Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:19.76377284Z"
+          },
+          "prompt_tokens": {
+            "value": 2064,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:23.988425527Z"
+          },
+          "output_tokens": {
+            "value": 64,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:23.988425527Z"
+          },
+          "total_tokens": {
+            "value": 2128,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:23.988425527Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:23.988425527Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1055.621105671048,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:50:23.988425527Z"
+          },
+          "output_tokens_per_second": {
+            "value": 30.678302051851123,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:50:23.988425527Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:19.76377284Z"
+          },
+          "prompt_ms": {
+            "value": 1955.247,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:23.988425527Z"
+          },
+          "generation_ms": {
+            "value": 2086.165,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:23.988425527Z"
+          },
+          "context_tokens": {
+            "value": 2128,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:23.988425527Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:19.76377284Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 99,
+      "summary": {
+        "invocation_id": "invocation-6782f490b4c1a56e4df565babb79c5798f3e73df90632cc6a9dc214767ec990d",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:50:29.067308166Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:50:29.067308166Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:24.628235632Z"
+          },
+          "prompt_tokens": {
+            "value": 2300,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:29.067276171Z"
+          },
+          "output_tokens": {
+            "value": 64,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:29.067276171Z"
+          },
+          "total_tokens": {
+            "value": 2364,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:29.067276171Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 348,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:29.067276171Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 980.1484784349759,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:50:29.067276171Z"
+          },
+          "output_tokens_per_second": {
+            "value": 30.244603228611396,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:50:29.067276171Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:24.628235632Z"
+          },
+          "prompt_ms": {
+            "value": 1991.535,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:29.067276171Z"
+          },
+          "generation_ms": {
+            "value": 2116.08,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:29.067276171Z"
+          },
+          "context_tokens": {
+            "value": 2364,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:29.067276171Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:24.628235632Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 120,
+      "summary": {
+        "invocation_id": "invocation-dc646f4f04ca1e611729ec9da5cedead2bcd1bb673477df49b8c39a56893b85c",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:51:09.007838825Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:51:09.007838825Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:29.851713275Z"
+          },
+          "prompt_tokens": {
+            "value": 4821,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:09.007710108Z"
+          },
+          "output_tokens": {
+            "value": 1012,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:09.007710108Z"
+          },
+          "total_tokens": {
+            "value": 5833,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:09.007710108Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:09.007710108Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1042.5508219197338,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:51:09.007710108Z"
+          },
+          "output_tokens_per_second": {
+            "value": 29.709128840271863,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:51:09.007710108Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:50:29.851713275Z"
+          },
+          "prompt_ms": {
+            "value": 4624.235,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:09.007710108Z"
+          },
+          "generation_ms": {
+            "value": 34063.604,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:09.007710108Z"
+          },
+          "context_tokens": {
+            "value": 5833,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:09.007710108Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:50:29.851713275Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 132,
+      "summary": {
+        "invocation_id": "invocation-31b03f71f540dc9c1d8ad5faac5932e8369cc5a323fd28275376b7c734ac248f",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:51:37.072716306Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:51:37.072716306Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:09.947399946Z"
+          },
+          "prompt_tokens": {
+            "value": 1865,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:37.072670233Z"
+          },
+          "output_tokens": {
+            "value": 760,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:37.072670233Z"
+          },
+          "total_tokens": {
+            "value": 2625,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:37.072670233Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:37.072670233Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 889.0079529269098,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:51:37.072670233Z"
+          },
+          "output_tokens_per_second": {
+            "value": 30.941781938036065,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:51:37.072670233Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:09.947399946Z"
+          },
+          "prompt_ms": {
+            "value": 2097.844,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:37.072670233Z"
+          },
+          "generation_ms": {
+            "value": 24562.257,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:37.072670233Z"
+          },
+          "context_tokens": {
+            "value": 2625,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:37.072670233Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:09.947399946Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 139,
+      "summary": {
+        "invocation_id": "invocation-09801081931ef874eff026959d821cb4c641138938eed0df47a26ed0f7bc8d4e",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:51:43.603139709Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:51:43.603139709Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:37.872831426Z"
+          },
+          "prompt_tokens": {
+            "value": 1331,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:43.603107281Z"
+          },
+          "output_tokens": {
+            "value": 124,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:43.603107281Z"
+          },
+          "total_tokens": {
+            "value": 1455,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:43.603107281Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:43.603107281Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 894.1016830742051,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:51:43.603107281Z"
+          },
+          "output_tokens_per_second": {
+            "value": 30.95409507700081,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:51:43.603107281Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:37.872831426Z"
+          },
+          "prompt_ms": {
+            "value": 1488.645,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:43.603107281Z"
+          },
+          "generation_ms": {
+            "value": 4005.932,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:43.603107281Z"
+          },
+          "context_tokens": {
+            "value": 1455,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:43.603107281Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:37.872831426Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 146,
+      "summary": {
+        "invocation_id": "invocation-260a879e7bbe1a6f10500f86d858092d57364bb8484b09a3fc3136454b1cbdc5",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:51:50.554567747Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:51:50.554567747Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:44.597474493Z"
+          },
+          "prompt_tokens": {
+            "value": 1516,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:50.554540348Z"
+          },
+          "output_tokens": {
+            "value": 124,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:50.554540348Z"
+          },
+          "total_tokens": {
+            "value": 1640,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:50.554540348Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 88,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:50.554540348Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 908.607336558847,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:51:50.554540348Z"
+          },
+          "output_tokens_per_second": {
+            "value": 31.452132264332853,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:51:50.554540348Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:44.597474493Z"
+          },
+          "prompt_ms": {
+            "value": 1571.636,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:50.554540348Z"
+          },
+          "generation_ms": {
+            "value": 3942.499,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:50.554540348Z"
+          },
+          "context_tokens": {
+            "value": 1640,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:50.554540348Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:44.597474493Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 154,
+      "summary": {
+        "invocation_id": "invocation-7d1dc47b0cdf12e6ed4be399021ef0021cec228ef0619418f48d5d95eff8e903",
+        "invocation_status": "failed",
+        "snapshot_at": "2026-10-28T15:51:52.461157035Z",
+        "inference": {
+          "status": "cancelled",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:51:52.461157035Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:52.461157035Z"
+          },
+          "prompt_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:52.461157035Z"
+          },
+          "output_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:52.461157035Z"
+          },
+          "total_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:52.461157035Z"
+          },
+          "cached_prompt_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:52.461157035Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:51:52.461157035Z"
+          },
+          "output_tokens_per_second": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:51:52.461157035Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:52.461157035Z"
+          },
+          "prompt_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:52.461157035Z"
+          },
+          "generation_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:51:52.461157035Z"
+          },
+          "context_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:52.461157035Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:51:52.461157035Z"
+          }
+        }
+      }
+    }
+  ]
+}

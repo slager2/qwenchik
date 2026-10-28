@@ -1,0 +1,11 @@
+{
+  "case_id": "dev-roadmap",
+  "variant": "baseline",
+  "state": "measured",
+  "started_at": "2026-10-28T15:30:02.086Z",
+  "run_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+  "cli_exit_code": 0,
+  "status": "failed",
+  "error_code": null,
+  "finished_at": "2026-10-28T15:30:33.875Z"
+}

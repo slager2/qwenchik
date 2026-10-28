@@ -1,0 +1,11 @@
+{
+  "case_id": "dev-rnaseq",
+  "variant": "baseline",
+  "state": "measured",
+  "started_at": "2026-10-28T15:10:52.078Z",
+  "run_id": "7154e0bd-7403-4289-a077-5db60c6d6c86",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused",
+  "finished_at": "2026-10-28T15:12:35.884Z"
+}

@@ -1,0 +1,10 @@
+{
+  "case_id": "heldout-units",
+  "variant": "adaptive",
+  "state": "attempted",
+  "started_at": "2026-10-28T15:39:08.944Z",
+  "run_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused"
+}

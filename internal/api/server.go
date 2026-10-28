@@ -101,6 +101,7 @@ type Server struct {
 	telemetryMu               sync.RWMutex
 	runTelemetry              func(runID string) (domain.Telemetry, uint64, bool)
 	researchPolicy            map[string]any
+	labHoldResourcePauses     bool
 	pdfCheck                  func(context.Context) error
 	fetchTempCheck            func(context.Context) error
 	contextInspector          func(context.Context, int, int, string) (domain.ContextBudget, error)
@@ -138,6 +139,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/doctor", s.doctor)
+	mux.HandleFunc("GET /api/lab/policy", s.labPolicy)
 	mux.HandleFunc("POST /api/doctor/context-probe", s.contextProbe)
 	mux.HandleFunc("GET /api/providers", s.providers)
 	mux.HandleFunc("GET /api/approvals", s.pendingApprovals)

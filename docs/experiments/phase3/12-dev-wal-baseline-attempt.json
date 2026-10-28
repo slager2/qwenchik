@@ -1,0 +1,10 @@
+{
+  "case_id": "dev-wal",
+  "variant": "baseline",
+  "state": "attempted",
+  "started_at": "2026-10-28T15:28:16.083Z",
+  "run_id": "99ea2063-c244-4bd5-9ec5-42eea6f799a4",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused"
+}

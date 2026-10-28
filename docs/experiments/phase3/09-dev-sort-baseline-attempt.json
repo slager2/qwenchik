@@ -1,0 +1,10 @@
+{
+  "case_id": "dev-sort",
+  "variant": "baseline",
+  "state": "attempted",
+  "started_at": "2026-10-28T15:22:33.276Z",
+  "run_id": "1bfbc700-e4e2-4ae1-865e-0082fdce8f10",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused"
+}

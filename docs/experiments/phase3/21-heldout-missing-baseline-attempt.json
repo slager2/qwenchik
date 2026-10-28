@@ -1,0 +1,10 @@
+{
+  "case_id": "heldout-missing",
+  "variant": "baseline",
+  "state": "attempted",
+  "started_at": "2026-10-28T15:46:43.716Z",
+  "run_id": "19aa654b-63c2-4015-9f1e-175b07e92784",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused"
+}

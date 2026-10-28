@@ -1,0 +1,1241 @@
+{
+  "runtime": {
+    "accepted_evidence": 0,
+    "active_round_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Создание роадмапа, объединяющего биоинформатику, химию и информатику.",
+        "Указание связей между тремя изучаемыми областями.",
+        "Определение ограничений учебного корпуса.",
+        "Использование данных только из импортированных источников.",
+        "Структурирование плана по этапам обучения."
+      ],
+      "schema_version": 1,
+      "goal": "сделай роадмап по биоинформатике, химии и информатике на основе импортированных источников. Свяжи три области и явно укажи ограничения учебного корпуса.",
+      "subtasks": [
+        {
+          "id": "search_1",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Изучить импортированные источники для определения ключевых тем в биоинформатике, химии и информатике.. User request: сделай роадмап по биоинформатике, химии и информатике на основе импортированных источников. Свяжи три области и явно укажи ограничения учебного корпуса.",
+          "dependencies": [],
+          "expected_output": "Список ключевых тем и источников.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_2",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Find independent corroborating sources for the exact user request, discovery angle 2. User request: сделай роадмап по биоинформатике, химии и информатике на основе импортированных источников. Свяжи три области и явно укажи ограничения учебного корпуса.",
+          "dependencies": [],
+          "expected_output": "Independent discovery leads",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "fetch_1",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 1 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_2",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 2 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        }
+      ],
+      "max_steps": 4,
+      "final_deliverable": "roadmap_bioinformatics_chemistry_informatics.pdf"
+    },
+    "adaptive_enabled": false,
+    "budget": {
+      "max_initial_plan_steps": 12,
+      "max_round_steps": 12,
+      "max_total_steps": 20,
+      "max_report_sections": 6,
+      "max_report_paragraphs": 16,
+      "max_report_bytes": 524288,
+      "wall_time_seconds": 1800,
+      "max_rounds": 3,
+      "max_steps": 12,
+      "max_search_queries": 8,
+      "max_fetches": 8,
+      "max_llm_calls": 48,
+      "max_evidence": 8,
+      "max_questions_created": 24,
+      "max_questions_accepted": 16,
+      "max_stagnant_rounds": 2,
+      "max_citation_sources": 8,
+      "max_citation_claims": 16
+    },
+    "budget_remaining": {
+      "evidence": 8,
+      "fetched_bytes": 134217728,
+      "fetches": 8,
+      "http_attempts": 93,
+      "initial_plan_steps": 12,
+      "llm_calls": 45,
+      "questions_accepted": 16,
+      "questions_created": 24,
+      "round_steps": 12,
+      "rounds": 3,
+      "search_queries": 5,
+      "stagnant_rounds": 2,
+      "steps": 16,
+      "total_steps": 16
+    },
+    "bundle_hash": "e27b07fb099039c84672d3db8b38e46d62d0a813a7da342ed2f8484d990f03bf",
+    "bundle_version": 1,
+    "compactions": 0,
+    "completed_steps": 2,
+    "completion": {
+      "continuations": 0
+    },
+    "context_budget": {
+      "version": 1,
+      "configured_context": 32768,
+      "server_reported_context": 32768,
+      "training_context": 262144,
+      "session_context": 32768,
+      "max_output_tokens": 4096,
+      "reserved_output_tokens": 4096,
+      "reserved_system_tokens": 2048,
+      "available_input_tokens": 26624,
+      "prompt_tokens": null,
+      "context_status": "matched",
+      "count_method": "unavailable",
+      "decision": "not_counted",
+      "server_source": "props.default_generation_settings.n_ctx:single_slot",
+      "runtime_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+      "runtime_build": "b11426-cda0f9256",
+      "chat_template_sha256": "7f0e529032c25183bcd66c7f238da2d377f43be754a94e2725a58c4e16d2ed67",
+      "model_quantization": "Q4_K - Medium",
+      "observed_at": "2026-10-28T15:30:32.851588078Z"
+    },
+    "context_snapshot_hash": "39b27c8d33c7d7166fa2ca5b64fcbafeff24e6c7d0e26212e518868fc9dc21a7",
+    "context_snapshot_number": 3,
+    "contradictions": null,
+    "counters": {
+      "steps_reserved": 4,
+      "llm_calls": 3,
+      "http_attempts": 3,
+      "search_queries": 3,
+      "fetches": 0,
+      "fetched_bytes": 0,
+      "evidence": 0,
+      "questions_created": 0,
+      "questions_accepted": 0,
+      "rounds": 0,
+      "stagnant_rounds": 0
+    },
+    "current_round": 1,
+    "cursor": 49,
+    "deadline_at": "2026-10-28T16:00:12.762352513Z",
+    "done_criteria": 9,
+    "elapsed_seconds": 19,
+    "inference_summary": {
+      "invocation_id": "invocation-a15d5ccde72cea1b24fdcc916166d37b8f5ff7149321e03199e697cf35e00fcb",
+      "invocation_status": "completed",
+      "snapshot_at": "2026-10-28T15:30:32.536560704Z",
+      "inference": {
+        "status": "completed",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:30:32.536560704Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:29.468846336Z"
+        },
+        "prompt_tokens": {
+          "value": 1244,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "output_tokens": {
+          "value": 71,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "total_tokens": {
+          "value": 1315,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "cached_prompt_tokens": {
+          "value": 397,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": 966.634559639184,
+          "source": "exact",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "output_tokens_per_second": {
+          "value": 34.820341749393585,
+          "source": "exact",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:30:29.468846336Z"
+        },
+        "prompt_ms": {
+          "value": 876.236,
+          "source": "exact",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "generation_ms": {
+          "value": 2039.038,
+          "source": "exact",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "context_tokens": {
+          "value": 1315,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:29.468846336Z"
+        }
+      }
+    },
+    "initial_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Создание роадмапа, объединяющего биоинформатику, химию и информатику.",
+        "Указание связей между тремя изучаемыми областями.",
+        "Определение ограничений учебного корпуса.",
+        "Использование данных только из импортированных источников.",
+        "Структурирование плана по этапам обучения."
+      ],
+      "schema_version": 1,
+      "goal": "сделай роадмап по биоинформатике, химии и информатике на основе импортированных источников. Свяжи три области и явно укажи ограничения учебного корпуса.",
+      "subtasks": [
+        {
+          "id": "search_1",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Изучить импортированные источники для определения ключевых тем в биоинформатике, химии и информатике.. User request: сделай роадмап по биоинформатике, химии и информатике на основе импортированных источников. Свяжи три области и явно укажи ограничения учебного корпуса.",
+          "dependencies": [],
+          "expected_output": "Список ключевых тем и источников.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_2",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Find independent corroborating sources for the exact user request, discovery angle 2. User request: сделай роадмап по биоинформатике, химии и информатике на основе импортированных источников. Свяжи три области и явно укажи ограничения учебного корпуса.",
+          "dependencies": [],
+          "expected_output": "Independent discovery leads",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "fetch_1",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 1 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_2",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 2 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        }
+      ],
+      "max_steps": 4,
+      "final_deliverable": "roadmap_bioinformatics_chemistry_informatics.pdf"
+    },
+    "keep_awake_requested": true,
+    "max_continuations": 1,
+    "model_profile_hash": "1b3d9bd1717af420d357a0aaef2b79a9e80c4f65a5e5f8a3f07e2dbfbb65e4c3",
+    "notification": {
+      "status": "pending"
+    },
+    "offline_corpus_sha256": "9814cb53c048545010e91bb6ee7e50be66e8c3852eb3380c8c435a86f03fd43b",
+    "open_questions": [],
+    "pause_reason": "",
+    "privacy_mode": "offline",
+    "profile": "standard",
+    "remaining_seconds": 0,
+    "research_session_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+    "resource_probe_attempts": 0,
+    "resource_reason": "",
+    "resume_after": null,
+    "round_plan_count": 1,
+    "runtime": {
+      "active_run_id": "",
+      "enabled": true,
+      "keep_awake": true,
+      "max_resume_attempts": 5,
+      "resource_policy": {
+        "enabled": true,
+        "min_free_ram_bytes": 536870912,
+        "min_free_vram_mb": 256,
+        "gpu_temp_max_c": 85,
+        "process_rss_max_bytes": 2147483648,
+        "model_rss_max_bytes": 3221225472,
+        "recovery_ram_margin_percent": 10,
+        "recovery_vram_margin_percent": 10,
+        "recovery_gpu_temp_margin_c": 5,
+        "recovery_rss_margin_percent": 10,
+        "llama_health_timeout": 2000000000,
+        "check_interval": 1000000000,
+        "max_resume_attempts": 5,
+        "backoff_base": 5000000000,
+        "backoff_max": 60000000000
+      },
+      "resources": {
+        "free_ram_bytes": 8575066112,
+        "gpu_free_vram_mb": 2433,
+        "gpu_temp_c": 65,
+        "heap_alloc_bytes": 3350224,
+        "llama_health_latency": 409781,
+        "llama_healthy": true,
+        "model_rss_bytes": 1590988800,
+        "power_source": "AC",
+        "rss_bytes": 34971648,
+        "snapshot_at": "2026-10-28T15:30:30.813279491Z",
+        "warnings": []
+      },
+      "sleep": {
+        "active": false,
+        "available": true,
+        "power_source": "unknown",
+        "provider": "systemd-inhibit"
+      },
+      "sleep_policy": "keep_awake",
+      "status": "ok"
+    },
+    "runtime_model_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+    "sectioned_report_enabled": true,
+    "stage": null,
+    "status": "failed",
+    "step": "search_2",
+    "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+    "telemetry": {
+      "timestamp": "2026-10-28T15:30:32.536560704Z",
+      "stale_after_ms": 39000,
+      "capabilities": {
+        "cpu": true,
+        "ram": true,
+        "gpu": true,
+        "gpu_temperature": true,
+        "gpu_utilization": true,
+        "power": true,
+        "battery": false,
+        "process_rss": true,
+        "llama_health": true,
+        "llama_timings": false,
+        "llama_metrics": false,
+        "llama_slots": false
+      },
+      "system": {
+        "metadata": {
+          "os": "linux",
+          "uptime_seconds": {
+            "value": 6755.8,
+            "source": "exact",
+            "unit": "seconds",
+            "updated_at": "2026-10-28T15:30:30.775169114Z"
+          }
+        },
+        "cpu_usage": {
+          "value": 26.79324894514768,
+          "source": "exact",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:30:30.775169114Z"
+        },
+        "cpu_temperature": {
+          "value": 89.5,
+          "source": "exact",
+          "unit": "celsius",
+          "updated_at": "2026-10-28T15:30:30.775169114Z"
+        },
+        "ram_used": {
+          "value": 7374663680,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:30:30.775169114Z"
+        },
+        "ram_free": {
+          "value": 8575066112,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:30:30.775169114Z"
+        },
+        "ram_total": {
+          "value": 15949729792,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:30:30.775169114Z"
+        },
+        "gpus": [
+          {
+            "name": {
+              "value": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+              "source": "exact",
+              "unit": "name",
+              "updated_at": "2026-10-28T15:30:30.775169114Z"
+            },
+            "utilization": {
+              "value": 100,
+              "source": "exact",
+              "unit": "percent",
+              "updated_at": "2026-10-28T15:30:30.775169114Z"
+            },
+            "temperature": {
+              "value": 65,
+              "source": "exact",
+              "unit": "celsius",
+              "updated_at": "2026-10-28T15:30:30.775169114Z"
+            },
+            "vram_used": {
+              "value": 3537895424,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:30:30.775169114Z"
+            },
+            "vram_free": {
+              "value": 2551185408,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:30:30.775169114Z"
+            },
+            "vram_total": {
+              "value": 6442450944,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:30:30.775169114Z"
+            },
+            "power_watts": {
+              "value": 40.22,
+              "source": "exact",
+              "unit": "watts",
+              "updated_at": "2026-10-28T15:30:30.775169114Z"
+            }
+          }
+        ],
+        "agent_rss": {
+          "value": 34971648,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:30:30.775169114Z"
+        },
+        "llama_server_rss": {
+          "value": 1590988800,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:30:30.775169114Z"
+        },
+        "power_source": {
+          "value": "AC",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:30:12.822543353Z"
+        },
+        "power_watts": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "watts",
+          "updated_at": "2026-10-28T15:30:30.775169114Z",
+          "error": "unsupported"
+        },
+        "battery_percent": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:30:30.775169114Z",
+          "error": "unsupported"
+        },
+        "battery_charging": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "boolean",
+          "updated_at": "2026-10-28T15:30:30.775169114Z",
+          "error": "unsupported"
+        },
+        "llama_health": {
+          "value": "healthy",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:30:30.775169114Z"
+        },
+        "llama_slots_active": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:30:30.775169114Z",
+          "error": "temporarily_unavailable"
+        },
+        "llama_slots_total": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:30:30.775169114Z",
+          "error": "temporarily_unavailable"
+        }
+      },
+      "inference": {
+        "status": "completed",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:30:32.536560704Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:29.468846336Z"
+        },
+        "prompt_tokens": {
+          "value": 1244,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "output_tokens": {
+          "value": 71,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "total_tokens": {
+          "value": 1315,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "cached_prompt_tokens": {
+          "value": 397,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": 966.634559639184,
+          "source": "exact",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "output_tokens_per_second": {
+          "value": 34.820341749393585,
+          "source": "exact",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:30:29.468846336Z"
+        },
+        "prompt_ms": {
+          "value": 876.236,
+          "source": "exact",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "generation_ms": {
+          "value": 2039.038,
+          "source": "exact",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "context_tokens": {
+          "value": 1315,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:32.536538267Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:30:29.468846336Z"
+        }
+      }
+    },
+    "telemetry_revision": 5,
+    "terminal_outcome": "blocked",
+    "updated_at": "2026-10-28T15:30:32.551527812Z"
+  },
+  "run": {
+    "resource_probe_attempts": 0,
+    "terminal_outcome": "blocked",
+    "id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+    "conversation_id": "7992f085-c82c-4fbb-a9c2-7d89fa45059c",
+    "user_message_id": "8cec25a3-2a78-444b-9135-4f367e45f6d3",
+    "assistant_message_id": "6b986c01-6490-4252-8216-4f6c33b5ba49",
+    "mode": "research",
+    "operation": "send",
+    "status": "failed",
+    "error_code": "invalid_model_output",
+    "error_message": "Модель вернула структурированный ответ, который не прошёл проверку.",
+    "retry_count": 0,
+    "cancel_requested": false,
+    "created_at": "2026-10-28T15:30:12.762352513Z",
+    "updated_at": "2026-10-28T15:30:32.551527812Z",
+    "started_at": "2026-10-28T15:30:12.7696166Z",
+    "completed_at": "2026-10-28T15:30:32.552094964Z",
+    "heartbeat_at": "2026-10-28T15:30:27.854364689Z",
+    "deadline_at": "2026-10-28T16:00:12.762352513Z"
+  },
+  "artifacts": [],
+  "public_events_complete": true,
+  "events": [
+    {
+      "id": "12a255e7-c31d-47cc-98f7-3fdab54bee91",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 1,
+      "type": "task.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:12.766770076Z",
+      "visibility": "user",
+      "payload": {
+        "mode": "research",
+        "status": "queued"
+      }
+    },
+    {
+      "id": "bc7b236f-c2cb-4c1b-aa6e-aab7bba72681",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 2,
+      "type": "message.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:12.767416082Z",
+      "visibility": "user",
+      "payload": {
+        "message_id": "6b986c01-6490-4252-8216-4f6c33b5ba49",
+        "role": "assistant",
+        "status": "pending"
+      }
+    },
+    {
+      "id": "fd65ef37-6415-4c3a-a9d1-6fa4f5d7ab95",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 3,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:12.770529929Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "from": "queued",
+        "to": "planning"
+      }
+    },
+    {
+      "id": "90718403-228b-46a1-980d-3c7cd0fbe695",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 10,
+      "type": "plan.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:23.673659334Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "goal": "сделай роадмап по биоинформатике, химии и информатике на основе импортированных источников. Свяжи три области и явно укажи ограничения учебного корпуса.",
+        "steps": 4
+      }
+    },
+    {
+      "id": "e7c826ed-cb28-466d-a2cb-963b638a8794",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 11,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:23.677896535Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "from": "planning",
+        "plan_steps": 4,
+        "to": "running"
+      }
+    },
+    {
+      "id": "a14ebf0f-3cd3-4d89-a2f1-bb2be99c64b1",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 12,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:23.680296131Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Изучить импортированные источники для определения ключевых тем в биоинформатике, химии и информатике.. User request: сделай роадмап по биоинформатике, химии и информатике на основе импортированных источников. Свяжи три области и явно укажи ограничения учебного корпуса.",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "b7b5e0fe-663f-4c32-b933-bc16130a10d3",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 22,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:29.370938659Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1",
+        "summary": "No new sources were imported or fetched in this session. The goal is to create a roadmap based on 'imported sources', but the context snapshot shows no evidence has been stored yet (accepted_evidence_ids is empty). To proceed, I must first locate and fetch the relevant imported documents. Since no specific URLs were provided in the allowed_fetch_urls list (it is null), I cannot fetch specific URLs. I will attempt to search for the specific imported documents or the roadmap content using a search",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "b4fc5e20-e7d8-4fe3-a3e4-062091591bd5",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 25,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:29.380824178Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "роадмап биоинформатика химия информатика импортированные источники",
+        "query_fingerprint": "e599e4e41fcb003d22afdcf19c1b18812b8cc12bd22a1f87c85bd2b9b2782e1e",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "15bfc581-c62a-4072-8541-1de70fef7604",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 26,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:29.381207969Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:30:29.381117845Z",
+        "code": "search_no_results",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:30:29.381117845Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider returned no results",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "e599e4e41fcb003d22afdcf19c1b18812b8cc12bd22a1f87c85bd2b9b2782e1e",
+        "result_count": 0,
+        "retryable": false,
+        "started_at": "2026-10-28T15:30:29.381117845Z",
+        "state": "unavailable",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "c5936f4e-a6d9-4182-b075-fb82797ad377",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 28,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:29.388984375Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [],
+        "step_id": "search_1",
+        "summary": "No new sources were imported or fetched in this session. The goal is to create a roadmap based on 'imported sources', but the context snapshot shows no evidence has been stored yet (accepted_evidence_ids is empty). To proceed, I must first locate and fetch the relevant imported documents. Since no specific URLs were provided in the allowed_fetch_urls list (it is null), I cannot fetch specific URLs. I will attempt to search for the specific imported documents or the roadmap content using a search",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "8f90d9b0-41ea-4df1-9676-44ad3fc08f1a",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 29,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:29.389161746Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "6cae4d39-3452-4e86-afcb-f21476f55dba",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 32,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:29.398755741Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "conditional-search-retry:search_1",
+        "summary": "Retrying the initial discovery query after a successful empty result.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "a0c30b41-f0d1-49d1-917d-1749cbcd0956",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 36,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:29.41467044Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "роадмап биоинформатика химия",
+        "query_fingerprint": "5ea3a0e4174783bea6a70bc9ab0e0d902d8bfe835bd69b50a7065c67b46c7e98",
+        "step_id": "conditional-search-retry:search_1"
+      }
+    },
+    {
+      "id": "3946906e-66cc-4aaf-83a1-b0080fe6c331",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 37,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:29.414928645Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:30:29.414829013Z",
+        "code": "search_no_results",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:30:29.414829013Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider returned no results",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "5ea3a0e4174783bea6a70bc9ab0e0d902d8bfe835bd69b50a7065c67b46c7e98",
+        "result_count": 0,
+        "retryable": false,
+        "started_at": "2026-10-28T15:30:29.414829013Z",
+        "state": "unavailable"
+      }
+    },
+    {
+      "id": "bbbff95f-d290-4114-b82e-3025b565ad90",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 39,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:29.42209492Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [],
+        "step_id": "conditional-search-retry:search_1",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "0e83032a-d6f8-4ac3-b078-4d1618c09f13",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 41,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:29.427034212Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Find independent corroborating sources for the exact user request, discovery angle 2. User request: сделай роадмап по биоинформатике, химии и информатике на основе импортированных источников. Свяжи три области и явно укажи ограничения учебного корпуса.",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "4d008f77-f81d-41c1-b464-d3821713d658",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "seq": 49,
+      "type": "task.failed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:30:32.551684539Z",
+      "visibility": "user",
+      "payload": {
+        "error_code": "invalid_model_output",
+        "from": "running",
+        "message": "Модель вернула структурированный ответ, который не прошёл проверку.",
+        "notification_schema_version": 1,
+        "terminal_outcome": "blocked",
+        "to": "failed"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "78a2c990-a8c2-484b-9edd-0ad4e2469373",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "step_id": "search_1",
+      "position": 0,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Изучить импортированные источники для определения ключевых тем в биоинформатике, химии и информатике.. User request: сделай роадмап по биоинформатике, химии и информатике на основе импортированных источников. Свяжи три области и явно укажи ограничения учебного корпуса.",
+      "dependencies": [],
+      "expected_output": "Список ключевых тем и источников.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:30:23.672502653Z",
+      "updated_at": "2026-10-28T15:30:29.388892939Z"
+    },
+    {
+      "id": "f533ec88-f767-42db-bfb2-86821fc1dfe4",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "step_id": "search_2",
+      "position": 1,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Find independent corroborating sources for the exact user request, discovery angle 2. User request: сделай роадмап по биоинформатике, химии и информатике на основе импортированных источников. Свяжи три области и явно укажи ограничения учебного корпуса.",
+      "dependencies": [],
+      "expected_output": "Independent discovery leads",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "failed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:30:23.673106792Z",
+      "updated_at": "2026-10-28T15:30:32.551107967Z"
+    },
+    {
+      "id": "5e980569-821a-4127-8475-6766a68b8eab",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "step_id": "fetch_1",
+      "position": 2,
+      "kind": "fetch",
+      "description": "Inspect distinct approved source 1 for the exact user request",
+      "dependencies": [
+        "search_1",
+        "search_2"
+      ],
+      "expected_output": "Source text with stored evidence ID",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "pending",
+      "attempts": 0,
+      "created_at": "2026-10-28T15:30:23.673484311Z",
+      "updated_at": "2026-10-28T15:30:23.673484311Z"
+    },
+    {
+      "id": "3f5a57f1-2b92-420f-8884-2ef5de491617",
+      "task_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "step_id": "fetch_2",
+      "position": 3,
+      "kind": "fetch",
+      "description": "Inspect distinct approved source 2 for the exact user request",
+      "dependencies": [
+        "search_1",
+        "search_2"
+      ],
+      "expected_output": "Source text with stored evidence ID",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "pending",
+      "attempts": 0,
+      "created_at": "2026-10-28T15:30:23.673524737Z",
+      "updated_at": "2026-10-28T15:30:23.673524737Z"
+    }
+  ],
+  "inference_summaries_complete": true,
+  "inference_summaries": [
+    {
+      "seq": 8,
+      "summary": {
+        "invocation_id": "invocation-4ee82428f05ffa31d31758d5a30d9ee8736f0bb55e3360576b98f48d49d5b792",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:30:23.666139907Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:30:23.666139907Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:12.876515914Z"
+          },
+          "prompt_tokens": {
+            "value": 822,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:23.66611009Z"
+          },
+          "output_tokens": {
+            "value": 303,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:23.66611009Z"
+          },
+          "total_tokens": {
+            "value": 1125,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:23.66611009Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:23.66611009Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 929.4394869313119,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:30:23.66611009Z"
+          },
+          "output_tokens_per_second": {
+            "value": 30.653123988345744,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:30:23.66611009Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:30:12.876515914Z"
+          },
+          "prompt_ms": {
+            "value": 884.404,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:30:23.66611009Z"
+          },
+          "generation_ms": {
+            "value": 9884.8,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:30:23.66611009Z"
+          },
+          "context_tokens": {
+            "value": 1125,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:23.66611009Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:12.876515914Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 18,
+      "summary": {
+        "invocation_id": "invocation-735ac9c0955398a8d186e3abaecfbd65b8d466f45eb769f9de7efb7df8b07eca",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:30:29.332185531Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:30:29.332185531Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:23.706681272Z"
+          },
+          "prompt_tokens": {
+            "value": 1117,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:29.33216559Z"
+          },
+          "output_tokens": {
+            "value": 152,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:29.33216559Z"
+          },
+          "total_tokens": {
+            "value": 1269,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:29.33216559Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:29.33216559Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 994.5544360511292,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:30:29.33216559Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.97170398017104,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:30:29.33216559Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:30:23.706681272Z"
+          },
+          "prompt_ms": {
+            "value": 1123.116,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:30:29.33216559Z"
+          },
+          "generation_ms": {
+            "value": 4346.371,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:30:29.33216559Z"
+          },
+          "context_tokens": {
+            "value": 1269,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:29.33216559Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:23.706681272Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 47,
+      "summary": {
+        "invocation_id": "invocation-a15d5ccde72cea1b24fdcc916166d37b8f5ff7149321e03199e697cf35e00fcb",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:30:32.536560704Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:30:32.536560704Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:29.468846336Z"
+          },
+          "prompt_tokens": {
+            "value": 1244,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:32.536538267Z"
+          },
+          "output_tokens": {
+            "value": 71,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:32.536538267Z"
+          },
+          "total_tokens": {
+            "value": 1315,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:32.536538267Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 397,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:32.536538267Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 966.634559639184,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:30:32.536538267Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.820341749393585,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:30:32.536538267Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:30:29.468846336Z"
+          },
+          "prompt_ms": {
+            "value": 876.236,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:30:32.536538267Z"
+          },
+          "generation_ms": {
+            "value": 2039.038,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:30:32.536538267Z"
+          },
+          "context_tokens": {
+            "value": 1315,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:32.536538267Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:30:29.468846336Z"
+          }
+        }
+      }
+    }
+  ]
+}

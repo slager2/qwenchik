@@ -1,0 +1,11 @@
+{
+  "case_id": "dev-catalyst",
+  "variant": "baseline",
+  "state": "measured",
+  "started_at": "2026-10-28T15:19:54.008Z",
+  "run_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused",
+  "finished_at": "2026-10-28T15:22:32.586Z"
+}

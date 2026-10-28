@@ -1,0 +1,125 @@
+{
+  "protocol_sha256": "974eef5c61a044f796113a8bd6c7cb9093dd81ae2f0384fceb6bf170312e7d8e",
+  "slots": [
+    {
+      "case_id": "dev-fasta",
+      "variant": "baseline",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-fasta",
+      "variant": "adaptive",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-rnaseq",
+      "variant": "adaptive",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-rnaseq",
+      "variant": "baseline",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-buffer",
+      "variant": "baseline",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-buffer",
+      "variant": "adaptive",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-catalyst",
+      "variant": "adaptive",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-catalyst",
+      "variant": "baseline",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-sort",
+      "variant": "baseline",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-sort",
+      "variant": "adaptive",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-wal",
+      "variant": "adaptive",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-wal",
+      "variant": "baseline",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-roadmap",
+      "variant": "baseline",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-roadmap",
+      "variant": "adaptive",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-recovery",
+      "variant": "adaptive",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "dev-recovery",
+      "variant": "baseline",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "heldout-units",
+      "variant": "baseline",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "heldout-units",
+      "variant": "adaptive",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "heldout-citations",
+      "variant": "adaptive",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "heldout-citations",
+      "variant": "baseline",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "heldout-missing",
+      "variant": "baseline",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "heldout-missing",
+      "variant": "adaptive",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "heldout-protocol",
+      "variant": "adaptive",
+      "state": "unattempted"
+    },
+    {
+      "case_id": "heldout-protocol",
+      "variant": "baseline",
+      "state": "unattempted"
+    }
+  ]
+}

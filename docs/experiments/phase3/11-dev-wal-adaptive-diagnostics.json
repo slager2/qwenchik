@@ -1,0 +1,2971 @@
+{
+  "runtime": {
+    "accepted_evidence": 2,
+    "active_round_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Identify SQLite WAL (Write-Ahead Logging) mechanism and its role in transaction handling.",
+        "Explain reader concurrency capabilities within SQLite WAL mode.",
+        "Explain writer concurrency capabilities within SQLite WAL mode.",
+        "State specific concurrency limitations of SQLite WAL regarding readers and writers.",
+        "Synthesize findings from imported computing references to validate technical claims.",
+        "Provide a clear statement of concurrency limitations based on research."
+      ],
+      "schema_version": 1,
+      "goal": "Research SQLite WAL, readers, writer concurrency and transactions using both imported computing references. State concurrency limitations.",
+      "subtasks": [
+        {
+          "id": "search_1",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for SQLite WAL mode documentation focusing on transaction mechanics and concurrency models.. User request: Research SQLite WAL, readers, writer concurrency and transactions using both imported computing references. State concurrency limitations.",
+          "dependencies": [],
+          "expected_output": "List of relevant documents explaining WAL transaction flow and concurrency basics.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_2",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for specific technical limitations of SQLite WAL regarding simultaneous readers and writers.. User request: Research SQLite WAL, readers, writer concurrency and transactions using both imported computing references. State concurrency limitations.",
+          "dependencies": [],
+          "expected_output": "List of sources detailing concurrency bottlenecks or restrictions in WAL mode.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "fetch_1",
+          "kind": "fetch",
+          "description": "Fetch detailed content from the first source found regarding SQLite WAL transaction mechanics.",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Extracted text or summary of WAL transaction flow.",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_2",
+          "kind": "fetch",
+          "description": "Fetch detailed content from the first source found regarding SQLite WAL concurrency limitations.",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Extracted text or summary of concurrency limitations.",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_3",
+          "kind": "fetch",
+          "description": "Fetch detailed content from a second source regarding SQLite WAL transaction mechanics.",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Extracted text or summary of WAL transaction flow from second source.",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_4",
+          "kind": "fetch",
+          "description": "Fetch detailed content from a second source regarding SQLite WAL concurrency limitations.",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Extracted text or summary of concurrency limitations from second source.",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        }
+      ],
+      "max_steps": 6,
+      "final_deliverable": "A concise report detailing SQLite WAL mechanics, reader/writer concurrency models, and specific limitations, sourced from provided computing references."
+    },
+    "adaptive_enabled": true,
+    "budget": {
+      "max_initial_plan_steps": 12,
+      "max_round_steps": 12,
+      "max_total_steps": 20,
+      "max_report_sections": 6,
+      "max_report_paragraphs": 16,
+      "max_report_bytes": 524288,
+      "wall_time_seconds": 1800,
+      "max_rounds": 3,
+      "max_steps": 12,
+      "max_search_queries": 8,
+      "max_fetches": 8,
+      "max_llm_calls": 48,
+      "max_evidence": 8,
+      "max_questions_created": 24,
+      "max_questions_accepted": 16,
+      "max_stagnant_rounds": 2,
+      "max_citation_sources": 8,
+      "max_citation_claims": 16
+    },
+    "budget_remaining": {
+      "evidence": 6,
+      "fetched_bytes": 134216937,
+      "fetches": 6,
+      "http_attempts": 87,
+      "initial_plan_steps": 12,
+      "llm_calls": 39,
+      "questions_accepted": 16,
+      "questions_created": 24,
+      "round_steps": 12,
+      "rounds": 2,
+      "search_queries": 6,
+      "stagnant_rounds": 2,
+      "steps": 14,
+      "total_steps": 14
+    },
+    "bundle_hash": "e27b07fb099039c84672d3db8b38e46d62d0a813a7da342ed2f8484d990f03bf",
+    "bundle_version": 1,
+    "compactions": 4,
+    "completed_steps": 4,
+    "completion": {
+      "continuations": 0,
+      "verdict": "PASS"
+    },
+    "context_budget": {
+      "version": 1,
+      "configured_context": 32768,
+      "server_reported_context": 32768,
+      "training_context": 262144,
+      "session_context": 32768,
+      "max_output_tokens": 4096,
+      "reserved_output_tokens": 4096,
+      "reserved_system_tokens": 2048,
+      "available_input_tokens": 26624,
+      "prompt_tokens": null,
+      "context_status": "matched",
+      "count_method": "unavailable",
+      "decision": "not_counted",
+      "server_source": "props.default_generation_settings.n_ctx:single_slot",
+      "runtime_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+      "runtime_build": "b11426-cda0f9256",
+      "chat_template_sha256": "7f0e529032c25183bcd66c7f238da2d377f43be754a94e2725a58c4e16d2ed67",
+      "model_quantization": "Q4_K - Medium",
+      "observed_at": "2026-10-28T15:28:14.553506773Z"
+    },
+    "context_snapshot_hash": "96d8f7357081a79f54dcb8d6ef74f59703a2c03260d72db127d9a3b4de4ff0d7",
+    "context_snapshot_number": 9,
+    "contradictions": null,
+    "counters": {
+      "steps_reserved": 6,
+      "llm_calls": 9,
+      "http_attempts": 9,
+      "search_queries": 2,
+      "fetches": 2,
+      "fetched_bytes": 791,
+      "evidence": 2,
+      "questions_created": 0,
+      "questions_accepted": 0,
+      "rounds": 1,
+      "stagnant_rounds": 0
+    },
+    "current_round": 1,
+    "cursor": 148,
+    "deadline_at": "2026-10-28T15:56:18.411592458Z",
+    "done_criteria": 10,
+    "elapsed_seconds": 116,
+    "inference_summary": {
+      "invocation_id": "invocation-164234052bad0bd2a0f9bf322efc4884379cd1fae446692f58e76fca9d06c62b",
+      "invocation_status": "failed",
+      "snapshot_at": "2026-10-28T15:28:12.448171274Z",
+      "inference": {
+        "status": "cancelled",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:28:12.448171274Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "output_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "total_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "cached_prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "output_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "prompt_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "generation_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "context_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        }
+      }
+    },
+    "initial_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Identify SQLite WAL (Write-Ahead Logging) mechanism and its role in transaction handling.",
+        "Explain reader concurrency capabilities within SQLite WAL mode.",
+        "Explain writer concurrency capabilities within SQLite WAL mode.",
+        "State specific concurrency limitations of SQLite WAL regarding readers and writers.",
+        "Synthesize findings from imported computing references to validate technical claims.",
+        "Provide a clear statement of concurrency limitations based on research."
+      ],
+      "schema_version": 1,
+      "goal": "Research SQLite WAL, readers, writer concurrency and transactions using both imported computing references. State concurrency limitations.",
+      "subtasks": [
+        {
+          "id": "search_1",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for SQLite WAL mode documentation focusing on transaction mechanics and concurrency models.. User request: Research SQLite WAL, readers, writer concurrency and transactions using both imported computing references. State concurrency limitations.",
+          "dependencies": [],
+          "expected_output": "List of relevant documents explaining WAL transaction flow and concurrency basics.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_2",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for specific technical limitations of SQLite WAL regarding simultaneous readers and writers.. User request: Research SQLite WAL, readers, writer concurrency and transactions using both imported computing references. State concurrency limitations.",
+          "dependencies": [],
+          "expected_output": "List of sources detailing concurrency bottlenecks or restrictions in WAL mode.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "fetch_1",
+          "kind": "fetch",
+          "description": "Fetch detailed content from the first source found regarding SQLite WAL transaction mechanics.",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Extracted text or summary of WAL transaction flow.",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_2",
+          "kind": "fetch",
+          "description": "Fetch detailed content from the first source found regarding SQLite WAL concurrency limitations.",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Extracted text or summary of concurrency limitations.",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_3",
+          "kind": "fetch",
+          "description": "Fetch detailed content from a second source regarding SQLite WAL transaction mechanics.",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Extracted text or summary of WAL transaction flow from second source.",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_4",
+          "kind": "fetch",
+          "description": "Fetch detailed content from a second source regarding SQLite WAL concurrency limitations.",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Extracted text or summary of concurrency limitations from second source.",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        }
+      ],
+      "max_steps": 6,
+      "final_deliverable": "A concise report detailing SQLite WAL mechanics, reader/writer concurrency models, and specific limitations, sourced from provided computing references."
+    },
+    "keep_awake_requested": true,
+    "max_continuations": 2,
+    "model_profile_hash": "1b3d9bd1717af420d357a0aaef2b79a9e80c4f65a5e5f8a3f07e2dbfbb65e4c3",
+    "offline_corpus_sha256": "9814cb53c048545010e91bb6ee7e50be66e8c3852eb3380c8c435a86f03fd43b",
+    "open_questions": [],
+    "pause_reason": "manual",
+    "privacy_mode": "offline",
+    "profile": "standard",
+    "remaining_seconds": 1683,
+    "research_report": {
+      "artifact_id": "",
+      "markdown_artifact_id": "",
+      "outcome": "completed",
+      "sections": 6,
+      "unrepresented_criteria": null
+    },
+    "research_rounds": [
+      {
+        "critical_missing": [],
+        "evidence_count": 2,
+        "frontier_count": 0,
+        "number": 1,
+        "outcome": "PASS",
+        "progress_fingerprint": "b63d7fa71ebdede397cddabb460b47cfbc1ae663f08cc55018f5f008cef5880c"
+      }
+    ],
+    "research_session_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+    "research_stagnant_rounds": 0,
+    "research_stop_reason": "criteria_covered",
+    "resource_probe_attempts": 0,
+    "resource_reason": "high_model_rss",
+    "resume_after": "2026-10-28T15:28:17.489941215Z",
+    "round_plan_count": 1,
+    "runtime": {
+      "active_run_id": "",
+      "enabled": true,
+      "keep_awake": true,
+      "max_resume_attempts": 5,
+      "resource_policy": {
+        "enabled": true,
+        "min_free_ram_bytes": 536870912,
+        "min_free_vram_mb": 256,
+        "gpu_temp_max_c": 85,
+        "process_rss_max_bytes": 2147483648,
+        "model_rss_max_bytes": 3221225472,
+        "recovery_ram_margin_percent": 10,
+        "recovery_vram_margin_percent": 10,
+        "recovery_gpu_temp_margin_c": 5,
+        "recovery_rss_margin_percent": 10,
+        "llama_health_timeout": 2000000000,
+        "check_interval": 1000000000,
+        "max_resume_attempts": 5,
+        "backoff_base": 5000000000,
+        "backoff_max": 60000000000
+      },
+      "resources": {
+        "free_ram_bytes": 8461553664,
+        "gpu_free_vram_mb": 2433,
+        "gpu_temp_c": 65,
+        "heap_alloc_bytes": 4196408,
+        "llama_health_latency": 332557,
+        "llama_healthy": true,
+        "model_rss_bytes": 3248381952,
+        "power_source": "AC",
+        "rss_bytes": 77291520,
+        "snapshot_at": "2026-10-28T15:28:12.448036792Z",
+        "warnings": []
+      },
+      "sleep": {
+        "active": false,
+        "available": true,
+        "power_source": "unknown",
+        "provider": "systemd-inhibit"
+      },
+      "sleep_policy": "keep_awake",
+      "status": "ok"
+    },
+    "runtime_model_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+    "sectioned_report_enabled": true,
+    "stage": null,
+    "status": "paused",
+    "step": "",
+    "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+    "telemetry": {
+      "timestamp": "2026-10-28T15:28:12.448171274Z",
+      "stale_after_ms": 39000,
+      "capabilities": {
+        "cpu": true,
+        "ram": true,
+        "gpu": true,
+        "gpu_temperature": true,
+        "gpu_utilization": true,
+        "power": true,
+        "battery": false,
+        "process_rss": true,
+        "llama_health": true,
+        "llama_timings": false,
+        "llama_metrics": false,
+        "llama_slots": false
+      },
+      "system": {
+        "metadata": {
+          "os": "linux",
+          "uptime_seconds": {
+            "value": 6617.44,
+            "source": "exact",
+            "unit": "seconds",
+            "updated_at": "2026-10-28T15:28:12.415738613Z"
+          }
+        },
+        "cpu_usage": {
+          "value": 18.860759493670887,
+          "source": "exact",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:28:12.415738613Z"
+        },
+        "cpu_temperature": {
+          "value": 77.375,
+          "source": "exact",
+          "unit": "celsius",
+          "updated_at": "2026-10-28T15:28:12.415738613Z"
+        },
+        "ram_used": {
+          "value": 7488176128,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:28:12.415738613Z"
+        },
+        "ram_free": {
+          "value": 8461553664,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:28:12.415738613Z"
+        },
+        "ram_total": {
+          "value": 15949729792,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:28:12.415738613Z"
+        },
+        "gpus": [
+          {
+            "name": {
+              "value": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+              "source": "exact",
+              "unit": "name",
+              "updated_at": "2026-10-28T15:28:12.415738613Z"
+            },
+            "utilization": {
+              "value": 100,
+              "source": "exact",
+              "unit": "percent",
+              "updated_at": "2026-10-28T15:28:12.415738613Z"
+            },
+            "temperature": {
+              "value": 65,
+              "source": "exact",
+              "unit": "celsius",
+              "updated_at": "2026-10-28T15:28:12.415738613Z"
+            },
+            "vram_used": {
+              "value": 3537895424,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:28:12.415738613Z"
+            },
+            "vram_free": {
+              "value": 2551185408,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:28:12.415738613Z"
+            },
+            "vram_total": {
+              "value": 6442450944,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:28:12.415738613Z"
+            },
+            "power_watts": {
+              "value": 36.74,
+              "source": "exact",
+              "unit": "watts",
+              "updated_at": "2026-10-28T15:28:12.415738613Z"
+            }
+          }
+        ],
+        "agent_rss": {
+          "value": 77291520,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:28:12.415738613Z"
+        },
+        "llama_server_rss": {
+          "value": 3248381952,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:28:12.415738613Z"
+        },
+        "power_source": {
+          "value": "AC",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:27:49.460345302Z"
+        },
+        "power_watts": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "watts",
+          "updated_at": "2026-10-28T15:28:12.415738613Z",
+          "error": "unsupported"
+        },
+        "battery_percent": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:28:12.415738613Z",
+          "error": "unsupported"
+        },
+        "battery_charging": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "boolean",
+          "updated_at": "2026-10-28T15:28:12.415738613Z",
+          "error": "unsupported"
+        },
+        "llama_health": {
+          "value": "healthy",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:28:12.415738613Z"
+        },
+        "llama_slots_active": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:28:12.415738613Z",
+          "error": "temporarily_unavailable"
+        },
+        "llama_slots_total": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:28:12.415738613Z",
+          "error": "temporarily_unavailable"
+        }
+      },
+      "inference": {
+        "status": "cancelled",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:28:12.448171274Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "output_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "total_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "cached_prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "output_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "prompt_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "generation_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "context_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:28:12.448171274Z"
+        }
+      }
+    },
+    "telemetry_revision": 47,
+    "terminal_outcome": "",
+    "updated_at": "2026-10-28T15:28:12.508092077Z",
+    "verdict": "PASS"
+  },
+  "run": {
+    "pause_reason": "manual",
+    "resource_reason": "high_model_rss",
+    "resume_after": "2026-10-28T15:28:17.489941215Z",
+    "resource_probe_attempts": 0,
+    "id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+    "conversation_id": "9e88393c-2dc9-4983-9fe1-6210759994ec",
+    "user_message_id": "8eaa6e3d-d8c5-4292-9a6b-16da993f34b8",
+    "assistant_message_id": "8cb4a028-dd12-4cab-83d5-81861e8c6658",
+    "mode": "research",
+    "operation": "send",
+    "status": "paused",
+    "retry_count": 0,
+    "cancel_requested": false,
+    "created_at": "2026-10-28T15:26:18.411592458Z",
+    "updated_at": "2026-10-28T15:28:12.508092077Z",
+    "started_at": "2026-10-28T15:26:18.413968976Z",
+    "heartbeat_at": "2026-10-28T15:28:08.466296444Z",
+    "deadline_at": "2026-10-28T15:56:18.411592458Z"
+  },
+  "artifacts": [
+    {
+      "id": "0811d85532857cce71e82353879cc348d91e93763ff3a9416d1caaade78c3ba0",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "name": "source-49b513afa563.txt",
+      "mime_type": "text/plain; charset=utf-8",
+      "sha256": "49b513afa5638c89a2dad0fb50fb8614e67b9bf9bd35f42a44a0f0a429c34c41",
+      "size_bytes": 415,
+      "created_at": "2026-10-28T15:26:57.817093645Z"
+    },
+    {
+      "id": "5f5b1aa474df501f7cb83ed3432f01927762ffcc67c6229d420948f4a1c61a3a",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "name": "source-49b513afa563.raw",
+      "mime_type": "text/plain",
+      "sha256": "49b513afa5638c89a2dad0fb50fb8614e67b9bf9bd35f42a44a0f0a429c34c41",
+      "size_bytes": 415,
+      "created_at": "2026-10-28T15:26:57.816506712Z"
+    },
+    {
+      "id": "3dc10a2c2c6ff2aa14d76947a42c8decaf3b906b4a51223648c9c3f99af11fcd",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "name": "source-e5daa620335c.txt",
+      "mime_type": "text/plain; charset=utf-8",
+      "sha256": "e5daa620335c0dc19d14bf0408ef8410b5efa5370df3b628e6a5d9ee334674e4",
+      "size_bytes": 376,
+      "created_at": "2026-10-28T15:26:53.662647087Z"
+    },
+    {
+      "id": "7019c586acd4a6d2afe52c2480090f91a14f7efc7e44d90fcbf16550fcc46ff6",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "name": "source-e5daa620335c.raw",
+      "mime_type": "text/plain",
+      "sha256": "e5daa620335c0dc19d14bf0408ef8410b5efa5370df3b628e6a5d9ee334674e4",
+      "size_bytes": 376,
+      "created_at": "2026-10-28T15:26:53.66214547Z"
+    }
+  ],
+  "public_events_complete": true,
+  "events": [
+    {
+      "id": "0c51390d-89f9-43f5-9e66-8f5a3802c244",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 1,
+      "type": "task.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:18.412703081Z",
+      "visibility": "user",
+      "payload": {
+        "mode": "research",
+        "status": "queued"
+      }
+    },
+    {
+      "id": "1359e826-6b39-4481-8069-2602e187d054",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 2,
+      "type": "message.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:18.412944721Z",
+      "visibility": "user",
+      "payload": {
+        "message_id": "8cb4a028-dd12-4cab-83d5-81861e8c6658",
+        "role": "assistant",
+        "status": "pending"
+      }
+    },
+    {
+      "id": "66f27a88-6025-4885-9378-1fdae16249b4",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 3,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:18.414502104Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "from": "queued",
+        "to": "planning"
+      }
+    },
+    {
+      "id": "470d9ffc-62b9-4a4c-9f86-9f606d4cda60",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 10,
+      "type": "plan.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:42.103626231Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "goal": "Research SQLite WAL, readers, writer concurrency and transactions using both imported computing references. State concurrency limitations.",
+        "steps": 6
+      }
+    },
+    {
+      "id": "c55736cb-d3c6-446e-8887-4b3cb108781b",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 11,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:42.113799599Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "from": "planning",
+        "plan_steps": 6,
+        "to": "running"
+      }
+    },
+    {
+      "id": "27e28aa2-2b3c-40fb-8b54-40ebbe47e22a",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 12,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:42.119721921Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for SQLite WAL mode documentation focusing on transaction mechanics and concurrency models.. User request: Research SQLite WAL, readers, writer concurrency and transactions using both imported computing references. State concurrency limitations.",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "2be1f978-638e-4332-b991-2e492751432d",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 22,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.753580574Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1",
+        "summary": "Searching for authoritative documentation on SQLite WAL mode transaction mechanics and concurrency models to identify specific limitations.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "8233d78a-50e8-4bb7-b398-1a133886a1fb",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 25,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.774102231Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "SQLite WAL mode transaction mechanics reader writer concurrency limitations",
+        "query_fingerprint": "4afc8bc22068c9b774f0353146656840eab8ead5bd8b859ae6ece10a16091999",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "e1a078db-7943-42c5-937e-e0673f1efdb6",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 26,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.774978307Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:26:45.774761385Z",
+        "code": "search_ok",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:26:45.774761385Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider is unavailable",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "4afc8bc22068c9b774f0353146656840eab8ead5bd8b859ae6ece10a16091999",
+        "result_count": 4,
+        "retryable": false,
+        "started_at": "2026-10-28T15:26:45.774761385Z",
+        "state": "unavailable",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "0f4cc323-534e-4e20-9834-77cbee2c444c",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 27,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.776205266Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "4afc8bc22068c9b774f0353146656840eab8ead5bd8b859ae6ece10a16091999",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:26:45.775833592Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "59182d73-9f54-4a91-8292-b5ec69ce7f18",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 28,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.777606545Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "url": "https://docs.example.com/computing",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic computing laboratory reference",
+          "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+          "provider": "search",
+          "query_fingerprint": "4afc8bc22068c9b774f0353146656840eab8ead5bd8b859ae6ece10a16091999",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:26:45.777059309Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "95846f54-66f0-40d6-a726-ed6a4f213322",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 29,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.779830916Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "4afc8bc22068c9b774f0353146656840eab8ead5bd8b859ae6ece10a16091999",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:26:45.779480564Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "2feb40ac-e97a-4ef7-b914-3472db804977",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 30,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.781427965Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "fingerprint": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "url": "https://docs.example.com/protocol",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic protocol architecture reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+          "provider": "search",
+          "query_fingerprint": "4afc8bc22068c9b774f0353146656840eab8ead5bd8b859ae6ece10a16091999",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:26:45.780956377Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "0aaaa31f-299f-494f-b1e2-0dcb6907439c",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 31,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.782880433Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "4afc8bc22068c9b774f0353146656840eab8ead5bd8b859ae6ece10a16091999",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:26:45.782353808Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "a7f69db5-e59a-4f05-a3fb-6b66b8f15376",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 32,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.785139562Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "url": "https://docs.example.com/computing",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic computing laboratory reference",
+          "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+          "provider": "search",
+          "query_fingerprint": "4afc8bc22068c9b774f0353146656840eab8ead5bd8b859ae6ece10a16091999",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:26:45.783434362Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "c1801e9f-9b60-4704-bb2d-d437b53e6470",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 33,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.785931264Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "4afc8bc22068c9b774f0353146656840eab8ead5bd8b859ae6ece10a16091999",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:26:45.78566736Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "f6a4f21b-62c7-4d59-a46e-1f4c8e8e81fe",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 34,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.786947903Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "fingerprint": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "url": "https://docs.example.com/protocol",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic protocol architecture reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+          "provider": "search",
+          "query_fingerprint": "4afc8bc22068c9b774f0353146656840eab8ead5bd8b859ae6ece10a16091999",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:26:45.786672347Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "dcb5fbc7-1bbc-42ed-ad5c-bfdfe22a8b6f",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 36,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.809747346Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [
+          {
+            "provider": "search",
+            "query": "SQLite WAL mode transaction mechanics reader writer concurrency limitations",
+            "url": "https://reference.example.net/computing",
+            "title": "Independent synthetic computing reference",
+            "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+            "score": 6,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "SQLite WAL mode transaction mechanics reader writer concurrency limitations",
+            "url": "https://docs.example.com/computing",
+            "title": "Synthetic computing laboratory reference",
+            "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+            "score": 5,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "SQLite WAL mode transaction mechanics reader writer concurrency limitations",
+            "url": "https://docs.example.com/recovery",
+            "title": "Synthetic recovery and provenance reference",
+            "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "SQLite WAL mode transaction mechanics reader writer concurrency limitations",
+            "url": "https://docs.example.com/protocol",
+            "title": "Synthetic protocol architecture reference",
+            "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          }
+        ],
+        "step_id": "search_1",
+        "summary": "Searching for authoritative documentation on SQLite WAL mode transaction mechanics and concurrency models to identify specific limitations.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "b9bc41a8-5c0d-48c2-bdfd-5c915a6bbfb1",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 37,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.810760649Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "b9641d4e-9781-45e9-a75f-22521e0c12e4",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 38,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.819181385Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for specific technical limitations of SQLite WAL regarding simultaneous readers and writers.. User request: Research SQLite WAL, readers, writer concurrency and transactions using both imported computing references. State concurrency limitations.",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "86cc991e-f46e-4d46-b3e7-66b7765e9286",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 41,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:45.863368392Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 0,
+        "contradictions": 0,
+        "done_criteria": 10,
+        "hash": "f4a2375a817eecc3cab18836497b46e965ad50d54df41f264df7ae10d70585c8",
+        "original_tool_result_bytes": 2705,
+        "reason": "role_tool_results",
+        "reduced_bytes": 192,
+        "retained_tool_result_bytes": 2513,
+        "slot": "bac9c42d793ee36b33eaadd9e465239d09f188663973ac3ffe59320364a95750"
+      }
+    },
+    {
+      "id": "be520103-072e-434a-b4f0-47a76d395725",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 49,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.389404768Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_2",
+        "summary": "Searching for authoritative documentation on SQLite WAL mode concurrency limitations, specifically focusing on the interaction between multiple readers and writers.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "6c76f44f-f018-41be-894f-5801b676bf6b",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 52,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.446324577Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "SQLite WAL mode multiple readers multiple writers concurrency limitations",
+        "query_fingerprint": "47be90b196ef5de4e9675d28bf07ed6faaf2c1721e2f022ed0aed76ca91534d5",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "b96b7adc-9882-4f80-b44c-229ff9c79f67",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 53,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.446830181Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:26:49.446689427Z",
+        "code": "search_ok",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:26:49.446689427Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider is unavailable",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "47be90b196ef5de4e9675d28bf07ed6faaf2c1721e2f022ed0aed76ca91534d5",
+        "result_count": 4,
+        "retryable": false,
+        "started_at": "2026-10-28T15:26:49.446689427Z",
+        "state": "unavailable",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "84dfb616-816c-4618-abbf-37202adf654b",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 54,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.447117711Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "url": "https://docs.example.com/computing",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic computing laboratory reference",
+          "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+          "provider": "search",
+          "query_fingerprint": "47be90b196ef5de4e9675d28bf07ed6faaf2c1721e2f022ed0aed76ca91534d5",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:26:49.446959122Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "b2197aea-ec62-4cc9-8e3a-74ccd69b0493",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 55,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.447532268Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "47be90b196ef5de4e9675d28bf07ed6faaf2c1721e2f022ed0aed76ca91534d5",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:26:49.447332639Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "d2fe8d3c-8c49-4176-8148-a16639c149ac",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 56,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.44796473Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "fingerprint": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "url": "https://docs.example.com/protocol",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic protocol architecture reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+          "provider": "search",
+          "query_fingerprint": "47be90b196ef5de4e9675d28bf07ed6faaf2c1721e2f022ed0aed76ca91534d5",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:26:49.447802003Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "6ec95f08-2fcb-4aa5-85d6-4da0811b2b56",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 57,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.448689071Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "47be90b196ef5de4e9675d28bf07ed6faaf2c1721e2f022ed0aed76ca91534d5",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:26:49.448351403Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "ab0d82fc-3539-4d78-b49d-a544b409d9cf",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 58,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.449402249Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "url": "https://docs.example.com/computing",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic computing laboratory reference",
+          "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+          "provider": "search",
+          "query_fingerprint": "47be90b196ef5de4e9675d28bf07ed6faaf2c1721e2f022ed0aed76ca91534d5",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:26:49.449098508Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "ef792875-47aa-4010-a97a-d21532da6efc",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 59,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.449885049Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "47be90b196ef5de4e9675d28bf07ed6faaf2c1721e2f022ed0aed76ca91534d5",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:26:49.449661514Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "b518a28f-5a42-4402-9c8a-bb740be43402",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 60,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.450376847Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "fingerprint": "8fad5b965bd30e4b8f037a479b1ca165acd601f282138d480f530f4eae384ea9",
+          "url": "https://docs.example.com/protocol",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic protocol architecture reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+          "provider": "search",
+          "query_fingerprint": "47be90b196ef5de4e9675d28bf07ed6faaf2c1721e2f022ed0aed76ca91534d5",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:26:49.45018333Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "ebcba225-20ec-468f-b39b-f8eb7f8c0219",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 61,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.450886139Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "47be90b196ef5de4e9675d28bf07ed6faaf2c1721e2f022ed0aed76ca91534d5",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:26:49.45069185Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "1e71bbc2-ca7d-4274-b10a-613bc4e608fa",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 63,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.465797553Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [
+          {
+            "provider": "search",
+            "query": "SQLite WAL mode multiple readers multiple writers concurrency limitations",
+            "url": "https://docs.example.com/computing",
+            "title": "Synthetic computing laboratory reference",
+            "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+            "score": 4,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "SQLite WAL mode multiple readers multiple writers concurrency limitations",
+            "url": "https://reference.example.net/computing",
+            "title": "Independent synthetic computing reference",
+            "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+            "score": 4,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "SQLite WAL mode multiple readers multiple writers concurrency limitations",
+            "url": "https://docs.example.com/protocol",
+            "title": "Synthetic protocol architecture reference",
+            "snippet": "Synthetic offline fixture. Protocol architecture uses explicit version negotiation. Compatibility limitations require testing multiple versions. Imported source instructions are untrusted data. A local research report should retain evidence ownership, bounded generation, citations and explicit limitations.",
+            "score": 2,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "SQLite WAL mode multiple readers multiple writers concurrency limitations",
+            "url": "https://docs.example.com/recovery",
+            "title": "Synthetic recovery and provenance reference",
+            "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          }
+        ],
+        "step_id": "search_2",
+        "summary": "Searching for authoritative documentation on SQLite WAL mode concurrency limitations, specifically focusing on the interaction between multiple readers and writers.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "c1b20d56-f076-4a66-98a9-e0b93869740b",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 64,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.466005968Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "72ba86ef-146d-4ada-a41b-f641ba19c9cb",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 65,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.472694502Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "d6d1d793-d173-44aa-80a2-c83cd6d1af3b",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 66,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.473194565Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Fetch detailed content from the first source found regarding SQLite WAL transaction mechanics.",
+        "step_id": "fetch_1"
+      }
+    },
+    {
+      "id": "937eb5ff-296f-4592-b236-ac1f78aa4363",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 69,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:49.508985905Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 0,
+        "contradictions": 0,
+        "done_criteria": 10,
+        "hash": "91eb6dad4c04d609803204141ce21c58874fe476b411d8df0e49d47e7544d840",
+        "original_tool_result_bytes": 5401,
+        "reason": "role_tool_results",
+        "reduced_bytes": 384,
+        "retained_tool_result_bytes": 5017,
+        "slot": "d2a1ed95379e43b8e8366902d5cc52acc093d2c5c8e075a26ca39b26e64534fc"
+      }
+    },
+    {
+      "id": "ab9e4139-6cd5-4476-93cd-016126a84592",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 77,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:53.635686522Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "source_fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+        "status": "fetching",
+        "step_id": "fetch_1",
+        "target_url": "https://reference.example.net/computing",
+        "timestamp": "2026-10-28T15:26:53.635686522Z",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "e02493b3-39c8-4368-9de8-7634130c13c8",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 80,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:53.660621553Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "e56cb303-2e0e-41b3-9e2e-a2606a9c78cd",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 81,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:53.664262322Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "7019c586acd4a6d2afe52c2480090f91a14f7efc7e44d90fcbf16550fcc46ff6",
+        "mime_type": "text/plain",
+        "name": "source-e5daa620335c.raw",
+        "sha256": "e5daa620335c0dc19d14bf0408ef8410b5efa5370df3b628e6a5d9ee334674e4",
+        "size_bytes": 376
+      }
+    },
+    {
+      "id": "e3e7b108-622c-47aa-9081-8890fc7732b9",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 82,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:53.6647079Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "3dc10a2c2c6ff2aa14d76947a42c8decaf3b906b4a51223648c9c3f99af11fcd",
+        "mime_type": "text/plain; charset=utf-8",
+        "name": "source-e5daa620335c.txt",
+        "sha256": "e5daa620335c0dc19d14bf0408ef8410b5efa5370df3b628e6a5d9ee334674e4",
+        "size_bytes": 376
+      }
+    },
+    {
+      "id": "98fd41e1-029a-4222-83d4-86c606212284",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 83,
+      "type": "evidence.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:53.665174178Z",
+      "visibility": "user",
+      "payload": {
+        "canonical_url": "https://reference.example.net/computing",
+        "evidence_id": "a915a02f-4336-4d3a-ac7a-d4c98a70f587",
+        "title": "Independent synthetic computing reference"
+      }
+    },
+    {
+      "id": "b86b1b6e-58f5-4832-b79e-de77f57542a9",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 85,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:53.688829287Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "result": {
+          "content_sha256": "e5daa620335c0dc19d14bf0408ef8410b5efa5370df3b628e6a5d9ee334674e4",
+          "evidence_id": "a915a02f-4336-4d3a-ac7a-d4c98a70f587",
+          "excerpt": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "fetched_bytes": 376,
+          "requested_url": "https://reference.example.net/computing",
+          "taint": "untrusted_external_content",
+          "title": "Independent synthetic computing reference",
+          "url": "https://reference.example.net/computing"
+        },
+        "step_id": "fetch_1",
+        "summary": "Fetching detailed content from the primary computing reference to extract specific information on SQLite WAL transaction mechanics, reader/writer concurrency models, and limitations.",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "b1c543e6-5493-4988-bef1-9ae69b9a4aaf",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 86,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:53.688915595Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "step_id": "fetch_1"
+      }
+    },
+    {
+      "id": "8915e15c-34aa-49c1-8c4f-b2ef18262cf6",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 87,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:53.697111884Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "0d323c89-e091-403f-a2eb-239123648589",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 88,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:53.697622718Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Fetch detailed content from the first source found regarding SQLite WAL concurrency limitations.",
+        "step_id": "fetch_2"
+      }
+    },
+    {
+      "id": "c3c99a09-feb5-4708-940a-58da81cb0049",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 91,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:53.751674303Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 1,
+        "contradictions": 0,
+        "done_criteria": 10,
+        "hash": "8f23627052380c608fe9b17e5338978723257a41f6504fb91115d633b54430da",
+        "original_tool_result_bytes": 6154,
+        "reason": "role_tool_results",
+        "reduced_bytes": 384,
+        "retained_tool_result_bytes": 5770,
+        "slot": "4af550b85f0e1eb30a5174c56ad0814811625e96fa63881e11ca76cc4786c94c"
+      }
+    },
+    {
+      "id": "52572447-dc1d-454c-906f-972df7001c9c",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 99,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:57.783692389Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "source_fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+        "status": "fetching",
+        "step_id": "fetch_2",
+        "target_url": "https://docs.example.com/computing",
+        "timestamp": "2026-10-28T15:26:57.783692389Z",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "5b29f48d-3ffe-4e37-8e82-b303800dd667",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 102,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:57.815031239Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "d55d4e43-d5c3-40b1-9660-308ff45f909b",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 103,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:57.818391842Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "5f5b1aa474df501f7cb83ed3432f01927762ffcc67c6229d420948f4a1c61a3a",
+        "mime_type": "text/plain",
+        "name": "source-49b513afa563.raw",
+        "sha256": "49b513afa5638c89a2dad0fb50fb8614e67b9bf9bd35f42a44a0f0a429c34c41",
+        "size_bytes": 415
+      }
+    },
+    {
+      "id": "ee8ec76a-0a5a-4600-a240-7b04aaa89080",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 104,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:57.818626589Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "0811d85532857cce71e82353879cc348d91e93763ff3a9416d1caaade78c3ba0",
+        "mime_type": "text/plain; charset=utf-8",
+        "name": "source-49b513afa563.txt",
+        "sha256": "49b513afa5638c89a2dad0fb50fb8614e67b9bf9bd35f42a44a0f0a429c34c41",
+        "size_bytes": 415
+      }
+    },
+    {
+      "id": "13327098-7ca2-4357-bd64-d342d32f179c",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 105,
+      "type": "evidence.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:57.818987232Z",
+      "visibility": "user",
+      "payload": {
+        "canonical_url": "https://docs.example.com/computing",
+        "evidence_id": "280762c7-b2d9-4a70-8d55-1d025b0ec175",
+        "title": "Synthetic computing laboratory reference"
+      }
+    },
+    {
+      "id": "928bfb32-ef1d-4a61-a343-42dff51d5244",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 107,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:57.850291925Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "result": {
+          "content_sha256": "49b513afa5638c89a2dad0fb50fb8614e67b9bf9bd35f42a44a0f0a429c34c41",
+          "evidence_id": "280762c7-b2d9-4a70-8d55-1d025b0ec175",
+          "excerpt": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited concurrent writers.",
+          "fetched_bytes": 415,
+          "requested_url": "https://docs.example.com/computing",
+          "taint": "untrusted_external_content",
+          "title": "Synthetic computing laboratory reference",
+          "url": "https://docs.example.com/computing"
+        },
+        "step_id": "fetch_2",
+        "summary": "Fetching detailed content from the primary computing reference to extract specific information on SQLite WAL transaction mechanics, reader/writer concurrency models, and limitations.",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "9346551f-c4b6-4bff-bbd1-dc83323a4a8c",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 108,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:57.851618037Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "step_id": "fetch_2"
+      }
+    },
+    {
+      "id": "07941fd3-4256-499f-be4e-00f0e723213f",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 109,
+      "type": "step.skipped",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:57.863970759Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "reason": "the required distinct-source evidence threshold is already met",
+        "step_id": "fetch_3"
+      }
+    },
+    {
+      "id": "bfa642c9-c427-4bff-8845-2d40802b07d4",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 111,
+      "type": "step.skipped",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:57.878177371Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "reason": "the required distinct-source evidence threshold is already met",
+        "step_id": "fetch_4"
+      }
+    },
+    {
+      "id": "7796843c-3a99-4c4e-a2fe-7f5e58d0d31b",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 114,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:57.911298512Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "verifying"
+      }
+    },
+    {
+      "id": "faf38ef8-c4c2-4243-9681-1e801c80cd86",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 116,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:57.976174332Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 2,
+        "contradictions": 0,
+        "done_criteria": 10,
+        "hash": "2a657936a59d67d6bb656137fa908a72740ffed1fa5044664874c4d391d40221",
+        "original_tool_result_bytes": 6935,
+        "reason": "role_tool_results",
+        "reduced_bytes": 384,
+        "retained_tool_result_bytes": 6551,
+        "slot": "2ca4994effa45820f9d9698ff4a879068c14ed86a059393f29c276c342bb742b"
+      }
+    },
+    {
+      "id": "c4508a34-c8ee-45f3-9be5-8efa7ebfa2aa",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 122,
+      "type": "research.round.assessed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:27:41.958102726Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "critical_missing_count": 0,
+        "evidence_count": 2,
+        "frontier_count": 0,
+        "number": 1,
+        "outcome": "PASS",
+        "stagnant_rounds": 0,
+        "stop_reason": "criteria_covered"
+      }
+    },
+    {
+      "id": "74d99c9e-33b3-429f-ace4-27c3ed553a15",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 123,
+      "type": "verification.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:27:41.958159877Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "criteria": [
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "280762c7-b2d9-4a70-8d55-1d025b0ec175",
+              "a915a02f-4336-4d3a-ac7a-d4c98a70f587"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 1,
+            "evidence_ids": [
+              "280762c7-b2d9-4a70-8d55-1d025b0ec175",
+              "a915a02f-4336-4d3a-ac7a-d4c98a70f587"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 2,
+            "evidence_ids": [
+              "280762c7-b2d9-4a70-8d55-1d025b0ec175",
+              "a915a02f-4336-4d3a-ac7a-d4c98a70f587"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 3,
+            "evidence_ids": [
+              "280762c7-b2d9-4a70-8d55-1d025b0ec175",
+              "a915a02f-4336-4d3a-ac7a-d4c98a70f587"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 4,
+            "evidence_ids": [
+              "280762c7-b2d9-4a70-8d55-1d025b0ec175",
+              "a915a02f-4336-4d3a-ac7a-d4c98a70f587"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 5,
+            "evidence_ids": [
+              "280762c7-b2d9-4a70-8d55-1d025b0ec175",
+              "a915a02f-4336-4d3a-ac7a-d4c98a70f587"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 6,
+            "evidence_ids": [
+              "280762c7-b2d9-4a70-8d55-1d025b0ec175",
+              "a915a02f-4336-4d3a-ac7a-d4c98a70f587"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "met": true,
+            "step_id": "search_1"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "met": true,
+            "step_id": "search_2"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "a915a02f-4336-4d3a-ac7a-d4c98a70f587"
+            ],
+            "met": true,
+            "step_id": "fetch_1"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "280762c7-b2d9-4a70-8d55-1d025b0ec175"
+            ],
+            "met": true,
+            "step_id": "fetch_2"
+          }
+        ],
+        "missing": [],
+        "phase": "evidence_readiness",
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "3198df16-8a19-4e67-8cab-a7261f427f04",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 125,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:27:41.991758748Z",
+      "stage": "finalization",
+      "visibility": "user",
+      "payload": {
+        "from": "verifying",
+        "to": "verifying"
+      }
+    },
+    {
+      "id": "0ff38eba-8aa7-4479-9942-21d2819efff5",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "seq": 148,
+      "type": "run.paused",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:28:12.508414535Z",
+      "visibility": "user",
+      "payload": {
+        "pause_reason": "manual",
+        "resource_probe_attempts": 0,
+        "resource_reason": "high_model_rss",
+        "resume_after": "2026-10-28T15:28:17.489941215Z",
+        "status": "paused"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "724c94e2-bb14-4995-9be6-e41101165667",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "step_id": "search_1",
+      "position": 0,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for SQLite WAL mode documentation focusing on transaction mechanics and concurrency models.. User request: Research SQLite WAL, readers, writer concurrency and transactions using both imported computing references. State concurrency limitations.",
+      "dependencies": [],
+      "expected_output": "List of relevant documents explaining WAL transaction flow and concurrency basics.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:26:42.101051708Z",
+      "updated_at": "2026-10-28T15:26:45.80952339Z"
+    },
+    {
+      "id": "0eb8f275-6f4a-4746-80d8-0f987c33feb0",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "step_id": "search_2",
+      "position": 1,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for specific technical limitations of SQLite WAL regarding simultaneous readers and writers.. User request: Research SQLite WAL, readers, writer concurrency and transactions using both imported computing references. State concurrency limitations.",
+      "dependencies": [],
+      "expected_output": "List of sources detailing concurrency bottlenecks or restrictions in WAL mode.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:26:42.101454913Z",
+      "updated_at": "2026-10-28T15:26:49.465391402Z"
+    },
+    {
+      "id": "bb6b26c5-9da4-4378-87dc-47531819abee",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "step_id": "fetch_1",
+      "position": 2,
+      "kind": "fetch",
+      "description": "Fetch detailed content from the first source found regarding SQLite WAL transaction mechanics.",
+      "dependencies": [
+        "search_1",
+        "search_2"
+      ],
+      "expected_output": "Extracted text or summary of WAL transaction flow.",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:26:42.101626778Z",
+      "updated_at": "2026-10-28T15:26:53.688637523Z"
+    },
+    {
+      "id": "61acfbbf-1d81-4b21-af5b-291eb9056f9e",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "step_id": "fetch_2",
+      "position": 3,
+      "kind": "fetch",
+      "description": "Fetch detailed content from the first source found regarding SQLite WAL concurrency limitations.",
+      "dependencies": [
+        "search_1",
+        "search_2"
+      ],
+      "expected_output": "Extracted text or summary of concurrency limitations.",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:26:42.101848289Z",
+      "updated_at": "2026-10-28T15:26:57.850154467Z"
+    },
+    {
+      "id": "a4914b99-da6b-4c71-bac6-c72a213bdcb9",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "step_id": "fetch_3",
+      "position": 4,
+      "kind": "fetch",
+      "description": "Fetch detailed content from a second source regarding SQLite WAL transaction mechanics.",
+      "dependencies": [
+        "search_1",
+        "search_2"
+      ],
+      "expected_output": "Extracted text or summary of WAL transaction flow from second source.",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "skipped",
+      "attempts": 0,
+      "created_at": "2026-10-28T15:26:42.101921301Z",
+      "updated_at": "2026-10-28T15:26:57.864128457Z"
+    },
+    {
+      "id": "24886e9a-81e5-44b4-a9c2-59ec0a36ae78",
+      "task_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "step_id": "fetch_4",
+      "position": 5,
+      "kind": "fetch",
+      "description": "Fetch detailed content from a second source regarding SQLite WAL concurrency limitations.",
+      "dependencies": [
+        "search_1",
+        "search_2"
+      ],
+      "expected_output": "Extracted text or summary of concurrency limitations from second source.",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "skipped",
+      "attempts": 0,
+      "created_at": "2026-10-28T15:26:42.101952171Z",
+      "updated_at": "2026-10-28T15:26:57.87838209Z"
+    }
+  ],
+  "inference_summaries_complete": true,
+  "inference_summaries": [
+    {
+      "seq": 8,
+      "summary": {
+        "invocation_id": "invocation-c4c1982e9fbcca621a14b9f615a6d79e5dfd1b6a59bd182dc7a723b95ea16a8b",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:26:42.073251558Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:26:42.073251558Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:18.47728126Z"
+          },
+          "prompt_tokens": {
+            "value": 782,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:42.073220077Z"
+          },
+          "output_tokens": {
+            "value": 782,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:42.073220077Z"
+          },
+          "total_tokens": {
+            "value": 1564,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:42.073220077Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:42.073220077Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 740.5969287009722,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:42.073220077Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.71207135807561,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:42.073220077Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:18.47728126Z"
+          },
+          "prompt_ms": {
+            "value": 1055.905,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:42.073220077Z"
+          },
+          "generation_ms": {
+            "value": 22528.186,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:42.073220077Z"
+          },
+          "context_tokens": {
+            "value": 1564,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:42.073220077Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:18.47728126Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 18,
+      "summary": {
+        "invocation_id": "invocation-c05f680528f42eeea058df39b6b74226fe283ba8507b150beea2197f78fc8170",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:26:45.707182822Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:26:45.707182822Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:42.239940448Z"
+          },
+          "prompt_tokens": {
+            "value": 1057,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:45.707152834Z"
+          },
+          "output_tokens": {
+            "value": 61,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:45.707152834Z"
+          },
+          "total_tokens": {
+            "value": 1118,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:45.707152834Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:45.707152834Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 897.0185378173511,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:45.707152834Z"
+          },
+          "output_tokens_per_second": {
+            "value": 30.70129302773635,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:45.707152834Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:42.239940448Z"
+          },
+          "prompt_ms": {
+            "value": 1178.348,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:45.707152834Z"
+          },
+          "generation_ms": {
+            "value": 1986.887,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:45.707152834Z"
+          },
+          "context_tokens": {
+            "value": 1118,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:45.707152834Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:42.239940448Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 45,
+      "summary": {
+        "invocation_id": "invocation-3b2f1f4c55e91ad00c43e2119ab4ad8eb24720eed722c8df611b338a91f22aed",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:26:49.367841963Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:26:49.367841963Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:45.910277439Z"
+          },
+          "prompt_tokens": {
+            "value": 1525,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:49.367791485Z"
+          },
+          "output_tokens": {
+            "value": 65,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:49.367791485Z"
+          },
+          "total_tokens": {
+            "value": 1590,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:49.367791485Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 397,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:49.367791485Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 883.8698454638202,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:49.367791485Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.271601917944295,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:49.367791485Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:45.910277439Z"
+          },
+          "prompt_ms": {
+            "value": 1276.206,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:49.367791485Z"
+          },
+          "generation_ms": {
+            "value": 1896.614,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:49.367791485Z"
+          },
+          "context_tokens": {
+            "value": 1590,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:49.367791485Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:45.910277439Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 73,
+      "summary": {
+        "invocation_id": "invocation-a4a2e6a9aa03acf28955ee9fd38b32a76a0979a3e3242f6c6ed439d973ac9373",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:26:53.572909599Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:26:53.572909599Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:49.54446177Z"
+          },
+          "prompt_tokens": {
+            "value": 1917,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:53.572887967Z"
+          },
+          "output_tokens": {
+            "value": 68,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:53.572887967Z"
+          },
+          "total_tokens": {
+            "value": 1985,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:53.572887967Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:53.572887967Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1039.2913951877067,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:53.572887967Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.66833618497393,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:53.572887967Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:49.54446177Z"
+          },
+          "prompt_ms": {
+            "value": 1844.526,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:53.572887967Z"
+          },
+          "generation_ms": {
+            "value": 1961.444,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:53.572887967Z"
+          },
+          "context_tokens": {
+            "value": 1985,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:53.572887967Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:49.54446177Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 95,
+      "summary": {
+        "invocation_id": "invocation-2d90b7042e09b0f439762dfc9d05c719edbb5751517514e3cf4377e3eedb51e3",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:26:57.725093962Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:26:57.725093962Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:53.797066145Z"
+          },
+          "prompt_tokens": {
+            "value": 2161,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:57.725069314Z"
+          },
+          "output_tokens": {
+            "value": 69,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:57.725069314Z"
+          },
+          "total_tokens": {
+            "value": 2230,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:57.725069314Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 348,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:57.725069314Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1037.3503337487311,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:57.725069314Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.61103219126959,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:57.725069314Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:53.797066145Z"
+          },
+          "prompt_ms": {
+            "value": 1747.722,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:57.725069314Z"
+          },
+          "generation_ms": {
+            "value": 1993.584,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:57.725069314Z"
+          },
+          "context_tokens": {
+            "value": 2230,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:57.725069314Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:53.797066145Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 120,
+      "summary": {
+        "invocation_id": "invocation-093f56936049a7673ba70d07537e5411045e1a11ff14d99091a00b850a03369d",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:27:41.925490035Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:27:41.925490035Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:58.051020976Z"
+          },
+          "prompt_tokens": {
+            "value": 4900,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:27:41.925294083Z"
+          },
+          "output_tokens": {
+            "value": 1326,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:27:41.925294083Z"
+          },
+          "total_tokens": {
+            "value": 6226,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:27:41.925294083Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:27:41.925294083Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1082.0247642345328,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:27:41.925294083Z"
+          },
+          "output_tokens_per_second": {
+            "value": 33.892546722255894,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:27:41.925294083Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:58.051020976Z"
+          },
+          "prompt_ms": {
+            "value": 4528.547,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:27:41.925294083Z"
+          },
+          "generation_ms": {
+            "value": 39123.646,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:27:41.925294083Z"
+          },
+          "context_tokens": {
+            "value": 6226,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:27:41.925294083Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:58.051020976Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 132,
+      "summary": {
+        "invocation_id": "invocation-7f01bf261d95c91a39651ef2af83116b98bec3de8043e3fdbebb1524d150d711",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:28:06.81564222Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:28:06.81564222Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:27:42.150745785Z"
+          },
+          "prompt_tokens": {
+            "value": 1866,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:06.815597082Z"
+          },
+          "output_tokens": {
+            "value": 793,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:06.815597082Z"
+          },
+          "total_tokens": {
+            "value": 2659,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:06.815597082Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:06.815597082Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1047.496617809688,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:28:06.815597082Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.95139640304733,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:28:06.815597082Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:27:42.150745785Z"
+          },
+          "prompt_ms": {
+            "value": 1781.39,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:28:06.815597082Z"
+          },
+          "generation_ms": {
+            "value": 22688.65,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:28:06.815597082Z"
+          },
+          "context_tokens": {
+            "value": 2659,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:06.815597082Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:27:42.150745785Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 139,
+      "summary": {
+        "invocation_id": "invocation-26f5a4bd203bbff36c0629bc09fc78a1ecd8cb079edfd138d1d3c63de6521964",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:28:10.933151586Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:28:10.933151586Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:07.088797708Z"
+          },
+          "prompt_tokens": {
+            "value": 1300,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:10.933119233Z"
+          },
+          "output_tokens": {
+            "value": 85,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:10.933119233Z"
+          },
+          "total_tokens": {
+            "value": 1385,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:10.933119233Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:10.933119233Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 995.6147001744622,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:28:10.933119233Z"
+          },
+          "output_tokens_per_second": {
+            "value": 35.595355350526305,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:28:10.933119233Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:28:07.088797708Z"
+          },
+          "prompt_ms": {
+            "value": 1305.726,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:28:10.933119233Z"
+          },
+          "generation_ms": {
+            "value": 2387.952,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:28:10.933119233Z"
+          },
+          "context_tokens": {
+            "value": 1385,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:10.933119233Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:07.088797708Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 146,
+      "summary": {
+        "invocation_id": "invocation-164234052bad0bd2a0f9bf322efc4884379cd1fae446692f58e76fca9d06c62b",
+        "invocation_status": "failed",
+        "snapshot_at": "2026-10-28T15:28:12.448171274Z",
+        "inference": {
+          "status": "cancelled",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:28:12.448171274Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:12.448171274Z"
+          },
+          "prompt_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:12.448171274Z"
+          },
+          "output_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:12.448171274Z"
+          },
+          "total_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:12.448171274Z"
+          },
+          "cached_prompt_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:12.448171274Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:28:12.448171274Z"
+          },
+          "output_tokens_per_second": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:28:12.448171274Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:28:12.448171274Z"
+          },
+          "prompt_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:28:12.448171274Z"
+          },
+          "generation_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:28:12.448171274Z"
+          },
+          "context_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:12.448171274Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:28:12.448171274Z"
+          }
+        }
+      }
+    }
+  ]
+}

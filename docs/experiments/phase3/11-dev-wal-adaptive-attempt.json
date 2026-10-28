@@ -1,0 +1,10 @@
+{
+  "case_id": "dev-wal",
+  "variant": "adaptive",
+  "state": "attempted",
+  "started_at": "2026-10-28T15:26:13.131Z",
+  "run_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused"
+}

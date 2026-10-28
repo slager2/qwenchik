@@ -1,0 +1,517 @@
+{
+  "target_sample_period_seconds": 2,
+  "missed_sample_intervals": 0,
+  "sampling_error": null,
+  "samples": [
+    {
+      "at": "2026-10-28T15:28:20.293Z",
+      "ram_available_bytes": 10893103104,
+      "model_rss_bytes": 830775296,
+      "app_rss_bytes": 24461312,
+      "gpu_free_mib": 2464,
+      "gpu_temperature_c": 60,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:22.294Z",
+      "ram_available_bytes": 10618867712,
+      "model_rss_bytes": 1047846912,
+      "app_rss_bytes": 27201536,
+      "gpu_free_mib": 2435,
+      "gpu_temperature_c": 63,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:24.293Z",
+      "ram_available_bytes": 10339848192,
+      "model_rss_bytes": 1048240128,
+      "app_rss_bytes": 27430912,
+      "gpu_free_mib": 2435,
+      "gpu_temperature_c": 64,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:26.293Z",
+      "ram_available_bytes": 10392309760,
+      "model_rss_bytes": 1048428544,
+      "app_rss_bytes": 27824128,
+      "gpu_free_mib": 2435,
+      "gpu_temperature_c": 63,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:28.294Z",
+      "ram_available_bytes": 10389094400,
+      "model_rss_bytes": 1062514688,
+      "app_rss_bytes": 27693056,
+      "gpu_free_mib": 2435,
+      "gpu_temperature_c": 64,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:30.296Z",
+      "ram_available_bytes": 10381488128,
+      "model_rss_bytes": 1062600704,
+      "app_rss_bytes": 28188672,
+      "gpu_free_mib": 2435,
+      "gpu_temperature_c": 64,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:32.299Z",
+      "ram_available_bytes": 10394226688,
+      "model_rss_bytes": 1062608896,
+      "app_rss_bytes": 28286976,
+      "gpu_free_mib": 2435,
+      "gpu_temperature_c": 64,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:34.300Z",
+      "ram_available_bytes": 10411290624,
+      "model_rss_bytes": 1062608896,
+      "app_rss_bytes": 28090368,
+      "gpu_free_mib": 2435,
+      "gpu_temperature_c": 64,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:36.302Z",
+      "ram_available_bytes": 9882296320,
+      "model_rss_bytes": 1295495168,
+      "app_rss_bytes": 29339648,
+      "gpu_free_mib": 2435,
+      "gpu_temperature_c": 64,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:38.304Z",
+      "ram_available_bytes": 9290022912,
+      "model_rss_bytes": 1295499264,
+      "app_rss_bytes": 29552640,
+      "gpu_free_mib": 2435,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:40.307Z",
+      "ram_available_bytes": 8915451904,
+      "model_rss_bytes": 1580597248,
+      "app_rss_bytes": 33378304,
+      "gpu_free_mib": 2435,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:42.308Z",
+      "ram_available_bytes": 8802983936,
+      "model_rss_bytes": 1713049600,
+      "app_rss_bytes": 39931904,
+      "gpu_free_mib": 2435,
+      "gpu_temperature_c": 62,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:44.309Z",
+      "ram_available_bytes": 8681050112,
+      "model_rss_bytes": 1818439680,
+      "app_rss_bytes": 39288832,
+      "gpu_free_mib": 2435,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:46.311Z",
+      "ram_available_bytes": 8536895488,
+      "model_rss_bytes": 2006622208,
+      "app_rss_bytes": 45486080,
+      "gpu_free_mib": 2435,
+      "gpu_temperature_c": 63,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:48.313Z",
+      "ram_available_bytes": 8422637568,
+      "model_rss_bytes": 2112012288,
+      "app_rss_bytes": 45883392,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:50.315Z",
+      "ram_available_bytes": 8330932224,
+      "model_rss_bytes": 2200305664,
+      "app_rss_bytes": 54087680,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 62,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:52.317Z",
+      "ram_available_bytes": 8318492672,
+      "model_rss_bytes": 2253000704,
+      "app_rss_bytes": 54640640,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:54.319Z",
+      "ram_available_bytes": 8428986368,
+      "model_rss_bytes": 2357678080,
+      "app_rss_bytes": 54788096,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:56.321Z",
+      "ram_available_bytes": 8389709824,
+      "model_rss_bytes": 2365669376,
+      "app_rss_bytes": 55537664,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:28:58.323Z",
+      "ram_available_bytes": 8234967040,
+      "model_rss_bytes": 2365669376,
+      "app_rss_bytes": 55676928,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:00.325Z",
+      "ram_available_bytes": 8183005184,
+      "model_rss_bytes": 2365288448,
+      "app_rss_bytes": 55771136,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:02.327Z",
+      "ram_available_bytes": 8149274624,
+      "model_rss_bytes": 2365288448,
+      "app_rss_bytes": 57581568,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:04.329Z",
+      "ram_available_bytes": 8201957376,
+      "model_rss_bytes": 2365288448,
+      "app_rss_bytes": 57872384,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:06.331Z",
+      "ram_available_bytes": 8193429504,
+      "model_rss_bytes": 2365288448,
+      "app_rss_bytes": 57679872,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:08.333Z",
+      "ram_available_bytes": 8245620736,
+      "model_rss_bytes": 2365288448,
+      "app_rss_bytes": 57860096,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:10.335Z",
+      "ram_available_bytes": 8152940544,
+      "model_rss_bytes": 2365288448,
+      "app_rss_bytes": 57864192,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:12.336Z",
+      "ram_available_bytes": 8120180736,
+      "model_rss_bytes": 2365296640,
+      "app_rss_bytes": 58032128,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:14.338Z",
+      "ram_available_bytes": 8123322368,
+      "model_rss_bytes": 2365296640,
+      "app_rss_bytes": 58032128,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:16.340Z",
+      "ram_available_bytes": 8137601024,
+      "model_rss_bytes": 2365296640,
+      "app_rss_bytes": 57724928,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:18.342Z",
+      "ram_available_bytes": 8149753856,
+      "model_rss_bytes": 2365296640,
+      "app_rss_bytes": 57724928,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:20.344Z",
+      "ram_available_bytes": 8156217344,
+      "model_rss_bytes": 2365296640,
+      "app_rss_bytes": 57778176,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:22.346Z",
+      "ram_available_bytes": 8119349248,
+      "model_rss_bytes": 2365296640,
+      "app_rss_bytes": 57778176,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:24.348Z",
+      "ram_available_bytes": 8145883136,
+      "model_rss_bytes": 2365296640,
+      "app_rss_bytes": 57786368,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:26.350Z",
+      "ram_available_bytes": 8110551040,
+      "model_rss_bytes": 2365296640,
+      "app_rss_bytes": 57786368,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:28.352Z",
+      "ram_available_bytes": 8128954368,
+      "model_rss_bytes": 2365296640,
+      "app_rss_bytes": 57786368,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:30.354Z",
+      "ram_available_bytes": 7988781056,
+      "model_rss_bytes": 2675245056,
+      "app_rss_bytes": 64163840,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:32.356Z",
+      "ram_available_bytes": 8011415552,
+      "model_rss_bytes": 2675245056,
+      "app_rss_bytes": 64364544,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:34.358Z",
+      "ram_available_bytes": 8032206848,
+      "model_rss_bytes": 2675245056,
+      "app_rss_bytes": 64401408,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:36.360Z",
+      "ram_available_bytes": 8004132864,
+      "model_rss_bytes": 2675245056,
+      "app_rss_bytes": 64606208,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:38.361Z",
+      "ram_available_bytes": 8019505152,
+      "model_rss_bytes": 2675245056,
+      "app_rss_bytes": 64659456,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:40.363Z",
+      "ram_available_bytes": 8056786944,
+      "model_rss_bytes": 2675245056,
+      "app_rss_bytes": 65261568,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:42.365Z",
+      "ram_available_bytes": 8057327616,
+      "model_rss_bytes": 2675245056,
+      "app_rss_bytes": 65363968,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:44.367Z",
+      "ram_available_bytes": 8023273472,
+      "model_rss_bytes": 2675245056,
+      "app_rss_bytes": 65536000,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:46.369Z",
+      "ram_available_bytes": 8586883072,
+      "model_rss_bytes": 2675245056,
+      "app_rss_bytes": 65634304,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:48.371Z",
+      "ram_available_bytes": 8597340160,
+      "model_rss_bytes": 2675245056,
+      "app_rss_bytes": 65839104,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:50.373Z",
+      "ram_available_bytes": 8516034560,
+      "model_rss_bytes": 2875363328,
+      "app_rss_bytes": 69083136,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:52.375Z",
+      "ram_available_bytes": 8503857152,
+      "model_rss_bytes": 2928058368,
+      "app_rss_bytes": 69734400,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:54.377Z",
+      "ram_available_bytes": 8210210816,
+      "model_rss_bytes": 3214831616,
+      "app_rss_bytes": 71659520,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:56.379Z",
+      "ram_available_bytes": 8194772992,
+      "model_rss_bytes": 3214831616,
+      "app_rss_bytes": 73588736,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 65,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:29:58.381Z",
+      "ram_available_bytes": 7691206656,
+      "model_rss_bytes": 3451006976,
+      "app_rss_bytes": 79044608,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 66,
+      "ac_online": true,
+      "errors": []
+    },
+    {
+      "at": "2026-10-28T15:30:00.324Z",
+      "ram_available_bytes": 7643877376,
+      "model_rss_bytes": 3451006976,
+      "app_rss_bytes": 79818752,
+      "gpu_free_mib": 2433,
+      "gpu_temperature_c": 62,
+      "ac_online": true,
+      "errors": []
+    }
+  ]
+}

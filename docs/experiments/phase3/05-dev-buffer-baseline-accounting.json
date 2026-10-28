@@ -1,0 +1,11 @@
+{
+  "case_id": "dev-buffer",
+  "variant": "baseline",
+  "state": "measured",
+  "started_at": "2026-10-28T15:12:37.188Z",
+  "run_id": "3341e885-3068-45ea-bf55-cddf419bf425",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused",
+  "finished_at": "2026-10-28T15:14:48.077Z"
+}

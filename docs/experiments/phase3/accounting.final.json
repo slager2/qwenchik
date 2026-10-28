@@ -1,0 +1,272 @@
+{
+  "protocol_sha256": "974eef5c61a044f796113a8bd6c7cb9093dd81ae2f0384fceb6bf170312e7d8e",
+  "finished_at": "2026-10-28T15:56:18.014Z",
+  "failure": null,
+  "restoration_errors": [],
+  "slots": [
+    {
+      "case_id": "dev-fasta",
+      "variant": "baseline",
+      "state": "measured",
+      "started_at": "2026-10-28T15:03:17.561Z",
+      "run_id": "be6598ef-c22b-443f-98ba-8bbe3e1fb692",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:05:33.172Z"
+    },
+    {
+      "case_id": "dev-fasta",
+      "variant": "adaptive",
+      "state": "measured",
+      "started_at": "2026-10-28T15:05:34.935Z",
+      "run_id": "306a102f-cb74-4143-9e9f-892d5da6d923",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:08:39.273Z"
+    },
+    {
+      "case_id": "dev-rnaseq",
+      "variant": "adaptive",
+      "state": "measured",
+      "started_at": "2026-10-28T15:08:40.777Z",
+      "run_id": "256ed2b7-879e-41a6-9244-b82385955db8",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:10:51.592Z"
+    },
+    {
+      "case_id": "dev-rnaseq",
+      "variant": "baseline",
+      "state": "measured",
+      "started_at": "2026-10-28T15:10:52.078Z",
+      "run_id": "7154e0bd-7403-4289-a077-5db60c6d6c86",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:12:35.884Z"
+    },
+    {
+      "case_id": "dev-buffer",
+      "variant": "baseline",
+      "state": "measured",
+      "started_at": "2026-10-28T15:12:37.188Z",
+      "run_id": "3341e885-3068-45ea-bf55-cddf419bf425",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:14:48.077Z"
+    },
+    {
+      "case_id": "dev-buffer",
+      "variant": "adaptive",
+      "state": "measured",
+      "started_at": "2026-10-28T15:14:48.667Z",
+      "run_id": "a0d90bc9-ae10-4214-927a-dff40ba1bb02",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:17:23.919Z"
+    },
+    {
+      "case_id": "dev-catalyst",
+      "variant": "adaptive",
+      "state": "measured",
+      "started_at": "2026-10-28T15:17:25.330Z",
+      "run_id": "67ffdf72-5745-4dcf-a604-8cbb2255ecfd",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:19:52.555Z"
+    },
+    {
+      "case_id": "dev-catalyst",
+      "variant": "baseline",
+      "state": "measured",
+      "started_at": "2026-10-28T15:19:54.008Z",
+      "run_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:22:32.586Z"
+    },
+    {
+      "case_id": "dev-sort",
+      "variant": "baseline",
+      "state": "measured",
+      "started_at": "2026-10-28T15:22:33.276Z",
+      "run_id": "1bfbc700-e4e2-4ae1-865e-0082fdce8f10",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:24:33.366Z"
+    },
+    {
+      "case_id": "dev-sort",
+      "variant": "adaptive",
+      "state": "measured",
+      "started_at": "2026-10-28T15:24:33.983Z",
+      "run_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:26:12.622Z"
+    },
+    {
+      "case_id": "dev-wal",
+      "variant": "adaptive",
+      "state": "measured",
+      "started_at": "2026-10-28T15:26:13.131Z",
+      "run_id": "5a88360d-5ece-4f7e-a7cd-6871fd917577",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:28:15.585Z"
+    },
+    {
+      "case_id": "dev-wal",
+      "variant": "baseline",
+      "state": "measured",
+      "started_at": "2026-10-28T15:28:16.083Z",
+      "run_id": "99ea2063-c244-4bd5-9ec5-42eea6f799a4",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:30:01.529Z"
+    },
+    {
+      "case_id": "dev-roadmap",
+      "variant": "baseline",
+      "state": "measured",
+      "started_at": "2026-10-28T15:30:02.086Z",
+      "run_id": "602e81b7-ff10-49e9-b636-f111f24c7f5e",
+      "cli_exit_code": 0,
+      "status": "failed",
+      "error_code": null,
+      "finished_at": "2026-10-28T15:30:33.875Z"
+    },
+    {
+      "case_id": "dev-roadmap",
+      "variant": "adaptive",
+      "state": "measured",
+      "started_at": "2026-10-28T15:30:34.239Z",
+      "run_id": "176d9d0f-f6b8-471c-9ae4-4b74442fe113",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:32:51.767Z"
+    },
+    {
+      "case_id": "dev-recovery",
+      "variant": "adaptive",
+      "state": "measured",
+      "started_at": "2026-10-28T15:32:52.222Z",
+      "run_id": "614a7388-d5e3-456a-a8ca-056d31fa9cce",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:34:54.747Z"
+    },
+    {
+      "case_id": "dev-recovery",
+      "variant": "baseline",
+      "state": "measured",
+      "started_at": "2026-10-28T15:34:55.228Z",
+      "run_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:36:48.805Z"
+    },
+    {
+      "case_id": "heldout-units",
+      "variant": "baseline",
+      "state": "measured",
+      "started_at": "2026-10-28T15:36:49.565Z",
+      "run_id": "eef0790f-c8bf-4e51-88dd-0e5c034407fa",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:39:08.184Z"
+    },
+    {
+      "case_id": "heldout-units",
+      "variant": "adaptive",
+      "state": "measured",
+      "started_at": "2026-10-28T15:39:08.944Z",
+      "run_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:41:22.531Z"
+    },
+    {
+      "case_id": "heldout-citations",
+      "variant": "adaptive",
+      "state": "measured",
+      "started_at": "2026-10-28T15:41:23.906Z",
+      "run_id": "250ae545-13b4-4f6c-bc28-c287f61aef93",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:44:07.754Z"
+    },
+    {
+      "case_id": "heldout-citations",
+      "variant": "baseline",
+      "state": "measured",
+      "started_at": "2026-10-28T15:44:09.062Z",
+      "run_id": "42028262-c2d0-437a-92ef-a5e3d6ca542d",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:46:42.303Z"
+    },
+    {
+      "case_id": "heldout-missing",
+      "variant": "baseline",
+      "state": "measured",
+      "started_at": "2026-10-28T15:46:43.716Z",
+      "run_id": "19aa654b-63c2-4015-9f1e-175b07e92784",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:49:26.953Z"
+    },
+    {
+      "case_id": "heldout-missing",
+      "variant": "adaptive",
+      "state": "measured",
+      "started_at": "2026-10-28T15:49:28.225Z",
+      "run_id": "8d396d5d-4ac4-4d46-84ed-2a3e0bea18d5",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:51:55.980Z"
+    },
+    {
+      "case_id": "heldout-protocol",
+      "variant": "adaptive",
+      "state": "measured",
+      "started_at": "2026-10-28T15:51:56.599Z",
+      "run_id": "d6aac832-4eac-41a3-9733-1f3600e1cded",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:54:12.545Z"
+    },
+    {
+      "case_id": "heldout-protocol",
+      "variant": "baseline",
+      "state": "measured",
+      "started_at": "2026-10-28T15:54:13.270Z",
+      "run_id": "91efaabb-abeb-40da-92e4-54224021d156",
+      "cli_exit_code": 1,
+      "status": "paused",
+      "error_code": "benchmark_paused",
+      "finished_at": "2026-10-28T15:56:13.268Z"
+    }
+  ]
+}

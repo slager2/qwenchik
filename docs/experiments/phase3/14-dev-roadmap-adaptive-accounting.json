@@ -1,0 +1,11 @@
+{
+  "case_id": "dev-roadmap",
+  "variant": "adaptive",
+  "state": "measured",
+  "started_at": "2026-10-28T15:30:34.239Z",
+  "run_id": "176d9d0f-f6b8-471c-9ae4-4b74442fe113",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused",
+  "finished_at": "2026-10-28T15:32:51.767Z"
+}

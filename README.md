@@ -11,8 +11,10 @@ source notes, checkpointed section reports/JSON+Markdown artifacts, three explic
 privacy contracts, offline text imports, and `lab readiness` / `lab soak` /
 `lab benchmark` / `lab compare`. See the [laboratory status and verification
 boundaries](docs/research-lab-phase9-status.md). Live isolated-PDF extraction,
-15m/60m/4h soak, and a real-model baseline/adaptive benchmark are **not established**
-by the local regression suite. These checkout changes require a build/redeploy.
+15m/60m/4h soak, and successful real-model research are **not established**
+by the local regression suite. The [Phase 3 offline comparison](docs/deep-research-phase3-offline-benchmark.md)
+measured all 12 tasks in both variants: 23 model-RSS pauses, one failed/blocked
+task, and zero delivered reports. Measurement completeness is not research success.
 
 The current implementation includes:
 
@@ -143,6 +145,35 @@ rung through the existing shared guard and worker. See the measured
 [Phase 2 context report](docs/deep-research-phase2-context-ladder.md): 32K/64K load
 probes passed, 96K/128K hit the fixed 120s timeout, and multi-call research remained
 model-RSS-limited. These are not overnight or general 128K-support claims.
+
+### Controlled offline comparison
+
+`lab benchmark` now requires `--protocol-sha256`, the SHA256 of a frozen
+experiment manifest. It uses passive `GET /api/lab/policy` discovery instead of
+the inference-capable doctor. Configure the running server for the exact embedded
+offline corpus, section reports and the selected adaptive setting. The CLI's
+environment does not reconfigure that server.
+
+```sh
+./qagent lab benchmark --variant baseline --split all --case-timeout 35m \
+  --protocol-sha256 "$PROTOCOL_SHA256" --output baseline.jsonl
+./qagent lab benchmark --variant adaptive --split all --case-timeout 35m \
+  --protocol-sha256 "$PROTOCOL_SHA256" --output adaptive.jsonl
+./qagent lab compare baseline.jsonl adaptive.jsonl
+```
+
+`--case ID` selects one fixed task for controlled per-case process starts.
+`--stop-on-pause` requires the offline-only `LAB_HOLD_RESOURCE_PAUSES=true` server
+setting, retains checkpoints, writes its receipt and returns nonzero on a pause.
+It does not enable the context load probe. Receipts are exclusive-create and
+separate collected text, report delivery, successful outcomes, missing metrics
+and app/model RSS. Comparison requires all 12 cases per variant and matching
+experiment-wide snapshots; complete accounting does not imply successful
+research. Source/lexical/citation-ownership scores are proxies, and independent
+factual accuracy remains null. The [Phase 3 protocol](docs/experiments/phase3/protocol.json)
+declares the cold-process, alternating-order experiment and its failure rules.
+The [Phase 3 report](docs/deep-research-phase3-offline-benchmark.md) records the
+24 real attempts, development/held-out populations and remaining unknowns.
 
 The planner uses bounded structural/semantic validation and lossless facet normalization. New version-two sessions preserve substantive user-deliverable criteria independently of acquisition steps; report coverage cannot substitute “source stored” for those criteria. Saved version-one sessions retain their original budgets. New section reports have explicit section/paragraph/claim/byte budgets and at most one correction per section; byte exhaustion produces deterministic partial excerpts and bounded JSON/Markdown artifacts. A source list or same-model critic does not establish independent factual truth. See [Deep Research Phase 1](docs/deep-research-phase1-round-budgets.md).
 

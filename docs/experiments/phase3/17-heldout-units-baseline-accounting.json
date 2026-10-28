@@ -1,0 +1,11 @@
+{
+  "case_id": "heldout-units",
+  "variant": "baseline",
+  "state": "measured",
+  "started_at": "2026-10-28T15:36:49.565Z",
+  "run_id": "eef0790f-c8bf-4e51-88dd-0e5c034407fa",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused",
+  "finished_at": "2026-10-28T15:39:08.184Z"
+}

@@ -1,0 +1,10 @@
+{
+  "case_id": "dev-buffer",
+  "variant": "adaptive",
+  "state": "attempted",
+  "started_at": "2026-10-28T15:14:48.667Z",
+  "run_id": "a0d90bc9-ae10-4214-927a-dff40ba1bb02",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused"
+}

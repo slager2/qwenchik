@@ -1,0 +1,2721 @@
+{
+  "runtime": {
+    "accepted_evidence": 2,
+    "active_round_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Identify stable sorting algorithms from the two imported computing sources.",
+        "Determine the time complexity of merge sort.",
+        "Determine the auxiliary memory requirements of merge sort.",
+        "Explain the trade-offs between stable sorting algorithms and merge sort based on the research."
+      ],
+      "schema_version": 1,
+      "goal": "Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+      "subtasks": [
+        {
+          "id": "search_1",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for stable sorting algorithms and their characteristics.. User request: Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+          "dependencies": [],
+          "expected_output": "List of stable sorting algorithms and their properties.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_2",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for merge sort time complexity and auxiliary memory requirements.. User request: Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+          "dependencies": [],
+          "expected_output": "Time complexity and auxiliary memory details for merge sort.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_3",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for trade-offs between stable sorting algorithms and merge sort.. User request: Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+          "dependencies": [],
+          "expected_output": "Comparison and trade-offs between stable sorting and merge sort.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "fetch_1",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 1 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_2",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 2 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        }
+      ],
+      "max_steps": 5,
+      "final_deliverable": "A summary report detailing stable sorting algorithms, merge sort complexity, memory usage, and trade-offs."
+    },
+    "adaptive_enabled": true,
+    "budget": {
+      "max_initial_plan_steps": 12,
+      "max_round_steps": 12,
+      "max_total_steps": 20,
+      "max_report_sections": 6,
+      "max_report_paragraphs": 16,
+      "max_report_bytes": 524288,
+      "wall_time_seconds": 1800,
+      "max_rounds": 3,
+      "max_steps": 12,
+      "max_search_queries": 8,
+      "max_fetches": 8,
+      "max_llm_calls": 48,
+      "max_evidence": 8,
+      "max_questions_created": 24,
+      "max_questions_accepted": 16,
+      "max_stagnant_rounds": 2,
+      "max_citation_sources": 8,
+      "max_citation_claims": 16
+    },
+    "budget_remaining": {
+      "evidence": 6,
+      "fetched_bytes": 134216937,
+      "fetches": 6,
+      "http_attempts": 86,
+      "initial_plan_steps": 12,
+      "llm_calls": 38,
+      "questions_accepted": 16,
+      "questions_created": 24,
+      "round_steps": 12,
+      "rounds": 2,
+      "search_queries": 6,
+      "stagnant_rounds": 2,
+      "steps": 15,
+      "total_steps": 15
+    },
+    "bundle_hash": "e27b07fb099039c84672d3db8b38e46d62d0a813a7da342ed2f8484d990f03bf",
+    "bundle_version": 1,
+    "compactions": 4,
+    "completed_steps": 4,
+    "completion": {
+      "continuations": 0,
+      "verdict": "PASS"
+    },
+    "context_budget": {
+      "version": 1,
+      "configured_context": 32768,
+      "server_reported_context": 32768,
+      "training_context": 262144,
+      "session_context": 32768,
+      "max_output_tokens": 4096,
+      "reserved_output_tokens": 4096,
+      "reserved_system_tokens": 2048,
+      "available_input_tokens": 26624,
+      "prompt_tokens": null,
+      "context_status": "matched",
+      "count_method": "unavailable",
+      "decision": "not_counted",
+      "server_source": "props.default_generation_settings.n_ctx:single_slot",
+      "runtime_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+      "runtime_build": "b11426-cda0f9256",
+      "chat_template_sha256": "7f0e529032c25183bcd66c7f238da2d377f43be754a94e2725a58c4e16d2ed67",
+      "model_quantization": "Q4_K - Medium",
+      "observed_at": "2026-10-28T15:26:11.588683795Z"
+    },
+    "context_snapshot_hash": "25e1976e170ef038d9f7fa6abf1d2a470dbc698a313e63cb7f3e67bb02c1076d",
+    "context_snapshot_number": 10,
+    "contradictions": null,
+    "counters": {
+      "steps_reserved": 5,
+      "llm_calls": 10,
+      "http_attempts": 10,
+      "search_queries": 2,
+      "fetches": 2,
+      "fetched_bytes": 791,
+      "evidence": 2,
+      "questions_created": 0,
+      "questions_accepted": 0,
+      "rounds": 1,
+      "stagnant_rounds": 0
+    },
+    "current_round": 1,
+    "cursor": 144,
+    "deadline_at": "2026-10-28T15:54:43.400499584Z",
+    "done_criteria": 8,
+    "elapsed_seconds": 88,
+    "inference_summary": {
+      "invocation_id": "invocation-af1aceff4da00f5d27c08b1cfc13c4a91deaf4c42d087c68493fc0faf7ddf365",
+      "invocation_status": "failed",
+      "snapshot_at": "2026-10-28T15:26:09.440605636Z",
+      "inference": {
+        "status": "cancelled",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:26:09.440605636Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "output_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "total_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "cached_prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "output_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "prompt_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "generation_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "context_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        }
+      }
+    },
+    "initial_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Identify stable sorting algorithms from the two imported computing sources.",
+        "Determine the time complexity of merge sort.",
+        "Determine the auxiliary memory requirements of merge sort.",
+        "Explain the trade-offs between stable sorting algorithms and merge sort based on the research."
+      ],
+      "schema_version": 1,
+      "goal": "Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+      "subtasks": [
+        {
+          "id": "search_1",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for stable sorting algorithms and their characteristics.. User request: Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+          "dependencies": [],
+          "expected_output": "List of stable sorting algorithms and their properties.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_2",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for merge sort time complexity and auxiliary memory requirements.. User request: Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+          "dependencies": [],
+          "expected_output": "Time complexity and auxiliary memory details for merge sort.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_3",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for trade-offs between stable sorting algorithms and merge sort.. User request: Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+          "dependencies": [],
+          "expected_output": "Comparison and trade-offs between stable sorting and merge sort.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "fetch_1",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 1 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_2",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 2 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        }
+      ],
+      "max_steps": 5,
+      "final_deliverable": "A summary report detailing stable sorting algorithms, merge sort complexity, memory usage, and trade-offs."
+    },
+    "keep_awake_requested": true,
+    "max_continuations": 2,
+    "model_profile_hash": "1b3d9bd1717af420d357a0aaef2b79a9e80c4f65a5e5f8a3f07e2dbfbb65e4c3",
+    "offline_corpus_sha256": "9814cb53c048545010e91bb6ee7e50be66e8c3852eb3380c8c435a86f03fd43b",
+    "open_questions": [],
+    "pause_reason": "manual",
+    "privacy_mode": "offline",
+    "profile": "standard",
+    "remaining_seconds": 1711,
+    "research_report": {
+      "artifact_id": "",
+      "markdown_artifact_id": "",
+      "outcome": "completed",
+      "sections": 2,
+      "unrepresented_criteria": null
+    },
+    "research_rounds": [
+      {
+        "critical_missing": [],
+        "evidence_count": 2,
+        "frontier_count": 0,
+        "number": 1,
+        "outcome": "PASS",
+        "progress_fingerprint": "952cba52599c06c03acadb8d892e3ae1d05e4cae1bc3f9c607e7faa8d6ca9568"
+      }
+    ],
+    "research_session_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+    "research_stagnant_rounds": 0,
+    "research_stop_reason": "criteria_covered",
+    "resource_probe_attempts": 0,
+    "resource_reason": "high_model_rss",
+    "resume_after": "2026-10-28T15:26:14.491222441Z",
+    "round_plan_count": 1,
+    "runtime": {
+      "active_run_id": "",
+      "enabled": true,
+      "keep_awake": true,
+      "max_resume_attempts": 5,
+      "resource_policy": {
+        "enabled": true,
+        "min_free_ram_bytes": 536870912,
+        "min_free_vram_mb": 256,
+        "gpu_temp_max_c": 85,
+        "process_rss_max_bytes": 2147483648,
+        "model_rss_max_bytes": 3221225472,
+        "recovery_ram_margin_percent": 10,
+        "recovery_vram_margin_percent": 10,
+        "recovery_gpu_temp_margin_c": 5,
+        "recovery_rss_margin_percent": 10,
+        "llama_health_timeout": 2000000000,
+        "check_interval": 1000000000,
+        "max_resume_attempts": 5,
+        "backoff_base": 5000000000,
+        "backoff_max": 60000000000
+      },
+      "resources": {
+        "free_ram_bytes": 8571129856,
+        "gpu_free_vram_mb": 2433,
+        "gpu_temp_c": 65,
+        "heap_alloc_bytes": 3014376,
+        "llama_health_latency": 465286,
+        "llama_healthy": true,
+        "model_rss_bytes": 3371483136,
+        "power_source": "AC",
+        "rss_bytes": 73785344,
+        "snapshot_at": "2026-10-28T15:26:09.440513196Z",
+        "warnings": []
+      },
+      "sleep": {
+        "active": false,
+        "available": true,
+        "power_source": "unknown",
+        "provider": "systemd-inhibit"
+      },
+      "sleep_policy": "keep_awake",
+      "status": "ok"
+    },
+    "runtime_model_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+    "sectioned_report_enabled": true,
+    "stage": null,
+    "status": "paused",
+    "step": "",
+    "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+    "telemetry": {
+      "timestamp": "2026-10-28T15:26:09.440605636Z",
+      "stale_after_ms": 39000,
+      "capabilities": {
+        "cpu": true,
+        "ram": true,
+        "gpu": true,
+        "gpu_temperature": true,
+        "gpu_utilization": true,
+        "power": true,
+        "battery": false,
+        "process_rss": true,
+        "llama_health": true,
+        "llama_timings": false,
+        "llama_metrics": false,
+        "llama_slots": false
+      },
+      "system": {
+        "metadata": {
+          "os": "linux",
+          "uptime_seconds": {
+            "value": 6494.43,
+            "source": "exact",
+            "unit": "seconds",
+            "updated_at": "2026-10-28T15:26:09.40488279Z"
+          }
+        },
+        "cpu_usage": {
+          "value": 17.239583333333332,
+          "source": "exact",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:26:09.40488279Z"
+        },
+        "cpu_temperature": {
+          "value": 77.875,
+          "source": "exact",
+          "unit": "celsius",
+          "updated_at": "2026-10-28T15:26:09.40488279Z"
+        },
+        "ram_used": {
+          "value": 7378599936,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:26:09.40488279Z"
+        },
+        "ram_free": {
+          "value": 8571129856,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:26:09.40488279Z"
+        },
+        "ram_total": {
+          "value": 15949729792,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:26:09.40488279Z"
+        },
+        "gpus": [
+          {
+            "name": {
+              "value": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+              "source": "exact",
+              "unit": "name",
+              "updated_at": "2026-10-28T15:26:09.40488279Z"
+            },
+            "utilization": {
+              "value": 95,
+              "source": "exact",
+              "unit": "percent",
+              "updated_at": "2026-10-28T15:26:09.40488279Z"
+            },
+            "temperature": {
+              "value": 65,
+              "source": "exact",
+              "unit": "celsius",
+              "updated_at": "2026-10-28T15:26:09.40488279Z"
+            },
+            "vram_used": {
+              "value": 3537895424,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:26:09.40488279Z"
+            },
+            "vram_free": {
+              "value": 2551185408,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:26:09.40488279Z"
+            },
+            "vram_total": {
+              "value": 6442450944,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:26:09.40488279Z"
+            },
+            "power_watts": {
+              "value": 40.17,
+              "source": "exact",
+              "unit": "watts",
+              "updated_at": "2026-10-28T15:26:09.40488279Z"
+            }
+          }
+        ],
+        "agent_rss": {
+          "value": 73785344,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:26:09.40488279Z"
+        },
+        "llama_server_rss": {
+          "value": 3371483136,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:26:09.40488279Z"
+        },
+        "power_source": {
+          "value": "AC",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:25:45.442428387Z"
+        },
+        "power_watts": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "watts",
+          "updated_at": "2026-10-28T15:26:09.40488279Z",
+          "error": "unsupported"
+        },
+        "battery_percent": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:26:09.40488279Z",
+          "error": "unsupported"
+        },
+        "battery_charging": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "boolean",
+          "updated_at": "2026-10-28T15:26:09.40488279Z",
+          "error": "unsupported"
+        },
+        "llama_health": {
+          "value": "healthy",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:26:09.40488279Z"
+        },
+        "llama_slots_active": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:26:09.40488279Z",
+          "error": "temporarily_unavailable"
+        },
+        "llama_slots_total": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:26:09.40488279Z",
+          "error": "temporarily_unavailable"
+        }
+      },
+      "inference": {
+        "status": "cancelled",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:26:09.440605636Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "output_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "total_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "cached_prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "output_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "prompt_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "generation_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "context_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:26:09.440605636Z"
+        }
+      }
+    },
+    "telemetry_revision": 38,
+    "terminal_outcome": "",
+    "updated_at": "2026-10-28T15:26:09.50600839Z",
+    "verdict": "PASS"
+  },
+  "run": {
+    "pause_reason": "manual",
+    "resource_reason": "high_model_rss",
+    "resume_after": "2026-10-28T15:26:14.491222441Z",
+    "resource_probe_attempts": 0,
+    "id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+    "conversation_id": "722c9cae-ee62-4adf-9960-df7d2ff58269",
+    "user_message_id": "bc959c04-e1b1-4224-9964-776c3d9d6a5c",
+    "assistant_message_id": "382d99cc-fc9d-4637-a395-0d46cfa3c7b1",
+    "mode": "research",
+    "operation": "send",
+    "status": "paused",
+    "retry_count": 0,
+    "cancel_requested": false,
+    "created_at": "2026-10-28T15:24:43.400499584Z",
+    "updated_at": "2026-10-28T15:26:09.50600839Z",
+    "started_at": "2026-10-28T15:24:43.403541947Z",
+    "heartbeat_at": "2026-10-28T15:26:08.458490671Z",
+    "deadline_at": "2026-10-28T15:54:43.400499584Z"
+  },
+  "artifacts": [
+    {
+      "id": "1a12f0ec427cc5b2f8edbafb9dd761f2b981315e31ce50393d5b5a8b30759899",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "name": "source-e5daa620335c.txt",
+      "mime_type": "text/plain; charset=utf-8",
+      "sha256": "e5daa620335c0dc19d14bf0408ef8410b5efa5370df3b628e6a5d9ee334674e4",
+      "size_bytes": 376,
+      "created_at": "2026-10-28T15:25:12.102806339Z"
+    },
+    {
+      "id": "f3f7a719349b7b9918c5d904485aed7e9556ffcc76e940aacdaa769bf3ea8cf1",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "name": "source-e5daa620335c.raw",
+      "mime_type": "text/plain",
+      "sha256": "e5daa620335c0dc19d14bf0408ef8410b5efa5370df3b628e6a5d9ee334674e4",
+      "size_bytes": 376,
+      "created_at": "2026-10-28T15:25:12.102159108Z"
+    },
+    {
+      "id": "efe586bccafe98c7c1188e7bd6a5afdb93c197c67eb7276f6ee32917be50e1fd",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "name": "source-49b513afa563.txt",
+      "mime_type": "text/plain; charset=utf-8",
+      "sha256": "49b513afa5638c89a2dad0fb50fb8614e67b9bf9bd35f42a44a0f0a429c34c41",
+      "size_bytes": 415,
+      "created_at": "2026-10-28T15:25:08.001937065Z"
+    },
+    {
+      "id": "1ffa90d675ef3d62cee7d11113c95d02349815a694a01f7abbebfbef7bfc2026",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "name": "source-49b513afa563.raw",
+      "mime_type": "text/plain",
+      "sha256": "49b513afa5638c89a2dad0fb50fb8614e67b9bf9bd35f42a44a0f0a429c34c41",
+      "size_bytes": 415,
+      "created_at": "2026-10-28T15:25:08.001288301Z"
+    }
+  ],
+  "public_events_complete": true,
+  "events": [
+    {
+      "id": "da9574c2-2a7a-4e26-88a2-0ec8a59b03c4",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 1,
+      "type": "task.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:24:43.402168723Z",
+      "visibility": "user",
+      "payload": {
+        "mode": "research",
+        "status": "queued"
+      }
+    },
+    {
+      "id": "41bfd42f-11b8-4b5b-9f14-7eef41ff30b2",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 2,
+      "type": "message.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:24:43.402601055Z",
+      "visibility": "user",
+      "payload": {
+        "message_id": "382d99cc-fc9d-4637-a395-0d46cfa3c7b1",
+        "role": "assistant",
+        "status": "pending"
+      }
+    },
+    {
+      "id": "2c4bacea-6c25-49b1-9d9a-fb61b40baa09",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 3,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:24:43.403853814Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "from": "queued",
+        "to": "planning"
+      }
+    },
+    {
+      "id": "5996771c-815b-493a-9d91-92136d965604",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 10,
+      "type": "plan.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:24:57.345946879Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "goal": "Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+        "steps": 5
+      }
+    },
+    {
+      "id": "4cfe323a-7cf2-4e6b-877f-fc63e986131b",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 11,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:24:57.348774043Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "from": "planning",
+        "plan_steps": 5,
+        "to": "running"
+      }
+    },
+    {
+      "id": "9ac61953-f51d-45b4-8d62-e2623b4a2497",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 12,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:24:57.35109919Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for stable sorting algorithms and their characteristics.. User request: Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "5481f550-4a81-48df-b493-a72bcf6cbd0d",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 22,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:00.443133463Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1",
+        "summary": "Searching for stable sorting algorithms and merge sort characteristics to identify sources for the research goal.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "2811ffeb-308b-477b-938a-dda3a71b1f9c",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 25,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:00.502505454Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "stable sorting algorithms merge sort time complexity auxiliary memory",
+        "query_fingerprint": "08613033e074c7a5948649121a95be957e582bbd26428fcb6e28116cef35133d",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "014d278f-21bb-4269-8ecc-f2be94c256a4",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 26,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:00.506814534Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:25:00.504094057Z",
+        "code": "search_ok",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:25:00.504094057Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider is unavailable",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "08613033e074c7a5948649121a95be957e582bbd26428fcb6e28116cef35133d",
+        "result_count": 2,
+        "retryable": false,
+        "started_at": "2026-10-28T15:25:00.504094057Z",
+        "state": "unavailable",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "8e61f8cf-27a4-4980-bb93-039233699ee5",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 27,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:00.51125515Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "url": "https://docs.example.com/computing",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic computing laboratory reference",
+          "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+          "provider": "search",
+          "query_fingerprint": "08613033e074c7a5948649121a95be957e582bbd26428fcb6e28116cef35133d",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:25:00.507312673Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "cd0ef060-c13a-4d89-8b04-72169ba76dbe",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 28,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:00.512969357Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "08613033e074c7a5948649121a95be957e582bbd26428fcb6e28116cef35133d",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:25:00.511613217Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "a03e4483-9ea3-42ff-b384-26dca9f525f2",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 29,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:00.514007729Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "url": "https://docs.example.com/computing",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic computing laboratory reference",
+          "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+          "provider": "search",
+          "query_fingerprint": "08613033e074c7a5948649121a95be957e582bbd26428fcb6e28116cef35133d",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:25:00.513692395Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "72c75feb-d530-4678-a75c-0d303a3223ba",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 30,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:00.514919344Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "08613033e074c7a5948649121a95be957e582bbd26428fcb6e28116cef35133d",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:25:00.514565785Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "30fb3eaa-97a7-4aa9-9940-43e487f77aea",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 32,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:00.539740312Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [
+          {
+            "provider": "search",
+            "query": "stable sorting algorithms merge sort time complexity auxiliary memory",
+            "url": "https://docs.example.com/computing",
+            "title": "Synthetic computing laboratory reference",
+            "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+            "score": 9,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "stable sorting algorithms merge sort time complexity auxiliary memory",
+            "url": "https://reference.example.net/computing",
+            "title": "Independent synthetic computing reference",
+            "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+            "score": 7,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          }
+        ],
+        "step_id": "search_1",
+        "summary": "Searching for stable sorting algorithms and merge sort characteristics to identify sources for the research goal.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "65c0ea33-aa01-4d33-a446-4ede79083381",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 33,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:00.539893119Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "a6507516-63a1-4425-b08d-b8e201cdac7b",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 34,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:00.550390608Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for merge sort time complexity and auxiliary memory requirements.. User request: Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "708994be-88c2-4c27-986f-9062da5d933f",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 37,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:00.600454606Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 0,
+        "contradictions": 0,
+        "done_criteria": 8,
+        "hash": "08302061f7b1e49b773b705cec47b8113f695168627a6bbf7a940690e8ce0853",
+        "original_tool_result_bytes": 1384,
+        "reason": "role_tool_results",
+        "reduced_bytes": 96,
+        "retained_tool_result_bytes": 1288,
+        "slot": "cfe8b6b08b49703d0541e8b390970eb54c0ab472f3f1afc6fc300e95f0e4286e"
+      }
+    },
+    {
+      "id": "bc8b21d9-8d7f-4bc4-afdf-df7eaa81ef01",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 45,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:03.857847266Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_2",
+        "summary": "Searching for specific details on merge sort's auxiliary memory requirements and stability characteristics to verify findings against the two imported computing sources.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "1b7e4ea3-c323-4075-9774-87e76e04bd28",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 48,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:03.925166471Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "merge sort auxiliary memory requirements stable sorting characteristics",
+        "query_fingerprint": "e6be91463bcd025342104c74f39bc04a97556e1cfc8af819ea0a2e6759fae3b0",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "aacc7db7-f18d-4eab-81a3-e31216372b57",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 49,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:03.927362046Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:25:03.926707671Z",
+        "code": "search_ok",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:25:03.926707671Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider is unavailable",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "e6be91463bcd025342104c74f39bc04a97556e1cfc8af819ea0a2e6759fae3b0",
+        "result_count": 2,
+        "retryable": false,
+        "started_at": "2026-10-28T15:25:03.926707671Z",
+        "state": "unavailable",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "a4061bcc-c62e-4d25-8062-23236341fcfa",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 50,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:03.928867357Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "url": "https://docs.example.com/computing",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic computing laboratory reference",
+          "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+          "provider": "search",
+          "query_fingerprint": "e6be91463bcd025342104c74f39bc04a97556e1cfc8af819ea0a2e6759fae3b0",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:25:03.928315913Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "e9142fc5-0734-4cbd-9226-7ef582605831",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 51,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:03.930033277Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "e6be91463bcd025342104c74f39bc04a97556e1cfc8af819ea0a2e6759fae3b0",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:25:03.929543333Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "f92aed87-c68f-444a-b128-96bd4af560e1",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 52,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:03.931749358Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "url": "https://docs.example.com/computing",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic computing laboratory reference",
+          "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+          "provider": "search",
+          "query_fingerprint": "e6be91463bcd025342104c74f39bc04a97556e1cfc8af819ea0a2e6759fae3b0",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:25:03.93136532Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "9f3cfe82-252c-47fb-b05f-b3a89d667844",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 53,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:03.932333095Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "e6be91463bcd025342104c74f39bc04a97556e1cfc8af819ea0a2e6759fae3b0",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:25:03.932045795Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "4f424907-3320-40cd-af84-469b73dbf636",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 55,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:03.967600863Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [
+          {
+            "provider": "search",
+            "query": "merge sort auxiliary memory requirements stable sorting characteristics",
+            "url": "https://docs.example.com/computing",
+            "title": "Synthetic computing laboratory reference",
+            "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+            "score": 6,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "merge sort auxiliary memory requirements stable sorting characteristics",
+            "url": "https://reference.example.net/computing",
+            "title": "Independent synthetic computing reference",
+            "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+            "score": 4,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          }
+        ],
+        "step_id": "search_2",
+        "summary": "Searching for specific details on merge sort's auxiliary memory requirements and stability characteristics to verify findings against the two imported computing sources.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "c5d70855-bda7-49d0-b475-b739ebae344a",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 56,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:03.967702401Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "ba107466-cf8c-4691-95c3-b950edc162cf",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 57,
+      "type": "step.skipped",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:03.983291333Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "reason": "the completed search facets already produced enough distinct candidate sites",
+        "step_id": "search_3"
+      }
+    },
+    {
+      "id": "349ca934-10d4-4297-b6af-002ade30a0bb",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 59,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:03.996803292Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "cada3c69-3bc2-4f9d-82a2-5b5580e8ca46",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 60,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:03.999351353Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Inspect distinct approved source 1 for the exact user request",
+        "step_id": "fetch_1"
+      }
+    },
+    {
+      "id": "b93482e9-43d7-4ff9-94cc-e8522795c4fb",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 63,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:04.096805953Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 0,
+        "contradictions": 0,
+        "done_criteria": 8,
+        "hash": "339462bdff157888462cab19ab5817e2a7f9de34951efbe58b4104c39bbca813",
+        "original_tool_result_bytes": 2771,
+        "reason": "role_tool_results",
+        "reduced_bytes": 192,
+        "retained_tool_result_bytes": 2579,
+        "slot": "c501581096277c1108af3fc3bdb5bb253bf42f6a440a256abd8c053b87a72b1c"
+      }
+    },
+    {
+      "id": "dfaa5e27-e5c2-4193-aca4-b97c62d74083",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 71,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:07.962124277Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "source_fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+        "status": "fetching",
+        "step_id": "fetch_1",
+        "target_url": "https://docs.example.com/computing",
+        "timestamp": "2026-10-28T15:25:07.962124277Z",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "b5c044a2-b23e-4e9c-abc5-5cd5bd029052",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 74,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:07.998646999Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "a7871495-4731-471c-b38b-5dad8595b138",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 75,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:08.003649138Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "1ffa90d675ef3d62cee7d11113c95d02349815a694a01f7abbebfbef7bfc2026",
+        "mime_type": "text/plain",
+        "name": "source-49b513afa563.raw",
+        "sha256": "49b513afa5638c89a2dad0fb50fb8614e67b9bf9bd35f42a44a0f0a429c34c41",
+        "size_bytes": 415
+      }
+    },
+    {
+      "id": "d9282cf4-1cd1-4129-ad2d-54d7bbd6c0a0",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 76,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:08.003779933Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "efe586bccafe98c7c1188e7bd6a5afdb93c197c67eb7276f6ee32917be50e1fd",
+        "mime_type": "text/plain; charset=utf-8",
+        "name": "source-49b513afa563.txt",
+        "sha256": "49b513afa5638c89a2dad0fb50fb8614e67b9bf9bd35f42a44a0f0a429c34c41",
+        "size_bytes": 415
+      }
+    },
+    {
+      "id": "fe99f996-2bf9-4695-abff-044db8e95295",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 77,
+      "type": "evidence.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:08.004076921Z",
+      "visibility": "user",
+      "payload": {
+        "canonical_url": "https://docs.example.com/computing",
+        "evidence_id": "e039c674-4fd9-4e09-ac19-c5324d9e7cb1",
+        "title": "Synthetic computing laboratory reference"
+      }
+    },
+    {
+      "id": "e49a5b13-2442-4343-bcfb-0e057563a51b",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 79,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:08.033847596Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "result": {
+          "content_sha256": "49b513afa5638c89a2dad0fb50fb8614e67b9bf9bd35f42a44a0f0a429c34c41",
+          "evidence_id": "e039c674-4fd9-4e09-ac19-c5324d9e7cb1",
+          "excerpt": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited concurrent writers.",
+          "fetched_bytes": 415,
+          "requested_url": "https://docs.example.com/computing",
+          "taint": "untrusted_external_content",
+          "title": "Synthetic computing laboratory reference",
+          "url": "https://docs.example.com/computing"
+        },
+        "step_id": "fetch_1",
+        "summary": "Inspecting the first approved source to extract details on stable sorting algorithms, merge sort complexity, memory usage, and trade-offs.",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "57497220-a50a-4862-badc-89d8cf63b3d5",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 80,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:08.034017557Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "step_id": "fetch_1"
+      }
+    },
+    {
+      "id": "184a228d-9952-45c4-9050-829b87ff77d6",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 81,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:08.043522053Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "885649e3-eb15-4e91-a09b-741d642faa37",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 82,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:08.045318882Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Inspect distinct approved source 2 for the exact user request",
+        "step_id": "fetch_2"
+      }
+    },
+    {
+      "id": "3a5d5e38-96d3-48e6-8d39-9192b22c5f0d",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 85,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:08.094293178Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 1,
+        "contradictions": 0,
+        "done_criteria": 8,
+        "hash": "c4d7879c5d91162c2ecbb7c46093a4d6ce652307fea8994e2f5c8efa8ac2f0f6",
+        "original_tool_result_bytes": 3552,
+        "reason": "role_tool_results",
+        "reduced_bytes": 192,
+        "retained_tool_result_bytes": 3360,
+        "slot": "c53f25b292817676b99b8ee1900c9f7cd58751c1d35f26e41ddc69ddd2bf223b"
+      }
+    },
+    {
+      "id": "07650f02-77fd-4e0c-a476-bafaf883845a",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 93,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:12.035489098Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "source_fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+        "status": "fetching",
+        "step_id": "fetch_2",
+        "target_url": "https://reference.example.net/computing",
+        "timestamp": "2026-10-28T15:25:12.035489098Z",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "ba054535-985b-4a6f-9b15-9dbcad128ee5",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 96,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:12.098751634Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "7ff2e375-e834-4085-93f8-879f871b82de",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 97,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:12.104102783Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "f3f7a719349b7b9918c5d904485aed7e9556ffcc76e940aacdaa769bf3ea8cf1",
+        "mime_type": "text/plain",
+        "name": "source-e5daa620335c.raw",
+        "sha256": "e5daa620335c0dc19d14bf0408ef8410b5efa5370df3b628e6a5d9ee334674e4",
+        "size_bytes": 376
+      }
+    },
+    {
+      "id": "2723b59d-e1b6-45cc-9b3c-3e356936be10",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 98,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:12.104940464Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "1a12f0ec427cc5b2f8edbafb9dd761f2b981315e31ce50393d5b5a8b30759899",
+        "mime_type": "text/plain; charset=utf-8",
+        "name": "source-e5daa620335c.txt",
+        "sha256": "e5daa620335c0dc19d14bf0408ef8410b5efa5370df3b628e6a5d9ee334674e4",
+        "size_bytes": 376
+      }
+    },
+    {
+      "id": "ac70fc28-8716-4be6-b651-ce22b41784f0",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 99,
+      "type": "evidence.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:12.105110345Z",
+      "visibility": "user",
+      "payload": {
+        "canonical_url": "https://reference.example.net/computing",
+        "evidence_id": "16e15429-a356-4af2-8237-8a37facbbfe3",
+        "title": "Independent synthetic computing reference"
+      }
+    },
+    {
+      "id": "8ecb342c-323e-4f6d-b7e4-a70370bb193c",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 101,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:12.163314762Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "result": {
+          "content_sha256": "e5daa620335c0dc19d14bf0408ef8410b5efa5370df3b628e6a5d9ee334674e4",
+          "evidence_id": "16e15429-a356-4af2-8237-8a37facbbfe3",
+          "excerpt": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "fetched_bytes": 376,
+          "requested_url": "https://reference.example.net/computing",
+          "taint": "untrusted_external_content",
+          "title": "Independent synthetic computing reference",
+          "url": "https://reference.example.net/computing"
+        },
+        "step_id": "fetch_2",
+        "summary": "Inspecting the second approved source to extract details on stable sorting algorithms, merge sort complexity, memory usage, and trade-offs.",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "97c26fcb-08e1-480d-83e5-c5debc8e78f4",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 102,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:12.163404637Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "step_id": "fetch_2"
+      }
+    },
+    {
+      "id": "34ce6c65-44c2-4827-9268-48b118d53b55",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 104,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:12.225809984Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "verifying"
+      }
+    },
+    {
+      "id": "05a869d2-5df6-45ba-a7d0-3e05c22da26f",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 106,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:12.34199295Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 2,
+        "contradictions": 0,
+        "done_criteria": 8,
+        "hash": "7be6685ab538428f6f56c9b30e2c087691e1e3ca12177e8954499b902019a205",
+        "original_tool_result_bytes": 4305,
+        "reason": "role_tool_results",
+        "reduced_bytes": 192,
+        "retained_tool_result_bytes": 4113,
+        "slot": "af7a074f41422bc9fb6d68fe6eef00f4770c65ce7d44601047c85360de9de414"
+      }
+    },
+    {
+      "id": "f6db6816-4525-46c3-ae85-11079f500204",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 112,
+      "type": "research.round.assessed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:46.942459285Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "critical_missing_count": 0,
+        "evidence_count": 2,
+        "frontier_count": 0,
+        "number": 1,
+        "outcome": "PASS",
+        "stagnant_rounds": 0,
+        "stop_reason": "criteria_covered"
+      }
+    },
+    {
+      "id": "c1b2a823-52b4-4812-a644-aefc0f8c3e25",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 113,
+      "type": "verification.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:46.942538169Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "criteria": [
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "16e15429-a356-4af2-8237-8a37facbbfe3",
+              "e039c674-4fd9-4e09-ac19-c5324d9e7cb1"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 1,
+            "evidence_ids": [
+              "16e15429-a356-4af2-8237-8a37facbbfe3",
+              "e039c674-4fd9-4e09-ac19-c5324d9e7cb1"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 2,
+            "evidence_ids": [
+              "16e15429-a356-4af2-8237-8a37facbbfe3",
+              "e039c674-4fd9-4e09-ac19-c5324d9e7cb1"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 3,
+            "evidence_ids": [
+              "16e15429-a356-4af2-8237-8a37facbbfe3",
+              "e039c674-4fd9-4e09-ac19-c5324d9e7cb1"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 4,
+            "evidence_ids": [
+              "16e15429-a356-4af2-8237-8a37facbbfe3",
+              "e039c674-4fd9-4e09-ac19-c5324d9e7cb1"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "met": true,
+            "step_id": "search_1"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "met": true,
+            "step_id": "search_2"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "e039c674-4fd9-4e09-ac19-c5324d9e7cb1"
+            ],
+            "met": true,
+            "step_id": "fetch_1"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "16e15429-a356-4af2-8237-8a37facbbfe3"
+            ],
+            "met": true,
+            "step_id": "fetch_2"
+          }
+        ],
+        "missing": [],
+        "phase": "evidence_readiness",
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "ae153415-e127-40fa-959c-397b33afda5b",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 115,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:25:46.971931099Z",
+      "stage": "finalization",
+      "visibility": "user",
+      "payload": {
+        "from": "verifying",
+        "to": "verifying"
+      }
+    },
+    {
+      "id": "fe96527e-9efb-4d07-bf40-1e1f177eed02",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "seq": 144,
+      "type": "run.paused",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:26:09.506245883Z",
+      "visibility": "user",
+      "payload": {
+        "pause_reason": "manual",
+        "resource_probe_attempts": 0,
+        "resource_reason": "high_model_rss",
+        "resume_after": "2026-10-28T15:26:14.491222441Z",
+        "status": "paused"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "db07b036-dbe3-492e-8fe5-d2cb19def94b",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "step_id": "search_1",
+      "position": 0,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for stable sorting algorithms and their characteristics.. User request: Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+      "dependencies": [],
+      "expected_output": "List of stable sorting algorithms and their properties.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:24:57.344811969Z",
+      "updated_at": "2026-10-28T15:25:00.539453323Z"
+    },
+    {
+      "id": "bc0c6ea6-d1ac-4a54-a049-b583b1ec2fa7",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "step_id": "search_2",
+      "position": 1,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for merge sort time complexity and auxiliary memory requirements.. User request: Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+      "dependencies": [],
+      "expected_output": "Time complexity and auxiliary memory details for merge sort.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:24:57.34566522Z",
+      "updated_at": "2026-10-28T15:25:03.967428036Z"
+    },
+    {
+      "id": "7232ca3e-767d-4698-949b-b0508aa75fc8",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "step_id": "search_3",
+      "position": 2,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for trade-offs between stable sorting algorithms and merge sort.. User request: Research stable sorting, merge sort time complexity and auxiliary memory from the two imported computing sources. Explain trade-offs.",
+      "dependencies": [],
+      "expected_output": "Comparison and trade-offs between stable sorting and merge sort.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "skipped",
+      "attempts": 0,
+      "created_at": "2026-10-28T15:24:57.345727491Z",
+      "updated_at": "2026-10-28T15:25:03.983600896Z"
+    },
+    {
+      "id": "22d99f61-d0f9-4ea2-b37e-e862d5842315",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "step_id": "fetch_1",
+      "position": 3,
+      "kind": "fetch",
+      "description": "Inspect distinct approved source 1 for the exact user request",
+      "dependencies": [
+        "search_1",
+        "search_2",
+        "search_3"
+      ],
+      "expected_output": "Source text with stored evidence ID",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:24:57.345749414Z",
+      "updated_at": "2026-10-28T15:25:08.033591838Z"
+    },
+    {
+      "id": "cf1158b2-7fce-4895-a84b-0b7fc10351aa",
+      "task_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+      "step_id": "fetch_2",
+      "position": 4,
+      "kind": "fetch",
+      "description": "Inspect distinct approved source 2 for the exact user request",
+      "dependencies": [
+        "search_1",
+        "search_2",
+        "search_3"
+      ],
+      "expected_output": "Source text with stored evidence ID",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:24:57.345879628Z",
+      "updated_at": "2026-10-28T15:25:12.163157186Z"
+    }
+  ],
+  "inference_summaries_complete": true,
+  "inference_summaries": [
+    {
+      "seq": 8,
+      "summary": {
+        "invocation_id": "invocation-896013336bcaa0db363bd340e44d0d0970b298caaf13f61d2aad82c55a0a2f79",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:24:57.336879333Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:24:57.336879333Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:24:43.470435081Z"
+          },
+          "prompt_tokens": {
+            "value": 780,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:24:57.336859926Z"
+          },
+          "output_tokens": {
+            "value": 438,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:24:57.336859926Z"
+          },
+          "total_tokens": {
+            "value": 1218,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:24:57.336859926Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:24:57.336859926Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 728.3831295261308,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:24:57.336859926Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.260333479761066,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:24:57.336859926Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:24:43.470435081Z"
+          },
+          "prompt_ms": {
+            "value": 1070.865,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:24:57.336859926Z"
+          },
+          "generation_ms": {
+            "value": 12784.464,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:24:57.336859926Z"
+          },
+          "context_tokens": {
+            "value": 1218,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:24:57.336859926Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:24:43.470435081Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 18,
+      "summary": {
+        "invocation_id": "invocation-16fcf76bdd6466d11f729a0bd760f171a2492043adb56a9680e45ba9961e6828",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:25:00.411659361Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:25:00.411659361Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:24:57.40972625Z"
+          },
+          "prompt_tokens": {
+            "value": 1030,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:00.411623181Z"
+          },
+          "output_tokens": {
+            "value": 60,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:00.411623181Z"
+          },
+          "total_tokens": {
+            "value": 1090,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:00.411623181Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:00.411623181Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 977.4466057929369,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:25:00.411623181Z"
+          },
+          "output_tokens_per_second": {
+            "value": 33.36271105390024,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:25:00.411623181Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:24:57.40972625Z"
+          },
+          "prompt_ms": {
+            "value": 1053.766,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:00.411623181Z"
+          },
+          "generation_ms": {
+            "value": 1798.415,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:00.411623181Z"
+          },
+          "context_tokens": {
+            "value": 1090,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:00.411623181Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:24:57.40972625Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 41,
+      "summary": {
+        "invocation_id": "invocation-9e621a91595f8a18dc99f15a43c565a43ad7793fcc60fc72c293e4f83642f320",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:25:03.82942698Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:25:03.82942698Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:00.640765233Z"
+          },
+          "prompt_tokens": {
+            "value": 1293,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:03.829377233Z"
+          },
+          "output_tokens": {
+            "value": 65,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:03.829377233Z"
+          },
+          "total_tokens": {
+            "value": 1358,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:03.829377233Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 397,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:03.829377233Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 894.6044171093096,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:25:03.829377233Z"
+          },
+          "output_tokens_per_second": {
+            "value": 33.20826589500875,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:25:03.829377233Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:00.640765233Z"
+          },
+          "prompt_ms": {
+            "value": 1001.56,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:03.829377233Z"
+          },
+          "generation_ms": {
+            "value": 1957.344,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:03.829377233Z"
+          },
+          "context_tokens": {
+            "value": 1358,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:03.829377233Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:00.640765233Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 67,
+      "summary": {
+        "invocation_id": "invocation-834d65712b9fdce9b511df964e1f0319eba32c4d6df432dce9d8fdcb11b3c6a0",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:25:07.934405567Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:25:07.934405567Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:04.178084908Z"
+          },
+          "prompt_tokens": {
+            "value": 1457,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:07.934370548Z"
+          },
+          "output_tokens": {
+            "value": 69,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:07.934370548Z"
+          },
+          "total_tokens": {
+            "value": 1526,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:07.934370548Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:07.934370548Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 989.5482783422044,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:25:07.934370548Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.589014829664144,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:25:07.934370548Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:04.178084908Z"
+          },
+          "prompt_ms": {
+            "value": 1472.389,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:07.934370548Z"
+          },
+          "generation_ms": {
+            "value": 1994.853,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:07.934370548Z"
+          },
+          "context_tokens": {
+            "value": 1526,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:07.934370548Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:04.178084908Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 89,
+      "summary": {
+        "invocation_id": "invocation-5070039498c248ed7d433ade1a30fd293df86cd97d188f72ffd5f97bd55f3e11",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:25:11.959490063Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:25:11.959490063Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:08.135610325Z"
+          },
+          "prompt_tokens": {
+            "value": 1706,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:11.959430928Z"
+          },
+          "output_tokens": {
+            "value": 67,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:11.959430928Z"
+          },
+          "total_tokens": {
+            "value": 1773,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:11.959430928Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 348,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:11.959430928Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 981.1855148695125,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:25:11.959430928Z"
+          },
+          "output_tokens_per_second": {
+            "value": 29.79716580032519,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:25:11.959430928Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:08.135610325Z"
+          },
+          "prompt_ms": {
+            "value": 1384.04,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:11.959430928Z"
+          },
+          "generation_ms": {
+            "value": 2248.536,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:11.959430928Z"
+          },
+          "context_tokens": {
+            "value": 1773,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:11.959430928Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:08.135610325Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 110,
+      "summary": {
+        "invocation_id": "invocation-c8c208dd713f7c1a95c9d3503269b8c3c1321f9aa65166ef801ccbb63351d000",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:25:46.91426545Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:25:46.91426545Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:12.496903641Z"
+          },
+          "prompt_tokens": {
+            "value": 4172,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:46.914226704Z"
+          },
+          "output_tokens": {
+            "value": 982,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:46.914226704Z"
+          },
+          "total_tokens": {
+            "value": 5154,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:46.914226704Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:46.914226704Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1040.427023969723,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:25:46.914226704Z"
+          },
+          "output_tokens_per_second": {
+            "value": 32.66997101355158,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:25:46.914226704Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:12.496903641Z"
+          },
+          "prompt_ms": {
+            "value": 4009.892,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:46.914226704Z"
+          },
+          "generation_ms": {
+            "value": 30058.184,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:46.914226704Z"
+          },
+          "context_tokens": {
+            "value": 5154,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:46.914226704Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:12.496903641Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 122,
+      "summary": {
+        "invocation_id": "invocation-adaa93692bad98edaf199d3684083f9be4839d37d6a6d1343315f32205b3d5be",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:25:57.125136015Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:25:57.125136015Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:47.126007488Z"
+          },
+          "prompt_tokens": {
+            "value": 1761,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:57.125103021Z"
+          },
+          "output_tokens": {
+            "value": 281,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:57.125103021Z"
+          },
+          "total_tokens": {
+            "value": 2042,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:57.125103021Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:57.125103021Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1017.9773293384997,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:25:57.125103021Z"
+          },
+          "output_tokens_per_second": {
+            "value": 34.74133407711933,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:25:57.125103021Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:47.126007488Z"
+          },
+          "prompt_ms": {
+            "value": 1729.901,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:57.125103021Z"
+          },
+          "generation_ms": {
+            "value": 8088.348,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:57.125103021Z"
+          },
+          "context_tokens": {
+            "value": 2042,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:57.125103021Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:47.126007488Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 129,
+      "summary": {
+        "invocation_id": "invocation-ee5d1b1556bef4298a27449934d0154141b03ec56ba971bacdcb480dc3935d88",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:26:01.111911473Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:26:01.111911473Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:57.281955816Z"
+          },
+          "prompt_tokens": {
+            "value": 1266,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:01.111890492Z"
+          },
+          "output_tokens": {
+            "value": 84,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:01.111890492Z"
+          },
+          "total_tokens": {
+            "value": 1350,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:01.111890492Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:01.111890492Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 978.7481764437115,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:01.111890492Z"
+          },
+          "output_tokens_per_second": {
+            "value": 35.17851631257117,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:01.111890492Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:25:57.281955816Z"
+          },
+          "prompt_ms": {
+            "value": 1293.489,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:01.111890492Z"
+          },
+          "generation_ms": {
+            "value": 2387.821,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:01.111890492Z"
+          },
+          "context_tokens": {
+            "value": 1350,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:01.111890492Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:25:57.281955816Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 135,
+      "summary": {
+        "invocation_id": "invocation-a3a2f269f6ac5b6482c111e0c1362e9afb0af4117bf0c3cb97aa60293a04e10d",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:26:07.607322902Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:26:07.607322902Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:01.29079253Z"
+          },
+          "prompt_tokens": {
+            "value": 1328,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:07.607189943Z"
+          },
+          "output_tokens": {
+            "value": 173,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:07.607189943Z"
+          },
+          "total_tokens": {
+            "value": 1501,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:07.607189943Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:07.607189943Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1024.5032162303528,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:07.607189943Z"
+          },
+          "output_tokens_per_second": {
+            "value": 35.500221722483076,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:07.607189943Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:01.29079253Z"
+          },
+          "prompt_ms": {
+            "value": 1296.238,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:07.607189943Z"
+          },
+          "generation_ms": {
+            "value": 4873.209,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:07.607189943Z"
+          },
+          "context_tokens": {
+            "value": 1501,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:07.607189943Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:01.29079253Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 142,
+      "summary": {
+        "invocation_id": "invocation-af1aceff4da00f5d27c08b1cfc13c4a91deaf4c42d087c68493fc0faf7ddf365",
+        "invocation_status": "failed",
+        "snapshot_at": "2026-10-28T15:26:09.440605636Z",
+        "inference": {
+          "status": "cancelled",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:26:09.440605636Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:09.440605636Z"
+          },
+          "prompt_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:09.440605636Z"
+          },
+          "output_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:09.440605636Z"
+          },
+          "total_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:09.440605636Z"
+          },
+          "cached_prompt_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:09.440605636Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:09.440605636Z"
+          },
+          "output_tokens_per_second": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:26:09.440605636Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:09.440605636Z"
+          },
+          "prompt_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:09.440605636Z"
+          },
+          "generation_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:26:09.440605636Z"
+          },
+          "context_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:09.440605636Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:26:09.440605636Z"
+          }
+        }
+      }
+    }
+  ]
+}

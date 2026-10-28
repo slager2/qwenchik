@@ -56,30 +56,25 @@ func TestBenchmarkScoresOwnedReferencesWithoutInventingFactualAccuracy(t *testin
 	c := labBenchmarkCase{ID: "case", Split: "heldout", Concepts: []string{"FASTA", "FASTQ"}, SourceURLs: []string{"https://a.example/source", "https://b.example/source"}}
 	evidence := []domain.Evidence{{ID: "owned", TaskID: "run", CanonicalURL: c.SourceURLs[0], ContentSHA256: "hash", TextArtifactID: "artifact"}, {ID: "foreign", TaskID: "other", CanonicalURL: c.SourceURLs[1], ContentSHA256: "hash", TextArtifactID: "artifact"}}
 	r := scoreLabCase(c, "FASTA [owned] and [foreign]", evidence, "run")
-	if r.ConceptHitRate != .5 || r.SourceRecall != .5 || r.CitationReferenceValidity == nil || *r.CitationReferenceValidity != .5 {
+	if r.ConceptHitRate == nil || *r.ConceptHitRate != .5 || r.SourceRecall == nil || *r.SourceRecall != .5 || r.CitationReferenceValidity == nil || *r.CitationReferenceValidity != .5 {
 		t.Fatalf("scores=%+v", r)
 	}
 	if r.IndependentFactualAccuracy != nil || r.TotalOutputTokens != nil {
 		t.Fatal("invented unavailable measurements")
 	}
 	r = scoreLabCase(c, "No citations", nil, "run")
-	if r.CitationReferenceValidity != nil || r.SourceRecall != 0 {
+	if r.CitationReferenceValidity != nil || r.SourceRecall == nil || *r.SourceRecall != 0 {
 		t.Fatal("empty evidence scored as validated")
 	}
 }
 func TestBenchmarkComparisonRejectsChangedSnapshots(t *testing.T) {
-	cases, _ := labCases()
-	b := labBenchmarkResult{ScoringComplete: true, CaseID: cases[0].ID, Variant: "baseline", DatasetSHA256: labHash(labCasesJSON), CorpusSHA256: labHash(labCorpusJSON), ModelProfileHash: "same-model", BudgetHash: "same-budget", Status: domain.StatusCompleted}
-	a := b
-	a.Variant = "adaptive"
-	a.SourceRecall = 1
-	base := map[string]labBenchmarkResult{b.CaseID: b}
-	adaptive := map[string]labBenchmarkResult{a.CaseID: a}
+	base, adaptive := benchmarkComparisonFixture(t)
 	rows, err := compareLabResults(base, adaptive)
-	if err != nil || len(rows) != 1 {
+	if err != nil || len(rows) != 12 {
 		t.Fatalf("rows=%v err=%v", rows, err)
 	}
-	a.ModelProfileHash = "different"
+	a := adaptive["dev-fasta"]
+	a.ModelProfileHash = labHash([]byte("different"))
 	adaptive[a.CaseID] = a
 	if _, err := compareLabResults(base, adaptive); err == nil {
 		t.Fatal("compared different model profiles")
@@ -95,7 +90,9 @@ func TestBenchmarkCancelsOwnRunOnPolicyMismatch(t *testing.T) {
 		case "/api/conversations/conversation/messages":
 			_ = json.NewEncoder(w).Encode(domain.SubmitResponse{Run: domain.Run{ID: "run", AssistantMessageID: "answer"}})
 		case "/api/runs/run/runtime":
-			_, _ = w.Write([]byte(`{"task_id":"run","status":"running","privacy_mode":"local_inference_external_search"}`))
+			projection := benchmarkRuntimeFixture(domain.StatusRunning)
+			projection["privacy_mode"] = domain.PrivacyExternalSearch
+			_ = json.NewEncoder(w).Encode(projection)
 		case "/api/runs/run/cancel":
 			cancelled = true
 			_, _ = w.Write([]byte(`{}`))
@@ -131,7 +128,7 @@ func TestBenchmarkRejectsIncompleteCollectionAndCleansAmbiguousSubmission(t *tes
 					}
 					_ = json.NewEncoder(w).Encode(domain.SubmitResponse{Run: domain.Run{ID: "run", AssistantMessageID: "answer"}})
 				case r.URL.Path == "/api/runs/run/runtime":
-					_ = json.NewEncoder(w).Encode(labRuntime{RunID: "run", ResearchSessionID: "session", PrivacyMode: domain.PrivacyOffline, CorpusSHA256: labHash(labCorpusJSON), SectionedReportEnabled: true, ModelProfileHash: "model", Status: domain.StatusCompleted})
+					_ = json.NewEncoder(w).Encode(benchmarkRuntimeFixture(domain.StatusCompleted))
 				case r.Method == "GET" && r.URL.Path == "/api/conversations/conversation/messages":
 					if mode == "messages_missing" {
 						_, _ = w.Write([]byte(`[]`))

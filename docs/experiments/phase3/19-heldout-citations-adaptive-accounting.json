@@ -1,0 +1,11 @@
+{
+  "case_id": "heldout-citations",
+  "variant": "adaptive",
+  "state": "measured",
+  "started_at": "2026-10-28T15:41:23.906Z",
+  "run_id": "250ae545-13b4-4f6c-bc28-c287f61aef93",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused",
+  "finished_at": "2026-10-28T15:44:07.754Z"
+}

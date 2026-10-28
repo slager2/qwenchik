@@ -1,0 +1,11 @@
+{
+  "case_id": "dev-recovery",
+  "variant": "baseline",
+  "state": "measured",
+  "started_at": "2026-10-28T15:34:55.228Z",
+  "run_id": "da1de0ac-2208-4e54-8f2a-dc3037286ec2",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused",
+  "finished_at": "2026-10-28T15:36:48.805Z"
+}

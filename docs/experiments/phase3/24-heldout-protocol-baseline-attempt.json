@@ -1,0 +1,10 @@
+{
+  "case_id": "heldout-protocol",
+  "variant": "baseline",
+  "state": "attempted",
+  "started_at": "2026-10-28T15:54:13.270Z",
+  "run_id": "91efaabb-abeb-40da-92e4-54224021d156",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused"
+}

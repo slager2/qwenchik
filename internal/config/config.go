@@ -40,6 +40,7 @@ type Config struct {
 	RuntimeModelFingerprint      string
 	ServerReportedContext        int
 	ContextProbeEnabled          bool
+	LabHoldResourcePauses        bool
 	LLMMaxOutputTokens           int
 	LLMTemperature               float64
 	LLMTopP                      float64
@@ -124,6 +125,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.ContextProbeEnabled, err = boolEnv("CONTEXT_PROBE_ENABLED", false); err != nil {
+		return Config{}, err
+	}
+	if cfg.LabHoldResourcePauses, err = boolEnv("LAB_HOLD_RESOURCE_PAUSES", false); err != nil {
 		return Config{}, err
 	}
 	if cfg.MaxSteps, err = intEnv("MAX_STEPS", 12); err != nil {
@@ -287,6 +291,9 @@ func dotEnvCommentStart(value string) int {
 }
 
 func (c Config) Validate() error {
+	if c.LabHoldResourcePauses && c.ResearchPrivacyMode != domain.PrivacyOffline {
+		return errors.New("LAB_HOLD_RESOURCE_PAUSES requires RESEARCH_PRIVACY_MODE=offline")
+	}
 	if err := c.validatePrivacy(); err != nil {
 		return err
 	}

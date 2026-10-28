@@ -1,0 +1,10 @@
+{
+  "case_id": "heldout-citations",
+  "variant": "baseline",
+  "state": "attempted",
+  "started_at": "2026-10-28T15:44:09.062Z",
+  "run_id": "42028262-c2d0-437a-92ef-a5e3d6ca542d",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused"
+}

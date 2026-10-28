@@ -1,0 +1,3302 @@
+{
+  "runtime": {
+    "accepted_evidence": 2,
+    "active_round_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Identify how catalysts affect reaction rates (kinetics) from imported chemistry sources.",
+        "Identify how catalysts affect chemical equilibrium from imported chemistry sources.",
+        "Confirm that sources explicitly state catalysts do not shift equilibrium.",
+        "Gather evidence from at least two distinct imported chemistry websites.",
+        "Synthesize findings to contrast kinetics vs. equilibrium effects without claiming equilibrium shifts."
+      ],
+      "schema_version": 1,
+      "goal": "Research how catalysts affect kinetics versus equilibrium using both imported chemistry sources. Avoid claiming that catalysts shift equilibrium.",
+      "subtasks": [
+        {
+          "id": "search_1",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for information on how catalysts affect reaction rates (kinetics) in imported chemistry sources.. User request: Research how catalysts affect kinetics versus equilibrium using both imported chemistry sources. Avoid claiming that catalysts shift equilibrium.",
+          "dependencies": [],
+          "expected_output": "List of sources and specific statements regarding rate changes.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_2",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for information on how catalysts affect chemical equilibrium in imported chemistry sources.. User request: Research how catalysts affect kinetics versus equilibrium using both imported chemistry sources. Avoid claiming that catalysts shift equilibrium.",
+          "dependencies": [],
+          "expected_output": "List of sources and specific statements regarding equilibrium position.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "fetch_1",
+          "kind": "fetch",
+          "description": "Fetch and verify specific imported chemistry sources found in the search results to ensure they explicitly state catalysts do not shift equilibrium.",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Verified excerpts confirming no equilibrium shift.",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_2",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 2 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        }
+      ],
+      "max_steps": 4,
+      "final_deliverable": "A concise research summary comparing the kinetic and equilibrium effects of catalysts, citing specific statements from imported sources that confirm catalysts do not alter equilibrium positions."
+    },
+    "adaptive_enabled": false,
+    "budget": {
+      "max_initial_plan_steps": 12,
+      "max_round_steps": 12,
+      "max_total_steps": 20,
+      "max_report_sections": 6,
+      "max_report_paragraphs": 16,
+      "max_report_bytes": 524288,
+      "wall_time_seconds": 1800,
+      "max_rounds": 3,
+      "max_steps": 12,
+      "max_search_queries": 8,
+      "max_fetches": 8,
+      "max_llm_calls": 48,
+      "max_evidence": 8,
+      "max_questions_created": 24,
+      "max_questions_accepted": 16,
+      "max_stagnant_rounds": 2,
+      "max_citation_sources": 8,
+      "max_citation_claims": 16
+    },
+    "budget_remaining": {
+      "evidence": 6,
+      "fetched_bytes": 134216990,
+      "fetches": 6,
+      "http_attempts": 85,
+      "initial_plan_steps": 12,
+      "llm_calls": 37,
+      "questions_accepted": 16,
+      "questions_created": 24,
+      "round_steps": 12,
+      "rounds": 3,
+      "search_queries": 6,
+      "stagnant_rounds": 2,
+      "steps": 16,
+      "total_steps": 16
+    },
+    "bundle_hash": "e27b07fb099039c84672d3db8b38e46d62d0a813a7da342ed2f8484d990f03bf",
+    "bundle_version": 1,
+    "compactions": 4,
+    "completed_steps": 4,
+    "completion": {
+      "continuations": 0,
+      "verdict": "PASS"
+    },
+    "context_budget": {
+      "version": 1,
+      "configured_context": 32768,
+      "server_reported_context": 32768,
+      "training_context": 262144,
+      "session_context": 32768,
+      "max_output_tokens": 4096,
+      "reserved_output_tokens": 4096,
+      "reserved_system_tokens": 2048,
+      "available_input_tokens": 26624,
+      "prompt_tokens": null,
+      "context_status": "matched",
+      "count_method": "unavailable",
+      "decision": "not_counted",
+      "server_source": "props.default_generation_settings.n_ctx:single_slot",
+      "runtime_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+      "runtime_build": "b11426-cda0f9256",
+      "chat_template_sha256": "7f0e529032c25183bcd66c7f238da2d377f43be754a94e2725a58c4e16d2ed67",
+      "model_quantization": "Q4_K - Medium",
+      "observed_at": "2026-10-28T15:22:31.537687797Z"
+    },
+    "context_snapshot_hash": "ff6f1a9e38eda7744450ede23588ddf1776ff3f9633283b5714895f1f87ef5f3",
+    "context_snapshot_number": 11,
+    "contradictions": null,
+    "counters": {
+      "steps_reserved": 4,
+      "llm_calls": 11,
+      "http_attempts": 11,
+      "search_queries": 2,
+      "fetches": 2,
+      "fetched_bytes": 738,
+      "evidence": 2,
+      "questions_created": 0,
+      "questions_accepted": 0,
+      "rounds": 0,
+      "stagnant_rounds": 0
+    },
+    "current_round": 1,
+    "cursor": 167,
+    "deadline_at": "2026-10-28T15:50:09.273501387Z",
+    "done_criteria": 9,
+    "elapsed_seconds": 142,
+    "inference_summary": {
+      "invocation_id": "invocation-d09f252f410db8ae3e3f38e8cfe0ccee44c7883089678d5dd0233b7ce69cc644",
+      "invocation_status": "failed",
+      "snapshot_at": "2026-10-28T15:22:29.325602142Z",
+      "inference": {
+        "status": "cancelled",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:22:29.325602142Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "output_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "total_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "cached_prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "output_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "prompt_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "generation_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "context_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        }
+      }
+    },
+    "initial_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Identify how catalysts affect reaction rates (kinetics) from imported chemistry sources.",
+        "Identify how catalysts affect chemical equilibrium from imported chemistry sources.",
+        "Confirm that sources explicitly state catalysts do not shift equilibrium.",
+        "Gather evidence from at least two distinct imported chemistry websites.",
+        "Synthesize findings to contrast kinetics vs. equilibrium effects without claiming equilibrium shifts."
+      ],
+      "schema_version": 1,
+      "goal": "Research how catalysts affect kinetics versus equilibrium using both imported chemistry sources. Avoid claiming that catalysts shift equilibrium.",
+      "subtasks": [
+        {
+          "id": "search_1",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for information on how catalysts affect reaction rates (kinetics) in imported chemistry sources.. User request: Research how catalysts affect kinetics versus equilibrium using both imported chemistry sources. Avoid claiming that catalysts shift equilibrium.",
+          "dependencies": [],
+          "expected_output": "List of sources and specific statements regarding rate changes.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_2",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for information on how catalysts affect chemical equilibrium in imported chemistry sources.. User request: Research how catalysts affect kinetics versus equilibrium using both imported chemistry sources. Avoid claiming that catalysts shift equilibrium.",
+          "dependencies": [],
+          "expected_output": "List of sources and specific statements regarding equilibrium position.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "fetch_1",
+          "kind": "fetch",
+          "description": "Fetch and verify specific imported chemistry sources found in the search results to ensure they explicitly state catalysts do not shift equilibrium.",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Verified excerpts confirming no equilibrium shift.",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_2",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 2 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        }
+      ],
+      "max_steps": 4,
+      "final_deliverable": "A concise research summary comparing the kinetic and equilibrium effects of catalysts, citing specific statements from imported sources that confirm catalysts do not alter equilibrium positions."
+    },
+    "keep_awake_requested": true,
+    "max_continuations": 1,
+    "model_profile_hash": "1b3d9bd1717af420d357a0aaef2b79a9e80c4f65a5e5f8a3f07e2dbfbb65e4c3",
+    "offline_corpus_sha256": "9814cb53c048545010e91bb6ee7e50be66e8c3852eb3380c8c435a86f03fd43b",
+    "open_questions": [],
+    "pause_reason": "manual",
+    "privacy_mode": "offline",
+    "profile": "standard",
+    "remaining_seconds": 1657,
+    "research_report": {
+      "artifact_id": "",
+      "markdown_artifact_id": "",
+      "outcome": "partial",
+      "sections": 6,
+      "unrepresented_criteria": null
+    },
+    "research_session_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+    "resource_probe_attempts": 0,
+    "resource_reason": "high_model_rss",
+    "resume_after": "2026-10-28T15:22:34.382481343Z",
+    "round_plan_count": 1,
+    "runtime": {
+      "active_run_id": "",
+      "enabled": true,
+      "keep_awake": true,
+      "max_resume_attempts": 5,
+      "resource_policy": {
+        "enabled": true,
+        "min_free_ram_bytes": 536870912,
+        "min_free_vram_mb": 256,
+        "gpu_temp_max_c": 85,
+        "process_rss_max_bytes": 2147483648,
+        "model_rss_max_bytes": 3221225472,
+        "recovery_ram_margin_percent": 10,
+        "recovery_vram_margin_percent": 10,
+        "recovery_gpu_temp_margin_c": 5,
+        "recovery_rss_margin_percent": 10,
+        "llama_health_timeout": 2000000000,
+        "check_interval": 1000000000,
+        "max_resume_attempts": 5,
+        "backoff_base": 5000000000,
+        "backoff_max": 60000000000
+      },
+      "resources": {
+        "free_ram_bytes": 8054317056,
+        "gpu_free_vram_mb": 2433,
+        "gpu_temp_c": 67,
+        "heap_alloc_bytes": 3612784,
+        "llama_health_latency": 362275,
+        "llama_healthy": true,
+        "model_rss_bytes": 3245776896,
+        "power_source": "AC",
+        "rss_bytes": 82022400,
+        "snapshot_at": "2026-10-28T15:22:29.325538078Z",
+        "warnings": []
+      },
+      "sleep": {
+        "active": false,
+        "available": true,
+        "power_source": "unknown",
+        "provider": "systemd-inhibit"
+      },
+      "sleep_policy": "keep_awake",
+      "status": "ok"
+    },
+    "runtime_model_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+    "sectioned_report_enabled": true,
+    "stage": null,
+    "status": "paused",
+    "step": "",
+    "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+    "telemetry": {
+      "timestamp": "2026-10-28T15:22:29.325602142Z",
+      "stale_after_ms": 39000,
+      "capabilities": {
+        "cpu": true,
+        "ram": true,
+        "gpu": true,
+        "gpu_temperature": true,
+        "gpu_utilization": true,
+        "power": true,
+        "battery": false,
+        "process_rss": true,
+        "llama_health": true,
+        "llama_timings": false,
+        "llama_metrics": false,
+        "llama_slots": false
+      },
+      "system": {
+        "metadata": {
+          "os": "linux",
+          "uptime_seconds": {
+            "value": 6274.31,
+            "source": "exact",
+            "unit": "seconds",
+            "updated_at": "2026-10-28T15:22:29.290163085Z"
+          }
+        },
+        "cpu_usage": {
+          "value": 26.065688329839272,
+          "source": "exact",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:22:29.290163085Z"
+        },
+        "cpu_temperature": {
+          "value": 94,
+          "source": "exact",
+          "unit": "celsius",
+          "updated_at": "2026-10-28T15:22:29.290163085Z"
+        },
+        "ram_used": {
+          "value": 7895412736,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:22:29.290163085Z"
+        },
+        "ram_free": {
+          "value": 8054317056,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:22:29.290163085Z"
+        },
+        "ram_total": {
+          "value": 15949729792,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:22:29.290163085Z"
+        },
+        "gpus": [
+          {
+            "name": {
+              "value": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+              "source": "exact",
+              "unit": "name",
+              "updated_at": "2026-10-28T15:22:29.290163085Z"
+            },
+            "utilization": {
+              "value": 100,
+              "source": "exact",
+              "unit": "percent",
+              "updated_at": "2026-10-28T15:22:29.290163085Z"
+            },
+            "temperature": {
+              "value": 67,
+              "source": "exact",
+              "unit": "celsius",
+              "updated_at": "2026-10-28T15:22:29.290163085Z"
+            },
+            "vram_used": {
+              "value": 3537895424,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:22:29.290163085Z"
+            },
+            "vram_free": {
+              "value": 2551185408,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:22:29.290163085Z"
+            },
+            "vram_total": {
+              "value": 6442450944,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:22:29.290163085Z"
+            },
+            "power_watts": {
+              "value": 32.12,
+              "source": "exact",
+              "unit": "watts",
+              "updated_at": "2026-10-28T15:22:29.290163085Z"
+            }
+          }
+        ],
+        "agent_rss": {
+          "value": 82022400,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:22:29.290163085Z"
+        },
+        "llama_server_rss": {
+          "value": 3245776896,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:22:29.290163085Z"
+        },
+        "power_source": {
+          "value": "AC",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:22:15.686742876Z"
+        },
+        "power_watts": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "watts",
+          "updated_at": "2026-10-28T15:22:29.290163085Z",
+          "error": "unsupported"
+        },
+        "battery_percent": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:22:29.290163085Z",
+          "error": "unsupported"
+        },
+        "battery_charging": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "boolean",
+          "updated_at": "2026-10-28T15:22:29.290163085Z",
+          "error": "unsupported"
+        },
+        "llama_health": {
+          "value": "healthy",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:22:29.290163085Z"
+        },
+        "llama_slots_active": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:22:29.290163085Z",
+          "error": "temporarily_unavailable"
+        },
+        "llama_slots_total": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:22:29.290163085Z",
+          "error": "temporarily_unavailable"
+        }
+      },
+      "inference": {
+        "status": "cancelled",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:22:29.325602142Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "output_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "total_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "cached_prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "output_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "prompt_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "generation_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "context_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:22:29.325602142Z"
+        }
+      }
+    },
+    "telemetry_revision": 61,
+    "terminal_outcome": "",
+    "updated_at": "2026-10-28T15:22:29.40771899Z",
+    "verdict": "PASS"
+  },
+  "run": {
+    "pause_reason": "manual",
+    "resource_reason": "high_model_rss",
+    "resume_after": "2026-10-28T15:22:34.382481343Z",
+    "resource_probe_attempts": 0,
+    "id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+    "conversation_id": "a9257fb2-0f3d-4168-b310-7057973e7340",
+    "user_message_id": "2d9a1ab4-6e17-421b-8764-07298e324706",
+    "assistant_message_id": "a1bab46d-afb9-43c1-a920-0d9e7da8ad7a",
+    "mode": "research",
+    "operation": "send",
+    "status": "paused",
+    "retry_count": 0,
+    "cancel_requested": false,
+    "created_at": "2026-10-28T15:20:09.273501387Z",
+    "updated_at": "2026-10-28T15:22:29.40771899Z",
+    "started_at": "2026-10-28T15:20:09.283134581Z",
+    "heartbeat_at": "2026-10-28T15:22:24.414284071Z",
+    "deadline_at": "2026-10-28T15:50:09.273501387Z"
+  },
+  "artifacts": [
+    {
+      "id": "bc9b0b8ad5753d31e4edd6d57a4accfaad925b75952059968611669ab64a125f",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "name": "source-72d03c500ab0.txt",
+      "mime_type": "text/plain; charset=utf-8",
+      "sha256": "72d03c500ab02bf8cd5879169c6ef2fc407fdcb6e7f2f8de818dc02068b8db85",
+      "size_bytes": 384,
+      "created_at": "2026-10-28T15:20:51.34653585Z"
+    },
+    {
+      "id": "4f2b808a4ff8e6ceb44af9e9efcf19860e50d5dd4bfe552f7a8b6f7b45c8f37e",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "name": "source-72d03c500ab0.raw",
+      "mime_type": "text/plain",
+      "sha256": "72d03c500ab02bf8cd5879169c6ef2fc407fdcb6e7f2f8de818dc02068b8db85",
+      "size_bytes": 384,
+      "created_at": "2026-10-28T15:20:51.345105796Z"
+    },
+    {
+      "id": "f90330103ad159911090f7c8a4ed256ff36d89e59ce5d752d8bb3b963b928ef8",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "name": "source-f0d6d5ed471d.txt",
+      "mime_type": "text/plain; charset=utf-8",
+      "sha256": "f0d6d5ed471d608fc200a2fed5cbdd6fb697227c34af6e042a0f98872dd0114e",
+      "size_bytes": 354,
+      "created_at": "2026-10-28T15:20:44.907317007Z"
+    },
+    {
+      "id": "3510fbfa324bd694efd22f5c1f2af5568a025dbc59f4eb075b24e6b4500bd8b4",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "name": "source-f0d6d5ed471d.raw",
+      "mime_type": "text/plain",
+      "sha256": "f0d6d5ed471d608fc200a2fed5cbdd6fb697227c34af6e042a0f98872dd0114e",
+      "size_bytes": 354,
+      "created_at": "2026-10-28T15:20:44.905881513Z"
+    }
+  ],
+  "public_events_complete": true,
+  "events": [
+    {
+      "id": "b1424ef0-9630-4500-978c-04c920082a50",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 1,
+      "type": "task.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:09.276828384Z",
+      "visibility": "user",
+      "payload": {
+        "mode": "research",
+        "status": "queued"
+      }
+    },
+    {
+      "id": "3590c07d-1f72-4373-9875-e295ff20d873",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 2,
+      "type": "message.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:09.277994294Z",
+      "visibility": "user",
+      "payload": {
+        "message_id": "a1bab46d-afb9-43c1-a920-0d9e7da8ad7a",
+        "role": "assistant",
+        "status": "pending"
+      }
+    },
+    {
+      "id": "6e5cd5b5-362b-493d-b0de-226faf2499a8",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 3,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:09.285421613Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "from": "queued",
+        "to": "planning"
+      }
+    },
+    {
+      "id": "62c427b7-be17-45d0-aac4-2d62626cab52",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 10,
+      "type": "plan.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:30.064590303Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "goal": "Research how catalysts affect kinetics versus equilibrium using both imported chemistry sources. Avoid claiming that catalysts shift equilibrium.",
+        "steps": 4
+      }
+    },
+    {
+      "id": "31e9aa72-55b3-4f36-9ad6-a427a2f0acae",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 11,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:30.089817866Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "from": "planning",
+        "plan_steps": 4,
+        "to": "running"
+      }
+    },
+    {
+      "id": "27386f6a-0588-4dbc-a6e3-cc8efe5f398f",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 12,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:30.10839914Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for information on how catalysts affect reaction rates (kinetics) in imported chemistry sources.. User request: Research how catalysts affect kinetics versus equilibrium using both imported chemistry sources. Avoid claiming that catalysts shift equilibrium.",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "fb7fc51f-b2b2-449e-84e7-cd2547c34c89",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 22,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.053805919Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1",
+        "summary": "Searching for information on how catalysts affect reaction rates (kinetics) in imported chemistry sources.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "65f2af82-eca1-48c2-85df-91360f453bfb",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 25,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.094521184Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "catalysts effect on reaction rate kinetics chemistry",
+        "query_fingerprint": "d9a3fc63d8b39d60b566d0e130f3cf8d3db7e377b44b3a6b9ee8f848d2942ce3",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "ab6d21e0-4f00-4958-9bfe-1c0af621a85d",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 26,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.095116313Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:20:34.094953886Z",
+        "code": "search_ok",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:20:34.094953886Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider is unavailable",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "d9a3fc63d8b39d60b566d0e130f3cf8d3db7e377b44b3a6b9ee8f848d2942ce3",
+        "result_count": 5,
+        "retryable": false,
+        "started_at": "2026-10-28T15:20:34.094953886Z",
+        "state": "unavailable",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "2466f7ff-7d55-45b4-b161-e40d1e666376",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 27,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.096668374Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "fingerprint": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "url": "https://reference.example.net/chemistry",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic chemistry reference",
+          "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "d9a3fc63d8b39d60b566d0e130f3cf8d3db7e377b44b3a6b9ee8f848d2942ce3",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:20:34.095651885Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "a1d79ff4-b18c-446c-be01-0e2fa9c1f5f4",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 28,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.099225202Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7575eedd4a61057407db2e3595d996964890d8f06afece274bb35217f22021fa",
+          "fingerprint": "7575eedd4a61057407db2e3595d996964890d8f06afece274bb35217f22021fa",
+          "url": "https://docs.example.com/chemistry",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic chemistry laboratory reference",
+          "snippet": "Synthetic educational fixture. Buffers resist pH change within a limited range. Henderson-Hasselbalch relates pH, pKa and the conjugate base to acid ratio. Dilution changes molarity; molarity is amount of solute per volume of solution. A catalyst changes reaction kinetics but not the equilibrium constant. Chemistry learning requires stoichiometry, equilibrium and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "d9a3fc63d8b39d60b566d0e130f3cf8d3db7e377b44b3a6b9ee8f848d2942ce3",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:20:34.097983905Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "d0be7fc2-0735-42eb-82d7-4548e2b4386b",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 29,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.102601084Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "url": "https://docs.example.com/bioinformatics",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+          "provider": "search",
+          "query_fingerprint": "d9a3fc63d8b39d60b566d0e130f3cf8d3db7e377b44b3a6b9ee8f848d2942ce3",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:20:34.100834906Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "ce1d5639-73da-40e2-8c31-312019f899ac",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 30,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.103568417Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "url": "https://reference.example.net/bioinformatics",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic bioinformatics reference",
+          "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "provider": "search",
+          "query_fingerprint": "d9a3fc63d8b39d60b566d0e130f3cf8d3db7e377b44b3a6b9ee8f848d2942ce3",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:20:34.103051771Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "9213b232-3372-4ae4-9fa6-f8f7f5ad5680",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 31,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.116869071Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "d9a3fc63d8b39d60b566d0e130f3cf8d3db7e377b44b3a6b9ee8f848d2942ce3",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:20:34.116439625Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "91fa6d41-2de4-4b21-9253-eb8ad98b38d6",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 32,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.118008118Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "fingerprint": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "url": "https://reference.example.net/chemistry",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic chemistry reference",
+          "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "d9a3fc63d8b39d60b566d0e130f3cf8d3db7e377b44b3a6b9ee8f848d2942ce3",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:20:34.117187461Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "d4664536-910a-48c2-a748-19513de82997",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 33,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.120192321Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7575eedd4a61057407db2e3595d996964890d8f06afece274bb35217f22021fa",
+          "fingerprint": "7575eedd4a61057407db2e3595d996964890d8f06afece274bb35217f22021fa",
+          "url": "https://docs.example.com/chemistry",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic chemistry laboratory reference",
+          "snippet": "Synthetic educational fixture. Buffers resist pH change within a limited range. Henderson-Hasselbalch relates pH, pKa and the conjugate base to acid ratio. Dilution changes molarity; molarity is amount of solute per volume of solution. A catalyst changes reaction kinetics but not the equilibrium constant. Chemistry learning requires stoichiometry, equilibrium and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "d9a3fc63d8b39d60b566d0e130f3cf8d3db7e377b44b3a6b9ee8f848d2942ce3",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:20:34.119079414Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "1579ac3c-93a0-42f9-a41a-8948c10cbc95",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 34,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.128034037Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "url": "https://docs.example.com/bioinformatics",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+          "provider": "search",
+          "query_fingerprint": "d9a3fc63d8b39d60b566d0e130f3cf8d3db7e377b44b3a6b9ee8f848d2942ce3",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:20:34.127716569Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "e6a2a2de-0b84-474d-8d56-78148a47fea1",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 35,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.131346886Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "url": "https://reference.example.net/bioinformatics",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic bioinformatics reference",
+          "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "provider": "search",
+          "query_fingerprint": "d9a3fc63d8b39d60b566d0e130f3cf8d3db7e377b44b3a6b9ee8f848d2942ce3",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:20:34.130795473Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "bc31267f-980b-45d8-88e2-922e064daadb",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 36,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.132533537Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "d9a3fc63d8b39d60b566d0e130f3cf8d3db7e377b44b3a6b9ee8f848d2942ce3",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:20:34.13226323Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "cf116553-6aad-4a30-a64f-8cf3596374e8",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 38,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.190273986Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [
+          {
+            "provider": "search",
+            "query": "catalysts effect on reaction rate kinetics chemistry",
+            "url": "https://reference.example.net/chemistry",
+            "title": "Independent synthetic chemistry reference",
+            "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+            "score": 4,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "catalysts effect on reaction rate kinetics chemistry",
+            "url": "https://docs.example.com/chemistry",
+            "title": "Synthetic chemistry laboratory reference",
+            "snippet": "Synthetic educational fixture. Buffers resist pH change within a limited range. Henderson-Hasselbalch relates pH, pKa and the conjugate base to acid ratio. Dilution changes molarity; molarity is amount of solute per volume of solution. A catalyst changes reaction kinetics but not the equilibrium constant. Chemistry learning requires stoichiometry, equilibrium and laboratory safety.",
+            "score": 3,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "catalysts effect on reaction rate kinetics chemistry",
+            "url": "https://docs.example.com/bioinformatics",
+            "title": "Synthetic bioinformatics laboratory reference",
+            "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "catalysts effect on reaction rate kinetics chemistry",
+            "url": "https://reference.example.net/bioinformatics",
+            "title": "Independent synthetic bioinformatics reference",
+            "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "catalysts effect on reaction rate kinetics chemistry",
+            "url": "https://reference.example.net/computing",
+            "title": "Independent synthetic computing reference",
+            "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          }
+        ],
+        "step_id": "search_1",
+        "summary": "Searching for information on how catalysts affect reaction rates (kinetics) in imported chemistry sources.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "ebc90d57-09e2-4b4b-85d3-44664a525694",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 39,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.190393319Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "51519df1-ba7d-45e5-a155-03ff8542438c",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 40,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.228569741Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for information on how catalysts affect chemical equilibrium in imported chemistry sources.. User request: Research how catalysts affect kinetics versus equilibrium using both imported chemistry sources. Avoid claiming that catalysts shift equilibrium.",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "0036051a-ba23-425e-8671-8ebec3ab449b",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 43,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:34.34103536Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 0,
+        "contradictions": 0,
+        "done_criteria": 9,
+        "hash": "b6e800837d7c2ad52ee63d895ecb8861e6b1cbb77b0cab1282f4bb43858c024c",
+        "original_tool_result_bytes": 3296,
+        "reason": "role_tool_results",
+        "reduced_bytes": 240,
+        "retained_tool_result_bytes": 3056,
+        "slot": "defef8e8f5d5e2cb1ccf067bf1ab4e0e9278b5dd391fbfa7402d0f732c2d12a0"
+      }
+    },
+    {
+      "id": "8da228db-9f60-42f4-a814-a4e40f29d273",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 51,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.571933272Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_2",
+        "summary": "Searching for specific statements on how catalysts affect chemical equilibrium to confirm they do not shift the equilibrium position.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "fd4277bf-4a9a-40b3-8e8c-5bdc1c3ada3a",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 54,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.713118152Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "catalysts do not shift chemical equilibrium position statement",
+        "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "cf2632f3-8088-4c99-b609-ddf2114edbf1",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 55,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.719569813Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:20:38.718040195Z",
+        "code": "search_ok",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:20:38.718040195Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider is unavailable",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+        "result_count": 8,
+        "retryable": false,
+        "started_at": "2026-10-28T15:20:38.718040195Z",
+        "state": "unavailable",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "b45a70c1-5bb6-406c-860b-2b56ace033ff",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 56,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.728087345Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "fingerprint": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "url": "https://reference.example.net/chemistry",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic chemistry reference",
+          "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.722816223Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "25ce9afe-3f74-4824-b37b-4779132d8e09",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 57,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.72988794Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7575eedd4a61057407db2e3595d996964890d8f06afece274bb35217f22021fa",
+          "fingerprint": "7575eedd4a61057407db2e3595d996964890d8f06afece274bb35217f22021fa",
+          "url": "https://docs.example.com/chemistry",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic chemistry laboratory reference",
+          "snippet": "Synthetic educational fixture. Buffers resist pH change within a limited range. Henderson-Hasselbalch relates pH, pKa and the conjugate base to acid ratio. Dilution changes molarity; molarity is amount of solute per volume of solution. A catalyst changes reaction kinetics but not the equilibrium constant. Chemistry learning requires stoichiometry, equilibrium and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.729213727Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "6422ddb4-c8fe-4f74-9510-6c84e5d7f80b",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 58,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.730830675Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "url": "https://docs.example.com/bioinformatics",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.730512847Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "3f268122-7b4f-4417-a503-dcc9684949c0",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 59,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.731800794Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "url": "https://reference.example.net/bioinformatics",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic bioinformatics reference",
+          "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.731192961Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "d47194ae-94f0-479a-9e38-f43178e84afa",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 60,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.738655439Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "url": "https://docs.example.com/computing",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic computing laboratory reference",
+          "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.737447096Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "dd1fbc85-fbdf-4ee1-b901-749010858227",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 61,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.73914925Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.73894871Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "8bc4dd36-ab66-46c6-9bf5-f5232f1ff34d",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 62,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.741700106Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.740288247Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "b232be4f-ce1a-4c81-bac7-97764c2d761c",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 63,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.744204532Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "fingerprint": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "url": "https://reference.example.net/recovery",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic recovery reference",
+          "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.743486744Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "68ce526a-e0b1-4434-8837-fbc0e27ddd88",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 64,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.746532293Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "fingerprint": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "url": "https://reference.example.net/chemistry",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic chemistry reference",
+          "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.746101515Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "4c19f6e7-1b72-41b6-85f3-145268610562",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 65,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.752565259Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7575eedd4a61057407db2e3595d996964890d8f06afece274bb35217f22021fa",
+          "fingerprint": "7575eedd4a61057407db2e3595d996964890d8f06afece274bb35217f22021fa",
+          "url": "https://docs.example.com/chemistry",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic chemistry laboratory reference",
+          "snippet": "Synthetic educational fixture. Buffers resist pH change within a limited range. Henderson-Hasselbalch relates pH, pKa and the conjugate base to acid ratio. Dilution changes molarity; molarity is amount of solute per volume of solution. A catalyst changes reaction kinetics but not the equilibrium constant. Chemistry learning requires stoichiometry, equilibrium and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.752240837Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "74af15fb-a6ba-4c79-992f-cca887d17f4d",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 66,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.753401056Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "url": "https://docs.example.com/bioinformatics",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.753159235Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "42aa1c98-3c32-4539-b25d-9bea2c87f3a3",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 67,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.754822834Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "url": "https://reference.example.net/bioinformatics",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic bioinformatics reference",
+          "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.754495015Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "9153c45a-e267-41c8-92bf-e0d67ec0603e",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 68,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.756863627Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "fingerprint": "25a5afd67973864a8d6cf703473cdedfee30bcc59009f0fa0f09c34e7389f590",
+          "url": "https://docs.example.com/computing",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic computing laboratory reference",
+          "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.756264059Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "ae0df172-26ff-490b-89b6-13b7274838df",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 69,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.757863042Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "fingerprint": "7b417b470a0edb44a38d18f174b5d266e8f38e875bc1234cd8304a8a51adf968",
+          "url": "https://reference.example.net/computing",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic computing reference",
+          "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.75736355Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "3b0b75e0-cc71-4925-9170-0baaff635769",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 70,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.760115387Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.759430253Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "ef200d0d-c7a6-498a-aab8-c0c0a846ced6",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 71,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.763640169Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "fingerprint": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "url": "https://reference.example.net/recovery",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic recovery reference",
+          "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+          "provider": "search",
+          "query_fingerprint": "17608b0f479ba7e4766e13eaaa8f50b8563e07625589dc10dab9ff638e2d49c2",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:20:38.761004278Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "04c72859-ae8e-4d81-879e-f3c3093d7b93",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 73,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.84214838Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [
+          {
+            "provider": "search",
+            "query": "catalysts do not shift chemical equilibrium position statement",
+            "url": "https://reference.example.net/chemistry",
+            "title": "Independent synthetic chemistry reference",
+            "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+            "score": 4,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "catalysts do not shift chemical equilibrium position statement",
+            "url": "https://docs.example.com/chemistry",
+            "title": "Synthetic chemistry laboratory reference",
+            "snippet": "Synthetic educational fixture. Buffers resist pH change within a limited range. Henderson-Hasselbalch relates pH, pKa and the conjugate base to acid ratio. Dilution changes molarity; molarity is amount of solute per volume of solution. A catalyst changes reaction kinetics but not the equilibrium constant. Chemistry learning requires stoichiometry, equilibrium and laboratory safety.",
+            "score": 2,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "catalysts do not shift chemical equilibrium position statement",
+            "url": "https://docs.example.com/bioinformatics",
+            "title": "Synthetic bioinformatics laboratory reference",
+            "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "catalysts do not shift chemical equilibrium position statement",
+            "url": "https://reference.example.net/bioinformatics",
+            "title": "Independent synthetic bioinformatics reference",
+            "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "catalysts do not shift chemical equilibrium position statement",
+            "url": "https://docs.example.com/computing",
+            "title": "Synthetic computing laboratory reference",
+            "snippet": "Synthetic offline fixture. Computing study includes Python, algorithms, data structures, complexity and testing. Stable sorting preserves the relative order of equal keys. Merge sort has O(n log n) time complexity and typically needs auxiliary memory. SQLite WAL allows readers to coexist with a writer; a single writer still coordinates writes. Transactions and isolation do not imply unlimited conc",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "catalysts do not shift chemical equilibrium position statement",
+            "url": "https://reference.example.net/computing",
+            "title": "Independent synthetic computing reference",
+            "snippet": "Synthetic offline fixture. Learn algorithms, data structures, complexity and testing alongside Python. Stability of sorting concerns equal keys, not whether memory usage is constant. Merge sort commonly uses O(n log n) time and additional memory. SQLite WAL separates readers from append-only writer activity; transactions remain coordinated and writer concurrency is bounded.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "catalysts do not shift chemical equilibrium position statement",
+            "url": "https://docs.example.com/recovery",
+            "title": "Synthetic recovery and provenance reference",
+            "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "catalysts do not shift chemical equilibrium position statement",
+            "url": "https://reference.example.net/recovery",
+            "title": "Independent synthetic recovery reference",
+            "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          }
+        ],
+        "step_id": "search_2",
+        "summary": "Searching for specific statements on how catalysts affect chemical equilibrium to confirm they do not shift the equilibrium position.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "2349537a-0f00-40c8-a876-3f36b55e8f5f",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 74,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.84784471Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "7854c270-c3bc-4866-8a07-db8d395deb36",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 75,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.889824256Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "ee3af3ff-b137-4adf-9e25-8d347311d7c6",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 76,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:38.891325809Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Fetch and verify specific imported chemistry sources found in the search results to ensure they explicitly state catalysts do not shift equilibrium.",
+        "step_id": "fetch_1"
+      }
+    },
+    {
+      "id": "6e903b08-7ee7-462f-bfa5-508afb6f0cba",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 79,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:39.106261178Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 0,
+        "contradictions": 0,
+        "done_criteria": 9,
+        "hash": "b9152e21ee1cb7706986f1fcf9a177ad78fe3d48b58e14a3f86cbd7fe9f1c3c1",
+        "original_tool_result_bytes": 8687,
+        "reason": "role_tool_results",
+        "reduced_bytes": 624,
+        "retained_tool_result_bytes": 8063,
+        "slot": "6c6345df54c38f9d580a1830409419db95f32e6684a309b5bbc9e13c5b2ca163"
+      }
+    },
+    {
+      "id": "111b1bf8-f123-4212-bbfb-104ead2ee064",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 87,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:44.786665711Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "source_fingerprint": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+        "status": "fetching",
+        "step_id": "fetch_1",
+        "target_url": "https://reference.example.net/chemistry",
+        "timestamp": "2026-10-28T15:20:44.786665711Z",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "1ba137d4-72ae-4153-8aba-ea568f352ff1",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 90,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:44.900632424Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "778ee53a-8109-4677-87e4-733026a0d7ae",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 91,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:44.913835538Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "3510fbfa324bd694efd22f5c1f2af5568a025dbc59f4eb075b24e6b4500bd8b4",
+        "mime_type": "text/plain",
+        "name": "source-f0d6d5ed471d.raw",
+        "sha256": "f0d6d5ed471d608fc200a2fed5cbdd6fb697227c34af6e042a0f98872dd0114e",
+        "size_bytes": 354
+      }
+    },
+    {
+      "id": "71830762-6369-40d1-8f24-d598b2789389",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 92,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:44.91477156Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "f90330103ad159911090f7c8a4ed256ff36d89e59ce5d752d8bb3b963b928ef8",
+        "mime_type": "text/plain; charset=utf-8",
+        "name": "source-f0d6d5ed471d.txt",
+        "sha256": "f0d6d5ed471d608fc200a2fed5cbdd6fb697227c34af6e042a0f98872dd0114e",
+        "size_bytes": 354
+      }
+    },
+    {
+      "id": "928ff47f-d1b2-4449-ad88-b03c07da142d",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 93,
+      "type": "evidence.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:44.915754133Z",
+      "visibility": "user",
+      "payload": {
+        "canonical_url": "https://reference.example.net/chemistry",
+        "evidence_id": "5b412837-1b8e-4b4b-b414-f5b16eb7a1f3",
+        "title": "Independent synthetic chemistry reference"
+      }
+    },
+    {
+      "id": "63b74fb4-b09f-4f77-8734-6c533a99fef9",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 95,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:44.983531774Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "result": {
+          "content_sha256": "f0d6d5ed471d608fc200a2fed5cbdd6fb697227c34af6e042a0f98872dd0114e",
+          "evidence_id": "5b412837-1b8e-4b4b-b414-f5b16eb7a1f3",
+          "excerpt": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+          "fetched_bytes": 354,
+          "requested_url": "https://reference.example.net/chemistry",
+          "taint": "untrusted_external_content",
+          "title": "Independent synthetic chemistry reference",
+          "url": "https://reference.example.net/chemistry"
+        },
+        "step_id": "fetch_1",
+        "summary": "Fetching the primary chemistry reference to extract explicit statements confirming catalysts do not shift equilibrium positions.",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "15e600fc-12ac-460c-a826-35d3be3078a8",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 96,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:44.983639824Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "step_id": "fetch_1"
+      }
+    },
+    {
+      "id": "268f7af1-c658-42d6-8086-0472833db3f3",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 97,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:45.025625613Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "caa0055a-14af-4822-838e-8ac9d7016dfa",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 98,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:45.03132551Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Inspect distinct approved source 2 for the exact user request",
+        "step_id": "fetch_2"
+      }
+    },
+    {
+      "id": "c01d6755-6e77-4f65-b607-ef0177c621cb",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 101,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:45.237562517Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 1,
+        "contradictions": 0,
+        "done_criteria": 9,
+        "hash": "cd232576749234b4d5372816ef5e65244c3d087f1814f9b6d69dd247132513f6",
+        "original_tool_result_bytes": 9418,
+        "reason": "role_tool_results",
+        "reduced_bytes": 624,
+        "retained_tool_result_bytes": 8794,
+        "slot": "8ba58f898f2888cdea61f4562213fcaa48c2a47368fc3b8c6cf647c39f78f6d7"
+      }
+    },
+    {
+      "id": "41988b01-9d1f-41e6-9367-692d047c0fee",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 109,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:51.118669934Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "source_fingerprint": "7575eedd4a61057407db2e3595d996964890d8f06afece274bb35217f22021fa",
+        "status": "fetching",
+        "step_id": "fetch_2",
+        "target_url": "https://docs.example.com/chemistry",
+        "timestamp": "2026-10-28T15:20:51.118669934Z",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "9663513f-e9d3-4e6a-972f-ae19c71ea9af",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 112,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:51.3425959Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "20a790c9-910b-4263-b6b5-5e37f16a7eab",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 113,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:51.365860262Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "4f2b808a4ff8e6ceb44af9e9efcf19860e50d5dd4bfe552f7a8b6f7b45c8f37e",
+        "mime_type": "text/plain",
+        "name": "source-72d03c500ab0.raw",
+        "sha256": "72d03c500ab02bf8cd5879169c6ef2fc407fdcb6e7f2f8de818dc02068b8db85",
+        "size_bytes": 384
+      }
+    },
+    {
+      "id": "bd40a8a8-b608-4571-966d-52a85f92b7b6",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 114,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:51.366705768Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "bc9b0b8ad5753d31e4edd6d57a4accfaad925b75952059968611669ab64a125f",
+        "mime_type": "text/plain; charset=utf-8",
+        "name": "source-72d03c500ab0.txt",
+        "sha256": "72d03c500ab02bf8cd5879169c6ef2fc407fdcb6e7f2f8de818dc02068b8db85",
+        "size_bytes": 384
+      }
+    },
+    {
+      "id": "7da98ac4-21f8-4757-b818-53cb3b35eb89",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 115,
+      "type": "evidence.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:51.366893393Z",
+      "visibility": "user",
+      "payload": {
+        "canonical_url": "https://docs.example.com/chemistry",
+        "evidence_id": "7e7d8f24-7b5b-4989-9abf-28990a1ea723",
+        "title": "Synthetic chemistry laboratory reference"
+      }
+    },
+    {
+      "id": "28085ad3-f8a3-4b14-8539-cd40824b389a",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 117,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:51.492166279Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "result": {
+          "content_sha256": "72d03c500ab02bf8cd5879169c6ef2fc407fdcb6e7f2f8de818dc02068b8db85",
+          "evidence_id": "7e7d8f24-7b5b-4989-9abf-28990a1ea723",
+          "excerpt": "Synthetic educational fixture. Buffers resist pH change within a limited range. Henderson-Hasselbalch relates pH, pKa and the conjugate base to acid ratio. Dilution changes molarity; molarity is amount of solute per volume of solution. A catalyst changes reaction kinetics but not the equilibrium constant. Chemistry learning requires stoichiometry, equilibrium and laboratory safety.",
+          "fetched_bytes": 384,
+          "requested_url": "https://docs.example.com/chemistry",
+          "taint": "untrusted_external_content",
+          "title": "Synthetic chemistry laboratory reference",
+          "url": "https://docs.example.com/chemistry"
+        },
+        "step_id": "fetch_2",
+        "summary": "Fetching the second approved chemistry source to extract explicit statements confirming catalysts do not shift equilibrium positions.",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "dd5a1a22-000c-431f-b176-4787841e95c2",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 118,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:51.492313786Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "step_id": "fetch_2"
+      }
+    },
+    {
+      "id": "5abf6b13-e693-4afe-8d8d-702afa289354",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 120,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:51.554861856Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "verifying"
+      }
+    },
+    {
+      "id": "6f3b1bed-8290-4f5f-bdcb-67b50ccd50dd",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 122,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:20:51.813801959Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 2,
+        "contradictions": 0,
+        "done_criteria": 9,
+        "hash": "bd54ff3d344ad8548d90dc592b4232cbe1796b248101e541d935f7ee94f2b260",
+        "original_tool_result_bytes": 10168,
+        "reason": "role_tool_results",
+        "reduced_bytes": 624,
+        "retained_tool_result_bytes": 9544,
+        "slot": "d2bd9f5c4b3ea493d3b1811e6c676dbea23d29eb6e6c016a83d1ffaa4634138e"
+      }
+    },
+    {
+      "id": "5d7b4df7-a056-45a1-98f5-e6b130fe5bf5",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 128,
+      "type": "verification.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:21:40.372646173Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "criteria": [
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "5b412837-1b8e-4b4b-b414-f5b16eb7a1f3",
+              "7e7d8f24-7b5b-4989-9abf-28990a1ea723"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 1,
+            "evidence_ids": [
+              "5b412837-1b8e-4b4b-b414-f5b16eb7a1f3",
+              "7e7d8f24-7b5b-4989-9abf-28990a1ea723"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 2,
+            "evidence_ids": [
+              "5b412837-1b8e-4b4b-b414-f5b16eb7a1f3",
+              "7e7d8f24-7b5b-4989-9abf-28990a1ea723"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 3,
+            "evidence_ids": [
+              "5b412837-1b8e-4b4b-b414-f5b16eb7a1f3",
+              "7e7d8f24-7b5b-4989-9abf-28990a1ea723"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 4,
+            "evidence_ids": [
+              "5b412837-1b8e-4b4b-b414-f5b16eb7a1f3",
+              "7e7d8f24-7b5b-4989-9abf-28990a1ea723"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 5,
+            "evidence_ids": [
+              "5b412837-1b8e-4b4b-b414-f5b16eb7a1f3",
+              "7e7d8f24-7b5b-4989-9abf-28990a1ea723"
+            ],
+            "met": true,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "met": true,
+            "step_id": "search_1"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "met": true,
+            "step_id": "search_2"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "5b412837-1b8e-4b4b-b414-f5b16eb7a1f3"
+            ],
+            "met": true,
+            "step_id": "fetch_1"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "7e7d8f24-7b5b-4989-9abf-28990a1ea723"
+            ],
+            "met": true,
+            "step_id": "fetch_2"
+          }
+        ],
+        "missing": [],
+        "phase": "evidence_readiness",
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "7d74936e-c6d6-4213-bd21-df6bb27b7a09",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 129,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:21:40.446153634Z",
+      "stage": "finalization",
+      "visibility": "user",
+      "payload": {
+        "from": "verifying",
+        "to": "verifying"
+      }
+    },
+    {
+      "id": "43ec89d2-8d4b-4418-be3d-552ddc8814e3",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 153,
+      "type": "report.section.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:22:22.089046552Z",
+      "visibility": "user",
+      "payload": {
+        "correction_used": true,
+        "section": 1,
+        "status": "fallback_excerpts"
+      }
+    },
+    {
+      "id": "d1a69628-777b-4606-b9aa-e318e1ca67a6",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "seq": 167,
+      "type": "run.paused",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:22:29.408236647Z",
+      "visibility": "user",
+      "payload": {
+        "pause_reason": "manual",
+        "resource_probe_attempts": 0,
+        "resource_reason": "high_model_rss",
+        "resume_after": "2026-10-28T15:22:34.382481343Z",
+        "status": "paused"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "c09837c7-374d-4841-89e0-954ad0e863a6",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "step_id": "search_1",
+      "position": 0,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for information on how catalysts affect reaction rates (kinetics) in imported chemistry sources.. User request: Research how catalysts affect kinetics versus equilibrium using both imported chemistry sources. Avoid claiming that catalysts shift equilibrium.",
+      "dependencies": [],
+      "expected_output": "List of sources and specific statements regarding rate changes.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:20:30.062360001Z",
+      "updated_at": "2026-10-28T15:20:34.19013198Z"
+    },
+    {
+      "id": "20f7a56f-92fd-443e-a641-873e6bc34624",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "step_id": "search_2",
+      "position": 1,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for information on how catalysts affect chemical equilibrium in imported chemistry sources.. User request: Research how catalysts affect kinetics versus equilibrium using both imported chemistry sources. Avoid claiming that catalysts shift equilibrium.",
+      "dependencies": [],
+      "expected_output": "List of sources and specific statements regarding equilibrium position.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:20:30.064188501Z",
+      "updated_at": "2026-10-28T15:20:38.841652605Z"
+    },
+    {
+      "id": "a091fe18-7d9e-4ed4-a0d8-459b2a619639",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "step_id": "fetch_1",
+      "position": 2,
+      "kind": "fetch",
+      "description": "Fetch and verify specific imported chemistry sources found in the search results to ensure they explicitly state catalysts do not shift equilibrium.",
+      "dependencies": [
+        "search_1",
+        "search_2"
+      ],
+      "expected_output": "Verified excerpts confirming no equilibrium shift.",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:20:30.064329956Z",
+      "updated_at": "2026-10-28T15:20:44.983285314Z"
+    },
+    {
+      "id": "d6e63027-4fa0-4c16-8fd2-57c495662c09",
+      "task_id": "ec1a6efe-d02c-4fe5-b945-a17bbd510bb3",
+      "step_id": "fetch_2",
+      "position": 3,
+      "kind": "fetch",
+      "description": "Inspect distinct approved source 2 for the exact user request",
+      "dependencies": [
+        "search_1",
+        "search_2"
+      ],
+      "expected_output": "Source text with stored evidence ID",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:20:30.064515377Z",
+      "updated_at": "2026-10-28T15:20:51.491620837Z"
+    }
+  ],
+  "inference_summaries_complete": true,
+  "inference_summaries": [
+    {
+      "seq": 8,
+      "summary": {
+        "invocation_id": "invocation-66ae46b9a943ce2c6689995b905cb65321eea36d995e9158e7e9835924026f91",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:20:29.996414489Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:20:29.996414489Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:09.487925741Z"
+          },
+          "prompt_tokens": {
+            "value": 789,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:29.996384901Z"
+          },
+          "output_tokens": {
+            "value": 518,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:29.996384901Z"
+          },
+          "total_tokens": {
+            "value": 1307,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:29.996384901Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:29.996384901Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 642.0783482066565,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:20:29.996384901Z"
+          },
+          "output_tokens_per_second": {
+            "value": 26.96355168066993,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:20:29.996384901Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:09.487925741Z"
+          },
+          "prompt_ms": {
+            "value": 1228.822,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:29.996384901Z"
+          },
+          "generation_ms": {
+            "value": 19211.119,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:29.996384901Z"
+          },
+          "context_tokens": {
+            "value": 1307,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:29.996384901Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:09.487925741Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 18,
+      "summary": {
+        "invocation_id": "invocation-9b876982820a51a557e0bf94347457f918e422ce27832bbb6645394289b962f4",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:20:33.920652365Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:20:33.920652365Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:30.279005597Z"
+          },
+          "prompt_tokens": {
+            "value": 1077,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:33.92061881Z"
+          },
+          "output_tokens": {
+            "value": 62,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:33.92061881Z"
+          },
+          "total_tokens": {
+            "value": 1139,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:33.92061881Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:33.92061881Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 844.8118979636661,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:20:33.92061881Z"
+          },
+          "output_tokens_per_second": {
+            "value": 31.471442204219205,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:20:33.92061881Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:30.279005597Z"
+          },
+          "prompt_ms": {
+            "value": 1274.84,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:33.92061881Z"
+          },
+          "generation_ms": {
+            "value": 1970.04,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:33.92061881Z"
+          },
+          "context_tokens": {
+            "value": 1139,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:33.92061881Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:30.279005597Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 47,
+      "summary": {
+        "invocation_id": "invocation-83df305db868e13839a526dcb8fd1f5d00de1b8c27b447439c74ed1f11bfdf74",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:20:38.396255961Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:20:38.396255961Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:34.419847902Z"
+          },
+          "prompt_tokens": {
+            "value": 1654,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:38.396225061Z"
+          },
+          "output_tokens": {
+            "value": 65,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:38.396225061Z"
+          },
+          "total_tokens": {
+            "value": 1719,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:38.396225061Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 397,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:38.396225061Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 897.918714426132,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:20:38.396225061Z"
+          },
+          "output_tokens_per_second": {
+            "value": 30.622936485202995,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:20:38.396225061Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:34.419847902Z"
+          },
+          "prompt_ms": {
+            "value": 1399.904,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:38.396225061Z"
+          },
+          "generation_ms": {
+            "value": 2122.592,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:38.396225061Z"
+          },
+          "context_tokens": {
+            "value": 1719,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:38.396225061Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:34.419847902Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 83,
+      "summary": {
+        "invocation_id": "invocation-2f900cb40eb76234ef0b4147807dbc2959d7de561772de6b7577968d8017fab2",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:20:44.64504976Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:20:44.64504976Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:39.27345839Z"
+          },
+          "prompt_tokens": {
+            "value": 2536,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:44.644958843Z"
+          },
+          "output_tokens": {
+            "value": 60,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:44.644958843Z"
+          },
+          "total_tokens": {
+            "value": 2596,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:44.644958843Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:44.644958843Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 957.754925772105,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:20:44.644958843Z"
+          },
+          "output_tokens_per_second": {
+            "value": 27.89580544721393,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:20:44.644958843Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:39.27345839Z"
+          },
+          "prompt_ms": {
+            "value": 2647.859,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:44.644958843Z"
+          },
+          "generation_ms": {
+            "value": 2150.861,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:44.644958843Z"
+          },
+          "context_tokens": {
+            "value": 2596,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:44.644958843Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:39.27345839Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 105,
+      "summary": {
+        "invocation_id": "invocation-723e8e0356ee477a2af5790f7995a543b13e4844bb3a8a3eb8fb3c9ed080a193",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:20:50.946018741Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:20:50.946018741Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:45.47615299Z"
+          },
+          "prompt_tokens": {
+            "value": 2761,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:50.945981088Z"
+          },
+          "output_tokens": {
+            "value": 61,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:50.945981088Z"
+          },
+          "total_tokens": {
+            "value": 2822,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:50.945981088Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 348,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:50.945981088Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1006.0173428551298,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:20:50.945981088Z"
+          },
+          "output_tokens_per_second": {
+            "value": 25.356381868773656,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:20:50.945981088Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:45.47615299Z"
+          },
+          "prompt_ms": {
+            "value": 2398.567,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:50.945981088Z"
+          },
+          "generation_ms": {
+            "value": 2405.706,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:50.945981088Z"
+          },
+          "context_tokens": {
+            "value": 2822,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:50.945981088Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:45.47615299Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 126,
+      "summary": {
+        "invocation_id": "invocation-b122078e8d168bb12f22d74b00b4d43d99c0939fbda35e768af9206d9a0c82aa",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:21:40.252702846Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:21:40.252702846Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:52.134925152Z"
+          },
+          "prompt_tokens": {
+            "value": 5369,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:21:40.252667907Z"
+          },
+          "output_tokens": {
+            "value": 1249,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:21:40.252667907Z"
+          },
+          "total_tokens": {
+            "value": 6618,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:21:40.252667907Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:21:40.252667907Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 964.7110529581267,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:21:40.252667907Z"
+          },
+          "output_tokens_per_second": {
+            "value": 29.79003629423397,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:21:40.252667907Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:20:52.134925152Z"
+          },
+          "prompt_ms": {
+            "value": 5565.397,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:21:40.252667907Z"
+          },
+          "generation_ms": {
+            "value": 41926.77,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:21:40.252667907Z"
+          },
+          "context_tokens": {
+            "value": 6618,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:21:40.252667907Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:20:52.134925152Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 136,
+      "summary": {
+        "invocation_id": "invocation-3bab25f93b9f463278a549231c54b44e49600d1e8116235f5439c119a9715b23",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:22:08.160627663Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:22:08.160627663Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:21:41.061802367Z"
+          },
+          "prompt_tokens": {
+            "value": 1780,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:08.160582986Z"
+          },
+          "output_tokens": {
+            "value": 787,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:08.160582986Z"
+          },
+          "total_tokens": {
+            "value": 2567,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:08.160582986Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:08.160582986Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 933.4869566175049,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:22:08.160582986Z"
+          },
+          "output_tokens_per_second": {
+            "value": 31.721939425364525,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:22:08.160582986Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:21:41.061802367Z"
+          },
+          "prompt_ms": {
+            "value": 1906.829,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:08.160582986Z"
+          },
+          "generation_ms": {
+            "value": 24809.328,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:08.160582986Z"
+          },
+          "context_tokens": {
+            "value": 2567,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:08.160582986Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:21:41.061802367Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 143,
+      "summary": {
+        "invocation_id": "invocation-b895b703d5b741813e2fd0ed20959d70558ce2986188a23d311a027a393f9878",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:22:14.913948347Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:22:14.913948347Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:08.5330284Z"
+          },
+          "prompt_tokens": {
+            "value": 1289,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:14.913906055Z"
+          },
+          "output_tokens": {
+            "value": 135,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:14.913906055Z"
+          },
+          "total_tokens": {
+            "value": 1424,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:14.913906055Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:14.913906055Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 811.8759372947085,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:22:14.913906055Z"
+          },
+          "output_tokens_per_second": {
+            "value": 29.575350544580786,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:22:14.913906055Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:08.5330284Z"
+          },
+          "prompt_ms": {
+            "value": 1587.681,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:14.913906055Z"
+          },
+          "generation_ms": {
+            "value": 4564.612,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:14.913906055Z"
+          },
+          "context_tokens": {
+            "value": 1424,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:14.913906055Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:08.5330284Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 150,
+      "summary": {
+        "invocation_id": "invocation-d052be6c11af05d657429c340c425502965eba61d8f0ed88375cf6386872ec56",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:22:22.00748132Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:22:22.00748132Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:15.926903713Z"
+          },
+          "prompt_tokens": {
+            "value": 1484,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:22.007431723Z"
+          },
+          "output_tokens": {
+            "value": 135,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:22.007431723Z"
+          },
+          "total_tokens": {
+            "value": 1619,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:22.007431723Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 88,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:22.007431723Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 953.3630633276196,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:22:22.007431723Z"
+          },
+          "output_tokens_per_second": {
+            "value": 31.900398920395986,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:22:22.007431723Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:15.926903713Z"
+          },
+          "prompt_ms": {
+            "value": 1464.29,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:22.007431723Z"
+          },
+          "generation_ms": {
+            "value": 4231.922,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:22.007431723Z"
+          },
+          "context_tokens": {
+            "value": 1619,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:22.007431723Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:15.926903713Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 158,
+      "summary": {
+        "invocation_id": "invocation-664419e3d2529de9bbcb76302e0f43aacc0f4d4bf1b01f59657fced86a0307ba",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:22:27.812397946Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:22:27.812397946Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:22.385837116Z"
+          },
+          "prompt_tokens": {
+            "value": 1422,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:27.812366274Z"
+          },
+          "output_tokens": {
+            "value": 136,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:27.812366274Z"
+          },
+          "total_tokens": {
+            "value": 1558,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:27.812366274Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 88,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:27.812366274Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1018.7646676528472,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:22:27.812366274Z"
+          },
+          "output_tokens_per_second": {
+            "value": 35.077881925270184,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:22:27.812366274Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:22.385837116Z"
+          },
+          "prompt_ms": {
+            "value": 1309.429,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:27.812366274Z"
+          },
+          "generation_ms": {
+            "value": 3877.087,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:27.812366274Z"
+          },
+          "context_tokens": {
+            "value": 1558,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:27.812366274Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:22.385837116Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 165,
+      "summary": {
+        "invocation_id": "invocation-d09f252f410db8ae3e3f38e8cfe0ccee44c7883089678d5dd0233b7ce69cc644",
+        "invocation_status": "failed",
+        "snapshot_at": "2026-10-28T15:22:29.325602142Z",
+        "inference": {
+          "status": "cancelled",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:22:29.325602142Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:29.325602142Z"
+          },
+          "prompt_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:29.325602142Z"
+          },
+          "output_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:29.325602142Z"
+          },
+          "total_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:29.325602142Z"
+          },
+          "cached_prompt_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:29.325602142Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:22:29.325602142Z"
+          },
+          "output_tokens_per_second": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:22:29.325602142Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:29.325602142Z"
+          },
+          "prompt_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:29.325602142Z"
+          },
+          "generation_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:22:29.325602142Z"
+          },
+          "context_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:29.325602142Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:22:29.325602142Z"
+          }
+        }
+      }
+    }
+  ]
+}

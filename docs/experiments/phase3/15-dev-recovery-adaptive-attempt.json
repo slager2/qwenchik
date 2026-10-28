@@ -1,0 +1,10 @@
+{
+  "case_id": "dev-recovery",
+  "variant": "adaptive",
+  "state": "attempted",
+  "started_at": "2026-10-28T15:32:52.222Z",
+  "run_id": "614a7388-d5e3-456a-a8ca-056d31fa9cce",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused"
+}

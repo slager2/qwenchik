@@ -730,7 +730,7 @@ func serve(parent context.Context) error {
 	}
 	deps.store.FreezeRefinement()
 	deps.worker = orchestrator.New(deps.store, model, registry, orchestrator.Options{
-		HoldResourcePauses: cfg.ContextProbeEnabled,
+		HoldResourcePauses: cfg.ContextProbeEnabled || cfg.LabHoldResourcePauses,
 		ContextProbe:       contextProbe,
 		ReportArtifacts:    artifactStore,
 		OnBundleChanged:    func(active domain.AgentBundle) { setResearchRunDefaultsForServe(deps.app, cfg, &active) },
@@ -778,6 +778,7 @@ func serve(parent context.Context) error {
 		apiServer.SetRunTelemetry(telemetryWorker.RunTelemetry)
 	}
 	apiServer.SetResearchPolicy(cfg.ResearchLimits(), pdfExtractor.Check)
+	apiServer.SetLabHoldResourcePauses(cfg.ContextProbeEnabled || cfg.LabHoldResourcePauses)
 	apiServer.SetFetchTempCheck(func(ctx context.Context) error { return research.CheckFetchTemp(ctx, cfg.FetchPolicy()) })
 	setResearchRunDefaultsForServe(deps.app, cfg, &activeBundle)
 	external := domain.EffectivePrivacyMode(cfg.ResearchPrivacyMode) == domain.PrivacyExternalSearch

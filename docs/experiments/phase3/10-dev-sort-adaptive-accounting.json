@@ -1,0 +1,11 @@
+{
+  "case_id": "dev-sort",
+  "variant": "adaptive",
+  "state": "measured",
+  "started_at": "2026-10-28T15:24:33.983Z",
+  "run_id": "c13eb5a8-a866-45f5-a9db-3f4b2febb728",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused",
+  "finished_at": "2026-10-28T15:26:12.622Z"
+}

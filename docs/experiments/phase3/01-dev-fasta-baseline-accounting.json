@@ -1,0 +1,11 @@
+{
+  "case_id": "dev-fasta",
+  "variant": "baseline",
+  "state": "measured",
+  "started_at": "2026-10-28T15:03:17.561Z",
+  "run_id": "be6598ef-c22b-443f-98ba-8bbe3e1fb692",
+  "cli_exit_code": 1,
+  "status": "paused",
+  "error_code": "benchmark_paused",
+  "finished_at": "2026-10-28T15:05:33.172Z"
+}

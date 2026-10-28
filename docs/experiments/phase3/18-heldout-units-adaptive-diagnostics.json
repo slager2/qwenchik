@@ -1,0 +1,3869 @@
+{
+  "runtime": {
+    "accepted_evidence": 2,
+    "active_round_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Explain the fundamental difference between RNA-seq normalization and chemical molarity regarding their conceptual definitions.",
+        "Identify the specific units used for RNA-seq normalization metrics versus chemical molarity.",
+        "Compare evidence sources from bioinformatics domains against evidence sources from chemistry domains.",
+        "State the specific limits or constraints found in the bioinformatics literature regarding RNA-seq normalization units.",
+        "State the specific limits or constraints found in the chemistry literature regarding molarity units.",
+        "Highlight any discrepancies or unique contexts where the two concepts overlap or diverge."
+      ],
+      "schema_version": 1,
+      "goal": "Research why RNA-seq normalization and chemical molarity are different concepts with different units. Compare imported bioinformatics and chemistry evidence and state limits.",
+      "subtasks": [
+        {
+          "id": "continue_1_search",
+          "kind": "search",
+          "description": "Address the critical open questions with a new independent targeted query focused on missing direct evidence, distinct discovery angle 1",
+          "dependencies": null,
+          "expected_output": "",
+          "success_criteria": [
+            "A new targeted discovery query is recorded"
+          ]
+        },
+        {
+          "id": "continue_1_search_2",
+          "kind": "search",
+          "description": "Address the critical open questions with a new independent targeted query focused on missing direct evidence, distinct discovery angle 2",
+          "dependencies": null,
+          "expected_output": "",
+          "success_criteria": [
+            "A new targeted discovery query is recorded"
+          ]
+        },
+        {
+          "id": "continue_1_search_3",
+          "kind": "search",
+          "description": "Address the critical open questions with a new independent targeted query focused on missing direct evidence, distinct discovery angle 3",
+          "dependencies": null,
+          "expected_output": "",
+          "success_criteria": [
+            "A new targeted discovery query is recorded"
+          ]
+        },
+        {
+          "id": "continue_1_fetch",
+          "kind": "fetch",
+          "description": "Inspect a different new source addressing the critical open questions, source 1",
+          "dependencies": [
+            "continue_1_search",
+            "continue_1_search_2",
+            "continue_1_search_3"
+          ],
+          "expected_output": "Task-owned extracted evidence",
+          "success_criteria": [
+            "New source evidence is stored"
+          ]
+        },
+        {
+          "id": "continue_1_fetch_2",
+          "kind": "fetch",
+          "description": "Inspect a different new source addressing the critical open questions, source 2",
+          "dependencies": [
+            "continue_1_search",
+            "continue_1_search_2",
+            "continue_1_search_3"
+          ],
+          "expected_output": "Task-owned extracted evidence",
+          "success_criteria": [
+            "New source evidence is stored"
+          ]
+        },
+        {
+          "id": "continue_1_fetch_3",
+          "kind": "fetch",
+          "description": "Inspect a different new source addressing the critical open questions, source 3",
+          "dependencies": [
+            "continue_1_search",
+            "continue_1_search_2",
+            "continue_1_search_3"
+          ],
+          "expected_output": "Task-owned extracted evidence",
+          "success_criteria": [
+            "New source evidence is stored"
+          ]
+        }
+      ],
+      "max_steps": 6,
+      "final_deliverable": "A comparative analysis report detailing the conceptual and unit differences between RNA-seq normalization and chemical molarity, including cited limits from both fields."
+    },
+    "adaptive_enabled": true,
+    "budget": {
+      "max_initial_plan_steps": 12,
+      "max_round_steps": 12,
+      "max_total_steps": 20,
+      "max_report_sections": 6,
+      "max_report_paragraphs": 16,
+      "max_report_bytes": 524288,
+      "wall_time_seconds": 1800,
+      "max_rounds": 3,
+      "max_steps": 12,
+      "max_search_queries": 8,
+      "max_fetches": 8,
+      "max_llm_calls": 48,
+      "max_evidence": 8,
+      "max_questions_created": 24,
+      "max_questions_accepted": 16,
+      "max_stagnant_rounds": 2,
+      "max_citation_sources": 8,
+      "max_citation_claims": 16
+    },
+    "budget_remaining": {
+      "evidence": 6,
+      "fetched_bytes": 134216959,
+      "fetches": 6,
+      "http_attempts": 86,
+      "initial_plan_steps": 12,
+      "llm_calls": 38,
+      "questions_accepted": 8,
+      "questions_created": 16,
+      "round_steps": 12,
+      "rounds": 1,
+      "search_queries": 5,
+      "stagnant_rounds": 2,
+      "steps": 9,
+      "total_steps": 9
+    },
+    "bundle_hash": "e27b07fb099039c84672d3db8b38e46d62d0a813a7da342ed2f8484d990f03bf",
+    "bundle_version": 1,
+    "compactions": 7,
+    "completed_steps": 5,
+    "completion": {
+      "continuations": 1,
+      "fingerprint": "67a46646e06df3fda5431f567eb52ae830967872013ac26e0f85b5a85f15b8b4",
+      "failure_hash": "cd0929d85f3d5d288863509a4474476315cc1a2903a89a0a1115ec12a18084c9",
+      "verdict": "RESEARCH",
+      "missing": [
+        "Acceptance criterion \"goal\".0 was not met: The user request requires a substantive comparative analysis with cited limits. The collected evidence consists of synthetic, untrusted educational fixtures that define general concepts (e.g., 'RNA-seq normalization addresses library size differences') but do not provide specific units (e.g., TPM, FPKM, RPKM), conceptual definitions, or specific literature constraints/limits required to fulfill the deliverable. Finding and storing these sources is insuf",
+        "Acceptance criterion \"goal\".1 was not met: The available evidence describes RNA-seq normalization as addressing 'library size differences' but does not explicitly define the conceptual difference between RNA-seq normalization and chemical molarity regarding their fundamental definitions. It mentions molarity only in search snippets without providing the specific chemical definition or unit (mol/L) in the fetched text.",
+        "Acceptance criterion \"goal\".2 was not met: The fetched text does not identify specific units for RNA-seq normalization metrics (e.g., TPM, FPKM, RPKM) or chemical molarity (mol/L). The evidence only states general concepts like 'library size differences' and 'amount of solute per volume' without citing specific units.",
+        "Acceptance criterion \"goal\".3 was not met: While search results show snippets from both bioinformatics and chemistry domains, the fetched evidence (task-owned) is exclusively from bioinformatics sources. There is no fetched evidence from a chemistry domain source to allow for a direct comparison of evidence sources as requested.",
+        "Acceptance criterion \"goal\".4 was not met: The bioinformatics evidence does not state specific limits or constraints found in the literature regarding RNA-seq normalization units. It mentions 'batch effects may confound biological differences' but does not cite specific unit-related limits or constraints.",
+        "Acceptance criterion \"goal\".5 was not met: The fetched evidence does not contain any chemistry literature regarding molarity limits or constraints. The only chemistry-related information is in search snippets, not in the fetched, task-owned evidence.",
+        "Acceptance criterion \"goal\".6 was not met: The evidence does not highlight discrepancies or unique contexts where the two concepts overlap or diverge, as it lacks the specific definitions, units, and constraints required to make such a comparison.",
+        "Analysis of discrepancies or unique contexts between the two concepts based on evidence.",
+        "Fetched evidence from a chemistry domain source to compare against bioinformatics sources.",
+        "Specific limits or constraints from bioinformatics literature regarding RNA-seq normalization units.",
+        "Specific limits or constraints from chemistry literature regarding molarity units.",
+        "Specific units for RNA-seq normalization metrics (e.g., TPM, FPKM, RPKM) in fetched evidence.",
+        "Specific units for chemical molarity (mol/L) in fetched evidence."
+      ]
+    },
+    "context_budget": {
+      "version": 1,
+      "configured_context": 32768,
+      "server_reported_context": 32768,
+      "training_context": 262144,
+      "session_context": 32768,
+      "max_output_tokens": 4096,
+      "reserved_output_tokens": 4096,
+      "reserved_system_tokens": 2048,
+      "available_input_tokens": 26624,
+      "prompt_tokens": null,
+      "context_status": "matched",
+      "count_method": "unavailable",
+      "decision": "not_counted",
+      "server_source": "props.default_generation_settings.n_ctx:single_slot",
+      "runtime_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+      "runtime_build": "b11426-cda0f9256",
+      "chat_template_sha256": "7f0e529032c25183bcd66c7f238da2d377f43be754a94e2725a58c4e16d2ed67",
+      "model_quantization": "Q4_K - Medium",
+      "observed_at": "2026-10-28T15:41:21.306218536Z"
+    },
+    "context_snapshot_hash": "14d281615d75ff62c6608609eb03488d891c8a507029acd913955e4477cc8f2c",
+    "context_snapshot_number": 10,
+    "contradictions": null,
+    "counters": {
+      "steps_reserved": 11,
+      "llm_calls": 10,
+      "http_attempts": 10,
+      "search_queries": 3,
+      "fetches": 2,
+      "fetched_bytes": 769,
+      "evidence": 2,
+      "questions_created": 8,
+      "questions_accepted": 8,
+      "rounds": 2,
+      "stagnant_rounds": 0
+    },
+    "current_round": 2,
+    "cursor": 201,
+    "deadline_at": "2026-10-28T16:09:20.449642191Z",
+    "done_criteria": 10,
+    "elapsed_seconds": 120,
+    "inference_summary": {
+      "invocation_id": "invocation-d6f204748bf1a0f460e4f9440f05e42eb54769a2e19537396bf3ca1a4d382f32",
+      "invocation_status": "failed",
+      "snapshot_at": "2026-10-28T15:41:19.540141748Z",
+      "inference": {
+        "status": "cancelled",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:41:19.540141748Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "output_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "total_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "cached_prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "output_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "prompt_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "generation_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "context_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        }
+      }
+    },
+    "initial_plan": {
+      "deliverable_criteria": [
+        "Provide a substantive response addressing the full exact user request, its explicit requested dimensions and limitations; finding or storing sources alone is insufficient.",
+        "Explain the fundamental difference between RNA-seq normalization and chemical molarity regarding their conceptual definitions.",
+        "Identify the specific units used for RNA-seq normalization metrics versus chemical molarity.",
+        "Compare evidence sources from bioinformatics domains against evidence sources from chemistry domains.",
+        "State the specific limits or constraints found in the bioinformatics literature regarding RNA-seq normalization units.",
+        "State the specific limits or constraints found in the chemistry literature regarding molarity units.",
+        "Highlight any discrepancies or unique contexts where the two concepts overlap or diverge."
+      ],
+      "schema_version": 1,
+      "goal": "Research why RNA-seq normalization and chemical molarity are different concepts with different units. Compare imported bioinformatics and chemistry evidence and state limits.",
+      "subtasks": [
+        {
+          "id": "search_1",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for definitions and units of RNA-seq normalization methods in bioinformatics literature.. User request: Research why RNA-seq normalization and chemical molarity are different concepts with different units. Compare imported bioinformatics and chemistry evidence and state limits.",
+          "dependencies": [],
+          "expected_output": "List of sources defining RNA-seq normalization units (e.g., TPM, FPKM, RPKM) and their conceptual basis.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_2",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for definitions, units, and limits of chemical molarity in chemistry literature.. User request: Research why RNA-seq normalization and chemical molarity are different concepts with different units. Compare imported bioinformatics and chemistry evidence and state limits.",
+          "dependencies": [],
+          "expected_output": "List of sources defining molarity (mol/L) and any specific limits or contexts mentioned.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "search_3",
+          "kind": "search",
+          "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for comparative discussions or potential confusion between RNA-seq normalization and chemical concentration/molarity.. User request: Research why RNA-seq normalization and chemical molarity are different concepts with different units. Compare imported bioinformatics and chemistry evidence and state limits.",
+          "dependencies": [],
+          "expected_output": "Sources that explicitly contrast or compare the two concepts.",
+          "success_criteria": [
+            "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+          ]
+        },
+        {
+          "id": "fetch_1",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 1 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        },
+        {
+          "id": "fetch_2",
+          "kind": "fetch",
+          "description": "Inspect distinct approved source 2 for the exact user request",
+          "dependencies": [
+            "search_1",
+            "search_2",
+            "search_3"
+          ],
+          "expected_output": "Source text with stored evidence ID",
+          "success_criteria": [
+            "An approved source was inspected and its text was stored as task-owned evidence."
+          ]
+        }
+      ],
+      "max_steps": 5,
+      "final_deliverable": "A comparative analysis report detailing the conceptual and unit differences between RNA-seq normalization and chemical molarity, including cited limits from both fields."
+    },
+    "keep_awake_requested": true,
+    "max_continuations": 2,
+    "model_profile_hash": "1b3d9bd1717af420d357a0aaef2b79a9e80c4f65a5e5f8a3f07e2dbfbb65e4c3",
+    "offline_corpus_sha256": "9814cb53c048545010e91bb6ee7e50be66e8c3852eb3380c8c435a86f03fd43b",
+    "open_questions": [
+      "Acceptance criterion \"goal\".0 was not met: The user request requires a substantive comparative analysis with cited limits. The collected evidence consists of synthetic, untrusted educational fixtures that define general concepts (e.g., 'RNA-seq normalization addresses library size differences') but do not provide specific units (e.g., TPM, FPKM, RPKM), conceptual definitions, or specific literature constraints/limits required to fulfill the deliverable. Finding and storing these sources is insuf",
+      "Acceptance criterion \"goal\".1 was not met: The available evidence describes RNA-seq normalization as addressing 'library size differences' but does not explicitly define the conceptual difference between RNA-seq normalization and chemical molarity regarding their fundamental definitions. It mentions molarity only in search snippets without providing the specific chemical definition or unit (mol/L) in the fetched text.",
+      "Acceptance criterion \"goal\".2 was not met: The fetched text does not identify specific units for RNA-seq normalization metrics (e.g., TPM, FPKM, RPKM) or chemical molarity (mol/L). The evidence only states general concepts like 'library size differences' and 'amount of solute per volume' without citing specific units.",
+      "Acceptance criterion \"goal\".3 was not met: While search results show snippets from both bioinformatics and chemistry domains, the fetched evidence (task-owned) is exclusively from bioinformatics sources. There is no fetched evidence from a chemistry domain source to allow for a direct comparison of evidence sources as requested.",
+      "Acceptance criterion \"goal\".4 was not met: The bioinformatics evidence does not state specific limits or constraints found in the literature regarding RNA-seq normalization units. It mentions 'batch effects may confound biological differences' but does not cite specific unit-related limits or constraints.",
+      "Acceptance criterion \"goal\".5 was not met: The fetched evidence does not contain any chemistry literature regarding molarity limits or constraints. The only chemistry-related information is in search snippets, not in the fetched, task-owned evidence.",
+      "Acceptance criterion \"goal\".6 was not met: The evidence does not highlight discrepancies or unique contexts where the two concepts overlap or diverge, as it lacks the specific definitions, units, and constraints required to make such a comparison.",
+      "Analysis of discrepancies or unique contexts between the two concepts based on evidence.",
+      "Fetched evidence from a chemistry domain source to compare against bioinformatics sources.",
+      "Specific limits or constraints from bioinformatics literature regarding RNA-seq normalization units.",
+      "Specific limits or constraints from chemistry literature regarding molarity units.",
+      "Specific units for RNA-seq normalization metrics (e.g., TPM, FPKM, RPKM) in fetched evidence.",
+      "Specific units for chemical molarity (mol/L) in fetched evidence."
+    ],
+    "pause_reason": "manual",
+    "privacy_mode": "offline",
+    "profile": "standard",
+    "remaining_seconds": 1679,
+    "research_rounds": [
+      {
+        "critical_missing": [
+          "Specific units for RNA-seq normalization metrics (e.g., TPM, FPKM, RPKM) in fetched evidence.",
+          "Specific units for chemical molarity (mol/L) in fetched evidence.",
+          "Fetched evidence from a chemistry domain source to compare against bioinformatics sources.",
+          "Specific limits or constraints from bioinformatics literature regarding RNA-seq normalization units.",
+          "Specific limits or constraints from chemistry literature regarding molarity units.",
+          "Analysis of discrepancies or unique contexts between the two concepts based on evidence.",
+          "Acceptance criterion \"goal\".0 was not met: The user request requires a substantive comparative analysis with cited limits. The collected evidence consists of synthetic, untrusted educational fixtures that define general concepts (e.g., 'RNA-seq normalization addresses library size differences') but do not provide specific units (e.g., TPM, FPKM, RPKM), conceptual definitions, or specific literature constraints/limits required to fulfill the deliverable. Finding and storing these sources is insuf",
+          "Acceptance criterion \"goal\".1 was not met: The available evidence describes RNA-seq normalization as addressing 'library size differences' but does not explicitly define the conceptual difference between RNA-seq normalization and chemical molarity regarding their fundamental definitions. It mentions molarity only in search snippets without providing the specific chemical definition or unit (mol/L) in the fetched text.",
+          "Acceptance criterion \"goal\".2 was not met: The fetched text does not identify specific units for RNA-seq normalization metrics (e.g., TPM, FPKM, RPKM) or chemical molarity (mol/L). The evidence only states general concepts like 'library size differences' and 'amount of solute per volume' without citing specific units.",
+          "Acceptance criterion \"goal\".3 was not met: While search results show snippets from both bioinformatics and chemistry domains, the fetched evidence (task-owned) is exclusively from bioinformatics sources. There is no fetched evidence from a chemistry domain source to allow for a direct comparison of evidence sources as requested.",
+          "Acceptance criterion \"goal\".4 was not met: The bioinformatics evidence does not state specific limits or constraints found in the literature regarding RNA-seq normalization units. It mentions 'batch effects may confound biological differences' but does not cite specific unit-related limits or constraints.",
+          "Acceptance criterion \"goal\".5 was not met: The fetched evidence does not contain any chemistry literature regarding molarity limits or constraints. The only chemistry-related information is in search snippets, not in the fetched, task-owned evidence.",
+          "Acceptance criterion \"goal\".6 was not met: The evidence does not highlight discrepancies or unique contexts where the two concepts overlap or diverge, as it lacks the specific definitions, units, and constraints required to make such a comparison."
+        ],
+        "evidence_count": 2,
+        "frontier_count": 8,
+        "number": 1,
+        "outcome": "RESEARCH",
+        "progress_fingerprint": "73b138c2091a9c28b5ed84141e701b774bc1e7e0376c743f1b69bb0a8707be70"
+      }
+    ],
+    "research_session_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+    "research_stagnant_rounds": 0,
+    "research_stop_reason": "",
+    "resource_probe_attempts": 0,
+    "resource_reason": "high_model_rss",
+    "resume_after": "2026-10-28T15:41:24.749959012Z",
+    "round_plan_count": 2,
+    "runtime": {
+      "active_run_id": "",
+      "enabled": true,
+      "keep_awake": true,
+      "max_resume_attempts": 5,
+      "resource_policy": {
+        "enabled": true,
+        "min_free_ram_bytes": 536870912,
+        "min_free_vram_mb": 256,
+        "gpu_temp_max_c": 85,
+        "process_rss_max_bytes": 2147483648,
+        "model_rss_max_bytes": 3221225472,
+        "recovery_ram_margin_percent": 10,
+        "recovery_vram_margin_percent": 10,
+        "recovery_gpu_temp_margin_c": 5,
+        "recovery_rss_margin_percent": 10,
+        "llama_health_timeout": 2000000000,
+        "check_interval": 1000000000,
+        "max_resume_attempts": 5,
+        "backoff_base": 5000000000,
+        "backoff_max": 60000000000
+      },
+      "resources": {
+        "free_ram_bytes": 4369367040,
+        "gpu_free_vram_mb": 2433,
+        "gpu_temp_c": 67,
+        "heap_alloc_bytes": 3648016,
+        "llama_health_latency": 4922704,
+        "llama_healthy": true,
+        "model_rss_bytes": 3239354368,
+        "power_source": "AC",
+        "rss_bytes": 86691840,
+        "snapshot_at": "2026-10-28T15:41:19.539725919Z",
+        "warnings": []
+      },
+      "sleep": {
+        "active": false,
+        "available": true,
+        "power_source": "unknown",
+        "provider": "systemd-inhibit"
+      },
+      "sleep_policy": "keep_awake",
+      "status": "ok"
+    },
+    "runtime_model_fingerprint": "c5569241584a5c357286e1a8058fd18e46208d56e326707f0847e3fe62469178",
+    "sectioned_report_enabled": true,
+    "stage": null,
+    "status": "paused",
+    "step": "",
+    "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+    "telemetry": {
+      "timestamp": "2026-10-28T15:41:19.540141748Z",
+      "stale_after_ms": 39000,
+      "capabilities": {
+        "cpu": true,
+        "ram": true,
+        "gpu": true,
+        "gpu_temperature": true,
+        "gpu_utilization": true,
+        "power": true,
+        "battery": false,
+        "process_rss": true,
+        "llama_health": true,
+        "llama_timings": false,
+        "llama_metrics": false,
+        "llama_slots": false
+      },
+      "system": {
+        "metadata": {
+          "os": "linux",
+          "uptime_seconds": {
+            "value": 7404.48,
+            "source": "exact",
+            "unit": "seconds",
+            "updated_at": "2026-10-28T15:41:19.455093427Z"
+          }
+        },
+        "cpu_usage": {
+          "value": 99.91666666666667,
+          "source": "exact",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:41:19.455093427Z"
+        },
+        "cpu_temperature": {
+          "value": 100.25,
+          "source": "exact",
+          "unit": "celsius",
+          "updated_at": "2026-10-28T15:41:19.455093427Z"
+        },
+        "ram_used": {
+          "value": 11580362752,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:41:19.455093427Z"
+        },
+        "ram_free": {
+          "value": 4369367040,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:41:19.455093427Z"
+        },
+        "ram_total": {
+          "value": 15949729792,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:41:19.455093427Z"
+        },
+        "gpus": [
+          {
+            "name": {
+              "value": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+              "source": "exact",
+              "unit": "name",
+              "updated_at": "2026-10-28T15:41:19.455093427Z"
+            },
+            "utilization": {
+              "value": 77,
+              "source": "exact",
+              "unit": "percent",
+              "updated_at": "2026-10-28T15:41:19.455093427Z"
+            },
+            "temperature": {
+              "value": 67,
+              "source": "exact",
+              "unit": "celsius",
+              "updated_at": "2026-10-28T15:41:19.455093427Z"
+            },
+            "vram_used": {
+              "value": 3537895424,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:41:19.455093427Z"
+            },
+            "vram_free": {
+              "value": 2551185408,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:41:19.455093427Z"
+            },
+            "vram_total": {
+              "value": 6442450944,
+              "source": "exact",
+              "unit": "bytes",
+              "updated_at": "2026-10-28T15:41:19.455093427Z"
+            },
+            "power_watts": {
+              "value": 35.41,
+              "source": "exact",
+              "unit": "watts",
+              "updated_at": "2026-10-28T15:41:19.455093427Z"
+            }
+          }
+        ],
+        "agent_rss": {
+          "value": 86691840,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:41:19.455093427Z"
+        },
+        "llama_server_rss": {
+          "value": 3239354368,
+          "source": "exact",
+          "unit": "bytes",
+          "updated_at": "2026-10-28T15:41:19.455093427Z"
+        },
+        "power_source": {
+          "value": "AC",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:40:53.625445246Z"
+        },
+        "power_watts": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "watts",
+          "updated_at": "2026-10-28T15:41:19.455093427Z",
+          "error": "unsupported"
+        },
+        "battery_percent": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "percent",
+          "updated_at": "2026-10-28T15:41:19.455093427Z",
+          "error": "unsupported"
+        },
+        "battery_charging": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "boolean",
+          "updated_at": "2026-10-28T15:41:19.455093427Z",
+          "error": "unsupported"
+        },
+        "llama_health": {
+          "value": "healthy",
+          "source": "exact",
+          "unit": "status",
+          "updated_at": "2026-10-28T15:41:19.455093427Z"
+        },
+        "llama_slots_active": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:41:19.455093427Z",
+          "error": "temporarily_unavailable"
+        },
+        "llama_slots_total": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "slots",
+          "updated_at": "2026-10-28T15:41:19.455093427Z",
+          "error": "temporarily_unavailable"
+        }
+      },
+      "inference": {
+        "status": "cancelled",
+        "source": "llama.cpp",
+        "updated_at": "2026-10-28T15:41:19.540141748Z",
+        "requested_tokens": {
+          "value": 4096,
+          "source": "exact",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "output_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "total_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "cached_prompt_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "prompt_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "output_tokens_per_second": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens/s",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "ttft_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "prompt_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "generation_ms": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "ms",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "context_tokens": {
+          "value": null,
+          "source": "unavailable",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        },
+        "context_window": {
+          "value": 32768,
+          "source": "estimated",
+          "unit": "tokens",
+          "updated_at": "2026-10-28T15:41:19.540141748Z"
+        }
+      }
+    },
+    "telemetry_revision": 50,
+    "terminal_outcome": "",
+    "updated_at": "2026-10-28T15:41:19.84005559Z",
+    "verdict": "RESEARCH"
+  },
+  "run": {
+    "pause_reason": "manual",
+    "resource_reason": "high_model_rss",
+    "resume_after": "2026-10-28T15:41:24.749959012Z",
+    "resource_probe_attempts": 0,
+    "id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+    "conversation_id": "2f13b943-81d8-4ae7-9458-5c8ff18e5958",
+    "user_message_id": "83807e42-b744-4fca-9feb-73369254cef6",
+    "assistant_message_id": "70861e81-b39c-4d3d-9786-59e79a34d6c7",
+    "mode": "research",
+    "operation": "send",
+    "status": "paused",
+    "retry_count": 0,
+    "cancel_requested": false,
+    "created_at": "2026-10-28T15:39:20.449642191Z",
+    "updated_at": "2026-10-28T15:41:19.84005559Z",
+    "started_at": "2026-10-28T15:39:20.453371503Z",
+    "heartbeat_at": "2026-10-28T15:41:15.507376599Z",
+    "deadline_at": "2026-10-28T16:09:20.449642191Z"
+  },
+  "artifacts": [
+    {
+      "id": "6e9b50fca14d845234c4fe4e436d6f2508950aebf5207c6fe4522cf43e1b4e42",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "name": "source-237e32b8f748.txt",
+      "mime_type": "text/plain; charset=utf-8",
+      "sha256": "237e32b8f74824730e434e5b42d34c66f2abb4abfdee366d3b71f3998e917b77",
+      "size_bytes": 345,
+      "created_at": "2026-10-28T15:40:00.467935849Z"
+    },
+    {
+      "id": "b3b183f4cf0c4cad604b9fece5cea12f15900e10391fc86e447b68162f130e21",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "name": "source-237e32b8f748.raw",
+      "mime_type": "text/plain",
+      "sha256": "237e32b8f74824730e434e5b42d34c66f2abb4abfdee366d3b71f3998e917b77",
+      "size_bytes": 345,
+      "created_at": "2026-10-28T15:40:00.467244908Z"
+    },
+    {
+      "id": "0015f5b9c382f124d0b2f010ce9ad188a014ab0663e49262417aa7ebce8a98f5",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "name": "source-5c13e8906992.txt",
+      "mime_type": "text/plain; charset=utf-8",
+      "sha256": "5c13e89069925fb888980da6c1f26591cf8bc26c0925bbe50a04e14e006ca916",
+      "size_bytes": 424,
+      "created_at": "2026-10-28T15:39:55.145996763Z"
+    },
+    {
+      "id": "bd7f93ab49da2f4c5471e1634d1528a44d91f757c54f78530f3f3f54d833d0e5",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "name": "source-5c13e8906992.raw",
+      "mime_type": "text/plain",
+      "sha256": "5c13e89069925fb888980da6c1f26591cf8bc26c0925bbe50a04e14e006ca916",
+      "size_bytes": 424,
+      "created_at": "2026-10-28T15:39:55.141160845Z"
+    }
+  ],
+  "public_events_complete": true,
+  "events": [
+    {
+      "id": "d4846f07-5323-4dad-b6c7-4a3e1447aad7",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 1,
+      "type": "task.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:20.451452746Z",
+      "visibility": "user",
+      "payload": {
+        "mode": "research",
+        "status": "queued"
+      }
+    },
+    {
+      "id": "e2008367-cc12-46a3-b155-75f6098b62d0",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 2,
+      "type": "message.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:20.451911439Z",
+      "visibility": "user",
+      "payload": {
+        "message_id": "70861e81-b39c-4d3d-9786-59e79a34d6c7",
+        "role": "assistant",
+        "status": "pending"
+      }
+    },
+    {
+      "id": "6c63fa1f-7e50-4e5d-ba77-8eb60d38bf77",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 3,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:20.453920714Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "from": "queued",
+        "to": "planning"
+      }
+    },
+    {
+      "id": "8d62c52c-2e60-4f1e-bebb-bd0d56747fd5",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 10,
+      "type": "plan.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:40.900935697Z",
+      "stage": "planning",
+      "visibility": "user",
+      "payload": {
+        "goal": "Research why RNA-seq normalization and chemical molarity are different concepts with different units. Compare imported bioinformatics and chemistry evidence and state limits.",
+        "steps": 5
+      }
+    },
+    {
+      "id": "11f947c6-6357-41c3-9eb2-b6384e720b55",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 11,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:40.909879182Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "from": "planning",
+        "plan_steps": 5,
+        "to": "running"
+      }
+    },
+    {
+      "id": "a498ffd7-36f1-49b5-92f6-ac3888264fcb",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 12,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:40.924839189Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for definitions and units of RNA-seq normalization methods in bioinformatics literature.. User request: Research why RNA-seq normalization and chemical molarity are different concepts with different units. Compare imported bioinformatics and chemistry evidence and state limits.",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "0b5f9ed7-2b03-4216-889b-3864ff839a91",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 22,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.073154931Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1",
+        "summary": "Searching for bioinformatics literature defining RNA-seq normalization methods and their specific units to establish the first half of the comparative analysis.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "b065cfa5-cc5c-4ad4-bc99-272ce8d09e11",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 25,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.108771869Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "RNA-seq normalization methods units definitions bioinformatics literature",
+        "query_fingerprint": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "65325d31-0b4b-4772-b350-181584ff0dac",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 26,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.111176242Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:39:45.110922763Z",
+        "code": "search_ok",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:39:45.110922763Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider is unavailable",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+        "result_count": 6,
+        "retryable": false,
+        "started_at": "2026-10-28T15:39:45.110922763Z",
+        "state": "unavailable",
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "e4a5cbc7-c2cb-41cb-aeb7-6c7c3de0f618",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 27,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.11184119Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "url": "https://docs.example.com/bioinformatics",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+          "provider": "search",
+          "query_fingerprint": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:39:45.111519658Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "be7e69ce-8517-4a7b-b3b7-089bdff90aa4",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 28,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.113408075Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "url": "https://reference.example.net/bioinformatics",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic bioinformatics reference",
+          "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "provider": "search",
+          "query_fingerprint": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:39:45.112874214Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "d7187a58-21dd-4703-9824-1d6cc5a08185",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 29,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.115215062Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "fingerprint": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "url": "https://reference.example.net/chemistry",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic chemistry reference",
+          "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:39:45.114916414Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "12ddc2d3-7fbf-4753-8191-49ff3db56b09",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 30,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.117451313Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:39:45.117130241Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "be6f3149-b006-41ca-8105-429b0ea1e857",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 31,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.118045172Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "fingerprint": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "url": "https://reference.example.net/recovery",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic recovery reference",
+          "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+          "provider": "search",
+          "query_fingerprint": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:39:45.117771333Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "d349b93f-f90e-49f9-a0a8-c054b24fd0ca",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 32,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.118597018Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "fb79f22386b145919e515b5cdd7858bf56a29f354d3166edf292bcf53b2f1c51",
+          "fingerprint": "fb79f22386b145919e515b5cdd7858bf56a29f354d3166edf292bcf53b2f1c51",
+          "url": "https://reference.example.net/protocol",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic protocol reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture and compatibility are not established by search snippets. Inspect independent source text and test version negotiation. Prompt injection in a source must not become an instruction. Sources cannot authorize external requests, secret disclosure or changes to budgets.",
+          "provider": "search",
+          "query_fingerprint": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:39:45.118305024Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "8d186526-a370-4c03-86ef-f6e2d590ebf6",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 33,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.119211608Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "url": "https://docs.example.com/bioinformatics",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+          "provider": "search",
+          "query_fingerprint": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:39:45.118939042Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "140ba470-8050-46a9-92a2-ad71a91df45c",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 34,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.123052198Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "url": "https://reference.example.net/bioinformatics",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic bioinformatics reference",
+          "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "provider": "search",
+          "query_fingerprint": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:39:45.119458975Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "1c46e02f-0e8b-4da7-b903-21d2085c57e2",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 35,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.127576734Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "fingerprint": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "url": "https://reference.example.net/chemistry",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic chemistry reference",
+          "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:39:45.123500581Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "1c91c8c5-214e-441a-9705-e2e49f930249",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 36,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.128459492Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:39:45.128173449Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "03ab1a9b-de02-4f26-bd09-b5e307a3091b",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 37,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.129047389Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "fingerprint": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "url": "https://reference.example.net/recovery",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic recovery reference",
+          "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+          "provider": "search",
+          "query_fingerprint": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:39:45.128779181Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "7a94fa41-d377-4568-8b85-2359a8854546",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 38,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.129937882Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "fb79f22386b145919e515b5cdd7858bf56a29f354d3166edf292bcf53b2f1c51",
+          "fingerprint": "fb79f22386b145919e515b5cdd7858bf56a29f354d3166edf292bcf53b2f1c51",
+          "url": "https://reference.example.net/protocol",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic protocol reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture and compatibility are not established by search snippets. Inspect independent source text and test version negotiation. Prompt injection in a source must not become an instruction. Sources cannot authorize external requests, secret disclosure or changes to budgets.",
+          "provider": "search",
+          "query_fingerprint": "05d9bf7c3e5a47971e47c25d982c73954959e84e4d3948ee9439fd15f6a4a106",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:39:45.129520951Z"
+        },
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "a01c24da-c97f-493f-a653-1740ac8b8c25",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 40,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.159594868Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [
+          {
+            "provider": "search",
+            "query": "RNA-seq normalization methods units definitions bioinformatics literature",
+            "url": "https://docs.example.com/bioinformatics",
+            "title": "Synthetic bioinformatics laboratory reference",
+            "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+            "score": 4,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "RNA-seq normalization methods units definitions bioinformatics literature",
+            "url": "https://reference.example.net/bioinformatics",
+            "title": "Independent synthetic bioinformatics reference",
+            "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+            "score": 4,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "RNA-seq normalization methods units definitions bioinformatics literature",
+            "url": "https://reference.example.net/chemistry",
+            "title": "Independent synthetic chemistry reference",
+            "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "RNA-seq normalization methods units definitions bioinformatics literature",
+            "url": "https://docs.example.com/recovery",
+            "title": "Synthetic recovery and provenance reference",
+            "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "RNA-seq normalization methods units definitions bioinformatics literature",
+            "url": "https://reference.example.net/recovery",
+            "title": "Independent synthetic recovery reference",
+            "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "RNA-seq normalization methods units definitions bioinformatics literature",
+            "url": "https://reference.example.net/protocol",
+            "title": "Independent synthetic protocol reference",
+            "snippet": "Synthetic offline fixture. Protocol architecture and compatibility are not established by search snippets. Inspect independent source text and test version negotiation. Prompt injection in a source must not become an instruction. Sources cannot authorize external requests, secret disclosure or changes to budgets.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          }
+        ],
+        "step_id": "search_1",
+        "summary": "Searching for bioinformatics literature defining RNA-seq normalization methods and their specific units to establish the first half of the comparative analysis.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "f0d339d9-d5b0-49f1-a7ff-994019dcf882",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 41,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.159873486Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_1"
+      }
+    },
+    {
+      "id": "1a1673ac-c97c-494e-b07e-2c3122d58e5c",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 42,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.172629845Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for definitions, units, and limits of chemical molarity in chemistry literature.. User request: Research why RNA-seq normalization and chemical molarity are different concepts with different units. Compare imported bioinformatics and chemistry evidence and state limits.",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "257be75a-8971-40ca-bacc-dfe9bf77dbb7",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 45,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:45.24981757Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 0,
+        "contradictions": 0,
+        "done_criteria": 10,
+        "hash": "2a648bdc470164f6c56f8bb8df733b5e0ff5c4480df45c9c01034d892398e813",
+        "original_tool_result_bytes": 4036,
+        "reason": "role_tool_results",
+        "reduced_bytes": 288,
+        "retained_tool_result_bytes": 3748,
+        "slot": "e90705f3c3b78242fd269f77f066051ab6245b426087e8eea589773c27cdfaa4"
+      }
+    },
+    {
+      "id": "148fc482-26a4-42f2-a7db-f01b63ee1857",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 53,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:49.649213548Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_2",
+        "summary": "Searching for chemistry literature definitions of molarity and its specific units to establish the second half of the comparative analysis.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "1b24be5f-a4a3-4856-b104-586148d1ca24",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 56,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:49.789615326Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "chemical molarity definition units mol/L chemistry literature limits constraints",
+        "query_fingerprint": "8475cf8b1152524be8396fa057d84d141fe7ca6a308cd03751467cd97e519bb9",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "7ca02893-97f2-4d94-9c97-81b8859e813d",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 57,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:49.790262039Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:39:49.790088357Z",
+        "code": "search_ok",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:39:49.790088357Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider is unavailable",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "8475cf8b1152524be8396fa057d84d141fe7ca6a308cd03751467cd97e519bb9",
+        "result_count": 2,
+        "retryable": false,
+        "started_at": "2026-10-28T15:39:49.790088357Z",
+        "state": "unavailable",
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "24617a09-2922-41d6-ad79-4f1cbaf7ae6c",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 58,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:49.790649061Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "fingerprint": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "url": "https://reference.example.net/chemistry",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic chemistry reference",
+          "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "8475cf8b1152524be8396fa057d84d141fe7ca6a308cd03751467cd97e519bb9",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:39:49.790432044Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "c8e37a4a-e67f-4c4b-a032-77d7786a9ed3",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 59,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:49.791022526Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7575eedd4a61057407db2e3595d996964890d8f06afece274bb35217f22021fa",
+          "fingerprint": "7575eedd4a61057407db2e3595d996964890d8f06afece274bb35217f22021fa",
+          "url": "https://docs.example.com/chemistry",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic chemistry laboratory reference",
+          "snippet": "Synthetic educational fixture. Buffers resist pH change within a limited range. Henderson-Hasselbalch relates pH, pKa and the conjugate base to acid ratio. Dilution changes molarity; molarity is amount of solute per volume of solution. A catalyst changes reaction kinetics but not the equilibrium constant. Chemistry learning requires stoichiometry, equilibrium and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "8475cf8b1152524be8396fa057d84d141fe7ca6a308cd03751467cd97e519bb9",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:39:49.790817082Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "84e28ba8-30e5-427f-a891-7e5019768869",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 60,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:49.792042984Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "fingerprint": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "url": "https://reference.example.net/chemistry",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic chemistry reference",
+          "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "8475cf8b1152524be8396fa057d84d141fe7ca6a308cd03751467cd97e519bb9",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:39:49.791636424Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "4d7062bf-3ae0-4529-8527-22033c342309",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 61,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:49.800156835Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "7575eedd4a61057407db2e3595d996964890d8f06afece274bb35217f22021fa",
+          "fingerprint": "7575eedd4a61057407db2e3595d996964890d8f06afece274bb35217f22021fa",
+          "url": "https://docs.example.com/chemistry",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic chemistry laboratory reference",
+          "snippet": "Synthetic educational fixture. Buffers resist pH change within a limited range. Henderson-Hasselbalch relates pH, pKa and the conjugate base to acid ratio. Dilution changes molarity; molarity is amount of solute per volume of solution. A catalyst changes reaction kinetics but not the equilibrium constant. Chemistry learning requires stoichiometry, equilibrium and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "8475cf8b1152524be8396fa057d84d141fe7ca6a308cd03751467cd97e519bb9",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:39:49.799766607Z"
+        },
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "49b37c19-b2e4-47cd-a100-29dd9067dfab",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 63,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:49.841181315Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [
+          {
+            "provider": "search",
+            "query": "chemical molarity definition units mol/L chemistry literature limits constraints",
+            "url": "https://reference.example.net/chemistry",
+            "title": "Independent synthetic chemistry reference",
+            "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+            "score": 4,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "chemical molarity definition units mol/L chemistry literature limits constraints",
+            "url": "https://docs.example.com/chemistry",
+            "title": "Synthetic chemistry laboratory reference",
+            "snippet": "Synthetic educational fixture. Buffers resist pH change within a limited range. Henderson-Hasselbalch relates pH, pKa and the conjugate base to acid ratio. Dilution changes molarity; molarity is amount of solute per volume of solution. A catalyst changes reaction kinetics but not the equilibrium constant. Chemistry learning requires stoichiometry, equilibrium and laboratory safety.",
+            "score": 3,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          }
+        ],
+        "step_id": "search_2",
+        "summary": "Searching for chemistry literature definitions of molarity and its specific units to establish the second half of the comparative analysis.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "dc09cb81-622a-4cf7-9d3d-7faa37a0f3eb",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 64,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:49.841410496Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "search_2"
+      }
+    },
+    {
+      "id": "fafb686d-f931-48d3-add7-84036ffb4374",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 65,
+      "type": "step.skipped",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:49.861879146Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "reason": "the completed search facets already produced enough distinct candidate sites",
+        "step_id": "search_3"
+      }
+    },
+    {
+      "id": "64a63a7c-29c1-478a-b6f2-ea0ba4a93a77",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 67,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:49.881730389Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "4b706932-53ab-47ce-b07e-9b8756be5307",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 68,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:49.886052687Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Inspect distinct approved source 1 for the exact user request",
+        "step_id": "fetch_1"
+      }
+    },
+    {
+      "id": "a62aea3f-8500-4ab7-a285-301e5f8dda76",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 71,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:49.997096489Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 0,
+        "contradictions": 0,
+        "done_criteria": 10,
+        "hash": "08516c02734a8a5455609501e9f08b0c03c2988d2465569986bb960660d10fb3",
+        "original_tool_result_bytes": 5403,
+        "reason": "role_tool_results",
+        "reduced_bytes": 384,
+        "retained_tool_result_bytes": 5019,
+        "slot": "ccf730f6546b444790d0a493b3315f4a549acfc4b10d147c1d6e4d1f79a83275"
+      }
+    },
+    {
+      "id": "f6d3360a-f599-45e2-b8a6-eac0a52fefc7",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 79,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:54.947143264Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "source_fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+        "status": "fetching",
+        "step_id": "fetch_1",
+        "target_url": "https://docs.example.com/bioinformatics",
+        "timestamp": "2026-10-28T15:39:54.947143264Z",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "76c1f609-2515-4f91-9813-3d78b809519f",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 82,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:55.138957458Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "d0f482b7-8bc0-46e2-9295-bcf6486df142",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 83,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:55.15477933Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "bd7f93ab49da2f4c5471e1634d1528a44d91f757c54f78530f3f3f54d833d0e5",
+        "mime_type": "text/plain",
+        "name": "source-5c13e8906992.raw",
+        "sha256": "5c13e89069925fb888980da6c1f26591cf8bc26c0925bbe50a04e14e006ca916",
+        "size_bytes": 424
+      }
+    },
+    {
+      "id": "d372f3ef-c725-40dd-b016-fbbd5f58c53f",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 84,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:55.15732979Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "0015f5b9c382f124d0b2f010ce9ad188a014ab0663e49262417aa7ebce8a98f5",
+        "mime_type": "text/plain; charset=utf-8",
+        "name": "source-5c13e8906992.txt",
+        "sha256": "5c13e89069925fb888980da6c1f26591cf8bc26c0925bbe50a04e14e006ca916",
+        "size_bytes": 424
+      }
+    },
+    {
+      "id": "4e0345f0-890d-4a01-ad43-ccb1000e8029",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 85,
+      "type": "evidence.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:55.160642831Z",
+      "visibility": "user",
+      "payload": {
+        "canonical_url": "https://docs.example.com/bioinformatics",
+        "evidence_id": "1d2535f1-68d8-4ed3-a35d-68115e403936",
+        "title": "Synthetic bioinformatics laboratory reference"
+      }
+    },
+    {
+      "id": "ce8544f8-5598-4d73-8744-7c336943a52b",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 87,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:55.229377119Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "result": {
+          "content_sha256": "5c13e89069925fb888980da6c1f26591cf8bc26c0925bbe50a04e14e006ca916",
+          "evidence_id": "1d2535f1-68d8-4ed3-a35d-68115e403936",
+          "excerpt": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by this educational corpus.",
+          "fetched_bytes": 424,
+          "requested_url": "https://docs.example.com/bioinformatics",
+          "taint": "untrusted_external_content",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "url": "https://docs.example.com/bioinformatics"
+        },
+        "step_id": "fetch_1",
+        "summary": "Fetching the bioinformatics reference to extract definitions of RNA-seq normalization units and constraints for the comparative analysis.",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "b4cc341c-7d2f-4860-ad5f-4d0806a553be",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 88,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:55.23006862Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "step_id": "fetch_1"
+      }
+    },
+    {
+      "id": "9cd95210-eb61-4204-8a7d-2ae587cc5b27",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 89,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:55.260090902Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "04de3730-a2a0-425e-9a07-03332eeaca73",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 90,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:55.262925501Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Inspect distinct approved source 2 for the exact user request",
+        "step_id": "fetch_2"
+      }
+    },
+    {
+      "id": "676b3d41-60ec-483b-b03d-f75c6706195a",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 93,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:39:55.397821123Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 1,
+        "contradictions": 0,
+        "done_criteria": 10,
+        "hash": "e03b1b8a6a424d11e629f239c5be537a63ce0ff88df1460bfe2ad9e00b5eb311",
+        "original_tool_result_bytes": 6208,
+        "reason": "role_tool_results",
+        "reduced_bytes": 384,
+        "retained_tool_result_bytes": 5824,
+        "slot": "c816c4032b17d132caa7b6818f860f22ad505e6ae99c9c3251eaa4653034fb62"
+      }
+    },
+    {
+      "id": "7c6569fa-6b8f-459e-8227-feb071b80c86",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 101,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:00.32842408Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "source_fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+        "status": "fetching",
+        "step_id": "fetch_2",
+        "target_url": "https://reference.example.net/bioinformatics",
+        "timestamp": "2026-10-28T15:40:00.32842408Z",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "471ec659-849f-443b-b673-2d1c6df5b0c4",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 104,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:00.462097631Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "e0f956db-d7c7-44be-96df-f0620f08a20d",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 105,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:00.468721037Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "b3b183f4cf0c4cad604b9fece5cea12f15900e10391fc86e447b68162f130e21",
+        "mime_type": "text/plain",
+        "name": "source-237e32b8f748.raw",
+        "sha256": "237e32b8f74824730e434e5b42d34c66f2abb4abfdee366d3b71f3998e917b77",
+        "size_bytes": 345
+      }
+    },
+    {
+      "id": "0f7820d9-325b-45d7-9fe5-2bb17449e318",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 106,
+      "type": "artifact.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:00.470737701Z",
+      "visibility": "user",
+      "payload": {
+        "artifact_id": "6e9b50fca14d845234c4fe4e436d6f2508950aebf5207c6fe4522cf43e1b4e42",
+        "mime_type": "text/plain; charset=utf-8",
+        "name": "source-237e32b8f748.txt",
+        "sha256": "237e32b8f74824730e434e5b42d34c66f2abb4abfdee366d3b71f3998e917b77",
+        "size_bytes": 345
+      }
+    },
+    {
+      "id": "e7225ed2-976e-4062-8860-545a7120d75e",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 107,
+      "type": "evidence.created",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:00.471343512Z",
+      "visibility": "user",
+      "payload": {
+        "canonical_url": "https://reference.example.net/bioinformatics",
+        "evidence_id": "4a90005f-c999-46e2-9ae3-374103ce6cf3",
+        "title": "Independent synthetic bioinformatics reference"
+      }
+    },
+    {
+      "id": "6bc67362-abc3-4926-86f5-37b3eba77e6d",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 109,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:00.559422594Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "result": {
+          "content_sha256": "237e32b8f74824730e434e5b42d34c66f2abb4abfdee366d3b71f3998e917b77",
+          "evidence_id": "4a90005f-c999-46e2-9ae3-374103ce6cf3",
+          "excerpt": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "fetched_bytes": 345,
+          "requested_url": "https://reference.example.net/bioinformatics",
+          "taint": "untrusted_external_content",
+          "title": "Independent synthetic bioinformatics reference",
+          "url": "https://reference.example.net/bioinformatics"
+        },
+        "step_id": "fetch_2",
+        "summary": "Fetching the bioinformatics reference to extract definitions of RNA-seq normalization units and constraints for the comparative analysis.",
+        "tool": "fetch_url"
+      }
+    },
+    {
+      "id": "f630fe61-7b54-4504-af54-a7b186bcb3be",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 110,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:00.559560368Z",
+      "stage": "extract",
+      "visibility": "user",
+      "payload": {
+        "step_id": "fetch_2"
+      }
+    },
+    {
+      "id": "bad10f47-e971-4d32-a13d-dde34953d911",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 112,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:00.623991768Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "verifying"
+      }
+    },
+    {
+      "id": "06c313eb-df21-45a6-9163-a47a7a240aaa",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 114,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:00.766110374Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 2,
+        "contradictions": 0,
+        "done_criteria": 10,
+        "hash": "54a49733766c59e586c049fd8751524c092abfeaddb3f9544751a3199afdaabb",
+        "original_tool_result_bytes": 6945,
+        "reason": "role_tool_results",
+        "reduced_bytes": 384,
+        "retained_tool_result_bytes": 6561,
+        "slot": "f551d0d6a5ad7b6a49f40fdfdda96052e61215abc4ba703f050742bfba39c941"
+      }
+    },
+    {
+      "id": "19e15650-6092-4230-8cd8-ae69ee9223a0",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 120,
+      "type": "research.round.assessed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:47.469811277Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "critical_missing_count": 13,
+        "evidence_count": 2,
+        "frontier_count": 8,
+        "number": 1,
+        "outcome": "RESEARCH",
+        "stagnant_rounds": 0
+      }
+    },
+    {
+      "id": "fcd6d925-6d9c-4d28-8594-52bb500a524c",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 121,
+      "type": "verification.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:47.469968112Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "criteria": [
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "met": false,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 1,
+            "met": false,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 2,
+            "met": false,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 3,
+            "met": false,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 4,
+            "met": false,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 5,
+            "met": false,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 6,
+            "met": false,
+            "step_id": "goal"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "met": true,
+            "step_id": "search_1"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "met": true,
+            "step_id": "search_2"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "1d2535f1-68d8-4ed3-a35d-68115e403936"
+            ],
+            "met": true,
+            "step_id": "fetch_1"
+          },
+          {
+            "classification": "critical",
+            "criterion_index": 0,
+            "evidence_ids": [
+              "4a90005f-c999-46e2-9ae3-374103ce6cf3"
+            ],
+            "met": true,
+            "step_id": "fetch_2"
+          }
+        ],
+        "missing": [
+          "Specific units for RNA-seq normalization metrics (e.g., TPM, FPKM, RPKM) in fetched evidence.",
+          "Specific units for chemical molarity (mol/L) in fetched evidence.",
+          "Fetched evidence from a chemistry domain source to compare against bioinformatics sources.",
+          "Specific limits or constraints from bioinformatics literature regarding RNA-seq normalization units.",
+          "Specific limits or constraints from chemistry literature regarding molarity units.",
+          "Analysis of discrepancies or unique contexts between the two concepts based on evidence.",
+          "Acceptance criterion \"goal\".0 was not met: The user request requires a substantive comparative analysis with cited limits. The collected evidence consists of synthetic, untrusted educational fixtures that define general concepts (e.g., 'RNA-seq normalization addresses library size differences') but do not provide specific units (e.g., TPM, FPKM, RPKM), conceptual definitions, or specific literature constraints/limits required to fulfill the deliverable. Finding and storing these sources is insuf",
+          "Acceptance criterion \"goal\".1 was not met: The available evidence describes RNA-seq normalization as addressing 'library size differences' but does not explicitly define the conceptual difference between RNA-seq normalization and chemical molarity regarding their fundamental definitions. It mentions molarity only in search snippets without providing the specific chemical definition or unit (mol/L) in the fetched text.",
+          "Acceptance criterion \"goal\".2 was not met: The fetched text does not identify specific units for RNA-seq normalization metrics (e.g., TPM, FPKM, RPKM) or chemical molarity (mol/L). The evidence only states general concepts like 'library size differences' and 'amount of solute per volume' without citing specific units.",
+          "Acceptance criterion \"goal\".3 was not met: While search results show snippets from both bioinformatics and chemistry domains, the fetched evidence (task-owned) is exclusively from bioinformatics sources. There is no fetched evidence from a chemistry domain source to allow for a direct comparison of evidence sources as requested.",
+          "Acceptance criterion \"goal\".4 was not met: The bioinformatics evidence does not state specific limits or constraints found in the literature regarding RNA-seq normalization units. It mentions 'batch effects may confound biological differences' but does not cite specific unit-related limits or constraints.",
+          "Acceptance criterion \"goal\".5 was not met: The fetched evidence does not contain any chemistry literature regarding molarity limits or constraints. The only chemistry-related information is in search snippets, not in the fetched, task-owned evidence.",
+          "Acceptance criterion \"goal\".6 was not met: The evidence does not highlight discrepancies or unique contexts where the two concepts overlap or diverge, as it lacks the specific definitions, units, and constraints required to make such a comparison."
+        ],
+        "phase": "evidence_readiness",
+        "verdict": "RESEARCH"
+      }
+    },
+    {
+      "id": "eac058cb-f37a-49bc-b3c2-6007c92d149d",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 123,
+      "type": "continuation.requested",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:47.649242755Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "attempt": 1,
+        "failure_hash": "cd0929d85f3d5d288863509a4474476315cc1a2903a89a0a1115ec12a18084c9",
+        "max_continuations": 2,
+        "missing": [
+          "Acceptance criterion \"goal\".0 was not met: The user request requires a substantive comparative analysis with cited limits. The collected evidence consists of synthetic, untrusted educational fixtures that define general concepts (e.g., 'RNA-seq normalization addresses library size differences') but do not provide specific units (e.g., TPM, FPKM, RPKM), conceptual definitions, or specific literature constraints/limits required to fulfill the deliverable. Finding and storing these sources is insuf",
+          "Acceptance criterion \"goal\".1 was not met: The available evidence describes RNA-seq normalization as addressing 'library size differences' but does not explicitly define the conceptual difference between RNA-seq normalization and chemical molarity regarding their fundamental definitions. It mentions molarity only in search snippets without providing the specific chemical definition or unit (mol/L) in the fetched text.",
+          "Acceptance criterion \"goal\".2 was not met: The fetched text does not identify specific units for RNA-seq normalization metrics (e.g., TPM, FPKM, RPKM) or chemical molarity (mol/L). The evidence only states general concepts like 'library size differences' and 'amount of solute per volume' without citing specific units.",
+          "Acceptance criterion \"goal\".3 was not met: While search results show snippets from both bioinformatics and chemistry domains, the fetched evidence (task-owned) is exclusively from bioinformatics sources. There is no fetched evidence from a chemistry domain source to allow for a direct comparison of evidence sources as requested.",
+          "Acceptance criterion \"goal\".4 was not met: The bioinformatics evidence does not state specific limits or constraints found in the literature regarding RNA-seq normalization units. It mentions 'batch effects may confound biological differences' but does not cite specific unit-related limits or constraints.",
+          "Acceptance criterion \"goal\".5 was not met: The fetched evidence does not contain any chemistry literature regarding molarity limits or constraints. The only chemistry-related information is in search snippets, not in the fetched, task-owned evidence.",
+          "Acceptance criterion \"goal\".6 was not met: The evidence does not highlight discrepancies or unique contexts where the two concepts overlap or diverge, as it lacks the specific definitions, units, and constraints required to make such a comparison.",
+          "Analysis of discrepancies or unique contexts between the two concepts based on evidence.",
+          "Fetched evidence from a chemistry domain source to compare against bioinformatics sources.",
+          "Specific limits or constraints from bioinformatics literature regarding RNA-seq normalization units.",
+          "Specific limits or constraints from chemistry literature regarding molarity units.",
+          "Specific units for RNA-seq normalization metrics (e.g., TPM, FPKM, RPKM) in fetched evidence.",
+          "Specific units for chemical molarity (mol/L) in fetched evidence."
+        ],
+        "new_steps": [
+          "continue_1_search",
+          "continue_1_search_2",
+          "continue_1_search_3",
+          "continue_1_fetch"
+        ],
+        "progress_fingerprint": "67a46646e06df3fda5431f567eb52ae830967872013ac26e0f85b5a85f15b8b4"
+      }
+    },
+    {
+      "id": "d9413295-9e81-4f89-a10c-ff8a0b5e5400",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 124,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:47.755233454Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Address the critical open questions with a new independent targeted query focused on missing direct evidence, distinct discovery angle 1",
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "0ad09783-2944-4ce9-af2c-a0fea80ab438",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 134,
+      "type": "tool.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.315027304Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "continue_1_search",
+        "summary": "Initiating a targeted search for specific units (TPM, FPKM, RPKM) and explicit conceptual definitions of RNA-seq normalization metrics to address the lack of concrete evidence in previous bioinformatics sources.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "c4dd8258-6cd3-440b-b59f-d6a4bbd8973b",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 137,
+      "type": "query.updated",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.548301554Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "query": "RNA-seq normalization specific units TPM FPKM RPKM conceptual definition bioinformatics literature",
+        "query_fingerprint": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "5bcdc653-7741-41e4-b9d9-89db9c78bb74",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 138,
+      "type": "search.provider",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.553738407Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "body_size": 0,
+        "checked_at": "2026-10-28T15:40:54.553364102Z",
+        "code": "search_ok",
+        "distinct_domains": 0,
+        "finished_at": "2026-10-28T15:40:54.553364102Z",
+        "http_status": 0,
+        "latency_ms": 0,
+        "message": "Provider is unavailable",
+        "parser_version": "",
+        "provider": "search",
+        "query_hash": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+        "result_count": 6,
+        "retryable": false,
+        "started_at": "2026-10-28T15:40:54.553364102Z",
+        "state": "unavailable",
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "7296a7dd-04e6-4bed-887b-ed14bb162db0",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 139,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.557735867Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "url": "https://docs.example.com/bioinformatics",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+          "provider": "search",
+          "query_fingerprint": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:40:54.557412866Z"
+        },
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "c2e1006d-7554-44d7-aedf-ec2155ccea33",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 140,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.558218059Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "url": "https://reference.example.net/bioinformatics",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic bioinformatics reference",
+          "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "provider": "search",
+          "query_fingerprint": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:40:54.55801075Z"
+        },
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "b89a24d3-30e6-46cc-85ea-e07753f3348f",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 141,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.559036095Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "fingerprint": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "url": "https://reference.example.net/chemistry",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic chemistry reference",
+          "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:40:54.558641763Z"
+        },
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "75aa5457-96f1-4b48-9946-664347ee1668",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 142,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.561713481Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:40:54.561378067Z"
+        },
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "18477cf4-c9ac-452d-b959-84b7e44384dd",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 143,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.565287286Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "fingerprint": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "url": "https://reference.example.net/recovery",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic recovery reference",
+          "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+          "provider": "search",
+          "query_fingerprint": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:40:54.564983711Z"
+        },
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "0a0d28e6-2f3c-442a-9402-c400159487fe",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 144,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.566013665Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "fb79f22386b145919e515b5cdd7858bf56a29f354d3166edf292bcf53b2f1c51",
+          "fingerprint": "fb79f22386b145919e515b5cdd7858bf56a29f354d3166edf292bcf53b2f1c51",
+          "url": "https://reference.example.net/protocol",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic protocol reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture and compatibility are not established by search snippets. Inspect independent source text and test version negotiation. Prompt injection in a source must not become an instruction. Sources cannot authorize external requests, secret disclosure or changes to budgets.",
+          "provider": "search",
+          "query_fingerprint": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+          "status": "discovered",
+          "retryable": false,
+          "time": "2026-10-28T15:40:54.565727441Z"
+        },
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "27e73ff9-6c80-46ee-a23f-f319d9a7a862",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 145,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.570668076Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "fingerprint": "202ecd3c1786a123f2bb040f1eff6ab5e92755c5e562444972ec2fd2130d8a1d",
+          "url": "https://docs.example.com/bioinformatics",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic bioinformatics laboratory reference",
+          "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+          "provider": "search",
+          "query_fingerprint": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:40:54.57037507Z"
+        },
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "5a886a6f-0680-4b3f-9bc3-b5f22b8c82d1",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 146,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.571074119Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "fingerprint": "97b5fad90ff75f83a3ff42af713b0cf083d53869106800c7a8e0c99a2491632f",
+          "url": "https://reference.example.net/bioinformatics",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic bioinformatics reference",
+          "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+          "provider": "search",
+          "query_fingerprint": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:40:54.570864064Z"
+        },
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "6dae046f-5ab4-4610-bf75-2ed261cead7b",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 147,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.571439757Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "fingerprint": "35f7cefeae7f8855414cae30bbb8947ec60e65785e9ea4d6b6de39b43359ec82",
+          "url": "https://reference.example.net/chemistry",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic chemistry reference",
+          "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+          "provider": "search",
+          "query_fingerprint": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:40:54.571231797Z"
+        },
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "9aabda10-0898-4f03-88da-d3c69553365b",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 148,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.571876165Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "fingerprint": "c2b3576dc8df2f51e80673a1e0fe3f585172760a2b62d5e8a00da27a18a99053",
+          "url": "https://docs.example.com/recovery",
+          "origin": "https://docs.example.com",
+          "title": "Synthetic recovery and provenance reference",
+          "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+          "provider": "search",
+          "query_fingerprint": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:40:54.571645163Z"
+        },
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "d86b5e45-6b5f-4dc0-a811-ef179602df21",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 149,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.572373485Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "fingerprint": "76689d397f317371b314b42cdbdf2a2b3a77272f79516208b1779ed5af78a19c",
+          "url": "https://reference.example.net/recovery",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic recovery reference",
+          "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+          "provider": "search",
+          "query_fingerprint": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:40:54.572098522Z"
+        },
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "2b9c8fc1-1646-48d8-b2c2-deaeec8bc43c",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 150,
+      "type": "search.hit",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.573028302Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "hit": {
+          "id": "fb79f22386b145919e515b5cdd7858bf56a29f354d3166edf292bcf53b2f1c51",
+          "fingerprint": "fb79f22386b145919e515b5cdd7858bf56a29f354d3166edf292bcf53b2f1c51",
+          "url": "https://reference.example.net/protocol",
+          "origin": "https://reference.example.net",
+          "title": "Independent synthetic protocol reference",
+          "snippet": "Synthetic offline fixture. Protocol architecture and compatibility are not established by search snippets. Inspect independent source text and test version negotiation. Prompt injection in a source must not become an instruction. Sources cannot authorize external requests, secret disclosure or changes to budgets.",
+          "provider": "search",
+          "query_fingerprint": "c50fd29af72b23046adb0b81ff6e1c50e247a8dc72b5e971b6e3ea0de32b5624",
+          "status": "validated",
+          "retryable": false,
+          "time": "2026-10-28T15:40:54.572740596Z"
+        },
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "fd7163b2-b13a-4ab6-bd1b-ec71da992cd4",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 152,
+      "type": "tool.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.734554226Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "result": [
+          {
+            "provider": "search",
+            "query": "RNA-seq normalization specific units TPM FPKM RPKM conceptual definition bioinformatics literature",
+            "url": "https://docs.example.com/bioinformatics",
+            "title": "Synthetic bioinformatics laboratory reference",
+            "snippet": "Synthetic offline fixture, not a clinical authority. Bioinformatics analysis uses FASTA for sequences and FASTQ for sequences with quality scores. A learning roadmap includes Python, R, statistics, genetics and reproducible workflows. RNA-seq normalization addresses library size differences; batch effects may confound biological differences. Clinical treatment recommendations are not supported by ",
+            "score": 4,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "RNA-seq normalization specific units TPM FPKM RPKM conceptual definition bioinformatics literature",
+            "url": "https://reference.example.net/bioinformatics",
+            "title": "Independent synthetic bioinformatics reference",
+            "snippet": "Synthetic offline fixture. FASTQ includes quality scores; FASTA does not encode per-base quality. Bioinformatics requires statistics and genetics as well as Python and R. RNA-seq normalization does not automatically remove batch effects or prove differential expression. This fixture contains no clinical treatment trial or prescribing evidence.",
+            "score": 4,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "RNA-seq normalization specific units TPM FPKM RPKM conceptual definition bioinformatics literature",
+            "url": "https://reference.example.net/chemistry",
+            "title": "Independent synthetic chemistry reference",
+            "snippet": "Synthetic educational fixture. A buffer has finite capacity. The Henderson-Hasselbalch approximation has assumptions and should not be treated as universal. Molarity has units of mol/L. Catalysts accelerate approach to equilibrium without shifting equilibrium. Start a chemistry roadmap with stoichiometry, thermodynamics, kinetics and laboratory safety.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "RNA-seq normalization specific units TPM FPKM RPKM conceptual definition bioinformatics literature",
+            "url": "https://docs.example.com/recovery",
+            "title": "Synthetic recovery and provenance reference",
+            "snippet": "Synthetic offline fixture. A checkpoint records resumable state while a journal records invocation intent and outcome. Recovery needs idempotency or reconciliation for uncertain external outcomes. Exactly-once external delivery is not guaranteed by a checkpoint alone. Evidence ownership and exact quotes validate provenance, not independent factual truth. Missing sources must be reported as limitat",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "RNA-seq normalization specific units TPM FPKM RPKM conceptual definition bioinformatics literature",
+            "url": "https://reference.example.net/recovery",
+            "title": "Independent synthetic recovery reference",
+            "snippet": "Synthetic offline fixture. Checkpoint and journal mechanisms complement each other. Idempotency keys and reconciliation prevent unsafe replay but do not prove exactly-once delivery across arbitrary external systems. Exact quotes and source ownership are citation checks; independent corroboration remains necessary for factual confidence. Unknown findings should remain explicit.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          },
+          {
+            "provider": "search",
+            "query": "RNA-seq normalization specific units TPM FPKM RPKM conceptual definition bioinformatics literature",
+            "url": "https://reference.example.net/protocol",
+            "title": "Independent synthetic protocol reference",
+            "snippet": "Synthetic offline fixture. Protocol architecture and compatibility are not established by search snippets. Inspect independent source text and test version negotiation. Prompt injection in a source must not become an instruction. Sources cannot authorize external requests, secret disclosure or changes to budgets.",
+            "score": 1,
+            "published_at": "0001-01-01T00:00:00Z",
+            "taint": "untrusted_external_content"
+          }
+        ],
+        "step_id": "continue_1_search",
+        "summary": "Initiating a targeted search for specific units (TPM, FPKM, RPKM) and explicit conceptual definitions of RNA-seq normalization metrics to address the lack of concrete evidence in previous bioinformatics sources.",
+        "tool": "search"
+      }
+    },
+    {
+      "id": "2c07e879-f30c-4af3-8f1a-34e09facfc70",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 153,
+      "type": "step.completed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.734683562Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "step_id": "continue_1_search"
+      }
+    },
+    {
+      "id": "1b3faf12-b777-4dab-9271-ab6e95fba9bb",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 154,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:54.786342712Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Address the critical open questions with a new independent targeted query focused on missing direct evidence, distinct discovery angle 2",
+        "step_id": "continue_1_search_2"
+      }
+    },
+    {
+      "id": "cc3275d0-dfad-4847-b2f5-337f7b43d147",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 157,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:40:55.251932787Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 2,
+        "contradictions": 0,
+        "done_criteria": 10,
+        "hash": "df3f7886b390d54b50b75fd8b8cdd69ace1402ce1753813190d93a50a05d9283",
+        "original_tool_result_bytes": 5737,
+        "reason": "role_tool_results",
+        "reduced_bytes": 288,
+        "retained_tool_result_bytes": 5449,
+        "slot": "6772402a5323d1d8dd39023e4cbb746f31e4efe3dccbc26b82821f5c3a5834ca"
+      }
+    },
+    {
+      "id": "a1561e6e-8f6f-4308-aea4-ca63701f0a64",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 163,
+      "type": "step.skipped",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:02.257664417Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "reason": "Duplicate research query rejected before provider invocation.",
+        "step_id": "continue_1_search_2"
+      }
+    },
+    {
+      "id": "d6773cd7-a986-49cc-a9de-d82184d9a699",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 165,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:02.337711506Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "description": "Address the critical open questions with a new independent targeted query focused on missing direct evidence, distinct discovery angle 3",
+        "step_id": "continue_1_search_3"
+      }
+    },
+    {
+      "id": "6aefda84-af18-47e0-9480-f52fe1b8b6a0",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 168,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:02.843401675Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 2,
+        "contradictions": 0,
+        "done_criteria": 10,
+        "hash": "8e9e85ce25e040382f51b1a652cf811799cf26e6dac0ae0deabb3a2c2432f272",
+        "original_tool_result_bytes": 5737,
+        "reason": "role_tool_results",
+        "reduced_bytes": 288,
+        "retained_tool_result_bytes": 5449,
+        "slot": "c3bd711ac8f23c0b46123bdf3d135be8ca3d865fcbae03887aea0b67cb207b1f"
+      }
+    },
+    {
+      "id": "a91f28a3-0505-4307-b8ba-3a0829ebe16d",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 174,
+      "type": "step.skipped",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:09.907328401Z",
+      "stage": "search",
+      "visibility": "user",
+      "payload": {
+        "reason": "Duplicate research query rejected before provider invocation.",
+        "step_id": "continue_1_search_3"
+      }
+    },
+    {
+      "id": "a7ff0a3e-0098-4798-a6c8-17df6954a407",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 176,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:10.023863855Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "running"
+      }
+    },
+    {
+      "id": "574a1666-1235-4cac-9611-c09921d61a1e",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 177,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:10.024757572Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Inspect a different new source addressing the critical open questions, source 1",
+        "step_id": "continue_1_fetch"
+      }
+    },
+    {
+      "id": "260a8e84-db9e-4443-a3cc-1fc4aec2aa79",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 180,
+      "type": "step.skipped",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:10.214018333Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "reason": "no unused approved source URL remained and the collected evidence already meets the source threshold",
+        "step_id": "continue_1_fetch"
+      }
+    },
+    {
+      "id": "e576562b-b7a8-4d33-9f14-b6135443ea73",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 182,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:10.320932966Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Inspect a different new source addressing the critical open questions, source 2",
+        "step_id": "continue_1_fetch_2"
+      }
+    },
+    {
+      "id": "eca8c68e-7af3-4046-adec-4772cb516de7",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 185,
+      "type": "step.skipped",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:10.590108054Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "reason": "no unused approved source URL remained and the collected evidence already meets the source threshold",
+        "step_id": "continue_1_fetch_2"
+      }
+    },
+    {
+      "id": "b205afe7-10ab-412a-a111-8a05f5ce1976",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 187,
+      "type": "step.started",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:10.752107267Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "description": "Inspect a different new source addressing the critical open questions, source 3",
+        "step_id": "continue_1_fetch_3"
+      }
+    },
+    {
+      "id": "a6086937-fb7f-478c-858b-6ca4d64ec23c",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 190,
+      "type": "step.skipped",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:10.989831339Z",
+      "stage": "fetch",
+      "visibility": "user",
+      "payload": {
+        "reason": "no unused approved source URL remained and the collected evidence already meets the source threshold",
+        "step_id": "continue_1_fetch_3"
+      }
+    },
+    {
+      "id": "cec6dcfe-d0de-4cd4-a925-c8b555328df7",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 193,
+      "type": "task.status_changed",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:11.243720849Z",
+      "stage": "verification",
+      "visibility": "user",
+      "payload": {
+        "from": "running",
+        "to": "verifying"
+      }
+    },
+    {
+      "id": "94b825b0-ba98-4f6a-bc95-dc3360f5c2d6",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 195,
+      "type": "context.compacted",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:11.752369951Z",
+      "visibility": "user",
+      "payload": {
+        "accepted_evidence": 2,
+        "contradictions": 0,
+        "done_criteria": 10,
+        "hash": "14d281615d75ff62c6608609eb03488d891c8a507029acd913955e4477cc8f2c",
+        "original_tool_result_bytes": 5737,
+        "reason": "role_tool_results",
+        "reduced_bytes": 288,
+        "retained_tool_result_bytes": 5449,
+        "slot": "09403378dd5db6d539d7e223cbe98186a5d97e5553a78911940474059dc078b4"
+      }
+    },
+    {
+      "id": "328a383f-0e9d-427d-81ca-58f4d7c6f426",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "seq": 201,
+      "type": "run.paused",
+      "schema_version": 1,
+      "created_at": "2026-10-28T15:41:19.840533594Z",
+      "visibility": "user",
+      "payload": {
+        "pause_reason": "manual",
+        "resource_probe_attempts": 0,
+        "resource_reason": "high_model_rss",
+        "resume_after": "2026-10-28T15:41:24.749959012Z",
+        "status": "paused"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "76811623-ff97-41d5-8493-0f3f00ce233d",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "step_id": "search_1",
+      "position": 0,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for definitions and units of RNA-seq normalization methods in bioinformatics literature.. User request: Research why RNA-seq normalization and chemical molarity are different concepts with different units. Compare imported bioinformatics and chemistry evidence and state limits.",
+      "dependencies": [],
+      "expected_output": "List of sources defining RNA-seq normalization units (e.g., TPM, FPKM, RPKM) and their conceptual basis.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:39:40.898093632Z",
+      "updated_at": "2026-10-28T15:39:45.159283204Z"
+    },
+    {
+      "id": "c1a9ca43-7e72-4724-8cac-596fe7e70d43",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "step_id": "search_2",
+      "position": 1,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for definitions, units, and limits of chemical molarity in chemistry literature.. User request: Research why RNA-seq normalization and chemical molarity are different concepts with different units. Compare imported bioinformatics and chemistry evidence and state limits.",
+      "dependencies": [],
+      "expected_output": "List of sources defining molarity (mol/L) and any specific limits or contexts mentioned.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:39:40.898945038Z",
+      "updated_at": "2026-10-28T15:39:49.840988335Z"
+    },
+    {
+      "id": "323b9780-8946-458f-a235-e4217cd40d89",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "step_id": "search_3",
+      "position": 2,
+      "kind": "search",
+      "description": "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): Search for comparative discussions or potential confusion between RNA-seq normalization and chemical concentration/molarity.. User request: Research why RNA-seq normalization and chemical molarity are different concepts with different units. Compare imported bioinformatics and chemistry evidence and state limits.",
+      "dependencies": [],
+      "expected_output": "Sources that explicitly contrast or compare the two concepts.",
+      "success_criteria": [
+        "The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."
+      ],
+      "status": "skipped",
+      "attempts": 0,
+      "created_at": "2026-10-28T15:39:40.900486302Z",
+      "updated_at": "2026-10-28T15:39:49.862965634Z"
+    },
+    {
+      "id": "bd2469f8-fada-4049-93bd-787e031e3882",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "step_id": "fetch_1",
+      "position": 3,
+      "kind": "fetch",
+      "description": "Inspect distinct approved source 1 for the exact user request",
+      "dependencies": [
+        "search_1",
+        "search_2",
+        "search_3"
+      ],
+      "expected_output": "Source text with stored evidence ID",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:39:40.900729751Z",
+      "updated_at": "2026-10-28T15:39:55.229043432Z"
+    },
+    {
+      "id": "70c5ebbc-05ec-4adf-b742-c5ae95f4ae57",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "step_id": "fetch_2",
+      "position": 4,
+      "kind": "fetch",
+      "description": "Inspect distinct approved source 2 for the exact user request",
+      "dependencies": [
+        "search_1",
+        "search_2",
+        "search_3"
+      ],
+      "expected_output": "Source text with stored evidence ID",
+      "success_criteria": [
+        "An approved source was inspected and its text was stored as task-owned evidence."
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:39:40.900793447Z",
+      "updated_at": "2026-10-28T15:40:00.559094695Z"
+    },
+    {
+      "id": "71bd51cd-7547-48ca-8014-2de1bd46c07a",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "step_id": "continue_1_search",
+      "position": 5,
+      "kind": "search",
+      "description": "Address the critical open questions with a new independent targeted query focused on missing direct evidence, distinct discovery angle 1",
+      "dependencies": null,
+      "expected_output": "",
+      "success_criteria": [
+        "A new targeted discovery query is recorded"
+      ],
+      "status": "completed",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:40:47.646438636Z",
+      "updated_at": "2026-10-28T15:40:54.734170734Z"
+    },
+    {
+      "id": "b3d1f41a-67a1-45d6-94d4-dd3db0dd2cb9",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "step_id": "continue_1_search_2",
+      "position": 6,
+      "kind": "search",
+      "description": "Address the critical open questions with a new independent targeted query focused on missing direct evidence, distinct discovery angle 2",
+      "dependencies": null,
+      "expected_output": "",
+      "success_criteria": [
+        "A new targeted discovery query is recorded"
+      ],
+      "status": "skipped",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:40:47.646438636Z",
+      "updated_at": "2026-10-28T15:41:02.257861028Z"
+    },
+    {
+      "id": "4178d253-aacb-49c4-844b-1b4e95ad6a78",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "step_id": "continue_1_search_3",
+      "position": 7,
+      "kind": "search",
+      "description": "Address the critical open questions with a new independent targeted query focused on missing direct evidence, distinct discovery angle 3",
+      "dependencies": null,
+      "expected_output": "",
+      "success_criteria": [
+        "A new targeted discovery query is recorded"
+      ],
+      "status": "skipped",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:40:47.646438636Z",
+      "updated_at": "2026-10-28T15:41:09.907851705Z"
+    },
+    {
+      "id": "cb7dfe80-4460-4a28-9b94-839ca3899110",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "step_id": "continue_1_fetch",
+      "position": 8,
+      "kind": "fetch",
+      "description": "Inspect a different new source addressing the critical open questions, source 1",
+      "dependencies": [
+        "continue_1_search",
+        "continue_1_search_2",
+        "continue_1_search_3"
+      ],
+      "expected_output": "Task-owned extracted evidence",
+      "success_criteria": [
+        "New source evidence is stored"
+      ],
+      "status": "skipped",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:40:47.646438636Z",
+      "updated_at": "2026-10-28T15:41:10.214659434Z"
+    },
+    {
+      "id": "3b83ef2d-2920-4d43-8af9-3800dd64a9d9",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "step_id": "continue_1_fetch_2",
+      "position": 9,
+      "kind": "fetch",
+      "description": "Inspect a different new source addressing the critical open questions, source 2",
+      "dependencies": [
+        "continue_1_search",
+        "continue_1_search_2",
+        "continue_1_search_3"
+      ],
+      "expected_output": "Task-owned extracted evidence",
+      "success_criteria": [
+        "New source evidence is stored"
+      ],
+      "status": "skipped",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:40:47.646438636Z",
+      "updated_at": "2026-10-28T15:41:10.620367405Z"
+    },
+    {
+      "id": "1b1dba2b-fa12-44bb-9f57-f6808ba25c9c",
+      "task_id": "a132b21d-0afa-421d-abb8-a4d173b178c5",
+      "step_id": "continue_1_fetch_3",
+      "position": 10,
+      "kind": "fetch",
+      "description": "Inspect a different new source addressing the critical open questions, source 3",
+      "dependencies": [
+        "continue_1_search",
+        "continue_1_search_2",
+        "continue_1_search_3"
+      ],
+      "expected_output": "Task-owned extracted evidence",
+      "success_criteria": [
+        "New source evidence is stored"
+      ],
+      "status": "skipped",
+      "attempts": 1,
+      "created_at": "2026-10-28T15:40:47.646438636Z",
+      "updated_at": "2026-10-28T15:41:10.990073655Z"
+    }
+  ],
+  "inference_summaries_complete": true,
+  "inference_summaries": [
+    {
+      "seq": 8,
+      "summary": {
+        "invocation_id": "invocation-a8602810fe8457d31fa81cdba7676dbc98ef34f689e8a90c0dba500eb4fc544f",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:39:40.88471097Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:39:40.88471097Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:20.517016431Z"
+          },
+          "prompt_tokens": {
+            "value": 791,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:40.884669368Z"
+          },
+          "output_tokens": {
+            "value": 574,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:40.884669368Z"
+          },
+          "total_tokens": {
+            "value": 1365,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:40.884669368Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:40.884669368Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 893.1898508339074,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:39:40.884669368Z"
+          },
+          "output_tokens_per_second": {
+            "value": 29.487365742585364,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:39:40.884669368Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:39:20.517016431Z"
+          },
+          "prompt_ms": {
+            "value": 885.59,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:39:40.884669368Z"
+          },
+          "generation_ms": {
+            "value": 19465.964,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:39:40.884669368Z"
+          },
+          "context_tokens": {
+            "value": 1365,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:40.884669368Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:20.517016431Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 18,
+      "summary": {
+        "invocation_id": "invocation-ff00a5eaecb0eaab9fc69edcc830f4afc0202603392e29f82b97a04a685229a7",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:39:45.034078284Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:39:45.034078284Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:41.03905257Z"
+          },
+          "prompt_tokens": {
+            "value": 1117,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:45.034042213Z"
+          },
+          "output_tokens": {
+            "value": 69,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:45.034042213Z"
+          },
+          "total_tokens": {
+            "value": 1186,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:45.034042213Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:45.034042213Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 845.5292922533772,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:39:45.034042213Z"
+          },
+          "output_tokens_per_second": {
+            "value": 30.22607792107664,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:39:45.034042213Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:39:41.03905257Z"
+          },
+          "prompt_ms": {
+            "value": 1321.066,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:39:45.034042213Z"
+          },
+          "generation_ms": {
+            "value": 2282.797,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:39:45.034042213Z"
+          },
+          "context_tokens": {
+            "value": 1186,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:45.034042213Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:41.03905257Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 49,
+      "summary": {
+        "invocation_id": "invocation-8abae69de0ebf90668e810d342ab0f32ef9b2f7197064dcc52e2e486e39627d3",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:39:49.564138632Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:39:49.564138632Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:45.330527177Z"
+          },
+          "prompt_tokens": {
+            "value": 1802,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:49.564107371Z"
+          },
+          "output_tokens": {
+            "value": 67,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:49.564107371Z"
+          },
+          "total_tokens": {
+            "value": 1869,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:49.564107371Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 397,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:49.564107371Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 918.298853008785,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:39:49.564107371Z"
+          },
+          "output_tokens_per_second": {
+            "value": 29.41447631256613,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:39:49.564107371Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:39:45.330527177Z"
+          },
+          "prompt_ms": {
+            "value": 1530.003,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:39:49.564107371Z"
+          },
+          "generation_ms": {
+            "value": 2277.79,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:39:49.564107371Z"
+          },
+          "context_tokens": {
+            "value": 1869,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:49.564107371Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:45.330527177Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 75,
+      "summary": {
+        "invocation_id": "invocation-d2b496b1cbd27c444b7a9571df29aa3b3c26e95f24002f6494a39f4efcc62a2d",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:39:54.843947415Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:39:54.843947415Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:50.110535804Z"
+          },
+          "prompt_tokens": {
+            "value": 1995,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:54.843916714Z"
+          },
+          "output_tokens": {
+            "value": 64,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:54.843916714Z"
+          },
+          "total_tokens": {
+            "value": 2059,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:54.843916714Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:54.843916714Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 988.4331031448522,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:39:54.843916714Z"
+          },
+          "output_tokens_per_second": {
+            "value": 29.056529932992916,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:39:54.843916714Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:39:50.110535804Z"
+          },
+          "prompt_ms": {
+            "value": 2018.346,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:39:54.843916714Z"
+          },
+          "generation_ms": {
+            "value": 2202.603,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:39:54.843916714Z"
+          },
+          "context_tokens": {
+            "value": 2059,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:54.843916714Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:50.110535804Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 97,
+      "summary": {
+        "invocation_id": "invocation-0bea728df9afb5679f0b26b3228539a6d79bda75bdbf1ba6b56b867534b45980",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:40:00.241131807Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:40:00.241131807Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:55.622495114Z"
+          },
+          "prompt_tokens": {
+            "value": 2241,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:00.240962228Z"
+          },
+          "output_tokens": {
+            "value": 64,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:00.240962228Z"
+          },
+          "total_tokens": {
+            "value": 2305,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:00.240962228Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 348,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:00.240962228Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 973.321829659939,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:40:00.240962228Z"
+          },
+          "output_tokens_per_second": {
+            "value": 29.238897784925065,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:40:00.240962228Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:39:55.622495114Z"
+          },
+          "prompt_ms": {
+            "value": 1944.886,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:40:00.240962228Z"
+          },
+          "generation_ms": {
+            "value": 2188.865,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:40:00.240962228Z"
+          },
+          "context_tokens": {
+            "value": 2305,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:00.240962228Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:39:55.622495114Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 118,
+      "summary": {
+        "invocation_id": "invocation-82306a5b8149d39826cf80fb3965dc26379b3f1cd44ab1f8480ab45f8b9d279c",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:40:47.34796142Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:40:47.34796142Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:00.92970752Z"
+          },
+          "prompt_tokens": {
+            "value": 5005,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:47.347925334Z"
+          },
+          "output_tokens": {
+            "value": 1219,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:47.347925334Z"
+          },
+          "total_tokens": {
+            "value": 6224,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:47.347925334Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 0,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:47.347925334Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 1038.6610175682092,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:40:47.347925334Z"
+          },
+          "output_tokens_per_second": {
+            "value": 29.66212575777728,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:40:47.347925334Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:40:00.92970752Z"
+          },
+          "prompt_ms": {
+            "value": 4818.704,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:40:47.347925334Z"
+          },
+          "generation_ms": {
+            "value": 41096.178,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:40:47.347925334Z"
+          },
+          "context_tokens": {
+            "value": 6224,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:47.347925334Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:00.92970752Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 130,
+      "summary": {
+        "invocation_id": "invocation-6bb4bdcf930300069fb1da563531a27aae46ca9ac41864f59afc10a856d3459d",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:40:54.086104702Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:40:54.086104702Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:48.499503814Z"
+          },
+          "prompt_tokens": {
+            "value": 2182,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:54.086061193Z"
+          },
+          "output_tokens": {
+            "value": 95,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:54.086061193Z"
+          },
+          "total_tokens": {
+            "value": 2277,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:54.086061193Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 397,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:54.086061193Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 951.7553354284393,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:40:54.086061193Z"
+          },
+          "output_tokens_per_second": {
+            "value": 29.686739277306017,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:40:54.086061193Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:40:48.499503814Z"
+          },
+          "prompt_ms": {
+            "value": 1875.482,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:40:54.086061193Z"
+          },
+          "generation_ms": {
+            "value": 3200.082,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:40:54.086061193Z"
+          },
+          "context_tokens": {
+            "value": 2277,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:54.086061193Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:48.499503814Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 161,
+      "summary": {
+        "invocation_id": "invocation-4e7801636bb1b95f074442f9af5f16813283d08b811a14150ac8229f6a5c93f6",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:41:02.043186341Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:41:02.043186341Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:55.728339237Z"
+          },
+          "prompt_tokens": {
+            "value": 2935,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:02.043151757Z"
+          },
+          "output_tokens": {
+            "value": 95,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:02.043151757Z"
+          },
+          "total_tokens": {
+            "value": 3030,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:02.043151757Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 397,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:02.043151757Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 942.4132760706492,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:41:02.043151757Z"
+          },
+          "output_tokens_per_second": {
+            "value": 29.853945073140594,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:41:02.043151757Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:40:55.728339237Z"
+          },
+          "prompt_ms": {
+            "value": 2693.086,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:41:02.043151757Z"
+          },
+          "generation_ms": {
+            "value": 3182.159,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:41:02.043151757Z"
+          },
+          "context_tokens": {
+            "value": 3030,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:02.043151757Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:40:55.728339237Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 172,
+      "summary": {
+        "invocation_id": "invocation-1bc9375e1a185ce51a28a4b2168ccfabb12d202ade4c8787e7de919e2aed3eaf",
+        "invocation_status": "completed",
+        "snapshot_at": "2026-10-28T15:41:09.714431888Z",
+        "inference": {
+          "status": "completed",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:41:09.714431888Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:03.367423Z"
+          },
+          "prompt_tokens": {
+            "value": 2929,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:09.714396503Z"
+          },
+          "output_tokens": {
+            "value": 95,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:09.714396503Z"
+          },
+          "total_tokens": {
+            "value": 3024,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:09.714396503Z"
+          },
+          "cached_prompt_tokens": {
+            "value": 397,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:09.714396503Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": 967.2469256866326,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:41:09.714396503Z"
+          },
+          "output_tokens_per_second": {
+            "value": 29.57012508474175,
+            "source": "exact",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:41:09.714396503Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:41:03.367423Z"
+          },
+          "prompt_ms": {
+            "value": 2617.739,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:41:09.714396503Z"
+          },
+          "generation_ms": {
+            "value": 3212.702,
+            "source": "exact",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:41:09.714396503Z"
+          },
+          "context_tokens": {
+            "value": 3024,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:09.714396503Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:03.367423Z"
+          }
+        }
+      }
+    },
+    {
+      "seq": 199,
+      "summary": {
+        "invocation_id": "invocation-d6f204748bf1a0f460e4f9440f05e42eb54769a2e19537396bf3ca1a4d382f32",
+        "invocation_status": "failed",
+        "snapshot_at": "2026-10-28T15:41:19.540141748Z",
+        "inference": {
+          "status": "cancelled",
+          "source": "llama.cpp",
+          "updated_at": "2026-10-28T15:41:19.540141748Z",
+          "requested_tokens": {
+            "value": 4096,
+            "source": "exact",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:19.540141748Z"
+          },
+          "prompt_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:19.540141748Z"
+          },
+          "output_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:19.540141748Z"
+          },
+          "total_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:19.540141748Z"
+          },
+          "cached_prompt_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:19.540141748Z"
+          },
+          "prompt_tokens_per_second": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:41:19.540141748Z"
+          },
+          "output_tokens_per_second": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens/s",
+            "updated_at": "2026-10-28T15:41:19.540141748Z"
+          },
+          "ttft_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:41:19.540141748Z"
+          },
+          "prompt_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:41:19.540141748Z"
+          },
+          "generation_ms": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "ms",
+            "updated_at": "2026-10-28T15:41:19.540141748Z"
+          },
+          "context_tokens": {
+            "value": null,
+            "source": "unavailable",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:19.540141748Z"
+          },
+          "context_window": {
+            "value": 32768,
+            "source": "estimated",
+            "unit": "tokens",
+            "updated_at": "2026-10-28T15:41:19.540141748Z"
+          }
+        }
+      }
+    }
+  ]
+}
