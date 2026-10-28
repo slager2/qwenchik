@@ -193,6 +193,26 @@ func assertResearchRunRequest(t *testing.T, request llm.ChatRequest, model domai
 	}
 }
 
+func TestResearchSessionModelClientDisablesPromptCacheWithoutChangingChatPolicy(t *testing.T) {
+	modelProfile := domain.ModelProfileSnapshot{Model: "saved-model", BaseURL: "http://127.0.0.1:8000/v1", ContextLength: 32768, MaxOutputTokens: 256, TopP: 0.8}
+	model := &researchRunModel{}
+	researchClient := &sessionModelClient{inner: model, model: modelProfile, disablePromptCache: true}
+	if _, err := researchClient.Complete(context.Background(), llm.ChatRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	chatClient := &sessionModelClient{inner: model, model: modelProfile}
+	if _, err := chatClient.Complete(context.Background(), llm.ChatRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	calls := model.calls()
+	if len(calls) != 2 || calls[0].request.CachePrompt == nil || *calls[0].request.CachePrompt {
+		t.Fatalf("research request did not explicitly disable prompt cache: %#v", calls)
+	}
+	if calls[1].request.CachePrompt != nil {
+		t.Fatalf("chat request unexpectedly inherited research cache policy: %#v", calls[1].request.CachePrompt)
+	}
+}
+
 func assertResearchRunTerminal(t *testing.T, f *researchRunFixture, status domain.TaskStatus, code string) {
 	t.Helper()
 	run, err := f.store.GetRun(context.Background(), f.turn.Run.ID)

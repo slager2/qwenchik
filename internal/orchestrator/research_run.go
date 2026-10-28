@@ -24,10 +24,11 @@ type researchExecutionRepository interface {
 type researchExecutionKey struct{}
 
 type sessionModelClient struct {
-	inner llm.Client
-	repo  researchExecutionRepository
-	runID string
-	model domain.ModelProfileSnapshot
+	inner              llm.Client
+	repo               researchExecutionRepository
+	runID              string
+	model              domain.ModelProfileSnapshot
+	disablePromptCache bool
 }
 
 func (c *sessionModelClient) prepare(ctx context.Context, request llm.ChatRequest) (llm.ChatRequest, error) {
@@ -46,6 +47,10 @@ func (c *sessionModelClient) prepare(ctx context.Context, request llm.ChatReques
 	request.ContextWindow = c.model.ContextLength
 	request.ContextOutputReserve = c.model.MaxOutputTokens
 	request.RuntimeFingerprint = c.model.RuntimeFingerprint
+	if c.disablePromptCache {
+		cachePrompt := false
+		request.CachePrompt = &cachePrompt
+	}
 	if c.model.ThinkingPinned {
 		v := c.model.ThinkingEnabled
 		request.EnableThinking = &v
@@ -129,7 +134,13 @@ func (w *Worker) researchExecutor(ctx context.Context, taskID string) (context.C
 	options := w.options
 	options.MaxSteps, options.MaxSearchQueries = session.Budget.MaxSteps, session.Budget.MaxSearchQueries
 	options.MaxFetchBytes = session.Policy.TaskFetchBudgetBytes
-	runner, err := w.modelExecutor(ctx, model, &sessionModelClient{inner: newInvocationClient(w.repo, w.client, taskID, w.recordRunTelemetry(taskID)), repo: repo, runID: taskID, model: model}, options)
+	runner, err := w.modelExecutor(ctx, model, &sessionModelClient{
+		inner:              newInvocationClient(w.repo, w.client, taskID, w.recordRunTelemetry(taskID)),
+		repo:               repo,
+		runID:              taskID,
+		model:              model,
+		disablePromptCache: true,
+	}, options)
 	if err != nil {
 		return ctx, nil, err
 	}

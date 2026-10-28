@@ -162,6 +162,7 @@ func renderRuntimeUnits(options runtimeOptions) (map[string][]byte, error) {
 		options.ModelBin, "-m", options.ModelPath, "--device", options.Device, "-ngl", "99",
 		"--host", "127.0.0.1", "--port", "8000", "--alias", options.Model,
 		"--jinja", "--parallel", "1", "-c", context, "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0",
+		"--cache-ram", "0", "--ctx-checkpoints", "0", "--no-cache-idle-slots",
 		"--reasoning", "off", "--no-webui",
 	) + "\nRestart=on-failure\nRestartSec=5s\nTimeoutStopSec=30s\n\n[Install]\nWantedBy=default.target\n"
 	app := "[Unit]\nDescription=Qwenchik API and worker\nWants=qwenchik-model.service\nAfter=qwenchik-model.service\nStartLimitIntervalSec=0\n\n[Service]\nType=exec\nWorkingDirectory=" + workingDirectory + "\nEnvironment=\"PATH=/usr/local/bin:/usr/bin:/bin\"\nEnvironment=\"LLM_CONTEXT_LENGTH=" + context + "\"\nEnvironment=\"SEARCH_ENABLE_DDG=false\"\nExecStartPre=" + execLine(

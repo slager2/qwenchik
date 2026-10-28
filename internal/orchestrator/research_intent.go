@@ -116,6 +116,27 @@ func duplicateResearchQuery(query string, previous []string) bool {
 	return false
 }
 
+// diversifyResearchQuery is a bounded backend safety net for small models that
+// repeat an already-used query. It changes the retrieval facet without
+// changing the user's subject, and it never returns a query already present in
+// the current attempt history.
+func diversifyResearchQuery(query string, previous []string) string {
+	base := strings.TrimSpace(query)
+	if base == "" {
+		return ""
+	}
+	for _, suffix := range []string{"independent sources", "official documentation", "specific evidence"} {
+		candidate := strings.TrimSpace(base + " " + suffix)
+		if len(candidate) > 1000 {
+			candidate = strings.TrimSpace(truncateRunes(base, 1000-len(suffix)-1) + " " + suffix)
+		}
+		if !duplicateResearchQuery(candidate, previous) {
+			return candidate
+		}
+	}
+	return ""
+}
+
 func requiredPlanSteps(taskTitle, goal string) int {
 	return len(requiredResearchKinds(taskTitle, goal))
 }

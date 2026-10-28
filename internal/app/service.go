@@ -128,6 +128,9 @@ func (s *Service) QueueMessageTask(ctx context.Context, taskID, idempotencyKey s
 		return domain.Task{}, err
 	}
 	if message.Status == domain.StatusInbox || message.Status == domain.StatusPaused || message.Status == domain.StatusFailed {
+		if err := ensurePausedTaskCanResume(message); err != nil {
+			return domain.Task{}, err
+		}
 		return s.repo.QueueTask(ctx, taskID, idempotencyKey)
 	}
 	return message, nil
@@ -148,7 +151,17 @@ func (s *Service) ResumeTask(ctx context.Context, id, idempotencyKey string) (do
 	if task.Status != domain.StatusPaused {
 		return domain.Task{}, fmt.Errorf("%w: only paused tasks can be resumed", sqlite.ErrConflict)
 	}
+	if err := ensurePausedTaskCanResume(task); err != nil {
+		return domain.Task{}, err
+	}
 	return s.repo.QueueTask(ctx, id, idempotencyKey)
+}
+
+func ensurePausedTaskCanResume(task domain.Task) error {
+	if task.Status == domain.StatusPaused && task.PauseReason != "" && task.PauseReason != "manual" {
+		return fmt.Errorf("%w: paused task requires its recovery path (%s)", sqlite.ErrConflict, task.PauseReason)
+	}
+	return nil
 }
 
 func (s *Service) CancelTask(ctx context.Context, id string) (domain.Task, error) {

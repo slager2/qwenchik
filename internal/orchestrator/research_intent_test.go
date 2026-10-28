@@ -144,6 +144,17 @@ func TestConditionalRetryRequiresSuccessfulZeroHitResult(t *testing.T) {
 	}
 }
 
+func TestDiversifyResearchQueryNeverRepeatsCurrentHistory(t *testing.T) {
+	previous := []string{"roadmap bioinformatics chemistry informatics", "roadmap bioinformatics chemistry informatics independent sources"}
+	got := diversifyResearchQuery(previous[0], previous)
+	if got == "" || duplicateResearchQuery(got, previous) || got == previous[0] {
+		t.Fatalf("diversified query=%q history=%v", got, previous)
+	}
+	if diversifyResearchQuery("", previous) != "" {
+		t.Fatal("empty query was diversified")
+	}
+}
+
 func TestResearchPlanValidationBoundsIndependentSearchesAndFetches(t *testing.T) {
 	registry := registerPlanValidationResearchTools(t)
 	worker := New(nil, &scriptedLLM{}, registry, Options{MaxSteps: 12})

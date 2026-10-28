@@ -84,6 +84,44 @@ func TestSoakAcceptanceRequiresWholeObservedIntervalAndKnownMetrics(t *testing.T
 	}
 }
 
+func TestSoakAcceptanceDoesNotTreatCounterRegressionAsProgress(t *testing.T) {
+	now := time.Now()
+	policy := resources.DefaultPolicy()
+	ram, rss, vram, temp := int64(8<<30), int64(1<<30), int64(4000), float64(60)
+	tracker := soakTracker{receipt: soakReceipt{RequiredSeconds: 30, Reasons: []string{}}}
+	base := labRuntime{RunID: "run", ResearchSessionID: "session", Status: domain.StatusRunning, BundleHash: "fixed"}
+	base.Runtime.Policy, base.Runtime.ActiveRunID, base.Runtime.Sleep.Active = &policy, base.RunID, true
+	for i, completed := range []int{5, 3, 2} {
+		r := base
+		r.CompletedSteps = completed
+		r.Cursor = int64(i + 1)
+		at := now.Add(time.Duration(i) * 15 * time.Second)
+		r.Runtime.Resources = resources.Snapshot{SnapshotAt: at, FreeRAMBytes: &ram, RSSBytes: &rss, GPUFreeVRAMMB: &vram, GPUTempC: &temp, PowerSource: resources.PowerAC}
+		tracker.sample(at, r)
+	}
+	if receipt := tracker.finish(now.Add(30 * time.Second)); receipt.ProgressObserved || receipt.Accepted {
+		t.Fatalf("counter regression was accepted as progress: %+v", receipt)
+	}
+}
+
+func TestSoakAcceptanceRejectsRunThatEndsPaused(t *testing.T) {
+	now := time.Now()
+	policy := resources.DefaultPolicy()
+	ram, rss, vram, temp := int64(8<<30), int64(1<<30), int64(4000), float64(60)
+	tracker := soakTracker{receipt: soakReceipt{RequiredSeconds: 15, Reasons: []string{}}}
+	for i, status := range []domain.TaskStatus{domain.StatusRunning, domain.StatusPaused} {
+		r := labRuntime{RunID: "run", ResearchSessionID: "session", Status: status, BundleHash: "fixed"}
+		r.Runtime.Policy, r.Runtime.ActiveRunID, r.Runtime.Sleep.Active = &policy, r.RunID, true
+		r.CompletedSteps = i + 1
+		at := now.Add(time.Duration(i) * 15 * time.Second)
+		r.Runtime.Resources = resources.Snapshot{SnapshotAt: at, FreeRAMBytes: &ram, RSSBytes: &rss, GPUFreeVRAMMB: &vram, GPUTempC: &temp, PowerSource: resources.PowerAC}
+		tracker.sample(at, r)
+	}
+	if receipt := tracker.finish(now.Add(15 * time.Second)); receipt.Accepted {
+		t.Fatalf("paused run was accepted: %+v", receipt)
+	}
+}
+
 func TestLabHTTPRejectsRedirectsAndForeignRuntime(t *testing.T) {
 	foreignCalls := 0
 	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { foreignCalls++ }))

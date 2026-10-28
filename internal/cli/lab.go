@@ -136,7 +136,9 @@ type soakTracker struct {
 	bundle                  string
 	lastSample              time.Time
 	lastWorkAt              time.Time
-	lastWork                string
+	lastWork                [5]int
+	hasWorkSample           bool
+	lastStatus              domain.TaskStatus
 	workProgress            bool
 	policy                  resources.Policy
 }
@@ -160,18 +162,25 @@ func (s *soakTracker) sample(now time.Time, r labRuntime) {
 	}
 	s.receipt.Samples++
 	s.lastSample = now
+	s.lastStatus = r.Status
 	if r.ResearchSessionID == "" {
 		add("research_session_missing")
 	}
 	if r.Runtime.ActiveRunID != r.RunID || r.RunID == "" {
 		add("selected_run_not_active_in_worker")
 	}
-	work := fmt.Sprintf("%d:%d:%d:%d:%d", r.CompletedSteps, r.Counters.Evidence, r.Counters.Fetches, r.Counters.SearchQueries, r.Counters.LLMCalls)
-	if s.lastWork != "" && s.lastWork != work {
-		s.workProgress = true
-		s.lastWorkAt = now
+	work := [5]int{r.CompletedSteps, r.Counters.Evidence, r.Counters.Fetches, r.Counters.SearchQueries, r.Counters.LLMCalls}
+	if s.hasWorkSample {
+		for index := range work {
+			if work[index] > s.lastWork[index] {
+				s.workProgress = true
+				s.lastWorkAt = now
+				break
+			}
+		}
 	}
 	s.lastWork = work
+	s.hasWorkSample = true
 	if now.Sub(s.lastWorkAt) > 10*time.Minute {
 		add("no_research_work_for_ten_minutes")
 	}
@@ -244,6 +253,9 @@ func (s *soakTracker) finish(now time.Time) soakReceipt {
 	}
 	if !s.receipt.ProgressObserved {
 		s.receipt.Reasons = append(s.receipt.Reasons, "no_durable_progress")
+	}
+	if s.lastStatus == domain.StatusQueued || s.lastStatus == domain.StatusPlanning || s.lastStatus == domain.StatusPaused {
+		s.receipt.Reasons = append(s.receipt.Reasons, "run_not_actively_researching")
 	}
 	s.receipt.Accepted = len(s.receipt.Reasons) == 0 && s.receipt.Samples >= 2
 	return s.receipt

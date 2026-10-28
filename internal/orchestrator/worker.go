@@ -477,6 +477,8 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 			code = "research_plan_incomplete"
 		} else if errors.Is(err, errResearchPlanBudget) {
 			code = "research_plan_budget"
+		} else if errors.Is(err, errDuplicateSearchQuery) {
+			code = "duplicate_search_query"
 		} else if errors.Is(err, errUnsupportedStep) {
 			code = "unsupported_step"
 		} else if errors.Is(err, errInputBudgetExceeded) {
@@ -943,13 +945,18 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 			}
 			query := strings.TrimSpace(arguments.Query)
 			if duplicateResearchQuery(query, state.SearchQueryHistory) && !pendingSearchQueryMatches(state, step.ID, query) {
-				if session, ok := ctx.Value(researchExecutionKey{}).(domain.ResearchSession); ok && session.Policy.AdaptiveEnabled {
-					if err := w.skipPlanStep(ctx, task.ID, &stage, step, "Duplicate research query rejected before provider invocation.", &state); err != nil {
-						return err
+				if diversified := diversifyResearchQuery(query, state.SearchQueryHistory); diversified != "" {
+					arguments.Query = diversified
+					encoded, encodeErr := json.Marshal(arguments)
+					if encodeErr != nil {
+						return fmt.Errorf("%w: diversified search query could not be encoded", errInvalidModelOutput)
 					}
-					continue
+					decision.ToolCall.Arguments = encoded
+					query = diversified
+					decision.Summary = "Search query was automatically diversified after a repeated query."
+				} else {
+					return fmt.Errorf("%w: search query repeats an earlier research question", errDuplicateSearchQuery)
 				}
-				return fmt.Errorf("%w: search query repeats an earlier research question", errInvalidModelOutput)
 			}
 			if !duplicateResearchQuery(query, state.SearchQueryHistory) {
 				if len(state.LifetimeSearchQueryHistory) == 0 {
@@ -4113,6 +4120,7 @@ var (
 	errSearchUnavailable      = errors.New("web search is not configured")
 	errResearchPlanIncomplete = errors.New("research plan is incomplete")
 	errResearchPlanBudget     = errors.New("research plan exceeds configured step budget")
+	errDuplicateSearchQuery   = errors.New("duplicate research query")
 )
 
 func publicError(code string) string {
@@ -4177,6 +4185,8 @@ func publicError(code string) string {
 		return "План исследования не прошёл проверку: не удалось согласовать поиск, загрузку источников и зависимости шагов без потери исходных направлений исследования."
 	case "research_plan_budget":
 		return "Лимита MAX_STEPS недостаточно для требуемого числа источников. Увеличьте лимит или сузьте задачу."
+	case "duplicate_search_query":
+		return "Модель повторила уже использованный поисковый запрос. Исследование остановлено до нового отличающегося направления; сохранённое состояние можно повторить."
 	case "fetch_budget_exceeded", "task_fetch_budget_exceeded":
 		return "Исчерпан лимит загружаемых данных для этой задачи."
 	case "source_response_too_large":

@@ -47,6 +47,7 @@ func TestRuntimeRenderingEscapesSystemdInputsAndKeepsSecretsOut(t *testing.T) {
 		`"--device" "Vulkan2"`, `"-ngl" "99"`, `"-c" "16384"`,
 		`"--host" "127.0.0.1" "--port" "8000"`,
 		`"--parallel" "1"`, `"-ctk" "q8_0" "-ctv" "q8_0"`,
+		`"--cache-ram" "0" "--ctx-checkpoints" "0" "--no-cache-idle-slots"`,
 	} {
 		if !strings.Contains(model, want) {
 			t.Errorf("model unit missing %q: %s", want, model)

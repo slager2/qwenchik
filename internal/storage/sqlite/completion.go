@@ -204,7 +204,7 @@ func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary
 			return stateErr
 		}
 		if len(adaptive.Rounds) > 0 && adaptive.Rounds[len(adaptive.Rounds)-1].Number == session.CurrentRound+1 {
-			if adaptive.Rounds[len(adaptive.Rounds)-1].AssessmentHash != adaptiveAssessmentHash(verdict, missing, criteria) {
+			if adaptive.Rounds[len(adaptive.Rounds)-1].AssessmentHash != adaptiveAssessmentHash(verdict, summary, missing, supplementaryMissing, criteria) {
 				return ErrConflict
 			}
 			return tx.Commit()
@@ -217,7 +217,7 @@ func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary
 	}
 	completion.Verdict = verdict
 	state["completion"] = completion
-	if err := assessAdaptiveRound(ctx, tx, taskID, state, verdict, missing, criteria); err != nil {
+	if err := assessAdaptiveRound(ctx, tx, taskID, state, verdict, summary, missing, supplementaryMissing, criteria); err != nil {
 		return err
 	}
 	payload := map[string]any{

@@ -56,7 +56,7 @@ func TestManualVerificationRetryUsesFreshPlanObservations(t *testing.T) {
 	}{
 		{name: "repeat original query", budget: 4},
 		{name: "old retry does not suppress new broadening", emptyInitial: true, budget: 6},
-		{name: "same attempt duplicate rejected", duplicateFacet: true, budget: 4, wantCode: "invalid_model_output"},
+		{name: "same attempt duplicate is diversified", duplicateFacet: true, budget: 4},
 		{name: "lifetime query budget enforced", emptyInitial: true, budget: 5, wantCode: "search_budget_exceeded"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
@@ -202,6 +202,10 @@ func TestManualVerificationRetryUsesFreshPlanObservations(t *testing.T) {
 				key := state.conditionalSearchRetryResultKey("search_1")
 				if state.ToolResults[key] == nil || state.HistoricalObservations[0].ToolResults[conditionalSearchRetryResultKey("search_1")] == nil || len(search.queries) != 6 || search.queries[4] != broadenResearchQuery(search.queries[3]) {
 					t.Fatalf("retry was not scoped to attempt: queries=%v state=%#v", search.queries, state)
+				}
+			} else if scenario.duplicateFacet {
+				if len(search.queries) < 4 || search.queries[2] == search.queries[3] {
+					t.Fatalf("duplicate query was not diversified: %v", search.queries)
 				}
 			} else if search.queries[0] != search.queries[2] {
 				t.Fatalf("original query was not repeated: %v", search.queries)

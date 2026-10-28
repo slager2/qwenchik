@@ -15,8 +15,8 @@ import (
 
 type adaptiveMutationKey struct{}
 
-func adaptiveAssessmentHash(verdict string, missing []string, criteria []domain.VerificationCriterionResult) string {
-	raw, _ := json.Marshal([]any{verdict, missing, criteria})
+func adaptiveAssessmentHash(verdict, summary string, missing, supplementaryMissing []string, criteria []domain.VerificationCriterionResult) string {
+	raw, _ := json.Marshal([]any{verdict, summary, missing, supplementaryMissing, criteria})
 	hash := sha256.Sum256(raw)
 	return hex.EncodeToString(hash[:])
 }
@@ -101,7 +101,7 @@ func (s *Store) StopAdaptiveResearch(ctx context.Context, taskID, reason string)
 	return tx.Commit()
 }
 
-func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state map[string]any, verdict string, missing []string, criteria []domain.VerificationCriterionResult) error {
+func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state map[string]any, verdict, summary string, missing, supplementaryMissing []string, criteria []domain.VerificationCriterionResult) error {
 	session, err := researchSession(ctx, tx, taskID)
 	if err == ErrNotFound {
 		return nil
@@ -250,7 +250,7 @@ func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state m
 	}
 	adaptive.CurrentRound = number
 	round := domain.ResearchRound{Number: number, Goal: session.Goal, AcceptedEvidence: evidence, CriticalMissing: append([]string{}, missing...), OpenQuestions: append([]string{}, missing...), Frontier: append([]string{}, adaptive.Frontier...), Outcome: verdict}
-	round.AssessmentHash = adaptiveAssessmentHash(verdict, missing, criteria)
+	round.AssessmentHash = adaptiveAssessmentHash(verdict, summary, missing, supplementaryMissing, criteria)
 	round.Coverage = append([]domain.VerificationCriterionResult{}, criteria...)
 	encoded, _ := json.Marshal(state["completed_steps"])
 	_ = json.Unmarshal(encoded, &round.CompletedSteps)
