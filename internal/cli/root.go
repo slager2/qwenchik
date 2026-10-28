@@ -21,6 +21,7 @@ import (
 	"github.com/slager2/qwenchik/internal/app"
 	"github.com/slager2/qwenchik/internal/config"
 	"github.com/slager2/qwenchik/internal/domain"
+	"github.com/slager2/qwenchik/internal/llm"
 	"github.com/slager2/qwenchik/internal/orchestrator"
 	"github.com/slager2/qwenchik/internal/policy"
 	"github.com/slager2/qwenchik/internal/providers/research"
@@ -639,15 +640,31 @@ func serve(parent context.Context) error {
 	if err != nil {
 		return err
 	}
-	configuredContext := cfg.LLMContextLength
-	cfg.LLMContextLength = effectiveModelContext(parent, cfg)
-	if cfg.LLMContextLength != configuredContext {
-		logger.Warn("LLM context capped to server-reported runtime capacity", "configured_context", configuredContext, "effective_context", cfg.LLMContextLength)
+	contextObservation, contextErr := discoverModelContext(parent, cfg)
+	if contextErr != nil {
+		logger.Warn("Model context is not matched; inference will remain blocked", "context_status", contextObservation.ContextStatus, "reason", contextObservation.Reason)
+	} else {
+		cfg.RuntimeModelFingerprint = contextObservation.RuntimeFingerprint
+		cfg.ServerReportedContext = *contextObservation.ServerReportedContext
 	}
 	if cfg.LLMContextLength-cfg.LLMMaxOutputTokens < 2304 {
 		return errors.New("server-reported model context is too small for output and prompt reserves; lower LLM_MAX_OUTPUT_TOKENS")
 	}
 	model := configuredModelClient(cfg)
+	contextProbe := func(ctx context.Context, snapshot domain.ModelProfileSnapshot) (domain.ContextBudget, error) {
+		return model.CheckContextRequest(ctx, llm.ChatRequest{Model: snapshot.Model, BaseURL: snapshot.BaseURL, ContextWindow: snapshot.ContextLength, ContextOutputReserve: snapshot.MaxOutputTokens, RuntimeFingerprint: snapshot.RuntimeFingerprint, Messages: []llm.ChatMessage{{Role: "user", Content: "Context admission dependency check; no generation."}}})
+	}
+	deps.app.SetModelSnapshotResolver(func(ctx context.Context, snapshot domain.ModelProfileSnapshot) (domain.ModelProfileSnapshot, error) {
+		snapshot.RuntimeFingerprint = "" // a fresh turn pins the currently observed deployment, not startup identity.
+		d, err := contextProbe(ctx, snapshot)
+		if err != nil {
+			return snapshot, err
+		}
+		snapshot.ConfiguredContext = cfg.LLMContextLength
+		snapshot.ServerReportedContext = *d.ServerReportedContext
+		snapshot.RuntimeFingerprint = d.RuntimeFingerprint
+		return snapshot, nil
+	})
 	registry := tools.NewRegistry(policy.NewWorkingSetEvaluator())
 	searchProvider, err := configuredSearchProvider(cfg)
 	if err != nil {
@@ -713,10 +730,12 @@ func serve(parent context.Context) error {
 	}
 	deps.store.FreezeRefinement()
 	deps.worker = orchestrator.New(deps.store, model, registry, orchestrator.Options{
-		ReportArtifacts:   artifactStore,
-		OnBundleChanged:   func(active domain.AgentBundle) { setResearchRunDefaultsForServe(deps.app, cfg, &active) },
-		RuntimeBundleHash: bundle.BundleHash,
-		ResourceMonitor:   resourceMonitor, ResourcePolicy: cfg.ResourcePolicy,
+		HoldResourcePauses: cfg.ContextProbeEnabled,
+		ContextProbe:       contextProbe,
+		ReportArtifacts:    artifactStore,
+		OnBundleChanged:    func(active domain.AgentBundle) { setResearchRunDefaultsForServe(deps.app, cfg, &active) },
+		RuntimeBundleHash:  bundle.BundleHash,
+		ResourceMonitor:    resourceMonitor, ResourcePolicy: cfg.ResourcePolicy,
 		KeepAwake: cfg.KeepAwake, SleepProvider: keepawake.NewProvider(),
 		MaxSteps: cfg.MaxSteps, MaxSearchQueries: cfg.MaxSearchQueries, MaxFetchBytes: cfg.MaxFetchBytes,
 		TaskTimeout:     time.Duration(cfg.TaskTimeoutSeconds) * time.Second,
@@ -732,6 +751,25 @@ func serve(parent context.Context) error {
 	apiServer := api.New(deps.app, deps.worker, deps.store.Ping, cfg.LLMBaseURL, cfg.LLMAPIKey, searchURL, logger)
 	apiServer.SetLLMModel(cfg.LLMModel)
 	apiServer.SetLLMClient(model)
+	apiServer.SetContextProbe(cfg.ContextProbeEnabled, cfg.LLMContextLength, cfg.LLMMaxOutputTokens, func(ctx context.Context) error {
+		if !cfg.ResourcePolicy.Enabled {
+			return errors.New("context experiment requires resource guard")
+		}
+		snapshot, violation, err := resourceMonitor.Check(ctx)
+		if err != nil {
+			return err
+		}
+		if violation != nil {
+			return violation
+		}
+		if snapshot.FreeRAMBytes == nil || snapshot.GPUFreeVRAMMB == nil || snapshot.GPUTempC == nil || (cfg.ResourcePolicy.ModelRSSMaxBytes > 0 && snapshot.ModelRSSBytes == nil) {
+			return errors.New("context resource measurement unavailable")
+		}
+		return nil
+	})
+	apiServer.SetContextInspector(func(ctx context.Context, session, output int, identity string) (domain.ContextBudget, error) {
+		return model.InspectContext(ctx, llm.ChatRequest{ContextWindow: session, ContextOutputReserve: output, RuntimeFingerprint: identity})
+	})
 	apiServer.SetWorkerHeartbeat(deps.worker.Heartbeat)
 	apiServer.SetRuntimeStatus(deps.worker.RuntimeStatus)
 	if telemetryWorker, ok := any(deps.worker).(interface {
@@ -1070,7 +1108,15 @@ func doctor(ctx context.Context, cfg config.Config) doctorReport {
 	checks["llm"] = doctorModel(ctx, cfg, appResponding)
 	limits := safeDoctorLimits(cfg.ResearchLimits())
 	limits["configured"] = true
-	return makeDoctorReport(checks, limits, pdfRuntime)
+	d, err := discoverModelContext(ctx, cfg)
+	if err != nil {
+		checks["context_budget"] = doctorCheck{Status: "error", Message: "context_mismatch or unverified server capacity"}
+	} else {
+		checks["context_budget"] = doctorCheck{Status: "ok", Message: "Configured and server context match"}
+	}
+	report := makeDoctorReport(checks, limits, pdfRuntime)
+	report.ContextBudget = &d
+	return report
 }
 
 func printValue(out output, value any) {

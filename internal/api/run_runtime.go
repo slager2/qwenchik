@@ -83,6 +83,7 @@ func (s *Server) runRuntime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result["runtime"] = s.runtimeHealth()
+	s.addRunContext(r.Context(), result)
 	s.addRunTelemetry(result, r.PathValue("runID"))
 	s.sanitizeRunInferenceSummary(result)
 	writeJSON(w, 200, result)

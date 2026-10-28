@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/slager2/qwenchik/internal/domain"
@@ -15,6 +16,7 @@ type Policy struct {
 	MinFreeVRAMMB             int64         `json:"min_free_vram_mb"`
 	GPUTempMaxC               float64       `json:"gpu_temp_max_c"`
 	ProcessRSSMaxBytes        int64         `json:"process_rss_max_bytes"`
+	ModelRSSMaxBytes          int64         `json:"model_rss_max_bytes,omitempty"`
 	RecoveryRAMMarginPercent  int           `json:"recovery_ram_margin_percent"`
 	RecoveryVRAMMarginPercent int           `json:"recovery_vram_margin_percent"`
 	RecoveryGPUTempMarginC    float64       `json:"recovery_gpu_temp_margin_c"`
@@ -31,6 +33,7 @@ func DefaultPolicy() Policy {
 		Enabled:                   true,
 		MinFreeRAMBytes:           512 << 20,
 		MinFreeVRAMMB:             256,
+		ModelRSSMaxBytes:          3 << 30,
 		GPUTempMaxC:               85,
 		ProcessRSSMaxBytes:        2 << 30,
 		RecoveryRAMMarginPercent:  10,
@@ -46,7 +49,7 @@ func DefaultPolicy() Policy {
 }
 
 func (p Policy) Validate() error {
-	if p.MinFreeRAMBytes < 0 || p.MinFreeVRAMMB < 0 || p.ProcessRSSMaxBytes < 0 || p.GPUTempMaxC < 0 || math.IsNaN(p.GPUTempMaxC) || math.IsInf(p.GPUTempMaxC, 0) {
+	if p.MinFreeRAMBytes < 0 || p.MinFreeVRAMMB < 0 || p.ProcessRSSMaxBytes < 0 || p.ModelRSSMaxBytes < 0 || p.GPUTempMaxC < 0 || math.IsNaN(p.GPUTempMaxC) || math.IsInf(p.GPUTempMaxC, 0) {
 		return errors.New("resource thresholds must be finite and nonnegative")
 	}
 	if p.RecoveryRAMMarginPercent < 0 || p.RecoveryRAMMarginPercent > 100 || p.RecoveryVRAMMarginPercent < 0 || p.RecoveryVRAMMarginPercent > 100 || p.RecoveryRSSMarginPercent < 0 || p.RecoveryRSSMarginPercent > 100 {
@@ -93,6 +96,7 @@ type Snapshot struct {
 	SnapshotAt         time.Time                     `json:"snapshot_at"`
 	FreeRAMBytes       *int64                        `json:"free_ram_bytes"`
 	RSSBytes           *int64                        `json:"rss_bytes"`
+	ModelRSSBytes      *int64                        `json:"model_rss_bytes"`
 	HeapAllocBytes     *uint64                       `json:"heap_alloc_bytes"`
 	GPUFreeVRAMMB      *int64                        `json:"gpu_free_vram_mb"`
 	GPUTempC           *float64                      `json:"gpu_temp_c"`
@@ -120,6 +124,8 @@ func Check(s Snapshot, p Policy) *Violation {
 	}
 	code, message := "", ""
 	switch {
+	case s.ModelRSSBytes != nil && p.ModelRSSMaxBytes > 0 && *s.ModelRSSBytes > p.ModelRSSMaxBytes:
+		code, message = "high_model_rss", "local model RSS exceeds configured maximum"
 	case s.FreeRAMBytes != nil && *s.FreeRAMBytes < p.MinFreeRAMBytes:
 		code, message = "low_ram", "available RAM below configured minimum"
 	case s.RSSBytes != nil && p.ProcessRSSMaxBytes > 0 && *s.RSSBytes > p.ProcessRSSMaxBytes:
@@ -132,6 +138,9 @@ func Check(s Snapshot, p Policy) *Violation {
 		code, message = "llama_unhealthy", "local llama health check failed"
 	}
 	if code == "" {
+		if p.ModelRSSMaxBytes > 0 && s.ModelRSSBytes == nil {
+			return &Violation{"telemetry_unavailable", "local model RSS guard cannot be evaluated", clone(s)}
+		}
 		return nil
 	}
 	return &Violation{code, message, clone(s)}
@@ -160,6 +169,8 @@ func CheckRecovery(s Snapshot, p Policy, pauseReason string) *Violation {
 	}
 	code, message := "", ""
 	switch {
+	case s.ModelRSSBytes != nil && p.ModelRSSMaxBytes > 0 && *s.ModelRSSBytes > recoveryMaximum(p.ModelRSSMaxBytes, p.RecoveryRSSMarginPercent):
+		code, message = "high_model_rss", "local model RSS has not cleared the recovery margin"
 	case s.FreeRAMBytes != nil && *s.FreeRAMBytes < recoveryMinimum(p.MinFreeRAMBytes, p.RecoveryRAMMarginPercent):
 		code, message = "low_ram", "available RAM has not cleared the recovery margin"
 	case s.RSSBytes != nil && p.ProcessRSSMaxBytes > 0 && *s.RSSBytes > recoveryMaximum(p.ProcessRSSMaxBytes, p.RecoveryRSSMarginPercent):
@@ -179,8 +190,8 @@ func CheckRecovery(s Snapshot, p Policy, pauseReason string) *Violation {
 
 func recoveryPauseReasonKnown(reason string) bool {
 	switch reason {
-	case "low_ram", "high_rss", "low_vram", "gpu_temperature", "llama_unhealthy",
-		"telemetry_unavailable", "model_oom", "model_resource", "model_timeout":
+	case "low_ram", "high_rss", "high_model_rss", "low_vram", "gpu_temperature", "llama_unhealthy",
+		"telemetry_unavailable", "model_oom", "model_resource", "model_timeout", "context_mismatch", "context_unverified", "context_capacity":
 		return true
 	default:
 		return false
@@ -191,8 +202,9 @@ func missingRecoveryMetric(s Snapshot, p Policy, pauseReason string) bool {
 	if s.LlamaHealthy == nil {
 		return true
 	}
-	if pauseReason == "telemetry_unavailable" || pauseReason == "model_oom" || pauseReason == "model_resource" || pauseReason == "model_timeout" {
+	if pauseReason == "telemetry_unavailable" || pauseReason == "model_oom" || pauseReason == "model_resource" || pauseReason == "model_timeout" || strings.HasPrefix(pauseReason, "context_") {
 		return p.MinFreeRAMBytes > 0 && s.FreeRAMBytes == nil ||
+			p.ModelRSSMaxBytes > 0 && s.ModelRSSBytes == nil ||
 			p.ProcessRSSMaxBytes > 0 && s.RSSBytes == nil ||
 			p.MinFreeVRAMMB > 0 && s.GPUFreeVRAMMB == nil ||
 			p.GPUTempMaxC > 0 && s.GPUTempC == nil || s.LlamaHealthy == nil
@@ -202,6 +214,8 @@ func missingRecoveryMetric(s Snapshot, p Policy, pauseReason string) bool {
 		return s.FreeRAMBytes == nil
 	case "high_rss":
 		return s.RSSBytes == nil
+	case "high_model_rss":
+		return s.ModelRSSBytes == nil
 	case "low_vram":
 		return s.GPUFreeVRAMMB == nil
 	case "gpu_temperature":

@@ -280,6 +280,7 @@ func ValidateResearchPolicy(policy domain.ResearchPolicy) error {
 
 func (c Config) ResearchModelSnapshot() domain.ModelProfileSnapshot {
 	return domain.ModelProfileSnapshot{
+		ConfiguredContext: c.LLMContextLength, ServerReportedContext: c.ServerReportedContext, RuntimeFingerprint: c.RuntimeModelFingerprint, ThinkingPinned: true, ThinkingEnabled: c.LLMEnableThinking,
 		Version: 1, Model: c.LLMModel, BaseURL: c.LLMBaseURL,
 		ContextLength: c.LLMContextLength, MaxOutputTokens: c.LLMMaxOutputTokens,
 		Temperature: c.LLMTemperature, TopP: c.LLMTopP, StopSequences: []string{},

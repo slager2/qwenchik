@@ -24,14 +24,15 @@ import (
 const maxResponseBytes = 4 << 20
 
 type Client struct {
-	baseURL          string
-	apiKey           string
-	model            string
-	thinking         bool
-	httpClient       *http.Client
-	defaultMaxTokens int
-	temperature      float64
-	topP             float64
+	baseURL           string
+	apiKey            string
+	model             string
+	thinking          bool
+	httpClient        *http.Client
+	defaultMaxTokens  int
+	temperature       float64
+	topP              float64
+	contextConfigured int
 }
 
 func New(baseURL, apiKey, model string, timeout time.Duration, maxTokens int, temperature, topP float64, thinking bool) *Client {
@@ -62,6 +63,7 @@ type requestBody struct {
 	StreamOptions      *streamOptions    `json:"stream_options,omitempty"`
 	ResponseFormat     *responseFormat   `json:"response_format,omitempty"`
 	ChatTemplateKwargs map[string]bool   `json:"chat_template_kwargs,omitempty"`
+	CachePrompt        *bool             `json:"cache_prompt,omitempty"`
 }
 
 type streamOptions struct {
@@ -480,6 +482,11 @@ func (c *Client) send(ctx context.Context, request llm.ChatRequest, stream bool)
 		return nil, err
 	}
 	for attempt := 0; attempt < 2; attempt++ {
+		if c.contextConfigured > 0 {
+			if _, err := c.CheckContextRequest(ctx, request); err != nil {
+				return nil, err
+			}
+		}
 		body, err := json.Marshal(c.prepare(request, stream))
 		if err != nil {
 			return nil, fmt.Errorf("encode LLM request: %w", err)
@@ -552,6 +559,10 @@ func (c *Client) prepare(request llm.ChatRequest, stream bool) requestBody {
 		Temperature: temperature, TopP: topP, Stop: append([]string(nil), request.Stop...), Stream: stream,
 		ChatTemplateKwargs: map[string]bool{"enable_thinking": c.thinking},
 	}
+	if request.EnableThinking != nil {
+		body.ChatTemplateKwargs["enable_thinking"] = *request.EnableThinking
+	}
+	body.CachePrompt = request.CachePrompt
 	if stream {
 		body.StreamOptions = &streamOptions{IncludeUsage: true}
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -136,6 +137,12 @@ func modelResourceReason(err error) string {
 		return ""
 	}
 	switch {
+	case errors.Is(err, llm.ErrContextMismatch):
+		return "context_mismatch"
+	case errors.Is(err, llm.ErrContextUnverified):
+		return "context_unverified"
+	case errors.Is(err, llm.ErrContextBudget):
+		return "context_capacity"
 	case errors.Is(err, ErrRecoveryRequired), errors.Is(err, sqlite.ErrResearchBudgetExceeded):
 		return ""
 	case errors.Is(err, resources.ErrModelOOM):
@@ -162,6 +169,9 @@ func (w *Worker) persistResourcePause(ctx context.Context, task domain.Task, rea
 	}
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
+	if w.options.HoldResourcePauses {
+		writeCtx = sqlite.WithDiagnosticResourceHold(writeCtx)
+	}
 	if len(causes) > 0 {
 		var failure *research.FetchFailure
 		if errors.As(causes[0], &failure) {
@@ -211,6 +221,33 @@ func (w *Worker) probeResourcePauses(ctx context.Context) {
 			violation = &resources.Violation{Code: "telemetry_unavailable", Message: "resource telemetry probe failed", Snapshot: snapshot}
 		}
 		healthy := probeErr == nil && violation == nil
+		if healthy && w.options.ContextProbe != nil {
+			if reader, ok := w.repo.(interface {
+				GetRunModelSnapshot(context.Context, string) (domain.ModelProfileSnapshot, error)
+			}); ok {
+				if model, err := reader.GetRunModelSnapshot(ctx, task.ID); err == nil {
+					_, err = w.options.ContextProbe(ctx, model)
+					healthy = err == nil
+				} else {
+					healthy = false
+				}
+			} else {
+				healthy = false
+			}
+		}
+		if strings.HasPrefix(task.ResourceReason, "context_") {
+			healthy = false
+			if w.options.ContextProbe != nil {
+				if reader, ok := w.repo.(interface {
+					GetRunModelSnapshot(context.Context, string) (domain.ModelProfileSnapshot, error)
+				}); ok {
+					if model, err := reader.GetRunModelSnapshot(ctx, task.ID); err == nil {
+						_, err = w.options.ContextProbe(ctx, model)
+						healthy = probeErr == nil && violation == nil && err == nil && task.ResourceReason != "context_capacity"
+					}
+				}
+			}
+		}
 		reason := task.ResourceReason
 		if !healthy && violation != nil && violation.Code == "telemetry_unavailable" {
 			reason = "telemetry_unavailable"

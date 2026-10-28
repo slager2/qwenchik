@@ -201,7 +201,7 @@ func newLabBenchmarkCommand() *cobra.Command {
 	return cmd
 }
 
-func runLabCase(parent context.Context, client *labClient, c labBenchmarkCase, variant string, timeout time.Duration) (result labBenchmarkResult, resultErr error) {
+func runLabCase(parent context.Context, client *labClient, c labBenchmarkCase, variant string, timeout time.Duration, stopOnPause ...bool) (result labBenchmarkResult, resultErr error) {
 	result = labBenchmarkResult{Type: "lab_benchmark_case", CaseID: c.ID, Split: c.Split, Variant: variant, DatasetSHA256: labHash(labCasesJSON), CorpusSHA256: labHash(labCorpusJSON)}
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
@@ -223,6 +223,18 @@ func runLabCase(parent context.Context, client *labClient, c labBenchmarkCase, v
 		}
 		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		if len(stopOnPause) > 0 && stopOnPause[0] {
+			if result.RunID == "" {
+				result.ErrorCode = "context_cleanup_unconfirmed"
+				resultErr = errors.Join(resultErr, errors.New("diagnostic submission outcome unconfirmed; conversation retained"))
+				return
+			}
+			if err := client.request(cleanup, "POST", "/api/tasks/"+url.PathEscape(result.RunID)+"/pause", nil, nil); err != nil {
+				result.ErrorCode = "context_cleanup_unconfirmed"
+				resultErr = errors.Join(resultErr, errors.New("could not confirm diagnostic pause; checkpoint retained"))
+			}
+			return
+		}
 		var err error
 		if result.RunID != "" {
 			err = client.request(cleanup, "POST", "/api/runs/"+url.PathEscape(result.RunID)+"/cancel", nil, nil)
@@ -270,6 +282,10 @@ func runLabCase(parent context.Context, client *labClient, c labBenchmarkCase, v
 			terminal = true
 			break
 		}
+		if len(stopOnPause) > 0 && stopOnPause[0] && r.Status == domain.StatusPaused {
+			terminal = true
+			break
+		} // preserve the measured checkpoint, do not cancel/retry it.
 		select {
 		case <-ctx.Done():
 			result.ErrorCode = "benchmark_timeout"
@@ -309,7 +325,7 @@ func runLabCase(parent context.Context, client *labClient, c labBenchmarkCase, v
 		result.Sections = latest.Report.Sections
 		result.UnrepresentedCriteria = len(latest.Report.UnrepresentedCriteria)
 	}
-	result.ScoringComplete = true
+	result.ScoringComplete = latest.Status.Terminal()
 	return result, nil
 }
 

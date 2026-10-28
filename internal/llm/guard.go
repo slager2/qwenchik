@@ -1,10 +1,32 @@
 package llm
 
-import "context"
+import (
+	"context"
+	"github.com/slager2/qwenchik/internal/domain"
+)
 
 type GuardedClient struct {
 	client Client
 	slot   chan struct{}
+}
+
+// Metadata/template/tokenization do not run generation. Actual completion and its
+// final recount still execute inside this guard's one inference slot.
+func (g *GuardedClient) InspectContext(ctx context.Context, r ChatRequest) (domain.ContextBudget, error) {
+	if c, ok := g.client.(interface {
+		InspectContext(context.Context, ChatRequest) (domain.ContextBudget, error)
+	}); ok {
+		return c.InspectContext(ctx, r)
+	}
+	return domain.ContextBudget{}, ErrContextUnverified
+}
+func (g *GuardedClient) CheckContextRequest(ctx context.Context, r ChatRequest) (domain.ContextBudget, error) {
+	if c, ok := g.client.(interface {
+		CheckContextRequest(context.Context, ChatRequest) (domain.ContextBudget, error)
+	}); ok {
+		return c.CheckContextRequest(ctx, r)
+	}
+	return domain.ContextBudget{}, ErrContextUnverified
 }
 
 func NewGuardedClient(client Client) *GuardedClient {

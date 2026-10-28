@@ -76,33 +76,39 @@ type ArtifactReader interface {
 }
 
 type Server struct {
-	service           TaskService
-	worker            WorkerControl
-	dbPing            func(context.Context) error
-	llmURL            string
-	llmKey            string
-	llmModel          string
-	searchURL         string
-	tavilyConfigured  bool
-	ddgDisabled       bool
-	searchDiagnostics func() []research.ProviderOutcome
-	artifactReader    ArtifactReader
-	sandboxAvailable  bool
-	sandboxMessage    string
-	logger            *slog.Logger
-	client            *http.Client
-	llmProbeMu        sync.Mutex
-	llmProbeAt        time.Time
-	llmProbeError     error
-	llmClient         llm.Client
-	healthMu          sync.RWMutex
-	workerHeartbeat   func(context.Context) (time.Time, error)
-	runtimeStatus     func() map[string]any
-	telemetryMu       sync.RWMutex
-	runTelemetry      func(runID string) (domain.Telemetry, uint64, bool)
-	researchPolicy    map[string]any
-	pdfCheck          func(context.Context) error
-	fetchTempCheck    func(context.Context) error
+	service                   TaskService
+	worker                    WorkerControl
+	dbPing                    func(context.Context) error
+	llmURL                    string
+	llmKey                    string
+	llmModel                  string
+	searchURL                 string
+	tavilyConfigured          bool
+	ddgDisabled               bool
+	searchDiagnostics         func() []research.ProviderOutcome
+	artifactReader            ArtifactReader
+	sandboxAvailable          bool
+	sandboxMessage            string
+	logger                    *slog.Logger
+	client                    *http.Client
+	llmProbeMu                sync.Mutex
+	llmProbeAt                time.Time
+	llmProbeError             error
+	llmClient                 llm.Client
+	healthMu                  sync.RWMutex
+	workerHeartbeat           func(context.Context) (time.Time, error)
+	runtimeStatus             func() map[string]any
+	telemetryMu               sync.RWMutex
+	runTelemetry              func(runID string) (domain.Telemetry, uint64, bool)
+	researchPolicy            map[string]any
+	pdfCheck                  func(context.Context) error
+	fetchTempCheck            func(context.Context) error
+	contextInspector          func(context.Context, int, int, string) (domain.ContextBudget, error)
+	contextProbeEnabled       bool
+	contextProbeMu            sync.Mutex
+	contextProbeWindow        int
+	contextProbeOutput        int
+	contextProbeResourceCheck func(context.Context) error
 }
 
 func New(service TaskService, worker WorkerControl, dbPing func(context.Context) error, llmURL, llmKey, searchURL string, logger *slog.Logger) *Server {
@@ -132,6 +138,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/doctor", s.doctor)
+	mux.HandleFunc("POST /api/doctor/context-probe", s.contextProbe)
 	mux.HandleFunc("GET /api/providers", s.providers)
 	mux.HandleFunc("GET /api/approvals", s.pendingApprovals)
 	mux.HandleFunc("GET /api/approvals/{approvalID}", s.getApproval)
@@ -842,6 +849,13 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	checks := map[string]map[string]string{}
+	modelContext, hasContext := s.contextBudget(r.Context(), 0, 0, "")
+	if hasContext {
+		checks["context_budget"] = map[string]string{"status": "ok", "message": "Configured and server runtime context match"}
+		if modelContext.ContextStatus != "matched" {
+			checks["context_budget"] = map[string]string{"status": "error", "message": "context_mismatch or unverified server capacity; inference blocked"}
+		}
+	}
 	researchLimits, pdfRuntime, pdfReadiness := s.researchPolicyStatus(r.Context())
 	checks["pdf_extractor"] = pdfReadiness
 	s.healthMu.RLock()
@@ -974,7 +988,11 @@ func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {
 	if status == "error" {
 		code = http.StatusServiceUnavailable
 	}
-	writeJSON(w, code, map[string]any{"status": status, "checks": checks, "providers": providerHealth, "research_limits": researchLimits, "pdf_extractor": pdfRuntime, "runtime": s.runtimeHealth()})
+	result := map[string]any{"status": status, "checks": checks, "providers": providerHealth, "research_limits": researchLimits, "pdf_extractor": pdfRuntime, "runtime": s.runtimeHealth()}
+	if hasContext {
+		result["context_budget"] = modelContext
+	}
+	writeJSON(w, code, result)
 }
 
 func (s *Server) probeStructuredLLM(ctx context.Context) error {
@@ -1265,6 +1283,8 @@ func safePublicEvent(event domain.Event) domain.Event {
 
 func (s *Server) writeServiceError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, llm.ErrContextMismatch), errors.Is(err, llm.ErrContextUnverified):
+		writeError(w, http.StatusConflict, "context_mismatch", "Контекст модели не совпадает с настройками приложения или не подтверждён сервером. Проверьте diagnostics.", true)
 	case errors.Is(err, sqlite.ErrRefinementFrozen):
 		writeError(w, http.StatusConflict, "refinement_frozen", "Refinement заморожен на время работы исследовательской лаборатории.", false)
 	case errors.Is(err, sqlite.ErrWebDisabled):

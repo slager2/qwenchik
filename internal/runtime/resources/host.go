@@ -206,6 +206,7 @@ func (p *HostProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 		}
 	}
 	system.LlamaSlotsActive = unavailableMetric[int64](domain.MetricUnitSlots, updatedAt, metricError)
+	s.ModelRSSBytes = copyPtr(system.LlamaServerRSS.Value)
 	system.LlamaSlotsTotal = unavailableMetric[int64](domain.MetricUnitSlots, updatedAt, metricError)
 	system.LlamaHealth = unavailableMetric[string](domain.MetricUnitStatus, updatedAt, metricError)
 	stalenessWindow := p.policy.CheckInterval + 30*time.Second + p.policy.LlamaHealthTimeout + gpuProbeTimeout + 2*windowsProbeTimeout
@@ -821,8 +822,11 @@ func (p *HostProvider) scanLlamaServerRSS(updatedAt time.Time) domain.Metric[int
 		}
 		comm, readErr := p.readFile("/proc/"+pid+"/comm", 256)
 		if readErr != nil {
-			// Any unreadable or disappearing numeric entry could conceal or be
-			// the target, so uniqueness cannot be established safely.
+			if errors.Is(readErr, fs.ErrNotExist) {
+				continue
+			} // exited processes cannot conceal a currently live model.
+			// Other unreadable entries could conceal a live target; do not turn
+			// permission/collection failures into a fabricated unique process.
 			return unavailableMetric[int64](domain.MetricUnitBytes, updatedAt, metricErrorCode(readErr))
 		}
 		if parseLinuxProcessComm(comm) != "llama-server" {

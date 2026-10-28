@@ -51,12 +51,28 @@ type Repository interface {
 }
 
 type Service struct {
-	repo                Repository
-	researchMu          sync.RWMutex
-	researchRunDefaults *researchRunDefaults
+	repo                  Repository
+	researchMu            sync.RWMutex
+	researchRunDefaults   *researchRunDefaults
+	modelSnapshotResolver func(context.Context, domain.ModelProfileSnapshot) (domain.ModelProfileSnapshot, error)
 }
 
 func New(repo Repository) *Service { return &Service{repo: repo} }
+
+func (s *Service) InferenceSummaries(ctx context.Context, id string, after int64) ([]sqlite.InvocationSummaryRecord, error) {
+	if reader, ok := s.repo.(interface {
+		InferenceSummaries(context.Context, string, int64) ([]sqlite.InvocationSummaryRecord, error)
+	}); ok {
+		return reader.InferenceSummaries(ctx, id, after)
+	}
+	return nil, errors.New("inference summaries unavailable")
+}
+
+func (s *Service) SetModelSnapshotResolver(resolve func(context.Context, domain.ModelProfileSnapshot) (domain.ModelProfileSnapshot, error)) {
+	s.researchMu.Lock()
+	defer s.researchMu.Unlock()
+	s.modelSnapshotResolver = resolve
+}
 
 func (s *Service) CreateTask(ctx context.Context, title, description, idempotencyKey string) (domain.Task, error) {
 	description = strings.TrimSpace(description)

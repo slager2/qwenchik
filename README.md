@@ -125,7 +125,24 @@ An oversized or otherwise unusable search source receives a terminal source fail
 
 Check `/api/doctor` for `research_limits` and `pdf_extractor`: effective limits, isolated runtime availability and explicit fallback permission, without secrets or raw runtime errors. The integrated doctor reports task/source/PDF limits of 128/16/64 MiB (134,217,728 / 16,777,216 / 67,108,864 bytes), pages/text 20/50,000, extraction/download deadlines 30/120 seconds, memory/tmpfs 512/64 MiB, CPU/PIDs 1/32, and unsandboxed fallback false. Artifact cap is 67,108,864 bytes, sandbox-file cap 5,000,000 bytes, and fetch-temp task/global quotas 134,217,728 / 268,435,456 bytes. In the recorded environment `PDF_EXTRACTOR_IMAGE` was unset and isolated extraction was unavailable. Doctor checks runtime readiness, not PDF parsing. The [14-section repair report](docs/pdf-limits-repair.md) records the verified file-backed download and the `verification_incomplete` research result; it makes no claim that the PDF was parsed. Restart the app after configuration changes; for installed services, restart `qwenchik-app.service` and inspect the running API's effective policy, since process environment overrides `.env`.
 
-Set `LLM_CONTEXT_LENGTH` to the actual server context, not the model's training capacity. The example uses `32768`; if the local `/v1/models` metadata reports a lower runtime `n_ctx`, startup caps the budget to it and logs the mismatch. Byte budgeting remains an estimate, not exact tokenization. Tool-result compaction reserves IDs/URLs/titles and minimum snippets for every result before distributing remaining space; insufficient space raises a budget error rather than sending an empty evidence set to verification.
+Set `LLM_CONTEXT_LENGTH` to the actual single-slot server runtime, not training
+capacity. The source default is now 32768. Doctor/run diagnostics keep configured,
+server-reported and saved-session context distinct, with separate output and
+2048-token system reserves. Mismatch/unverified capacity blocks dispatch rather
+than silently adopting a configured number. Production admission freshly checks
+`/props` and matching model metadata, renders the complete request with
+`/apply-template`, and counts `/tokenize` tokens before generation. Existing byte
+compaction/persistence bounds remain separate resource limits. Saved context and
+thinking settings are not silently enlarged on recovery.
+
+`MODEL_RSS_MAX_BYTES` separately guards llama-server RSS (default 3 GiB); it is
+not the Go process RSS cap. Resource problems preserve checkpoints and use bounded
+recovery. `CONTEXT_PROBE_ENABLED=false` keeps the opt-in fixed synthetic load probe
+disabled for normal serving. `lab context-check` records one operator-configured
+rung through the existing shared guard and worker. See the measured
+[Phase 2 context report](docs/deep-research-phase2-context-ladder.md): 32K/64K load
+probes passed, 96K/128K hit the fixed 120s timeout, and multi-call research remained
+model-RSS-limited. These are not overnight or general 128K-support claims.
 
 The planner uses bounded structural/semantic validation and lossless facet normalization. New version-two sessions preserve substantive user-deliverable criteria independently of acquisition steps; report coverage cannot substitute “source stored” for those criteria. Saved version-one sessions retain their original budgets. New section reports have explicit section/paragraph/claim/byte budgets and at most one correction per section; byte exhaustion produces deterministic partial excerpts and bounded JSON/Markdown artifacts. A source list or same-model critic does not establish independent factual truth. See [Deep Research Phase 1](docs/deep-research-phase1-round-budgets.md).
 

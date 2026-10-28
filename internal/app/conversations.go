@@ -288,6 +288,32 @@ func (s *Service) SubmitTurn(ctx context.Context, in domain.SubmitTurn, key stri
 		}
 	}
 	in.Mode = mode
+	if replay, ok := s.repo.(interface {
+		ReplaySubmitTurn(context.Context, domain.SubmitTurn, string) (domain.SubmitResponse, bool, error)
+	}); ok {
+		if response, found, err := replay.ReplaySubmitTurn(ctx, in, key); err != nil || found {
+			return response, err
+		}
+	}
+	if in.ModelSnapshot != nil {
+		s.researchMu.RLock()
+		resolve := s.modelSnapshotResolver
+		s.researchMu.RUnlock()
+		if resolve != nil {
+			model, err := resolve(ctx, *in.ModelSnapshot)
+			if err != nil {
+				if replay, ok := s.repo.(interface {
+					ReplaySubmitTurn(context.Context, domain.SubmitTurn, string) (domain.SubmitResponse, bool, error)
+				}); ok {
+					if response, found, replayErr := replay.ReplaySubmitTurn(ctx, in, key); found || replayErr != nil {
+						return response, replayErr
+					}
+				}
+				return domain.SubmitResponse{}, err
+			}
+			in.ModelSnapshot = &model
+		}
+	}
 	if in.ResearchRunID != "" {
 		if in.Operation != "send" || mode != "chat" || len(in.ResearchRunID) > 128 {
 			return domain.SubmitResponse{}, domain.ErrInvalidConversation

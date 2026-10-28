@@ -30,7 +30,7 @@ func standardResearchSessionDefaults() (domain.ResearchPolicy, domain.ResearchBu
 	model := domain.ModelProfileSnapshot{
 		Version:         1,
 		Model:           "local-qwen",
-		ContextLength:   131072,
+		ContextLength:   32768,
 		MaxOutputTokens: 4096,
 		Temperature:     0.2,
 		TopP:            0.8,

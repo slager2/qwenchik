@@ -373,7 +373,24 @@ export interface RuntimeTelemetry {
   inference: InferenceTelemetry
 }
 
+export interface ContextBudget {
+  version: number
+  configured_context: number
+  server_reported_context: number | null
+  session_context: number | null
+  max_output_tokens: number
+  reserved_output_tokens: number
+  reserved_system_tokens: number
+  available_input_tokens: number | null
+  prompt_tokens: number | null
+  context_status: 'matched' | 'context_mismatch' | 'unavailable'
+  decision: string
+  count_method: string
+  reason?: string
+}
+
 export interface RunRuntime {
+  context_budget?: ContextBudget
 	 privacy_mode?: string
 	 offline_corpus_sha256?: string
 	 research_report?: { artifact_id: string; markdown_artifact_id: string; outcome: string; sections: number; unrepresented_criteria: string[] }
@@ -477,6 +494,7 @@ export interface ResearchPlan {
 }
 
 export interface DoctorResponse {
+  context_budget?: ContextBudget
   status: string
   checks: Record<string, { status: string; message: string }>
   research_limits?: {

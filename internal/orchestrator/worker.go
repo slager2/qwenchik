@@ -81,7 +81,9 @@ type Repository interface {
 }
 
 type Options struct {
-	ReportArtifacts interface {
+	HoldResourcePauses bool
+	ContextProbe       func(context.Context, domain.ModelProfileSnapshot) (domain.ContextBudget, error)
+	ReportArtifacts    interface {
 		Put(context.Context, string, string, string, []byte) (domain.Artifact, string, error)
 	}
 	OnBundleChanged       func(domain.AgentBundle)
@@ -378,8 +380,11 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 		return
 	}
 	reason := guard.pauseReason()
-	if reason == "" && w.options.ResourcePolicy.Enabled {
-		reason = modelResourceReason(err)
+	if reason == "" {
+		candidate := modelResourceReason(err)
+		if w.options.ResourcePolicy.Enabled || strings.HasPrefix(candidate, "context_") {
+			reason = candidate
+		}
 	}
 	if reason != "" {
 		if pauseErr := w.persistResourcePause(ctx, task, reason, err); pauseErr != nil && !errors.Is(pauseErr, sqlite.ErrLeaseLost) && !errors.Is(pauseErr, sqlite.ErrConflict) {
@@ -407,8 +412,11 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 		}
 		if partialErr != nil {
 			reason := guard.pauseReason()
-			if reason == "" && w.options.ResourcePolicy.Enabled {
-				reason = modelResourceReason(partialErr)
+			if reason == "" {
+				candidate := modelResourceReason(partialErr)
+				if w.options.ResourcePolicy.Enabled || strings.HasPrefix(candidate, "context_") {
+					reason = candidate
+				}
 			}
 			if reason != "" {
 				if pauseErr := w.persistResourcePause(ctx, task, reason, partialErr); pauseErr != nil && !errors.Is(pauseErr, sqlite.ErrLeaseLost) && !errors.Is(pauseErr, sqlite.ErrConflict) {

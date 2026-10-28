@@ -56,17 +56,22 @@ type ResearchPolicy struct {
 }
 
 type ModelProfileSnapshot struct {
-	Bundle          *AgentBundle `json:"bundle,omitempty"`
-	Version         int          `json:"version"`
-	Model           string       `json:"model"`
-	BaseURL         string       `json:"base_url"`
-	ContextLength   int          `json:"context_length"`
-	MaxOutputTokens int          `json:"max_output_tokens"`
-	Temperature     float64      `json:"temperature"`
-	TopP            float64      `json:"top_p"`
-	StopSequences   []string     `json:"stop_sequences"`
-	PromptVersion   string       `json:"prompt_version"`
-	SchemaVersion   int          `json:"schema_version"`
+	ConfiguredContext     int          `json:"configured_context,omitempty"`
+	ServerReportedContext int          `json:"server_reported_context,omitempty"`
+	RuntimeFingerprint    string       `json:"runtime_fingerprint,omitempty"`
+	ThinkingEnabled       bool         `json:"thinking_enabled,omitempty"`
+	ThinkingPinned        bool         `json:"thinking_pinned,omitempty"`
+	Bundle                *AgentBundle `json:"bundle,omitempty"`
+	Version               int          `json:"version"`
+	Model                 string       `json:"model"`
+	BaseURL               string       `json:"base_url"`
+	ContextLength         int          `json:"context_length"`
+	MaxOutputTokens       int          `json:"max_output_tokens"`
+	Temperature           float64      `json:"temperature"`
+	TopP                  float64      `json:"top_p"`
+	StopSequences         []string     `json:"stop_sequences"`
+	PromptVersion         string       `json:"prompt_version"`
+	SchemaVersion         int          `json:"schema_version"`
 }
 
 type ResearchCounters struct {

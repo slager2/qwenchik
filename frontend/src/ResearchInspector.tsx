@@ -1,6 +1,7 @@
 import { ProviderCard } from './diagnostic-ui.mjs'
 import TelemetryPanel from './TelemetryPanel'
 import PrivacyNotice from './PrivacyNotice'
+import ContextNotice from './ContextNotice'
 import Expandable from './Expandable'
 import FailureDetails, { safeCount } from './FailureDetails'
 import type { ReloadReason } from './network-debug'
@@ -77,6 +78,7 @@ export default function ResearchInspector({ resources, events, run, showHeading 
   const outcome = currentRuntime?.terminal_outcome || run?.terminal_outcome
   const outcomes: Record<string, string> = { partial: 'Частичный результат', blocked: 'Заблокировано проверкой', budget_exhausted: 'Бюджет исчерпан', cancelled: 'Остановлено', failed: 'Ошибка запуска' }
   return <div className="chat-research">
+    <ContextNotice budget={currentRuntime?.context_budget} />
     {currentRuntime?.privacy_mode && <PrivacyNotice mode={currentRuntime.privacy_mode} />}
     <TelemetryPanel runtime={currentRuntime} />
     {resources.pdfCapability && <p role="status">PDF: {resources.pdfCapability.state==='isolated_available'?'изолированная среда доступна':resources.pdfCapability.state==='pure_go_fallback_available'?'разрешён process-bounded fallback без OS-изоляции':'извлечение недоступно'}. {resources.pdfCapability.smoke_tested?'Fixture smoke подтверждён.':'Наличие capability не подтверждает извлечение конкретного PDF.'}</p>}

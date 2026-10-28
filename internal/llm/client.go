@@ -14,6 +14,9 @@ var (
 	ErrOutputTruncated    = errors.New("local model output truncated")
 	ErrInvalidModelOutput = errors.New("local model returned invalid output")
 	ErrInferenceBusy      = errors.New("local model inference slot is busy")
+	ErrContextMismatch    = errors.New("context_mismatch")
+	ErrContextUnverified  = errors.New("server context is unverified")
+	ErrContextBudget      = errors.New("rendered prompt exceeds context budget")
 )
 
 type ChatMessage struct {
@@ -27,6 +30,10 @@ type ChatRequest struct {
 	BaseURL               string   `json:"-"`
 	Stop                  []string `json:"-"`
 	ContextWindow         int      `json:"-"`
+	ContextOutputReserve  int      `json:"-"`
+	RuntimeFingerprint    string   `json:"-"`
+	EnableThinking        *bool    `json:"-"`
+	CachePrompt           *bool    `json:"-"`
 	MaxTokens             int
 	Temperature           float64
 	TemperatureSet        bool
@@ -41,10 +48,11 @@ type ChatRequest struct {
 type ChatTelemetry struct{ domain.InferenceTelemetry }
 
 type ChatResponse struct {
-	Content      string
-	PromptTokens int
-	OutputTokens int
-	Telemetry    *ChatTelemetry
+	ContextBudget *domain.ContextBudget `json:"context_budget,omitempty"`
+	Content       string
+	PromptTokens  int
+	OutputTokens  int
+	Telemetry     *ChatTelemetry
 }
 
 type ChatEvent struct {

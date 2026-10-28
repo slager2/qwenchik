@@ -42,7 +42,9 @@ func newChatTelemetry(at time.Time, request llm.ChatRequest, status domain.Infer
 		telemetry.RequestedTokens = domain.NewExactMetric(int64(request.MaxTokens), domain.MetricUnitTokens, at)
 	}
 	if request.ContextWindow > 0 {
-		telemetry.ContextWindow = domain.NewExactMetric(int64(request.ContextWindow), domain.MetricUnitTokens, at)
+		// This is a request/session hint, not an independently observed server
+		// capacity. The context-budget diagnostic carries verified runtime data.
+		telemetry.ContextWindow = domain.NewEstimatedMetric(int64(request.ContextWindow), domain.MetricUnitTokens, at)
 	}
 	return telemetry
 }

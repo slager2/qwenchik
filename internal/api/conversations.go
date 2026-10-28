@@ -44,6 +44,7 @@ func (s *Server) conversationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/runs", s.createRun)
 	mux.HandleFunc("GET /api/runs/{runID}", s.getRun)
 	mux.HandleFunc("GET /api/runs/{runID}/runtime", s.runRuntime)
+	mux.HandleFunc("GET /api/runs/{runID}/inference-summaries", s.inferenceSummaries)
 	mux.HandleFunc("POST /api/runs/{runID}/cancel", s.cancelRun)
 	mux.HandleFunc("POST /api/runs/{runID}/retry", func(w http.ResponseWriter, r *http.Request) { s.repeatRun(w, r, "retry") })
 	mux.HandleFunc("POST /api/runs/{runID}/continue", func(w http.ResponseWriter, r *http.Request) { s.repeatRun(w, r, "continue") })

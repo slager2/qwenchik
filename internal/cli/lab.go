@@ -63,6 +63,10 @@ func (c *labClient) request(ctx context.Context, method, path string, input, out
 }
 
 type labRuntime struct {
+	Compactions            int                   `json:"compactions"`
+	PauseReason            string                `json:"pause_reason"`
+	ResourceReason         string                `json:"resource_reason"`
+	ContextBudget          *domain.ContextBudget `json:"context_budget"`
 	ModelProfileHash       string                `json:"model_profile_hash"`
 	SectionedReportEnabled bool                  `json:"sectioned_report_enabled"`
 	Budget                 domain.ResearchBudget `json:"budget"`
@@ -288,6 +292,7 @@ func newLabCommand(jsonMode *bool) *cobra.Command {
 	}}
 	ready.Flags().StringVar(&runID, "run-id", "", "active research run to inspect")
 	command.AddCommand(ready, newLabSoakCommand(), newLabBenchmarkCommand(), newLabCompareCommand())
+	command.AddCommand(newLabContextCommand())
 	return command
 }
 

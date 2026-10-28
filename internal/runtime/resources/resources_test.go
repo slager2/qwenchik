@@ -66,8 +66,8 @@ func TestPolicyAndBackoff(t *testing.T) {
 
 func TestCheckThresholdsAndUnknown(t *testing.T) {
 	p := DefaultPolicy()
-	good := Snapshot{FreeRAMBytes: ptr(p.MinFreeRAMBytes), RSSBytes: ptr(p.ProcessRSSMaxBytes), GPUFreeVRAMMB: ptr(p.MinFreeVRAMMB), GPUTempC: ptr(p.GPUTempMaxC), LlamaHealthy: ptr(true)}
-	if Check(good, p) != nil || Check(Snapshot{}, p) != nil {
+	good := Snapshot{FreeRAMBytes: ptr(p.MinFreeRAMBytes), RSSBytes: ptr(p.ProcessRSSMaxBytes), ModelRSSBytes: ptr(p.ModelRSSMaxBytes / 2), GPUFreeVRAMMB: ptr(p.MinFreeVRAMMB), GPUTempC: ptr(p.GPUTempMaxC), LlamaHealthy: ptr(true)}
+	if Check(good, p) != nil || Check(Snapshot{}, p) == nil || Check(Snapshot{}, p).Code != "telemetry_unavailable" {
 		t.Fatal("threshold boundary or unknown violated")
 	}
 	for _, tc := range []struct {
@@ -151,6 +151,7 @@ func TestRecoveryRequiresReasonTelemetryAndStrictTelemetryRecovery(t *testing.T)
 		StaleAfterMS:  ptr(int64(60_000)),
 		FreeRAMBytes:  ptr(p.MinFreeRAMBytes * 2),
 		RSSBytes:      ptr(p.ProcessRSSMaxBytes / 2),
+		ModelRSSBytes: ptr(p.ModelRSSMaxBytes / 2),
 		GPUFreeVRAMMB: ptr(p.MinFreeVRAMMB * 2),
 		GPUTempC:      ptr(p.GPUTempMaxC - p.RecoveryGPUTempMarginC),
 		LlamaHealthy:  ptr(true),

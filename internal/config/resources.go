@@ -24,6 +24,7 @@ func loadResourcePolicy(c *Config) error {
 		{"MIN_FREE_RAM_BYTES", &p.MinFreeRAMBytes, 536870912},
 		{"MIN_FREE_VRAM_MB", &p.MinFreeVRAMMB, 256},
 		{"PROCESS_RSS_MAX_BYTES", &p.ProcessRSSMaxBytes, 2147483648},
+		{"MODEL_RSS_MAX_BYTES", &p.ModelRSSMaxBytes, 3 << 30},
 	} {
 		if *item.target, err = int64Env(item.name, item.fallback); err != nil {
 			return err

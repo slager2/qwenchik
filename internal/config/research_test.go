@@ -187,7 +187,7 @@ func TestResearchModelSnapshotUsesValidatedEffectiveConfiguration(t *testing.T) 
 	}
 	cfg.LLMContextLength = 8192
 	want := domain.ModelProfileSnapshot{
-		Version: 1, Model: "configured-local-model", BaseURL: "http://[::1]:8000/v1",
+		ConfiguredContext: 8192, ThinkingPinned: true, Version: 1, Model: "configured-local-model", BaseURL: "http://[::1]:8000/v1",
 		ContextLength: 8192, MaxOutputTokens: 3072, Temperature: 0, TopP: 0.7,
 		StopSequences: []string{}, PromptVersion: "local-research-v1", SchemaVersion: 1,
 	}

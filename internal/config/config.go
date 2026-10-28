@@ -37,6 +37,9 @@ type Config struct {
 	LLMAPIKey                    string
 	LLMModel                     string
 	LLMContextLength             int
+	RuntimeModelFingerprint      string
+	ServerReportedContext        int
+	ContextProbeEnabled          bool
 	LLMMaxOutputTokens           int
 	LLMTemperature               float64
 	LLMTopP                      float64
@@ -99,7 +102,7 @@ func Load() (Config, error) {
 	if cfg.SearchEnableDDG, err = boolEnv("SEARCH_ENABLE_DDG", true); err != nil {
 		return Config{}, err
 	}
-	if cfg.LLMContextLength, err = intEnv("LLM_CONTEXT_LENGTH", 131072); err != nil {
+	if cfg.LLMContextLength, err = intEnv("LLM_CONTEXT_LENGTH", 32768); err != nil {
 		return Config{}, err
 	}
 	if cfg.LLMMaxOutputTokens, err = intEnv("LLM_MAX_OUTPUT_TOKENS", 4096); err != nil {
@@ -118,6 +121,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.LLMMaxConcurrency, err = intEnv("LLM_MAX_CONCURRENCY", 1); err != nil {
+		return Config{}, err
+	}
+	if cfg.ContextProbeEnabled, err = boolEnv("CONTEXT_PROBE_ENABLED", false); err != nil {
 		return Config{}, err
 	}
 	if cfg.MaxSteps, err = intEnv("MAX_STEPS", 12); err != nil {

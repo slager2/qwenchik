@@ -43,6 +43,13 @@ func (c *sessionModelClient) prepare(ctx context.Context, request llm.ChatReques
 		}
 	}
 	request.Model, request.BaseURL = c.model.Model, c.model.BaseURL
+	request.ContextWindow = c.model.ContextLength
+	request.ContextOutputReserve = c.model.MaxOutputTokens
+	request.RuntimeFingerprint = c.model.RuntimeFingerprint
+	if c.model.ThinkingPinned {
+		v := c.model.ThinkingEnabled
+		request.EnableThinking = &v
+	}
 	request.Stop = append([]string(nil), c.model.StopSequences...)
 	if request.MaxTokens <= 0 || request.MaxTokens > c.model.MaxOutputTokens {
 		request.MaxTokens = c.model.MaxOutputTokens
@@ -116,7 +123,7 @@ func (w *Worker) researchExecutor(ctx context.Context, taskID string) (context.C
 		}
 	}
 	model := session.ModelSnapshot
-	if w.options.RuntimeModelContext > 0 && model.ContextLength > w.options.RuntimeModelContext {
+	if w.options.ContextProbe == nil && w.options.RuntimeModelContext > 0 && model.ContextLength > w.options.RuntimeModelContext {
 		return ctx, nil, errResearchRuntimeChanged
 	}
 	options := w.options
@@ -130,6 +137,11 @@ func (w *Worker) researchExecutor(ctx context.Context, taskID string) (context.C
 }
 
 func (w *Worker) modelExecutor(ctx context.Context, model domain.ModelProfileSnapshot, client llm.Client, options Options) (*Worker, error) {
+	if w.options.ContextProbe != nil {
+		if _, err := w.options.ContextProbe(ctx, model); err != nil {
+			return nil, err
+		}
+	}
 	if model.Bundle != nil {
 		if model.Bundle.Validate() != nil || model.Bundle.ModelProfile != model.Model || options.RuntimeBundleHash != "" && model.Bundle.BaseHash() != options.RuntimeBundleHash {
 			return nil, errResearchRuntimeChanged
@@ -150,10 +162,11 @@ func (w *Worker) modelExecutor(ctx context.Context, model domain.ModelProfileSna
 			}
 		}
 	}
-	if w.options.RuntimeModelContext > 0 && model.ContextLength > w.options.RuntimeModelContext {
+	if w.options.ContextProbe == nil && w.options.RuntimeModelContext > 0 && model.ContextLength > w.options.RuntimeModelContext {
 		return nil, errResearchRuntimeChanged
 	}
 	options.MaxOutputTokens = model.MaxOutputTokens
+	options.RuntimeModelContext = model.ContextLength
 	options.Temperature, options.TopP = model.Temperature, model.TopP
 	availableTokens := model.ContextLength - model.MaxOutputTokens - 2048
 	if availableTokens < 256 {

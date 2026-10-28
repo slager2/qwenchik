@@ -55,7 +55,7 @@ func (s *Service) researchDefaults() researchRunDefaults {
 		profile:  domain.ResearchProfileStandard,
 		policies: map[string]domain.ResearchPolicy{domain.ResearchProfileStandard: policy},
 		model: domain.ModelProfileSnapshot{
-			Version: 1, Model: "local-qwen", ContextLength: 131072, MaxOutputTokens: 4096,
+			Version: 1, Model: "local-qwen", ContextLength: 32768, MaxOutputTokens: 4096,
 			Temperature: 0.2, TopP: 0.8, StopSequences: []string{},
 			PromptVersion: "local-research-v1", SchemaVersion: 1,
 		},

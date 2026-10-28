@@ -51,6 +51,7 @@ func safeRuntimeFields(input map[string]any) map[string]any {
 	}
 	for key, maximum := range map[string]float64{
 		"free_ram_bytes": 1 << 50, "rss_bytes": 1 << 50, "heap_alloc_bytes": 1 << 50,
+		"model_rss_bytes":  1 << 50,
 		"gpu_free_vram_mb": 1 << 30, "gpu_temp_c": 200, "llama_health_latency": float64(time.Hour),
 		"resource_probe_attempts": 1000, "max_resume_attempts": 1000, "retry_count": 1000,
 	} {
@@ -67,7 +68,7 @@ func safeRuntimeFields(input map[string]any) map[string]any {
 		"sleep_policy":     {"disabled", "keep_awake", "opt_in", "requested", "enabled", "best_effort", "unknown"},
 		"pause_reason":     {"resource_guard", "recovery_required", "manual", ""},
 		"terminal_outcome": {"complete", "completed", "partial", "blocked", "needs_review", "budget_exhausted", "cancelled", "failed", ""},
-		"resource_reason":  {"low_ram", "low_vram", "high_rss", "gpu_temperature", "llama_unhealthy", "llama_timeout", "model_timeout", "model_oom", "model_resource", "telemetry_unavailable", ""},
+		"resource_reason":  {"low_ram", "low_vram", "high_rss", "high_model_rss", "gpu_temperature", "llama_unhealthy", "llama_timeout", "model_timeout", "model_oom", "model_resource", "telemetry_unavailable", "context_mismatch", "context_unverified", "context_capacity", ""},
 		"error_code":       {"resource_guard_exhausted", "deadline_exceeded", "failed_recovery_required", "fetch_outcome_unknown", "generation_interrupted", ""},
 	} {
 		if value, ok := input[key].(string); ok {

@@ -80,6 +80,7 @@ func clone(s Snapshot) Snapshot {
 	}
 	s.FreeRAMBytes = copyPtr(s.FreeRAMBytes)
 	s.RSSBytes = copyPtr(s.RSSBytes)
+	s.ModelRSSBytes = copyPtr(s.ModelRSSBytes)
 	s.HeapAllocBytes = copyPtr(s.HeapAllocBytes)
 	s.GPUFreeVRAMMB = copyPtr(s.GPUFreeVRAMMB)
 	s.GPUTempC = copyPtr(s.GPUTempC)

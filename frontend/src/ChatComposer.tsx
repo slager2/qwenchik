@@ -1,13 +1,16 @@
 import type { FormEvent } from 'react'
 import type { ConversationMode, Run } from './types'
 import PrivacyNotice from './PrivacyNotice'
+import ContextNotice from './ContextNotice'
+import type { ContextBudget } from './types'
 
 export default function ChatComposer({
-  mode, privacyMode, onModeChange, text, onTextChange, onSend, busy, active, run, onStop,
+  mode, privacyMode, contextBudget, onModeChange, text, onTextChange, onSend, busy, active, run, onStop,
   researchContextRunID, researchContextReady, onEnableResearchContext, onClearResearchContext,
 }: {
   mode: ConversationMode
   privacyMode?: string
+  contextBudget?: ContextBudget
   onModeChange: (mode: ConversationMode) => void
   text: string
   onTextChange: (text: string) => void
@@ -22,6 +25,7 @@ export default function ChatComposer({
   onClearResearchContext: () => void
 }) {
   return <>
+    {contextBudget?.context_status !== 'matched' && <ContextNotice budget={contextBudget} />}
     {mode === 'research' && <PrivacyNotice mode={privacyMode} />}
     {run?.mode === 'research' && run.status === 'completed' && !researchContextRunID && <button className="chat-context-enable" type="button" disabled={busy || !researchContextReady} title={!researchContextReady ? 'Нужен сохранённый ответ с проверенными ссылками на evidence' : undefined} onClick={onEnableResearchContext}>Продолжить с контекстом исследования</button>}
     {researchContextRunID && <div className="chat-context-chip" role="status"><span>Research context: ON · run {researchContextRunID.slice(0, 8)}</span><button type="button" onClick={onClearResearchContext}>Очистить research context</button></div>}

@@ -12,12 +12,14 @@ import (
 
 	"github.com/slager2/qwenchik/internal/api"
 	"github.com/slager2/qwenchik/internal/config"
+	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/llm"
 	"github.com/slager2/qwenchik/internal/llm/openai"
 	"github.com/slager2/qwenchik/internal/workerlock"
 )
 
 type doctorReport struct {
+	ContextBudget  *domain.ContextBudget  `json:"context_budget,omitempty"`
 	Runtime        map[string]any         `json:"runtime,omitempty"`
 	Status         string                 `json:"status"`
 	Checks         map[string]doctorCheck `json:"checks"`
@@ -72,7 +74,7 @@ func runningAppDoctor(ctx context.Context, cfg config.Config) doctorReport {
 		return unavailableAppDoctor()
 	}
 	checks := map[string]doctorCheck{}
-	for _, name := range []string{"app", "worker", "database", "artifacts", "frontend", "sandbox", "llm", "pdf_extractor", "fetch_temp", "search", "search_probe", "search_searxng", "search_tavily", "search_duckduckgo"} {
+	for _, name := range []string{"app", "worker", "database", "artifacts", "frontend", "sandbox", "llm", "context_budget", "pdf_extractor", "fetch_temp", "search", "search_probe", "search_searxng", "search_tavily", "search_duckduckgo"} {
 		if check, ok := raw.Checks[name]; ok && (check.Status == "ok" || check.Status == "warning" || check.Status == "error") {
 			checks[name] = doctorCheck{Status: check.Status, Message: "Running application reported " + check.Status}
 		}
@@ -114,6 +116,9 @@ func runningAppDoctor(ctx context.Context, cfg config.Config) doctorReport {
 		checks["app"] = doctorCheck{Status: "warning", Message: "Running application reports a readiness warning"}
 	}
 	report := makeDoctorReport(checks, limits, pdf)
+	if raw.ContextBudget != nil && raw.ContextBudget.Version == 1 {
+		report.ContextBudget = raw.ContextBudget
+	}
 	report.Runtime = api.SafeRuntimeStatus(raw.Runtime)
 	return report
 }
@@ -157,7 +162,7 @@ func safeDoctorLimits(input map[string]any) map[string]any {
 }
 
 func configuredModelClient(cfg config.Config) *llm.GuardedClient {
-	return llm.NewGuardedClient(openai.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, time.Duration(cfg.LLMRequestTimeoutSecs)*time.Second, cfg.LLMMaxOutputTokens, cfg.LLMTemperature, cfg.LLMTopP, cfg.LLMEnableThinking))
+	return llm.NewGuardedClient(openai.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, time.Duration(cfg.LLMRequestTimeoutSecs)*time.Second, cfg.LLMMaxOutputTokens, cfg.LLMTemperature, cfg.LLMTopP, cfg.LLMEnableThinking).WithContextBudget(cfg.LLMContextLength))
 }
 
 func doctorModel(ctx context.Context, cfg config.Config, appResponding bool) doctorCheck {
@@ -207,7 +212,7 @@ func doctorModel(ctx context.Context, cfg config.Config, appResponding bool) doc
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	probeClient := llm.NewGuardedClient(openai.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, 30*time.Second, 24, 0, 1, cfg.LLMEnableThinking))
+	probeClient := llm.NewGuardedClient(openai.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, 30*time.Second, 24, 0, 1, cfg.LLMEnableThinking).WithContextBudget(cfg.LLMContextLength))
 	err = llm.ProbeStructuredOutput(probeCtx, probeClient)
 	if errors.Is(err, llm.ErrInferenceBusy) {
 		return doctorCheck{Status: "warning", Message: "Model inference is busy; structured smoke was skipped"}

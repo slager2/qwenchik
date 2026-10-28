@@ -170,6 +170,7 @@ func (p *runtimeGuardSleep) counts() (int, int) {
 
 func runtimeGuardOptions() (Options, *runtimeGuardMonitor, *runtimeGuardSleep) {
 	p := resources.DefaultPolicy()
+	p.ModelRSSMaxBytes = 0 // these legacy fixtures isolate agent/RAM/GPU guards; model RSS has separate explicit tests.
 	p.CheckInterval = 10 * time.Millisecond
 	p.MaxResumeAttempts = 3
 	m := &runtimeGuardMonitor{policy: p}

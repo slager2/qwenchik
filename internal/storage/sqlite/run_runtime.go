@@ -109,6 +109,8 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 		}
 		modelHash := sha256.Sum256(modelRaw)
 		result["model_profile_hash"] = hex.EncodeToString(modelHash[:])
+		result["context_budget"] = domain.NewContextBudget(session.ModelSnapshot.ContextLength, session.ModelSnapshot.ContextLength, session.ModelSnapshot.MaxOutputTokens, nil)
+		result["runtime_model_fingerprint"] = session.ModelSnapshot.RuntimeFingerprint
 		result["sectioned_report_enabled"] = session.Policy.SectionedReportEnabled
 		result["research_session_id"] = session.ID
 		result["privacy_mode"] = domain.EffectivePrivacyMode(session.Policy.PrivacyMode)
@@ -136,8 +138,18 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 	} else if !errors.Is(err, ErrNotFound) {
 		return nil, err
 	}
+	if _, present := result["context_budget"]; !present {
+		if model, err := runModelSnapshot(ctx, tx, taskID); err == nil {
+			result["context_budget"] = domain.NewContextBudget(model.ContextLength, model.ContextLength, model.MaxOutputTokens, nil)
+			result["runtime_model_fingerprint"] = model.RuntimeFingerprint
+		} else if !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
+	}
 	if _, present := result["bundle_hash"]; !present {
 		if model, err := runModelSnapshot(ctx, tx, taskID); err == nil && model.Bundle != nil {
+			result["context_budget"] = domain.NewContextBudget(model.ContextLength, model.ContextLength, model.MaxOutputTokens, nil)
+			result["runtime_model_fingerprint"] = model.RuntimeFingerprint
 			result["bundle_hash"], result["bundle_version"] = model.Bundle.BundleHash, model.Bundle.Version
 		} else if err != nil && !errors.Is(err, ErrNotFound) {
 			return nil, err

@@ -8,6 +8,14 @@ import (
 	"github.com/slager2/qwenchik/internal/domain"
 )
 
+type diagnosticHoldKey struct{}
+
+// Controlled lab experiments reuse the existing manual pause, keeping the
+// measured checkpoint stable until explicitly resumed; no new status or queue.
+func WithDiagnosticResourceHold(ctx context.Context) context.Context {
+	return context.WithValue(ctx, diagnosticHoldKey{}, true)
+}
+
 func (s *Store) PauseTaskForResource(ctx context.Context, taskID, reason string, nextProbe time.Time, state any) (domain.Task, error) {
 	if reason == "" || len(reason) > 1024 || nextProbe.IsZero() {
 		return domain.Task{}, errors.New("resource reason and next probe required")
@@ -49,7 +57,12 @@ func (s *Store) PauseTaskForResource(ctx context.Context, taskID, reason string,
 	if err := transitionStageTx(ctx, tx, taskID, task.Stage, nil, "paused", now); err != nil {
 		return domain.Task{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status='paused',stage=NULL,pause_reason='resource_guard',resource_reason=?,resume_after=?,version=version+1,updated_at=? WHERE id=? AND cancel_requested=0`, reason, stamp(nextProbe), stamp(now), taskID); err != nil {
+	pauseReason := "resource_guard"
+	hold, _ := ctx.Value(diagnosticHoldKey{}).(bool)
+	if hold {
+		pauseReason = "manual"
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status='paused',stage=NULL,pause_reason=?,resource_reason=?,resume_after=?,version=version+1,updated_at=? WHERE id=? AND cancel_requested=0`, pauseReason, reason, stamp(nextProbe), stamp(now), taskID); err != nil {
 		return domain.Task{}, err
 	}
 	var cancelled bool
@@ -62,11 +75,11 @@ func (s *Store) PauseTaskForResource(ctx context.Context, taskID, reason string,
 	if err := updateResearchSessionStatus(ctx, tx, taskID, domain.StatusPaused, "paused_resource_guard", false, "", now); err != nil {
 		return domain.Task{}, err
 	}
-	seq, err := appendEvent(ctx, tx, taskID, "run.paused", nil, "user", map[string]any{"status": domain.StatusPaused, "pause_reason": "resource_guard", "resource_reason": reason, "resume_after": nextProbe, "resource_probe_attempts": task.ResourceProbeAttempts})
+	seq, err := appendEvent(ctx, tx, taskID, "run.paused", nil, "user", map[string]any{"status": domain.StatusPaused, "pause_reason": pauseReason, "diagnostic_hold": hold, "resource_reason": reason, "resume_after": nextProbe, "resource_probe_attempts": task.ResourceProbeAttempts})
 	if err != nil {
 		return domain.Task{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE conversation_messages SET status='paused',metadata_json=json_set(metadata_json,'$.pause_reason','resource_guard','$.resource_reason',?),updated_at=?,last_event_seq=? WHERE id=(SELECT assistant_message_id FROM tasks WHERE id=?)`, reason, stamp(now), seq, taskID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE conversation_messages SET status='paused',metadata_json=json_set(metadata_json,'$.pause_reason',?,'$.resource_reason',?),updated_at=?,last_event_seq=? WHERE id=(SELECT assistant_message_id FROM tasks WHERE id=?)`, pauseReason, reason, stamp(now), seq, taskID); err != nil {
 		return domain.Task{}, err
 	}
 	if err := insertCheckpoint(ctx, tx, taskID, 1, seq, state); err != nil {

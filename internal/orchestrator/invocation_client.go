@@ -79,7 +79,7 @@ func invocationHash(value any) (string, error) {
 }
 
 func modelInvocationHash(request llm.ChatRequest) (string, error) {
-	return invocationHash(struct {
+	base, err := invocationHash(struct {
 		Model, BaseURL          string
 		Stop                    []string
 		Messages                []llm.ChatMessage
@@ -89,6 +89,13 @@ func modelInvocationHash(request llm.ChatRequest) (string, error) {
 		Temperature, TopP       float64
 		TemperatureSet, TopPSet bool
 	}{request.Model, request.BaseURL, request.Stop, request.Messages, request.JSONSchema, request.JSONMode, request.MaxTokens, request.Temperature, request.TopP, request.TemperatureSet, request.TopPSet})
+	if err != nil {
+		return "", err
+	}
+	if request.RuntimeFingerprint != "" || request.EnableThinking != nil || request.CachePrompt != nil {
+		return invocationHash([]any{base, request.ContextWindow, request.ContextOutputReserve, request.RuntimeFingerprint, request.EnableThinking, request.CachePrompt})
+	}
+	return base, nil
 }
 
 func invocationScope(ctx context.Context, repo any, taskID string) (string, string, int, error) {
@@ -162,7 +169,7 @@ func prepareInvocation(ctx context.Context, repo invocationRepository, taskID, k
 		if prior.Kind != kind || prior.InputHash != inputHash || prior.StepID != step || prior.Role != role {
 			return domain.Invocation{}, false, ErrRecoveryRequired
 		}
-		if kind == "llm.stream" {
+		if kind == "llm.stream" && !(prior.Status == "failed" && strings.HasPrefix(prior.ErrorCode, "context_admission_")) {
 			return domain.Invocation{}, false, ErrRecoveryRequired
 		}
 		if prior.Status == "completed" {
@@ -193,7 +200,7 @@ func prepareInvocation(ctx context.Context, repo invocationRepository, taskID, k
 
 func retryableInvocationFailure(code string) bool {
 	switch code {
-	case "model_resource", "model_oom", "model_timeout", "llama_unhealthy", "resource_pause", "cancel_unknown":
+	case "model_resource", "model_oom", "model_timeout", "llama_unhealthy", "resource_pause", "cancel_unknown", "context_admission_mismatch", "context_admission_unverified", "context_admission_capacity":
 		return true
 	}
 	return false
@@ -224,6 +231,19 @@ func finishInvocation(ctx context.Context, repo invocationRepository, in domain.
 		}
 		if errors.Is(callErr, context.Canceled) && in.ErrorCode != "resource_pause" {
 			in.Status, in.ErrorCode = "unknown", "cancel_unknown"
+		}
+		// These transport sentinels are emitted only before a generation POST.
+		// Retrying them is safe even for streams; dispatched/unknown streams keep
+		// their existing recovery-required restriction and two-attempt bound.
+		if strings.HasPrefix(in.Kind, "llm.") {
+			switch {
+			case errors.Is(callErr, llm.ErrContextMismatch):
+				in.Status, in.ErrorCode = "failed", "context_admission_mismatch"
+			case errors.Is(callErr, llm.ErrContextUnverified):
+				in.Status, in.ErrorCode = "failed", "context_admission_unverified"
+			case errors.Is(callErr, llm.ErrContextBudget):
+				in.Status, in.ErrorCode = "failed", "context_admission_capacity"
+			}
 		}
 		result = nil
 	} else {

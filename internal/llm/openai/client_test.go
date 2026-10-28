@@ -91,8 +91,8 @@ func TestCompleteParsesLlamaTimingsAndCacheMetrics(t *testing.T) {
 	if got := *telemetry.CachedPromptTokens.Value; got != 4 || telemetry.CachedPromptTokens.Source != domain.MetricSourceExact {
 		t.Errorf("cached prompt tokens = %d (%s), want exact 4", got, telemetry.CachedPromptTokens.Source)
 	}
-	if got := *telemetry.ContextWindow.Value; got != 4096 || telemetry.ContextWindow.Source != domain.MetricSourceExact {
-		t.Errorf("context window = %d (%s), want exact 4096", got, telemetry.ContextWindow.Source)
+	if got := *telemetry.ContextWindow.Value; got != 4096 || telemetry.ContextWindow.Source != domain.MetricSourceEstimated {
+		t.Errorf("context window = %d (%s), want request hint 4096", got, telemetry.ContextWindow.Source)
 	}
 }
 
@@ -135,7 +135,7 @@ func TestCompleteMissingAndInvalidMetricsRemainUnavailable(t *testing.T) {
 					t.Errorf("%s metric = %#v, want unavailable", name, metric)
 				}
 			}
-			if telemetry.ContextWindow.Source != domain.MetricSourceExact || telemetry.ContextWindow.Value == nil || *telemetry.ContextWindow.Value != 2048 {
+			if telemetry.ContextWindow.Source != domain.MetricSourceEstimated || telemetry.ContextWindow.Value == nil || *telemetry.ContextWindow.Value != 2048 {
 				t.Errorf("context window hint was not reported: %#v", telemetry.ContextWindow)
 			}
 		})
