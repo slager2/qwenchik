@@ -23,7 +23,7 @@ func (e *SearchFailure) Unwrap() error { return e.Cause }
 
 func (e *SearchFailure) Is(target error) bool {
 	if target == ErrSearchUnavailable {
-		return e.Code != "search_filtered_by_policy"
+		return e.Code != "search_filtered_by_policy" && e.Code != "search_no_results"
 	}
 	return target == ErrSearchResponseTooBig && e.Code == "search_response_too_big" || target == ErrSearchFilteredByPolicy && e.Code == "search_filtered_by_policy"
 }

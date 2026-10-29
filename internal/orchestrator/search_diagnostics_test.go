@@ -81,7 +81,7 @@ func TestSearchObserverRecordsSafeOutcomesAndPropagatesPersistenceFailure(t *tes
 }
 
 func TestProviderFailuresEndTaskWithSafeOutcomeMetadataWithoutRetry(t *testing.T) {
-	for _, code := range []string{"provider_blocked", "provider_malformed", "provider_misconfigured", "provider_rate_limited", "search_filtered_by_policy", "search_no_results"} {
+	for _, code := range []string{"provider_blocked", "provider_malformed", "provider_misconfigured", "provider_rate_limited", "search_filtered_by_policy"} {
 		t.Run(code, func(t *testing.T) {
 			ctx := context.Background()
 			store, err := sqlite.Open(ctx, t.TempDir()+"/provider.db")

@@ -116,7 +116,11 @@ func invocationCheckpointState(ctx context.Context, tx *sql.Tx, taskID string) (
 			if err := tx.QueryRowContext(ctx, `SELECT state_json FROM checkpoints WHERE task_id=? AND id=?`, taskID, latest.ID).Scan(&raw); err != nil {
 				return nil, 0, err
 			}
-			decoder := json.NewDecoder(strings.NewReader(raw))
+			decoded, err := decodeCheckpointStorage(raw)
+			if err != nil {
+				return nil, 0, err
+			}
+			decoder := json.NewDecoder(strings.NewReader(string(decoded)))
 			decoder.UseNumber()
 			if err := decoder.Decode(&state); err != nil || state == nil {
 				return nil, 0, fmt.Errorf("%w: invocation checkpoint must be an object", ErrCheckpointInvalid)

@@ -125,13 +125,47 @@ func diversifyResearchQuery(query string, previous []string) string {
 	if base == "" {
 		return ""
 	}
-	for _, suffix := range []string{"independent sources", "official documentation", "specific evidence"} {
+	// Keep this list deliberately finite, but long enough for a small model to
+	// repeat a facet across several adaptive rounds without terminating the
+	// whole run. Each variant remains a source-discovery query; it does not
+	// pretend that the model supplied a genuinely new research direction.
+	facets := []string{
+		"independent sources",
+		"official documentation",
+		"specific evidence",
+		"implementation guide",
+		"performance data",
+		"benchmark results",
+		"limitations and tradeoffs",
+		"reference documentation",
+		"practical guidance",
+		"primary sources",
+		"case studies",
+		"current measurements",
+	}
+	for _, suffix := range facets {
 		candidate := strings.TrimSpace(base + " " + suffix)
 		if len(candidate) > 1000 {
 			candidate = strings.TrimSpace(truncateRunes(base, 1000-len(suffix)-1) + " " + suffix)
 		}
 		if !duplicateResearchQuery(candidate, previous) {
 			return candidate
+		}
+	}
+	// If all full-query facets were already used, shorten the query before
+	// adding a new facet. This helps later adaptive rounds when an actor keeps
+	// repeating a long generated query and still keeps recovery bounded.
+	words := strings.Fields(base)
+	for _, keep := range []int{len(words) - 1, len(words) - 2, max(1, len(words)/2)} {
+		if keep < 1 || keep >= len(words) {
+			continue
+		}
+		core := strings.Join(words[:keep], " ")
+		for _, suffix := range []string{"official sources", "practical evidence", "limitations"} {
+			candidate := strings.TrimSpace(core + " " + suffix)
+			if !duplicateResearchQuery(candidate, previous) {
+				return candidate
+			}
 		}
 	}
 	return ""

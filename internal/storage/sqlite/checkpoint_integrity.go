@@ -59,13 +59,18 @@ func verifiedCheckpointChain(ctx context.Context, tx *sql.Tx, taskID string, ful
 	var lastRaw string
 	for rows.Next() {
 		var item domain.Checkpoint
-		var raw, created string
+		var stored, created string
 		var eventExists bool
 		var eventType, eventVisibility, eventPayload string
-		if err := rows.Scan(&item.ID, &item.TaskID, &item.PlanVersion, &raw, &item.LastEventSeq, &created, &item.ParentID, &item.StateSchemaVersion, &item.StateHash, &item.ContextSnapshotHash, &eventExists, &eventType, &eventVisibility, &eventPayload); err != nil {
+		if err := rows.Scan(&item.ID, &item.TaskID, &item.PlanVersion, &stored, &item.LastEventSeq, &created, &item.ParentID, &item.StateSchemaVersion, &item.StateHash, &item.ContextSnapshotHash, &eventExists, &eventType, &eventVisibility, &eventPayload); err != nil {
 			return nil, err
 		}
 		invalid := func() ([]domain.Checkpoint, error) { return nil, fmt.Errorf("%w: %s", ErrCheckpointInvalid, item.ID) }
+		rawBytes, decodeErr := decodeCheckpointStorage(stored)
+		if decodeErr != nil {
+			return invalid()
+		}
+		raw := string(rawBytes)
 		if !eventExists {
 			return invalid()
 		}
@@ -294,11 +299,15 @@ func (s *Store) CommitStepResult(ctx context.Context, taskID, stepID, tool, summ
 }
 
 func sealInitialCheckpoint(ctx context.Context, tx *sql.Tx, taskID string) error {
-	var id, raw string
-	if err := tx.QueryRowContext(ctx, `SELECT id,state_json FROM checkpoints WHERE task_id=?`, taskID).Scan(&id, &raw); err != nil {
+	var id, stored string
+	if err := tx.QueryRowContext(ctx, `SELECT id,state_json FROM checkpoints WHERE task_id=?`, taskID).Scan(&id, &stored); err != nil {
 		return err
 	}
-	digest := sha256.Sum256([]byte(raw))
-	_, err := tx.ExecContext(ctx, `UPDATE checkpoints SET state_schema_version=1,state_hash=? WHERE id=?`, hex.EncodeToString(digest[:]), id)
+	raw, err := decodeCheckpointStorage(stored)
+	if err != nil {
+		return err
+	}
+	digest := sha256.Sum256(raw)
+	_, err = tx.ExecContext(ctx, `UPDATE checkpoints SET state_schema_version=1,state_hash=? WHERE id=?`, hex.EncodeToString(digest[:]), id)
 	return err
 }

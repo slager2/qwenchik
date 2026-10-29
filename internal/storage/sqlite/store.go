@@ -1338,8 +1338,12 @@ func saveApprovalCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, stat
 		var latestVersion int
 		err := tx.QueryRowContext(ctx, `SELECT state_json,plan_version FROM checkpoints WHERE task_id=? ORDER BY created_at DESC,id DESC LIMIT 1`, taskID).Scan(&stateJSON, &latestVersion)
 		if err == nil {
+			decodedState, decodeErr := decodeCheckpointStorage(stateJSON)
+			if decodeErr != nil {
+				return decodeErr
+			}
 			var decoded map[string]any
-			if err := json.Unmarshal([]byte(stateJSON), &decoded); err != nil {
+			if err := json.Unmarshal(decodedState, &decoded); err != nil {
 				return err
 			}
 			decoded["approval_id"] = approvalID
@@ -1932,7 +1936,11 @@ func saveCheckpointTx(ctx context.Context, tx *sql.Tx, taskID string, planVersio
 	if err := verifyRoleInputsCheckpoint(ctx, tx, checkpoint, prior, nil); err != nil {
 		return domain.Checkpoint{}, err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO checkpoints(id,task_id,plan_version,state_json,last_event_seq,created_at,parent_id,state_schema_version,state_hash,context_snapshot_hash) VALUES(?,?,?,?,?,?,?,?,?,?)`, checkpoint.ID, taskID, planVersion, string(encoded), seq, stamp(checkpoint.CreatedAt), checkpoint.ParentID, checkpoint.StateSchemaVersion, checkpoint.StateHash, checkpoint.ContextSnapshotHash)
+	stored, err := encodeCheckpointStorage(encoded)
+	if err != nil {
+		return checkpoint, err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO checkpoints(id,task_id,plan_version,state_json,last_event_seq,created_at,parent_id,state_schema_version,state_hash,context_snapshot_hash) VALUES(?,?,?,?,?,?,?,?,?,?)`, checkpoint.ID, taskID, planVersion, stored, seq, stamp(checkpoint.CreatedAt), checkpoint.ParentID, checkpoint.StateSchemaVersion, checkpoint.StateHash, checkpoint.ContextSnapshotHash)
 	return checkpoint, err
 }
 

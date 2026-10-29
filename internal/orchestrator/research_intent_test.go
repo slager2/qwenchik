@@ -155,6 +155,21 @@ func TestDiversifyResearchQueryNeverRepeatsCurrentHistory(t *testing.T) {
 	}
 }
 
+func TestDiversifyResearchQuerySurvivesSeveralAdaptiveRepeats(t *testing.T) {
+	base := "official go runtime memory profiling pprof gc tuning documentation"
+	previous := []string{base}
+	for _, suffix := range []string{
+		"independent sources", "official documentation", "specific evidence",
+		"implementation guide", "performance data", "benchmark results",
+	} {
+		previous = append(previous, base+" "+suffix)
+	}
+	got := diversifyResearchQuery(base, previous)
+	if got == "" || duplicateResearchQuery(got, previous) {
+		t.Fatalf("diversified query=%q history=%v", got, previous)
+	}
+}
+
 func TestResearchPlanValidationBoundsIndependentSearchesAndFetches(t *testing.T) {
 	registry := registerPlanValidationResearchTools(t)
 	worker := New(nil, &scriptedLLM{}, registry, Options{MaxSteps: 12})

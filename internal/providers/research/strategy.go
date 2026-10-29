@@ -94,6 +94,21 @@ func (s *LocalPrimarySearch) SearchWithDiagnostics(ctx context.Context, options 
 	if len(report.Hits) > 0 {
 		return report, nil
 	}
+	// A valid empty response is not the same as an outage. When a primary
+	// provider is down but a later provider answered successfully with no
+	// usable hits, keep the provider diagnostics but return a non-fatal
+	// no-results outcome. The research worker can then issue another
+	// diversified query instead of terminating the whole run as unavailable.
+	sawNoResults := false
+	for _, outcome := range report.Outcomes {
+		if outcome.Code == "search_no_results" {
+			sawNoResults = true
+			break
+		}
+	}
+	if sawNoResults && len(failures) > 0 {
+		return report, &SearchFailure{Code: "search_no_results", Outcomes: append([]ProviderOutcome(nil), report.Outcomes...)}
+	}
 	if len(s.providers) == 0 || len(failures) > 0 {
 		code := "search_unavailable"
 		var cause error

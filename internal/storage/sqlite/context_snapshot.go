@@ -220,7 +220,11 @@ func (s *Store) updateContextSnapshot(ctx context.Context, taskID string, snapsh
 		if err := tx.QueryRowContext(ctx, `SELECT state_json FROM checkpoints WHERE id=? AND task_id=?`, last.ID, taskID).Scan(&encoded); err != nil {
 			return domain.ContextSnapshot{}, err
 		}
-		state = checkpointObject([]byte(encoded))
+		decoded, err := decodeCheckpointStorage(encoded)
+		if err != nil {
+			return domain.ContextSnapshot{}, err
+		}
+		state = checkpointObject(decoded)
 		if state == nil {
 			state = make(map[string]json.RawMessage)
 		}

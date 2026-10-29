@@ -123,6 +123,13 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 				}
 				var failure *research.SearchFailure
 				if errors.As(err, &failure) {
+					if failure.Code == "search_no_results" {
+						// Empty discovery is a recoverable research result. Keep
+						// provider diagnostics in the event stream and let the
+						// orchestrator diversify the query or move to the next step.
+						collectionCancel()
+						return []research.SearchHit{}, nil
+					}
 					return nil, err
 				}
 				code := "search_unavailable"

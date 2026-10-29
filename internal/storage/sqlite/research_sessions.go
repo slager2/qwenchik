@@ -561,6 +561,11 @@ func prepareResearchCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, p
 	var canonicalPlans, canonicalCompletion json.RawMessage
 	err = tx.QueryRowContext(ctx, `SELECT state_json FROM checkpoints WHERE task_id=? ORDER BY last_event_seq DESC,rowid DESC LIMIT 1`, taskID).Scan(&prior)
 	if err == nil {
+		decodedPrior, decodeErr := decodeCheckpointStorage(prior)
+		if decodeErr != nil {
+			return nil, 0, decodeErr
+		}
+		prior = string(decodedPrior)
 		var previous map[string]json.RawMessage
 		if err := json.Unmarshal([]byte(prior), &previous); err != nil {
 			return nil, 0, fmt.Errorf("decode prior research checkpoint: %w", err)

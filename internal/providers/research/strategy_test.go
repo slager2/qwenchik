@@ -85,6 +85,26 @@ func TestLocalPrimaryPartialSurvivesFailedSecondary(t *testing.T) {
 	}
 }
 
+func TestLocalPrimaryEmptyFallbackIsRecoverableNoResults(t *testing.T) {
+	primary := strategyProvider(func(context.Context, SearchOptions) ([]SearchHit, error) {
+		return nil, ErrSearchUnavailable
+	})
+	secondary := strategyProvider(func(context.Context, SearchOptions) ([]SearchHit, error) {
+		return nil, nil
+	})
+	report, err := NewLocalPrimarySearch(primary, secondary, nil).SearchWithDiagnostics(context.Background(), SearchOptions{MaxResults: 5})
+	if err == nil {
+		t.Fatal("expected a classified no-results error for the caller to downgrade")
+	}
+	var failure *SearchFailure
+	if !errors.As(err, &failure) || failure.Code != "search_no_results" {
+		t.Fatalf("report=%+v err=%v", report, err)
+	}
+	if len(report.Hits) != 0 || len(report.Outcomes) != 2 || report.Outcomes[1].Code != "search_no_results" {
+		t.Fatalf("report=%+v", report)
+	}
+}
+
 func TestLocalPrimaryEmptyVersusOutage(t *testing.T) {
 	for _, test := range []struct {
 		name         string

@@ -46,10 +46,14 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
-	if len(raw) > 4<<20 {
+	decoded, decodeErr := decodeCheckpointStorage(raw)
+	if decodeErr != nil {
 		return nil, ErrCheckpointInvalid
 	}
-	if raw != "" {
+	if len(decoded) > 4<<20 {
+		return nil, ErrCheckpointInvalid
+	}
+	if len(decoded) > 0 {
 		var state struct {
 			Plans       *domain.ResearchPlans         `json:"research_plans"`
 			Report      *domain.ResearchReportState   `json:"research_report"`
@@ -60,7 +64,7 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 			Completion  domain.CompletionState        `json:"completion"`
 			Snapshot    *domain.ContextSnapshot       `json:"context_snapshot"`
 		}
-		if json.Unmarshal([]byte(raw), &state) != nil {
+		if json.Unmarshal(decoded, &state) != nil {
 			return nil, ErrCheckpointInvalid
 		}
 		result["step"], result["completed_steps"], result["completion"] = state.CurrentStep, len(state.Completed), state.Completion

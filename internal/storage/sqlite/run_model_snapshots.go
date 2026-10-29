@@ -84,6 +84,19 @@ func chatRunModelSnapshot(ctx context.Context, q conversationQuery, taskID strin
 	if err != nil {
 		return domain.ModelProfileSnapshot{}, false, err
 	}
+	var initialJSON, latestJSON []byte
+	if initial.Valid {
+		initialJSON, err = decodeCheckpointStorage(initial.String)
+		if err != nil {
+			return domain.ModelProfileSnapshot{}, true, err
+		}
+	}
+	if latest.Valid {
+		latestJSON, err = decodeCheckpointStorage(latest.String)
+		if err != nil {
+			return domain.ModelProfileSnapshot{}, true, err
+		}
+	}
 	expected := false
 	if created.Valid {
 		values, err := chatCheckpointValues([]byte(created.String))
@@ -104,7 +117,7 @@ func chatRunModelSnapshot(ctx context.Context, q conversationQuery, taskID strin
 		}
 		return domain.ModelProfileSnapshot{}, true, ErrNotFound
 	}
-	model, present, err := decodeChatModelSnapshot([]byte(initial.String))
+	model, present, err := decodeChatModelSnapshot(initialJSON)
 	if err != nil {
 		return domain.ModelProfileSnapshot{}, true, err
 	}
@@ -114,8 +127,8 @@ func chatRunModelSnapshot(ctx context.Context, q conversationQuery, taskID strin
 		}
 		return domain.ModelProfileSnapshot{}, true, ErrNotFound
 	}
-	if latest.Valid && latest.String != initial.String {
-		mirror, present, err := decodeChatModelSnapshot([]byte(latest.String))
+	if latest.Valid && !bytes.Equal(latestJSON, initialJSON) {
+		mirror, present, err := decodeChatModelSnapshot(latestJSON)
 		if err != nil {
 			return domain.ModelProfileSnapshot{}, true, err
 		}
@@ -199,7 +212,11 @@ func insertInitialChatModelSnapshot(ctx context.Context, tx *sql.Tx, taskID stri
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO checkpoints(id,task_id,plan_version,state_json,last_event_seq,created_at) VALUES(?,?,1,?,?,?)`, newID(), taskID, string(state), seq, stamp(created))
+	stored, err := encodeCheckpointStorage(state)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO checkpoints(id,task_id,plan_version,state_json,last_event_seq,created_at) VALUES(?,?,1,?,?,?)`, newID(), taskID, stored, seq, stamp(created))
 	return err
 }
 
