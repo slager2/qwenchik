@@ -224,7 +224,7 @@ func verificationOutputSchema(catalog []verificationCriterion, contradictions ..
 			"properties": map[string]any{
 				"met":          map[string]any{"type": "boolean"},
 				"evidence_ids": boundedArraySchema(evidenceItem, 0, len(criterion.EvidenceIDs)),
-				"rationale":    boundedStringSchema(1, 500),
+				"rationale":    boundedStringSchema(1, 180),
 			},
 			"required":             []string{"met", "evidence_ids", "rationale"},
 			"additionalProperties": false,
@@ -240,8 +240,8 @@ func verificationOutputSchema(catalog []verificationCriterion, contradictions ..
 		"type": "object",
 		"properties": map[string]any{
 			"ready_to_answer":        map[string]any{"type": "boolean"},
-			"summary":                boundedStringSchema(1, 1000),
-			"missing":                boundedArraySchema(boundedStringSchema(1, 500), 0, 20),
+			"summary":                boundedStringSchema(1, 600),
+			"missing":                boundedArraySchema(boundedStringSchema(1, 240), 0, 20),
 			"supplementary_criteria": boundedArraySchema(supplementaryIDSchema, 0, len(catalog)),
 			"criterion_assessments":  map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false},
 		},

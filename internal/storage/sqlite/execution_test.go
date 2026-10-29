@@ -248,6 +248,12 @@ func TestCheckpointIntegrityAndAtomicRollback(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if _, err := s.db.Exec(`UPDATE checkpoints SET state_json='{}' WHERE id=?`, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SaveCheckpoint(ctx, turn.Run.ID, 1, map[string]any{"partial": "must not append over corrupt history"}); !errors.Is(err, ErrCheckpointInvalid) {
+		t.Fatalf("checkpoint append accepted corrupted ancestor: %v", err)
+	}
 }
 
 func mustCheckpointJSON(t *testing.T, s *Store, taskID, id string) string {
@@ -279,8 +285,8 @@ func TestExecutionAndRefinementMigrationsPreserveExistingTables(t *testing.T) {
 		t.Fatal("existing data changed")
 	}
 	after := researchMigrationSchemaSnapshot(t, s.db)
-	if len(after) != len(schema)+5 {
-		t.Fatal("unexpected schema objects added beyond the refinement table and its indexes")
+	if len(after) != len(schema)+6 {
+		t.Fatal("unexpected schema objects added beyond execution/refinement objects and the checkpoint tail index")
 	}
 	for name, sql := range schema {
 		if name != "table:tasks" && name != "table:checkpoints" && after[name] != sql {

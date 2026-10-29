@@ -16,8 +16,12 @@ import (
 
 var ErrCheckpointInvalid = errors.New("checkpoint integrity invalid")
 
-func verifiedCheckpoints(ctx context.Context, tx *sql.Tx, taskID string) ([]domain.Checkpoint, error) {
-	return verifiedCheckpointChain(ctx, tx, taskID, false)
+type checkpointQuery interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func verifiedCheckpoints(ctx context.Context, q checkpointQuery, taskID string) ([]domain.Checkpoint, error) {
+	return verifiedCheckpointChain(ctx, q, taskID, false)
 }
 
 func decodeCheckpointState(raw string) (any, error) {
@@ -47,8 +51,8 @@ func decodeCheckpointState(raw string) (any, error) {
 
 // Internal consumers need only the latest full state. History endpoints explicitly
 // request full materialization; no checkpoint/history is removed from SQLite.
-func verifiedCheckpointChain(ctx context.Context, tx *sql.Tx, taskID string, full bool) ([]domain.Checkpoint, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT c.id,c.task_id,c.plan_version,c.state_json,c.last_event_seq,c.created_at,c.parent_id,c.state_schema_version,c.state_hash,c.context_snapshot_hash,e.seq IS NOT NULL,COALESCE(e.type,''),COALESCE(e.visibility,''),COALESCE(e.payload_json,'') FROM checkpoints c LEFT JOIN events e ON e.task_id=c.task_id AND e.seq=c.last_event_seq WHERE c.task_id=? ORDER BY c.last_event_seq,c.rowid`, taskID)
+func verifiedCheckpointChain(ctx context.Context, q checkpointQuery, taskID string, full bool) ([]domain.Checkpoint, error) {
+	rows, err := q.QueryContext(ctx, `SELECT c.id,c.task_id,c.plan_version,c.state_json,c.last_event_seq,c.created_at,c.parent_id,c.state_schema_version,c.state_hash,c.context_snapshot_hash,e.seq IS NOT NULL,COALESCE(e.type,''),COALESCE(e.visibility,''),COALESCE(e.payload_json,'') FROM checkpoints c LEFT JOIN events e ON e.task_id=c.task_id AND e.seq=c.last_event_seq WHERE c.task_id=? ORDER BY c.last_event_seq,c.rowid`, taskID)
 	if err != nil {
 		return nil, err
 	}

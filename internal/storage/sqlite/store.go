@@ -1436,6 +1436,15 @@ func scanApproval(row scanner) (domain.Approval, error) {
 }
 
 func (s *Store) SaveCheckpoint(ctx context.Context, taskID string, planVersion int, state any) (domain.Checkpoint, error) {
+	// Validate and materialize the immutable history before opening the write
+	// transaction. A plain SELECT does not reserve SQLite's single writer slot,
+	// so heartbeats and API writes remain responsive while a long chain is
+	// hashed/decompressed. The tail is checked again after the write lock is
+	// acquired to reject a concurrent append.
+	prior, err := verifiedCheckpoints(ctx, s.db, taskID)
+	if err != nil {
+		return domain.Checkpoint{}, err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.Checkpoint{}, err
@@ -1447,11 +1456,14 @@ func (s *Store) SaveCheckpoint(ctx context.Context, taskID string, planVersion i
 	if _, err := getTask(ctx, tx, taskID); err != nil {
 		return domain.Checkpoint{}, err
 	}
+	if err := checkpointTailUnchanged(ctx, tx, taskID, prior); err != nil {
+		return domain.Checkpoint{}, err
+	}
 	seq, err := appendEvent(ctx, tx, taskID, "checkpoint.saved", nil, "internal", map[string]any{"plan_version": planVersion})
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
-	checkpoint, err := saveCheckpointTx(ctx, tx, taskID, planVersion, seq, state)
+	checkpoint, err := saveCheckpointTxWithPrior(ctx, tx, taskID, planVersion, seq, state, prior)
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
@@ -1459,6 +1471,32 @@ func (s *Store) SaveCheckpoint(ctx context.Context, taskID string, planVersion i
 		return domain.Checkpoint{}, err
 	}
 	return checkpoint, nil
+}
+
+func checkpointTailUnchanged(ctx context.Context, tx *sql.Tx, taskID string, prior []domain.Checkpoint) error {
+	var id string
+	var seq int64
+	err := tx.QueryRowContext(ctx, `SELECT id,last_event_seq FROM checkpoints WHERE task_id=? ORDER BY last_event_seq DESC LIMIT 1`, taskID).Scan(&id, &seq)
+	if len(prior) == 0 {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return ErrConflict
+	}
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrCheckpointInvalid
+		}
+		return err
+	}
+	tail := prior[len(prior)-1]
+	if id != tail.ID || seq != tail.LastEventSeq {
+		return ErrConflict
+	}
+	return nil
 }
 
 func (s *Store) Checkpoints(ctx context.Context, taskID string) ([]domain.Checkpoint, error) {
@@ -1884,6 +1922,10 @@ func saveCheckpointTx(ctx context.Context, tx *sql.Tx, taskID string, planVersio
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
+	return saveCheckpointTxWithPrior(ctx, tx, taskID, planVersion, seq, state, prior)
+}
+
+func saveCheckpointTxWithPrior(ctx context.Context, tx *sql.Tx, taskID string, planVersion int, seq int64, state any, prior []domain.Checkpoint) (domain.Checkpoint, error) {
 	if err := validateRoleInputsState(state, prior); err != nil {
 		return domain.Checkpoint{}, err
 	}

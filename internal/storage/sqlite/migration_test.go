@@ -235,8 +235,12 @@ func TestResearchAndRefinementMigrationsAddOnlyRequiredTablesAndPreserveAllData(
 	if !reflect.DeepEqual(researchMigrationSchemaSnapshot(t, s.db), afterSchema) || !reflect.DeepEqual(researchMigrationDataSnapshot(t, s.db), beforeData) {
 		t.Fatal("repeat migration or legacy reads changed persisted data")
 	}
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 11 {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 12 {
 		t.Fatalf("migration ledger: %d %v", count, err)
+	}
+	var checkpointTailIndex string
+	if err := s.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_checkpoints_task_event_seq'`).Scan(&checkpointTailIndex); err != nil || !strings.Contains(checkpointTailIndex, "task_id, last_event_seq DESC") {
+		t.Fatalf("checkpoint tail index: %q %v", checkpointTailIndex, err)
 	}
 	if ftsSchemaSnapshot(t, s.db) != ftsBefore {
 		t.Fatal("migration changed FTS schema or triggers")
@@ -308,7 +312,7 @@ func TestResearchSessionMigrationUpgradesEveryExistingVersion(t *testing.T) {
 			if err := s.db.QueryRow(`SELECT COUNT(*) FROM research_sessions`).Scan(&count); err != nil || count != 0 {
 				t.Fatalf("legacy session backfill: %d %v", count, err)
 			}
-			if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 11 {
+			if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 12 {
 				t.Fatalf("migration ledger: %d %v", count, err)
 			}
 		})

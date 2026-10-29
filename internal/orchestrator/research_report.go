@@ -131,6 +131,32 @@ func reportContentFailure(err error) bool {
 	return errors.Is(err, errInvalidModelOutput) || errors.Is(err, llm.ErrInvalidModelOutput) || errors.Is(err, llm.ErrOutputTruncated) || errors.Is(err, errCitationMapping) || errors.Is(err, errUnsupportedCitationClaim) || errors.Is(err, errInputBudgetExceeded) || errors.Is(err, sqlite.ErrResearchBudgetExceeded)
 }
 
+func reportFailureCode(err error) string {
+	switch {
+	case errors.Is(err, sqlite.ErrResearchBudgetExceeded):
+		return "budget_exhausted"
+	case errors.Is(err, errInputBudgetExceeded):
+		return "input_budget_exceeded"
+	case errors.Is(err, errUnsupportedCitationClaim):
+		return "claim_not_supported"
+	case errors.Is(err, errCitationMapping):
+		return "citation_mapping_invalid"
+	case errors.Is(err, llm.ErrOutputTruncated):
+		return "output_truncated"
+	case errors.Is(err, errInvalidModelOutput), errors.Is(err, llm.ErrInvalidModelOutput):
+		return "invalid_model_output"
+	default:
+		return "section_not_supported"
+	}
+}
+
+// A second pass can repair syntax/shape mistakes. It cannot make an excerpt
+// entail a claim that the critic already rejected, nor can it create context or
+// quota. Retrying those cases only repeats the same expensive model call.
+func reportFailureRepairable(err error) bool {
+	return errors.Is(err, errInvalidModelOutput) || errors.Is(err, llm.ErrInvalidModelOutput) || errors.Is(err, llm.ErrOutputTruncated) || errors.Is(err, errCitationMapping)
+}
+
 func validateReportBody(body string) error {
 	lower := strings.ToLower(body)
 	if strings.Contains(lower, "://") || strings.Contains(lower, "www.") || strings.Contains(lower, "mailto:") || strings.Contains(body, "](") || strings.ContainsAny(body, "<>") {
@@ -213,11 +239,10 @@ func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal,
 			return err
 		}
 		section.RejectedDraft = truncateBytesUTF8(draft.Answer, 20_000)
-		if errors.Is(err, sqlite.ErrResearchBudgetExceeded) {
-			section.Limitation = "budget_exhausted"
+		section.Limitation = reportFailureCode(err)
+		if !reportFailureRepairable(err) {
 			break
 		}
-		section.Limitation = "section_not_supported"
 	}
 	section.Status = "fallback_excerpts"
 	if roundPlanSession(ctx) {

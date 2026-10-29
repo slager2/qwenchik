@@ -215,3 +215,28 @@ func TestReportBodiesCannotInventSourceLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestReportSectionRetriesOnlyRepairableFailures(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		err        error
+		code       string
+		repairable bool
+	}{
+		{"citation shape", errCitationMapping, "citation_mapping_invalid", true},
+		{"invalid JSON", errInvalidModelOutput, "invalid_model_output", true},
+		{"truncated", llm.ErrOutputTruncated, "output_truncated", true},
+		{"unsupported claim", errUnsupportedCitationClaim, "claim_not_supported", false},
+		{"input budget", errInputBudgetExceeded, "input_budget_exceeded", false},
+		{"research budget", sqlite.ErrResearchBudgetExceeded, "budget_exhausted", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := reportFailureCode(test.err); got != test.code {
+				t.Fatalf("failure code = %q, want %q", got, test.code)
+			}
+			if got := reportFailureRepairable(test.err); got != test.repairable {
+				t.Fatalf("repairable = %v, want %v", got, test.repairable)
+			}
+		})
+	}
+}
