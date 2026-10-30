@@ -38,7 +38,9 @@ test('missing telemetry stays unavailable and never reads legacy or persisted me
   assert.match(html, /Нет данных/)
   assert.match(ticker(html), /—/)
   assert.doesNotMatch(ticker(html), /Speed|0G|99°/)
-  assert.doesNotMatch(html, /123456|999|Итог инференса/)
+  assert.doesNotMatch(ticker(html), /123456|999|Итог инференса/)
+  assert.match(html, /Последний сохранённый вызов/)
+  assert.match(html, /Исторические данные, не текущая скорость или состояние ресурсов/)
   assert.doesNotThrow(() => render(null))
 })
 
@@ -88,4 +90,55 @@ test('guard warnings stay visible above disclosure and respect showWarnings', ()
   assert.doesNotMatch(html, /obsolete warning/)
   assert.doesNotMatch(render(runtime, { showWarnings: false }), /Memory below threshold/)
   assert.doesNotMatch(render({ ...runtime, runtime_warnings: [] }), /Memory below threshold|obsolete warning/)
+})
+
+test('touch-visible freshness distinguishes stale, estimated and unknown readings', () => {
+  const html = render({ telemetry: {
+    timestamp: '2000-01-01T00:00:00Z', stale_after_ms: 1000,
+    system: { ram_free: metric(4 * 1024 ** 3, 'bytes', 'exact', '2000-01-01T00:00:00Z'), gpus: [{ temperature: metric(61, 'celsius', 'estimated'), vram_free: { value: 2 * 1024 ** 3, unit: 'bytes', source: 'exact' } }] },
+    inference: { status: 'generating', output_tokens_per_second: metric(9, 'tokens/s', 'estimated', '2000-01-01T00:00:00Z') },
+  } })
+  const strip = ticker(html)
+  assert.match(strip, /class="telemetry-panel__ticker-quality">Устарело/)
+  assert.match(strip, /class="telemetry-panel__ticker-quality">Оценка/)
+  assert.match(strip, /class="telemetry-panel__ticker-quality">Время неизвестно/)
+  assert.match(strip, /Снимок устарел/)
+  assert.match(html, /Генерация · Время состояния инференса неизвестно/)
+  assert.match(html, /class="telemetry-panel__freshness">Устарело/)
+})
+
+test('saved invocation is a separate closed disclosure with exact provenance, never live speed', () => {
+  const html = render({ telemetry: {
+    system: { ram_free: metric(3 * 1024 ** 3, 'bytes') },
+    inference: { output_tokens_per_second: metric(12, 'tokens/s') },
+  }, inference_summary: {
+    invocation_id: 'saved-invocation', invocation_status: 'failed', snapshot_at: '2026-10-28T13:42:17.123Z',
+    inference: { source: 'llama.cpp timings', output_tokens_per_second: metric(987, 'tokens/s'), output_tokens: metric(4321, 'tokens') },
+  } })
+  assert.match(ticker(html), /Speed <strong>12<\/strong>/)
+  assert.doesNotMatch(ticker(html), /987|4321|saved-invocation/)
+  const saved = html.slice(html.indexOf('<details class="telemetry-panel__saved"'), html.indexOf('</details>'))
+  assert.match(saved, /^<details class="telemetry-panel__saved"><summary>/)
+  assert.match(saved, /saved-invocation/)
+  assert.match(saved, /llama.cpp timings/)
+  assert.match(saved, /dateTime="2026-10-28T13:42:17.123Z">2026-10-28T13:42:17.123Z/)
+  assert.match(saved, /987 токенов\/с/)
+  assert.match(saved, /Ошибка/)
+})
+
+test('resource reasons are localized and a manual resource hold is not automatic recovery', () => {
+  for (const [reason, label] of [
+    ['high_model_rss', 'Превышен лимит памяти сервера модели'],
+    ['context_mismatch', 'Контекст модели не совпадает с настройками'],
+    ['context_unverified', 'Размер контекста модели не подтверждён'],
+    ['context_capacity', 'Запрос не помещается в контекст модели'],
+    ['model_resource', 'Модель остановлена из-за ресурсов'],
+  ]) {
+    const html = render({ pause_reason: 'manual', resource_reason: reason })
+    assert.match(html, new RegExp(label))
+    assert.match(html, /Ручная пауза с ограничением ресурсов — автоматического продолжения нет/)
+    assert.doesNotMatch(html, new RegExp(`>${reason}<`))
+  }
+  assert.match(render({ pause_reason: 'recovery_required' }), /Исход вызова неизвестен/)
+  assert.match(render({ pause_reason: 'resource_guard' }), /Приостановлено защитой ресурсов/)
 })

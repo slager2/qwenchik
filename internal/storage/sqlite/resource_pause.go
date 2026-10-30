@@ -20,10 +20,11 @@ func (s *Store) PauseTaskForResource(ctx context.Context, taskID, reason string,
 	if reason == "" || len(reason) > 1024 || nextProbe.IsZero() {
 		return domain.Task{}, errors.New("resource reason and next probe required")
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return domain.Task{}, err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	task, err := getTask(ctx, tx, taskID)
 	if err != nil {
@@ -45,7 +46,7 @@ func (s *Store) PauseTaskForResource(ctx context.Context, taskID, reason string,
 		return domain.Task{}, ErrConflict
 	}
 	if state == nil {
-		prior, err := verifiedCheckpoints(ctx, tx, taskID)
+		prior, _, err := s.cachedVerifiedCheckpointsQuery(ctx, tx, taskID)
 		if err != nil {
 			return domain.Task{}, err
 		}
@@ -82,7 +83,7 @@ func (s *Store) PauseTaskForResource(ctx context.Context, taskID, reason string,
 	if _, err := tx.ExecContext(ctx, `UPDATE conversation_messages SET status='paused',metadata_json=json_set(metadata_json,'$.pause_reason',?,'$.resource_reason',?),updated_at=?,last_event_seq=? WHERE id=(SELECT assistant_message_id FROM tasks WHERE id=?)`, pauseReason, reason, stamp(now), seq, taskID); err != nil {
 		return domain.Task{}, err
 	}
-	if err := insertCheckpoint(ctx, tx, taskID, 1, seq, state); err != nil {
+	if err := s.insertCheckpoint(ctx, tx, taskID, 1, seq, state); err != nil {
 		return domain.Task{}, err
 	}
 	if err := clearLease(ctx, tx, taskID); err != nil {
@@ -92,7 +93,7 @@ func (s *Store) PauseTaskForResource(ctx context.Context, taskID, reason string,
 	if err != nil {
 		return domain.Task{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitCheckpointTx(ctx, tx); err != nil {
 		return domain.Task{}, err
 	}
 	return task, nil

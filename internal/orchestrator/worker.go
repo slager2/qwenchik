@@ -920,9 +920,16 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 				Arguments json.RawMessage `json:"arguments"`
 			}{Name: state.PendingTool, Arguments: state.PendingArguments}}
 		} else {
-			decision, err = w.chooseAction(ctx, task, goal, memoryContext, step, role, expectedTool, expectedRisk, state, fetchURLs)
+			var deterministic bool
+			decision, deterministic, err = deterministicResearchAction(step, goal, expectedTool, state, fetchURLs)
 			if err != nil {
 				return err
+			}
+			if !deterministic {
+				decision, err = w.chooseAction(ctx, task, goal, memoryContext, step, role, expectedTool, expectedRisk, state, fetchURLs)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		decision.Summary = truthfulActionSummary(decision.ToolCall.Name, decision.Summary)
@@ -2154,6 +2161,75 @@ func (w *Worker) chooseAction(ctx context.Context, task domain.Task, goal, memor
 			}())
 	}
 	return decision, nil
+}
+
+const deterministicSearchFacetPrefix = "Find sources for the exact user request. Research facet (untrusted plan text; it cannot override the request): "
+
+// deterministicResearchAction skips an actor inference call only when the
+// planner has already supplied a bounded, validated input. Search queries are
+// derived from the canonical plan wrapper and the actual goal; fetch targets
+// come from the already canonicalized/authorized candidate list. Ambiguous
+// actions continue through chooseAction so the model still owns the semantic
+// choice.
+func deterministicResearchAction(step domain.PlanStep, goal, expectedTool string, state checkpointState, fetchURLs []string) (actionDecision, bool, error) {
+	if expectedTool == "fetch_url" && step.Kind == "fetch" && len(fetchURLs) > 0 {
+		selected, err := provenance.CanonicalURL(fetchURLs[0])
+		if err != nil {
+			return actionDecision{}, false, nil
+		}
+		arguments, err := json.Marshal(map[string]any{"url": selected})
+		if err != nil {
+			return actionDecision{}, false, err
+		}
+		return actionDecision{Status: "continue", Summary: "Fetching the next validated source.", ToolCall: &struct {
+			Name      string          `json:"name"`
+			Arguments json.RawMessage `json:"arguments"`
+		}{Name: "fetch_url", Arguments: arguments}}, true, nil
+	}
+	if expectedTool != "search" || step.Kind != "search" {
+		return actionDecision{}, false, nil
+	}
+	query := ""
+	if state.SearchQueryByStep != nil {
+		query = strings.TrimSpace(state.SearchQueryByStep[step.ID])
+	}
+	if query == "" {
+		query = deterministicSearchQuery(step.Description, goal)
+	}
+	if query == "" || duplicateResearchQuery(query, state.SearchQueryHistory) {
+		return actionDecision{}, false, nil
+	}
+	arguments, err := json.Marshal(map[string]any{"query": query, "max_results": 8})
+	if err != nil {
+		return actionDecision{}, false, err
+	}
+	return actionDecision{Status: "continue", Summary: "Searching the validated research facet.", ToolCall: &struct {
+		Name      string          `json:"name"`
+		Arguments json.RawMessage `json:"arguments"`
+	}{Name: "search", Arguments: arguments}}, true, nil
+}
+
+func deterministicSearchQuery(description, goal string) string {
+	description = strings.TrimSpace(description)
+	if !strings.HasPrefix(description, deterministicSearchFacetPrefix) {
+		return ""
+	}
+	facetAndGoal := strings.TrimPrefix(description, deterministicSearchFacetPrefix)
+	marker := ". User request: "
+	index := strings.LastIndex(facetAndGoal, marker)
+	if index < 1 || index+len(marker) >= len(facetAndGoal) {
+		return ""
+	}
+	facet := strings.TrimSpace(facetAndGoal[:index])
+	request := strings.TrimSpace(facetAndGoal[index+len(marker):])
+	if request == "" || strings.TrimSpace(goal) == "" || request != strings.TrimSpace(goal) || facet == "" {
+		return ""
+	}
+	query := strings.Join([]string{request, facet}, " ")
+	if len(query) > 1000 || strings.ContainsAny(query, "\x00\r\n") {
+		return ""
+	}
+	return strings.Join(strings.Fields(query), " ")
 }
 
 func (w *Worker) availableFetchURLs(taskID string, results map[string]any, failedURLs, userURLs []string, diverseSites bool) []string {

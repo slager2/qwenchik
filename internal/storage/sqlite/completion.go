@@ -20,10 +20,11 @@ func (s *Store) RequestResearchContinuation(ctx context.Context, taskID string, 
 			return ErrCheckpointInvalid
 		}
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if err := invocationAllowed(ctx, tx, taskID, true); err != nil {
 		return err
@@ -32,7 +33,7 @@ func (s *Store) RequestResearchContinuation(ctx context.Context, taskID string, 
 	if err != nil {
 		return err
 	}
-	state, version, err := invocationCheckpointState(ctx, tx, taskID)
+	state, version, err := s.invocationCheckpointState(ctx, tx, taskID)
 	if err != nil {
 		return err
 	}
@@ -50,7 +51,7 @@ func (s *Store) RequestResearchContinuation(ctx context.Context, taskID string, 
 		return ErrConflict
 	}
 	if session.Policy.Version == 2 {
-		return requestBoundedRoundTx(ctx, tx, session, state, version, count, fingerprint, failure, missing)
+		return requestBoundedRoundTx(ctx, s, tx, session, state, version, count, fingerprint, failure, missing)
 	}
 	var prior domain.CompletionState
 	raw, _ := json.Marshal(state["completion"])
@@ -140,13 +141,13 @@ func (s *Store) RequestResearchContinuation(ctx context.Context, taskID string, 
 	if err != nil {
 		return err
 	}
-	if _, err := saveCheckpointTx(context.WithValue(ctx, adaptiveMutationKey{}, session.Policy.AdaptiveEnabled), tx, taskID, version, seq, state); err != nil {
+	if _, err := s.saveCheckpointTx(context.WithValue(ctx, adaptiveMutationKey{}, session.Policy.AdaptiveEnabled), tx, taskID, version, seq, state); err != nil {
 		return err
 	}
 	if err := fenceExecution(ctx, tx, taskID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return s.commitCheckpointTx(ctx, tx)
 }
 
 func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary string, missing, supplementaryMissing []string, criteria []domain.VerificationCriterionResult) error {
@@ -175,10 +176,11 @@ func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary
 			evidenceIDs = append(evidenceIDs, evidenceID)
 		}
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if err := invocationAllowed(ctx, tx, taskID, true); err != nil {
 		return err
@@ -194,7 +196,7 @@ func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary
 	if err := validateSnapshotEvidence(ctx, tx, taskID, ownedEvidence); err != nil {
 		return err
 	}
-	state, version, err := invocationCheckpointState(ctx, tx, taskID)
+	state, version, err := s.invocationCheckpointState(ctx, tx, taskID)
 	if err != nil {
 		return err
 	}
@@ -207,7 +209,7 @@ func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary
 			if adaptive.Rounds[len(adaptive.Rounds)-1].AssessmentHash != adaptiveAssessmentHash(verdict, summary, missing, supplementaryMissing, criteria) {
 				return ErrConflict
 			}
-			return tx.Commit()
+			return s.commitCheckpointTx(ctx, tx)
 		}
 	}
 	var completion domain.CompletionState
@@ -232,11 +234,11 @@ func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary
 	if err != nil {
 		return err
 	}
-	if _, err := saveCheckpointTx(context.WithValue(ctx, adaptiveMutationKey{}, true), tx, taskID, version, seq, state); err != nil {
+	if _, err := s.saveCheckpointTx(context.WithValue(ctx, adaptiveMutationKey{}, true), tx, taskID, version, seq, state); err != nil {
 		return err
 	}
 	if err := fenceExecution(ctx, tx, taskID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return s.commitCheckpointTx(ctx, tx)
 }

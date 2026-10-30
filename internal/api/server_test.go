@@ -1,13 +1,16 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -33,6 +36,18 @@ type testArtifactReader struct{}
 
 func (testArtifactReader) Read(context.Context, string, string) ([]byte, error) {
 	return []byte("stored bytes"), nil
+}
+
+type testStreamingArtifactReader struct{}
+
+func (testStreamingArtifactReader) Read(context.Context, string, string) ([]byte, error) {
+	return []byte("stored bytes"), nil
+}
+
+func (testStreamingArtifactReader) Open(context.Context, string, string) (io.ReadCloser, int64, string, error) {
+	content := []byte("stored bytes")
+	hash := sha256.Sum256(content)
+	return io.NopCloser(bytes.NewReader(content)), int64(len(content)), hex.EncodeToString(hash[:]), nil
 }
 
 func newTestServer(t *testing.T) (*Server, *sqlite.Store) {
@@ -210,6 +225,33 @@ func TestEvidenceAndArtifactMetadataEndpoints(t *testing.T) {
 	server.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusOK || response.Body.String() != "stored bytes" {
 		t.Fatalf("artifact download status=%d body=%q", response.Code, response.Body.String())
+	}
+}
+
+func TestArtifactDownloadUsesBoundedMemoryStreamingReader(t *testing.T) {
+	server, store := newTestServer(t)
+	defer store.Close()
+	server.SetArtifactReader(testStreamingArtifactReader{})
+	ctx := context.Background()
+	task, err := app.New(store).CreateTask(ctx, "Streaming", "Download", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("stored bytes")
+	hash := sha256.Sum256(content)
+	artifact, err := store.SaveArtifact(ctx, domain.Artifact{
+		ID: "stream-1", TaskID: task.ID, Name: "source.bin", MIMEType: "application/octet-stream",
+		SHA256: hex.EncodeToString(hash[:]), SizeBytes: int64(len(content)),
+	}, task.ID+"/stream-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/tasks/"+task.ID+"/artifacts/"+artifact.ID, nil)
+	request.Host = "127.0.0.1:8080"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Body.String() != string(content) || response.Header().Get("Content-Length") != strconv.Itoa(len(content)) {
+		t.Fatalf("streaming artifact status=%d body=%q headers=%v", response.Code, response.Body.String(), response.Header())
 	}
 }
 

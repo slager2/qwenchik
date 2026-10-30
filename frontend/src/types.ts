@@ -59,6 +59,7 @@ export interface PlanStep {
 }
 
 export interface TaskPlan {
+  deliverable_criteria?: string[]
   schema_version: number
   goal: string
   subtasks: PlanStep[]
@@ -67,6 +68,9 @@ export interface TaskPlan {
 }
 
 export interface Task {
+  pause_reason?: string
+  resource_reason?: string
+  terminal_outcome?: string
   id: string
   title: string
   description: string
@@ -214,6 +218,21 @@ export interface MemoryMatch {
 
 export type ConversationMode = 'chat' | 'research'
 
+export type ResearchProfile = 'quick' | 'standard' | 'deep_laptop' | 'long_laptop' | 'overnight_laptop'
+
+export interface ConversationSetup {
+  profile: ResearchProfile
+  timeBudgetMinutes: number
+  maxOutputTokens: number
+  temperature: number
+  topP: number
+}
+
+export interface ConversationSettingsPatch {
+  research_settings?: { web_enabled?: boolean; profile?: ResearchProfile; time_budget_seconds?: number }
+  model_profile?: { temperature?: number; top_p?: number; max_output_tokens?: number }
+}
+
 export interface Conversation {
   id: string
   title: string
@@ -223,7 +242,7 @@ export interface Conversation {
   active_run_id?: string
   latest_run_id?: string
   archived_at?: string
-  research_settings?: { web_enabled?: boolean }
+  research_settings?: ConversationSettingsPatch['research_settings']
   model_profile?: Record<string, number>
 }
 
@@ -374,6 +393,11 @@ export interface RuntimeTelemetry {
 }
 
 export interface ContextBudget {
+  training_context?: number | null
+  runtime_fingerprint?: string
+  runtime_build?: string
+  model_quantization?: string
+  observed_at?: string
   version: number
   configured_context: number
   server_reported_context: number | null
@@ -390,13 +414,16 @@ export interface ContextBudget {
 }
 
 export interface RunRuntime {
+  active_round_plan?: TaskPlan
+  initial_plan?: TaskPlan
+  round_plan_count?: number
   context_budget?: ContextBudget
 	 privacy_mode?: string
 	 offline_corpus_sha256?: string
-	 research_report?: { artifact_id: string; markdown_artifact_id: string; outcome: string; sections: number; unrepresented_criteria: string[] }
+	 research_report?: { artifact_id: string; markdown_artifact_id: string; outcome: string; sections: number; unrepresented_criteria?: string[] | null }
 	 adaptive_enabled?: boolean
 	 current_round?: number
-	 research_rounds?: { number: number; outcome: string; evidence_count: number; critical_missing: string[]; frontier_count: number; progress_fingerprint: string }[]
+	 research_rounds?: { number: number; outcome: string; evidence_count: number; critical_missing?: string[] | null; frontier_count: number; progress_fingerprint: string }[]
 	 research_stop_reason?: string
 	 research_stagnant_rounds?: number
   bundle_hash?: string
@@ -433,12 +460,14 @@ export interface RunRuntime {
   notification?: { status: string; attempt?: number; channel?: string }
   keep_awake_requested?: boolean
   runtime?: {
+    active_run_id?: string
+    status?: string
 	 enabled?: boolean
     keep_awake?: boolean
     sleep_policy?: string
     warnings?: string[]
     active_warnings?: string[]
-    resources?: { free_ram_bytes?: number | null; rss_bytes?: number | null; gpu_free_vram_mb?: number | null; gpu_temp_c?: number | null; snapshot_at?: string; power_source?: string; warnings?: string[]; active_warnings?: string[] }
+    resources?: { free_ram_bytes?: number | null; rss_bytes?: number | null; model_rss_bytes?: number | null; gpu_free_vram_mb?: number | null; gpu_temp_c?: number | null; snapshot_at?: string; power_source?: string; warnings?: string[]; active_warnings?: string[] }
     sleep?: { active?: boolean; available?: boolean; provider?: string; failure_reason?: string }
   }
 }
@@ -518,4 +547,18 @@ export interface DoctorResponse {
     fetch_temp_global_bytes?: number
   }
   pdf_extractor?: { isolated_available: boolean; isolated_status: 'available' | 'unavailable'; fallback_allowed: boolean; state?: 'isolated_available' | 'pure_go_fallback_available' | 'unavailable'; pure_go_fallback_available?: boolean; smoke_tested?: boolean }
+}
+
+export interface HealthResponse {
+  status: string
+  database: string
+  model?: { id: string; status: string }
+  worker?: string
+  worker_details?: { status: string; busy?: boolean; heartbeat_age_seconds?: number }
+  runtime?: RunRuntime['runtime']
+}
+
+export interface LabPolicyResponse {
+  hold_resource_pauses: boolean
+  research_limits?: DoctorResponse['research_limits'] & { adaptive_enabled?: boolean; sectioned_report_enabled?: boolean }
 }

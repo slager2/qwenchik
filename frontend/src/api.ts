@@ -1,5 +1,5 @@
 import type { AgentEvent, Approval, Artifact, Checkpoint, Evidence, Memory, MemoryMatch, MemoryStatus, Message, ProvidersResponse, Task, TaskStep } from './types'
-import type { Conversation, ConversationMessage, ConversationMode, DoctorResponse, ResearchPlan, Run, RunRuntime, SourceRecord, Submission } from './types'
+import type { Conversation, ConversationMessage, ConversationMode, ConversationSettingsPatch, DoctorResponse, HealthResponse, LabPolicyResponse, ResearchPlan, Run, RunRuntime, SourceRecord, Submission } from './types'
 import { recordHTTP } from './network-debug'
 
 export class ApiError extends Error {
@@ -61,11 +61,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: (signal?: AbortSignal) => request<{ status: string; database: string }>('/api/health', { signal }),
+  health: (signal?: AbortSignal) => request<HealthResponse>('/api/health', { signal }),
+  labPolicy: (signal?: AbortSignal) => request<LabPolicyResponse>('/api/lab/policy', { signal }),
   conversations: (signal?: AbortSignal) => request<Conversation[]>('/api/conversations', { signal }),
   conversation: (id: string, signal?: AbortSignal) => request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { signal }),
-  createConversation: (title: string, mode: ConversationMode, key: string) => request<Conversation>('/api/conversations', { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ title, mode }) }),
-  updateConversation: (id: string, patch: { title?: string; mode?: ConversationMode }) => request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  createConversation: (title: string, mode: ConversationMode, key: string, settings?: ConversationSettingsPatch) => request<Conversation>('/api/conversations', { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ title, mode, ...settings }) }),
+  updateConversation: (id: string, patch: { title?: string; mode?: ConversationMode } & ConversationSettingsPatch) => request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteConversation: (id: string) => request<void>(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   conversationMessages: (id: string, signal?: AbortSignal) => request<ConversationMessage[]>(`/api/conversations/${encodeURIComponent(id)}/messages`, { signal }),
   submitMessage: (id: string, content: string, mode: ConversationMode, key: string, researchRunID = '') => request<Submission>(`/api/conversations/${encodeURIComponent(id)}/messages`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ content, mode, ...(mode === 'chat' && researchRunID ? { research_run_id: researchRunID } : {}) }) }),

@@ -240,3 +240,33 @@ func TestReportSectionRetriesOnlyRepairableFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestReportContentBreakerTripsOnlyOnRepeatedSameContentFailure(t *testing.T) {
+	var breaker reportContentBreaker
+	if breaker.observe(errInvalidModelOutput) {
+		t.Fatal("circuit breaker tripped on the first content failure")
+	}
+	if breaker.failures != 1 || breaker.code != "invalid_model_output" {
+		t.Fatalf("first failure state=%+v", breaker)
+	}
+	if !breaker.observe(errInvalidModelOutput) || !breaker.tripped {
+		t.Fatalf("circuit breaker did not trip on repeated content failure: %+v", breaker)
+	}
+
+	breaker.success()
+	if breaker.tripped || breaker.failures != 0 || breaker.code != "" {
+		t.Fatalf("successful section did not reset breaker: %+v", breaker)
+	}
+	if breaker.observe(errCitationMapping) {
+		t.Fatal("circuit breaker tripped on a different first failure")
+	}
+	if breaker.observe(errUnsupportedCitationClaim) {
+		t.Fatal("different failure codes were counted as identical")
+	}
+	if breaker.failures != 1 || breaker.code != "claim_not_supported" {
+		t.Fatalf("different failure state=%+v", breaker)
+	}
+	if breaker.observe(sqlite.ErrResearchBudgetExceeded) {
+		t.Fatal("budget failure entered content circuit breaker")
+	}
+}

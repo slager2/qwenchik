@@ -3,6 +3,7 @@ package sqlite
 import (
 	"bytes"
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -41,6 +42,17 @@ func TestCheckpointStorageCompressesLargeStatesAndKeepsLegacyJSONReadable(t *tes
 func TestCheckpointStorageRejectsCorruptCompressedState(t *testing.T) {
 	if _, err := decodeCheckpointStorage(checkpointStoragePrefix + "not-base64"); err == nil {
 		t.Fatal("corrupt compressed state was accepted")
+	}
+}
+
+func TestCheckpointStorageRejectsOversizedDecompressedState(t *testing.T) {
+	oversized := bytes.Repeat([]byte("x"), checkpointDecodedLimit+1)
+	stored, err := encodeCheckpointStorage(oversized)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodeCheckpointStorage(stored); !errors.Is(err, errCheckpointStorageTooLarge) {
+		t.Fatalf("oversized compressed state accepted: %v", err)
 	}
 }
 

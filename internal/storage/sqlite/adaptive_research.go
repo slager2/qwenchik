@@ -43,10 +43,11 @@ func (s *Store) StopAdaptiveResearch(ctx context.Context, taskID, reason string)
 	default:
 		return ErrCheckpointInvalid
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if err := invocationAllowed(ctx, tx, taskID, true); err != nil {
 		return err
@@ -58,7 +59,7 @@ func (s *Store) StopAdaptiveResearch(ctx context.Context, taskID, reason string)
 	if !session.Policy.AdaptiveEnabled {
 		return ErrConflict
 	}
-	state, version, err := invocationCheckpointState(ctx, tx, taskID)
+	state, version, err := s.invocationCheckpointState(ctx, tx, taskID)
 	if err != nil {
 		return err
 	}
@@ -92,13 +93,13 @@ func (s *Store) StopAdaptiveResearch(ctx context.Context, taskID, reason string)
 	if err != nil {
 		return err
 	}
-	if _, err := saveCheckpointTx(context.WithValue(ctx, adaptiveMutationKey{}, true), tx, taskID, version, seq, state); err != nil {
+	if _, err := s.saveCheckpointTx(context.WithValue(ctx, adaptiveMutationKey{}, true), tx, taskID, version, seq, state); err != nil {
 		return err
 	}
 	if err := fenceExecution(ctx, tx, taskID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return s.commitCheckpointTx(ctx, tx)
 }
 
 func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state map[string]any, verdict, summary string, missing, supplementaryMissing []string, criteria []domain.VerificationCriterionResult) error {

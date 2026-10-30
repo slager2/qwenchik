@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
+	"errors"
 	"io"
 	"strings"
 )
@@ -16,7 +17,10 @@ import (
 const (
 	checkpointStoragePrefix    = "gz1:"
 	checkpointCompressionLimit = 64 << 10
+	checkpointDecodedLimit     = 16 << 20
 )
+
+var errCheckpointStorageTooLarge = errors.New("checkpoint decompressed payload exceeds limit")
 
 func encodeCheckpointStorage(encoded []byte) (string, error) {
 	if len(encoded) < checkpointCompressionLimit {
@@ -53,13 +57,16 @@ func decodeCheckpointStorage(stored string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	decoded, readErr := io.ReadAll(reader)
+	decoded, readErr := io.ReadAll(io.LimitReader(reader, checkpointDecodedLimit+1))
 	closeErr := reader.Close()
 	if readErr != nil {
 		return nil, readErr
 	}
 	if closeErr != nil {
 		return nil, closeErr
+	}
+	if len(decoded) > checkpointDecodedLimit {
+		return nil, errCheckpointStorageTooLarge
 	}
 	return decoded, nil
 }

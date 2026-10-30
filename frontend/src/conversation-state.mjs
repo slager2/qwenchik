@@ -6,9 +6,19 @@ export function mergeMessages(current, incoming) {
     if (!message || typeof message.id !== 'string' || typeof message.content !== 'string') continue
     const previous = next.get(message.id)
     if (previous && (previous.last_event_seq ?? 0) > (message.last_event_seq ?? 0)) continue
+    // Preserve object identity for an unchanged REST snapshot. ChatTranscript
+    // memoizes message content; replacing every object on a periodic refresh
+    // would otherwise re-parse Markdown for the whole conversation.
+    if (previous && sameMessageSnapshot(previous, message)) continue
     next.set(message.id, { ...message })
   }
   return [...next.values()].sort((a, b) => a.created_at.localeCompare(b.created_at))
+}
+
+function sameMessageSnapshot(previous, next) {
+  if (previous === next) return true
+  if (previous.id !== next.id || previous.conversation_id !== next.conversation_id || previous.run_id !== next.run_id || previous.role !== next.role || previous.content !== next.content || previous.status !== next.status || previous.parent_message_id !== next.parent_message_id || previous.created_at !== next.created_at || previous.updated_at !== next.updated_at || previous.last_event_seq !== next.last_event_seq) return false
+  return JSON.stringify(previous.metadata ?? null) === JSON.stringify(next.metadata ?? null) && JSON.stringify(previous.citations ?? null) === JSON.stringify(next.citations ?? null)
 }
 
 export function createStreamState(runID) {

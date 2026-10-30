@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/slager2/qwenchik/internal/domain"
@@ -28,7 +29,8 @@ type sessionModelClient struct {
 	repo               researchExecutionRepository
 	runID              string
 	model              domain.ModelProfileSnapshot
-	disablePromptCache bool
+	promptCacheEnabled bool
+	fingerprintOnce    sync.Once
 }
 
 func (c *sessionModelClient) prepare(ctx context.Context, request llm.ChatRequest) (llm.ChatRequest, error) {
@@ -46,9 +48,18 @@ func (c *sessionModelClient) prepare(ctx context.Context, request llm.ChatReques
 	request.Model, request.BaseURL = c.model.Model, c.model.BaseURL
 	request.ContextWindow = c.model.ContextLength
 	request.ContextOutputReserve = c.model.MaxOutputTokens
-	request.RuntimeFingerprint = c.model.RuntimeFingerprint
-	if c.disablePromptCache {
-		cachePrompt := false
+	// Pin the runtime identity on the first admission check. Subsequent
+	// requests use the client's short metadata TTL cache; this preserves a
+	// strict first-use identity check without issuing /props and /models for
+	// every LLM call in a long research run.
+	if request.RuntimeFingerprint == "" && c.model.RuntimeFingerprint != "" {
+		c.fingerprintOnce.Do(func() { request.RuntimeFingerprint = c.model.RuntimeFingerprint })
+	}
+	// llama.cpp's prompt cache is safe for the stable, local research runtime.
+	// Only provide the default when the caller did not make an explicit choice:
+	// special probes and future A/B tests can still opt out per request.
+	if c.promptCacheEnabled && request.CachePrompt == nil {
+		cachePrompt := true
 		request.CachePrompt = &cachePrompt
 	}
 	if c.model.ThinkingPinned {
@@ -139,7 +150,7 @@ func (w *Worker) researchExecutor(ctx context.Context, taskID string) (context.C
 		repo:               repo,
 		runID:              taskID,
 		model:              model,
-		disablePromptCache: true,
+		promptCacheEnabled: true,
 	}, options)
 	if err != nil {
 		return ctx, nil, err

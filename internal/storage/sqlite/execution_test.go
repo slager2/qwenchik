@@ -214,9 +214,28 @@ func TestCheckpointIntegrityAndAtomicRollback(t *testing.T) {
 	ctx := context.Background()
 	s, turn, _ := researchConversationFixture(t, nil)
 	claimResearchFixture(t, s)
-	first, err := s.SaveCheckpoint(ctx, turn.Run.ID, 1, map[string]any{"partial": "one"})
+	state := map[string]any{"partial": "one", "nested": map[string]any{"value": "original"}}
+	first, err := s.SaveCheckpoint(ctx, turn.Run.ID, 1, state)
 	if err != nil {
 		t.Fatal(err)
+	}
+	state["nested"].(map[string]any)["value"] = "mutated-after-save"
+	cached := s.checkpointCache[turn.Run.ID].checkpoints[0].State.(map[string]any)
+	if cached["nested"].(map[string]any)["value"] != "original" {
+		t.Fatal("checkpoint cache retained mutable caller state")
+	}
+	var generationBefore, generationAfter int64
+	if generationBefore, err = checkpointChainGeneration(ctx, s.db, turn.Run.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RecordEvent(ctx, turn.Run.ID, "test.unrelated", nil, "internal", map[string]any{"ok": true}); err != nil {
+		t.Fatal(err)
+	}
+	if generationAfter, err = checkpointChainGeneration(ctx, s.db, turn.Run.ID); err != nil {
+		t.Fatal(err)
+	}
+	if generationAfter != generationBefore {
+		t.Fatalf("unrelated event invalidated checkpoint cache: %d -> %d", generationBefore, generationAfter)
 	}
 	second, err := s.SaveCheckpoint(ctx, turn.Run.ID, 1, map[string]any{"partial": "two"})
 	if err != nil || second.ParentID != first.ID || second.StateHash == "" {
@@ -285,7 +304,7 @@ func TestExecutionAndRefinementMigrationsPreserveExistingTables(t *testing.T) {
 		t.Fatal("existing data changed")
 	}
 	after := researchMigrationSchemaSnapshot(t, s.db)
-	if len(after) != len(schema)+6 {
+	if len(after) != len(schema)+13 {
 		t.Fatal("unexpected schema objects added beyond execution/refinement objects and the checkpoint tail index")
 	}
 	for name, sql := range schema {

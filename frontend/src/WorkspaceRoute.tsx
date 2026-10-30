@@ -4,7 +4,7 @@ import { createCoalescedScheduler } from './chat-sync.mjs'
 import { recordReload, recordSSE, type ReloadReason } from './network-debug'
 import { legacyDraft } from './conversation-state.mjs'
 import { createTaskDetailTracker } from './task-detail.mjs'
-import { fullWorkspaceResources, workspaceEventResources } from './workspace-sync.mjs'
+import { applyWorkspaceDelta, fullWorkspaceResources, workspaceEventResources } from './workspace-sync.mjs'
 import WorkspaceBoard from './WorkspaceBoard'
 import { diagnosticSummary, failureSummary, streamLabel } from './observability.mjs'
 import { ProviderCard, TaskFailureCard, SourceList } from './diagnostic-ui.mjs'
@@ -12,6 +12,8 @@ import type { ProvidersResponse } from './types'
 import type { AgentEvent, Approval, Artifact, Checkpoint, DraftMessage, Evidence, InferenceTelemetry, Memory, MemoryMatch, MemoryStatus, Message, MessageDeltaPayload, RunRuntime, RuntimeTelemetry, Task, TaskStatus, TaskStep } from './types'
 import { mergeRuntimeSnapshot } from './telemetry-state.mjs'
 import TelemetryPanel from './TelemetryPanel'
+import { resumeEligibility } from './run-presentation.mjs'
+import type { HealthResponse } from './types'
 
 const columns: { id: string; title: string; statuses: TaskStatus[] }[] = [
   { id: 'inbox', title: 'Входящие', statuses: ['inbox'] },
@@ -128,6 +130,10 @@ export default function WorkspaceRoute() {
   const [approvals, setApprovals] = useState<Approval[]>([])
   const [runtime, setRuntime] = useState<RunRuntime | null>(null)
   const [doctor, setDoctor] = useState<DoctorResponse | null>(null)
+  const [health, setHealth] = useState<HealthResponse | null>(null)
+  const [privacyMode, setPrivacyMode] = useState('')
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState(false)
+  const [diagnosticsError, setDiagnosticsError] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [createTitle, setCreateTitle] = useState('')
   const [createDescription, setCreateDescription] = useState('')
@@ -144,6 +150,8 @@ export default function WorkspaceRoute() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [memoryOpen, setMemoryOpen] = useState(false)
   const [pageHidden, setPageHidden] = useState(document.hidden)
+  const draftRef = useRef(draft)
+  draftRef.current = draft
   const selectedTask = tasks.find((task) => task.id === selectedID)
   const selectedTaskRef = useRef(selectedTask)
   selectedTaskRef.current = selectedTask
@@ -331,31 +339,25 @@ export default function WorkspaceRoute() {
         }
         if (parsed.task_id !== selectedID) return
         if (!Number.isSafeInteger(parsed.seq) || parsed.seq <= 0 || seenEventSeq.current.has(parsed.seq)) return
-        seenEventSeq.current.add(parsed.seq)
-        lastEventSeq.current = Math.max(lastEventSeq.current, parsed.seq)
         if (parsed.type === 'message.delta') {
           recordReload('workspace.draft', 'sse_event')
           const payload = parsed.payload as Partial<MessageDeltaPayload>
-          if (typeof payload.stream_id !== 'string' || typeof payload.message_id !== 'string' || typeof payload.delta !== 'string' || !Number.isInteger(payload.chunk_index)) {
-            setError('Получен некорректный фрагмент ответа')
+          const applied = applyWorkspaceDelta(draftRef.current, payload, parsed.seq)
+          if (applied.needsSync) {
+            draftRef.current = applied.draft
+            setDraft(applied.draft)
+            setError(applied.error === 'gap' ? 'Поток ответа потерял фрагмент; восстанавливаем сохранённый текст.' : 'Получен некорректный фрагмент ответа')
+            workspaceQueueRef.current(['messages', 'events', 'runtime'], 'sse_resync')
             return
           }
-          setDraft((current) => {
-            if (current && parsed.seq <= current.seq) return current
-            if (!current || current.stream_id !== payload.stream_id || current.message_id !== payload.message_id) {
-              return { ...payload, content: payload.delta!, seq: parsed.seq } as DraftMessage
-            }
-            if (payload.chunk_index! <= current.chunk_index) return { ...current, seq: parsed.seq }
-            return {
-              ...current,
-              delta: payload.delta!,
-              content: current.content + payload.delta!,
-              chunk_index: payload.chunk_index!,
-              seq: parsed.seq,
-            }
-          })
+          seenEventSeq.current.add(parsed.seq)
+          lastEventSeq.current = Math.max(lastEventSeq.current, parsed.seq)
+          draftRef.current = applied.draft
+          setDraft(applied.draft)
           return
         }
+        seenEventSeq.current.add(parsed.seq)
+        lastEventSeq.current = Math.max(lastEventSeq.current, parsed.seq)
         setEvents((current) => current.some((item) => item.seq === parsed.seq) ? current : [...current, parsed].slice(-200))
         const terminal = ['task.completed', 'task.failed', 'task.cancelled'].includes(parsed.type)
         const payloadStatus = typeof parsed.payload.to === 'string' && ['inbox', 'queued', 'planning', 'running', 'waiting_approval', 'paused', 'verifying', 'completed', 'failed', 'cancelled'].includes(parsed.payload.to) ? parsed.payload.to as TaskStatus : undefined
@@ -440,18 +442,26 @@ export default function WorkspaceRoute() {
   useEffect(() => {
     let active = true
     const check = async (reason: ReloadReason) => {
-      try {
-        recordReload('workspace.doctor', reason)
-        const result = await api.doctor()
-        if (active) setDoctor(result)
-      } catch {
-        if (active) setDoctor(null)
-      }
+      recordReload('workspace.configuration', reason)
+      const [status, policy] = await Promise.allSettled([api.health(), api.labPolicy()])
+      if (!active) return
+      setHealth(status.status === 'fulfilled' ? status.value : null)
+      setPrivacyMode(policy.status === 'fulfilled' ? policy.value?.research_limits?.privacy_mode ?? '' : '')
     }
     void check('initial')
-    const timer = window.setInterval(() => void check('fallback_poll'), 30000)
+    const timer = window.setInterval(() => void check('fallback_poll'), 60000)
     return () => { active = false; window.clearInterval(timer) }
   }, [])
+
+  async function requestDiagnostics() {
+    if (diagnosticsBusy) return
+    setDiagnosticsBusy(true)
+    setDiagnosticsError('')
+    recordReload('workspace.doctor', 'user_action')
+    try { setDoctor(await api.doctor()) }
+    catch (caught) { setDiagnosticsError(caught instanceof Error ? caught.message : 'Не удалось выполнить проверку модели и поиска.') }
+    finally { setDiagnosticsBusy(false) }
+  }
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -568,7 +578,7 @@ export default function WorkspaceRoute() {
   }
 
   const modelCheck = doctor?.checks.llm
-  const apiReady = doctor && ['app', 'worker', 'database'].every((name) => doctor.checks[name]?.status === 'ok')
+  const apiReady = health?.status === 'ok' && health.database === 'ok' && health.worker === 'attached'
 
   return (
     <div className="app-shell">
@@ -601,7 +611,7 @@ export default function WorkspaceRoute() {
           <div className="top-actions">
             <span className={`service-pill ${apiReady ? 'is-online' : ''}`}>
               <span className="health-dot" />
-              {apiReady ? 'Приложение и worker готовы' : 'Сервис не готов / не проверен'}
+              {apiReady ? 'Приложение и worker доступны' : 'Соединение не подтверждено'}
             </span>
             <button className="button button-quiet palette-trigger" type="button" onClick={() => setPaletteOpen(true)} aria-label="Открыть командную палитру">
               <span>Команды</span><kbd>⌘ K</kbd>
@@ -629,15 +639,19 @@ export default function WorkspaceRoute() {
 
         {(error || detailError) && <div className="notice notice-error" role="alert"><span className="notice-marker">!</span><span>{error || detailError}</span><button type="button" onClick={() => { setError(''); setDetailError('') }} aria-label="Закрыть сообщение">×</button></div>}
 
-        <section className="provider-panel" aria-label="Поисковые провайдеры">
+        <details className="provider-panel"><summary>Сервисы и диагностика</summary><section aria-label="Поисковые провайдеры">
           <h2>Поисковые провайдеры</h2>
           <p>Конфигурация и последнее реальное обращение. До первого запроса здоровье неизвестно.</p>
-          <p>Поисковые запросы передаются включённым внешним сервисам. DuckDuckGo можно отключить через SEARCH_ENABLE_DDG=false; локальный SearXNG также обращается к публичным поисковикам.</p>
+          <p>{privacyMode === 'offline' ? 'Offline: поиск и чтение ограничены импортированным корпусом; сетевые источники отключены.' : privacyMode ? 'Модель работает локально; поисковые запросы передаются включённым внешним сервисам. Локальный SearXNG также обращается к публичным поисковикам.' : 'Режим приватности пока не загружен. Конфигурация провайдера не подтверждает его доступность.'}</p>
           <button className="button button-secondary" type="button" onClick={() => void refreshProviders('manual_retry')}>Обновить состояние провайдеров</button>
           {providersError && <p role="status">{providersError}</p>}
           {!providers && !providersError && <p>Загрузка состояния…</p>}
           <div className="provider-grid">{Object.entries(providers?.search.providers ?? {}).map(([name, provider]) => <ProviderCard key={name} name={name} provider={provider} checkedLabel={provider.last_checked ? timeLabel(provider.last_checked) : ''} />)}</div>
-        </section>
+          <button className="button button-secondary" type="button" disabled={diagnosticsBusy} onClick={() => void requestDiagnostics()}>{diagnosticsBusy ? 'Проверяем…' : 'Проверить модель и поиск'}</button>
+          <p>Проверка по запросу может выполнить короткую генерацию и обращение к поиску.</p>
+          {doctor && <p role="status">Последняя явная проверка: {doctor.status === 'ok' ? 'проверки пройдены' : doctor.status === 'warning' ? 'есть ограничения' : 'есть ошибки'}. Модель: {modelCheck?.status === 'ok' ? 'доступна на момент проверки' : 'доступность не подтверждена'}.</p>}
+          {diagnosticsError && <p role="alert">{diagnosticsError}</p>}
+        </section></details>
 
         {createOpen && (
           <form className="create-panel" onSubmit={createTask}>
@@ -735,6 +749,7 @@ function TaskInspector(props: InspectorProps) {
   const timeline = [...events].sort((a, b) => b.seq - a.seq).slice(0, 30)
   const sortedMessages = [...messages].sort((a, b) => a.created_at.localeCompare(b.created_at))
   const failure = [...events].reverse().find((event) => event.type === 'task.failed')
+  const resume = resumeEligibility(task, runtime)
 
   return (
     <section className="inspector" aria-label="Инспектор задачи">
@@ -745,11 +760,12 @@ function TaskInspector(props: InspectorProps) {
       <div className="inspector-actions">
         {['inbox', 'failed'].includes(task.status) && <button className="button button-primary" type="button" onClick={props.onRun} disabled={busy}>{task.status === 'failed' ? 'Повторить' : 'Запустить'}</button>}
         {canPause && <button className="button button-secondary" type="button" onClick={props.onPause} disabled={busy}>Пауза</button>}
-        {task.status === 'paused' && <button className="button button-primary" type="button" onClick={props.onResume} disabled={busy}>Продолжить</button>}
+        {task.status === 'paused' && <button className="button button-primary" type="button" onClick={props.onResume} disabled={busy || !resume.allowed} aria-describedby="workspace-resume-explanation">Продолжить</button>}
         {canCancel && <button className="button button-danger-quiet" type="button" onClick={props.onCancel} disabled={busy}>Отменить</button>}
         <button className="button button-quiet" type="button" onClick={props.onRefresh} disabled={busy}>Обновить данные</button>
         {busy && <span className="action-feedback" role="status">Сохраняем…</span>}
       </div>
+      {task.status === 'paused' && <p id="workspace-resume-explanation" className="chat-muted">{resume.explanation}</p>}
 
       {task.status === 'failed' && <TaskFailureCard payload={failure?.payload} evidenceCount={evidence.length} />}
 

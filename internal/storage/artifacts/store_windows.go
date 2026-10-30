@@ -451,6 +451,13 @@ func (r contextReader) Read(p []byte) (int, error) {
 	return r.reader.Read(p)
 }
 
+type contextReadCloser struct {
+	contextReader
+	closer io.Closer
+}
+
+func (r contextReadCloser) Close() error { return r.closer.Close() }
+
 func openArtifactFile(dir *os.File, name string, access uint32) (windows.Handle, error) {
 	handle, _, err := ntCreateAt(windows.Handle(dir.Fd()), name, access,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
@@ -793,6 +800,50 @@ func (s *Store) Read(ctx context.Context, taskID, artifactID string) ([]byte, er
 		return nil, err
 	}
 	return content, nil
+}
+
+// Open verifies an artifact without materializing it in memory, then returns a
+// reader positioned at the beginning for streaming HTTP responses.
+func (s *Store) Open(ctx context.Context, taskID, artifactID string) (io.ReadCloser, int64, string, error) {
+	if !safeSegment.MatchString(artifactID) {
+		return nil, 0, "", errors.New("invalid artifact identifier")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, 0, "", err
+	}
+	dir, err := s.taskDirectory(taskID, false)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	defer dir.Close()
+	handle, err := openArtifactFile(dir, artifactID, windows.FILE_GENERIC_READ|windows.READ_CONTROL)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	file := os.NewFile(uintptr(handle), artifactID)
+	info, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return nil, 0, "", err
+	}
+	if !info.Mode().IsRegular() || info.Size() > s.maxBytes {
+		file.Close()
+		return nil, 0, "", errors.New("artifact is not a bounded regular file")
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, io.LimitReader(contextReader{ctx, file}, s.maxBytes+1)); err != nil {
+		file.Close()
+		return nil, 0, "", err
+	}
+	if err := ctx.Err(); err != nil {
+		file.Close()
+		return nil, 0, "", err
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		file.Close()
+		return nil, 0, "", err
+	}
+	return contextReadCloser{contextReader: contextReader{ctx: ctx, reader: file}, closer: file}, info.Size(), hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func (s *Store) ReadRange(ctx context.Context, taskID, artifactID string, offset int64, limit int) ([]byte, error) {

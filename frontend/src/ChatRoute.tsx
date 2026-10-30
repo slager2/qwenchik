@@ -7,11 +7,13 @@ import ChatComposer from './ChatComposer'
 import ChatTranscript from './ChatTranscript'
 import { applyRunEvent, canUseResearchContext, citationReferences, explicitResearchContextReferences, createStreamState, mergeMessages, mergeRunEventHistory, normalizeSources, terminal, type StreamState } from './conversation-state.mjs'
 import ResearchInspector from './ResearchInspector'
+import ResearchOverview from './ResearchOverview'
+import { conversationSetup, defaultSetup, settingsPatch, setupProblem } from './research-settings.mjs'
 import FailureDetails from './FailureDetails'
 import { publicResearchEvents } from './research-state.mjs'
 import ChatSidebar from './ChatSidebar'
 import { recordReload, recordSSE, type ReloadReason } from './network-debug'
-import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, Evidence, InferenceTelemetry, ResearchPlan, Run, RunRuntime, RuntimeTelemetry, Submission } from './types'
+import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, ConversationSetup, DoctorResponse, Evidence, InferenceTelemetry, ResearchPlan, Run, RunRuntime, RuntimeTelemetry, Submission } from './types'
 import './chat.css'
 
 const failure = (error: unknown) => error instanceof Error ? error.message : 'Не удалось выполнить запрос. Попробуйте ещё раз.'
@@ -76,7 +78,16 @@ function Drawer({ title, onClose, children }: { title: string; onClose: () => vo
   }, [])
   return <dialog ref={ref} className="chat-drawer" aria-label={title} onCancel={onClose} onKeyDown={(event) => {
     if (event.key !== 'Tab') return
-    const focusable = [...event.currentTarget.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')].filter((element) => element.getClientRects().length)
+    const focusable = [...event.currentTarget.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]')].filter((element) => {
+      if (element.tabIndex < 0 || element.closest('[inert], [hidden], [aria-hidden="true"]') || !element.getClientRects().length) return false
+      if (typeof element.checkVisibility === 'function' && !element.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true })) return false
+      // Closed disclosures can retain layout boxes. Only their own first summary
+      // participates in keyboard order; hidden descendants must not trap focus.
+      for (let ancestor = element.parentElement; ancestor && ancestor !== event.currentTarget; ancestor = ancestor.parentElement) {
+        if (ancestor instanceof HTMLDetailsElement && !ancestor.open && !ancestor.querySelector(':scope > summary')?.contains(element)) return false
+      }
+      return true
+    })
     const first = focusable[0]
     const last = focusable.at(-1)
     if (!first || !last) { event.preventDefault(); return }
@@ -149,8 +160,12 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const runtimeSetterRef = useRef(runtime.setData)
   runSetterRef.current = run.setData
   runtimeSetterRef.current = runtime.setData
-  const doctor = useRemote(useCallback((signal) => api.doctor(signal), []), 60000, 'chat.doctor')
+  const [diagnosticsRequested, setDiagnosticsRequested] = useState(false)
+  const doctor = useRemote(useCallback((signal) => diagnosticsRequested ? api.doctor(signal) : Promise.resolve<DoctorResponse | null>(null), [diagnosticsRequested]), 0, 'chat.doctor')
+  const configuration = useRemote(useCallback((signal) => api.labPolicy(signal), []), 60000, 'chat.configuration')
   const health = useRemote(useCallback((signal) => api.health(signal), []), 60000, 'chat.health')
+  const [setup, setSetup] = useState<ConversationSetup>(() => ({ ...defaultSetup }))
+  const [settingsDirty, setSettingsDirty] = useState(false)
   const [mode, setMode] = useState<ConversationMode>('chat')
   const [researchContextRunID, setResearchContextRunID] = useState('')
   const modeRef = useRef(mode)
@@ -170,6 +185,8 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const [optimistic, setOptimistic] = useState<ConversationMessage[]>([])
   const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 70rem)').matches)
   const listRef = useRef<HTMLDivElement>(null)
+  const centerRef = useRef<HTMLElement>(null)
+  const readingRun = useRef({ id: '', openSaved: false, positioned: false })
   const streamRef = useRef(transcript.stream)
   const syncSchedulerRef = useRef<(resources: string[], reason: ReloadReason) => void>(() => {})
   const syncFlushRef = useRef<(resources: string[], reason: ReloadReason) => void>(() => {})
@@ -177,6 +194,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const fallbackTimerRef = useRef<number | undefined>(undefined)
   const fallbackDelayRef = useRef(15000)
   const fallbackSchedulerRef = useRef<() => void>(() => {})
+  const pageHiddenRef = useRef(document.hidden)
   const closeEventStreamRef = useRef<() => void>(() => {})
   const alive = useRef(true)
   const submissionKey = useRef<{ content: string; key: string } | null>(null)
@@ -203,15 +221,24 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
     const latest = item.active_run_id || item.latest_run_id
     if (latest) setRunID(latest)
   }, [conversation.data])
+  useEffect(() => { if (conversation.data && !settingsDirty) setSetup(conversationSetup(conversation.data)) }, [conversation.data, settingsDirty])
   useEffect(() => { if (!editing && conversation.data) setTitle(conversation.data.title) }, [conversation.data, editing])
   useEffect(() => { if (snapshots.data) dispatch({ type: 'snapshot', messages: snapshots.data }) }, [snapshots.data])
   useEffect(() => { dispatch({ type: 'run', id: runID }) }, [runID])
   useEffect(() => { if (history.data?.id === runID) dispatch({ type: 'history', id: runID, events: history.data.events }) }, [history.data, runID])
-  useEffect(() => { if (currentRun?.mode === 'research') setDetails(true) }, [currentRun?.id, currentRun?.mode])
   useEffect(() => {
-    if (!follow || !listRef.current) return
-    listRef.current.scrollTop = listRef.current.scrollHeight
+    const surface = scrollSurface()
+    if (!follow || !surface) return
+    surface.scrollTop = surface.scrollHeight
   }, [transcript.messages, follow])
+
+  function scrollSurface() {
+    return window.matchMedia('(max-width: 48rem)').matches ? centerRef.current : listRef.current
+  }
+
+  function observeScroll(surface: HTMLElement) {
+    setFollow(surface.scrollHeight - surface.scrollTop - surface.clientHeight < 100)
+  }
 
   async function action(work: () => Promise<void>) {
     if (requestBusy.current) return
@@ -241,18 +268,28 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   function send(event?: FormEvent) {
     event?.preventDefault()
     if (!text.trim() || active || busy) return
+    const settingsError = setupProblem(setup)
+    if (settingsError) { setError(settingsError); return }
     const content = text.trim()
     const selectedMode = mode
     if (!submissionKey.current || submissionKey.current.content !== content) submissionKey.current = { content, key: crypto.randomUUID() }
     const key = submissionKey.current.key
+    let shouldSaveSettings = settingsDirty
+    const selectedSetup = { ...setup }
     const now = new Date().toISOString()
     setOptimistic([{ id: `pending-${key}`, conversation_id: id, run_id: '', role: 'user', content, status: 'pending', created_at: now, updated_at: now, last_event_seq: 0 }])
     void action(async () => {
       let target = createdID.current
       if (!target) {
-        const item = await api.createConversation(content.slice(0, 70), selectedMode, conversationKey.current)
+        const item = await api.createConversation(content.slice(0, 70), selectedMode, conversationKey.current, settingsPatch(selectedSetup))
         target = item.id
         createdID.current = target
+        shouldSaveSettings = false
+        if (alive.current) setSettingsDirty(false)
+      } else if (shouldSaveSettings) {
+        const item = await api.updateConversation(target, settingsPatch(selectedSetup))
+        shouldSaveSettings = false
+        if (alive.current) { conversation.setData(item); setSettingsDirty(false) }
       }
       const result = await api.submitMessage(target, content, selectedMode, key, selectedMode === 'chat' ? researchContextRunID : '')
       submissionKey.current = null
@@ -278,11 +315,12 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   }
 
   function changeMode(next: ConversationMode) {
-    if (!id) { setMode(next); setDetails(next === 'research'); if (next === 'research') { setResearchContextRunID(''); submissionKey.current = null } return }
+    submissionKey.current = null
+    if (!id) { setMode(next); if (next === 'research') setResearchContextRunID(''); return }
     void action(async () => {
       const result = await api.updateConversation(id, { mode: next })
       if (!alive.current) return
-      conversation.setData(result); setMode(next); setDetails(next === 'research')
+      conversation.setData(result); setMode(next)
       if (next === 'research') { setResearchContextRunID(''); submissionKey.current = null }
       void onChanged()
     })
@@ -305,10 +343,55 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
     })
   }
 
+  function saveSettings() {
+    const problem = setupProblem(setup)
+    if (problem) { setError(problem); return }
+    if (!id || active) return
+    void action(async () => {
+      const item = await api.updateConversation(id, settingsPatch(setup))
+      if (alive.current) { conversation.setData(item); setSettingsDirty(false) }
+    })
+  }
+
+  function changeSettings(value: ConversationSetup) {
+    setSetup(value)
+    setSettingsDirty(true)
+    // A failed operation retains its original draft for idempotent retry. Once
+    // the settings draft changes, that old closure must not overwrite it.
+    setActionRetry(null)
+  }
+
+  function requestDiagnostics() {
+    if (diagnosticsRequested) void doctor.reload('user_action')
+    else setDiagnosticsRequested(true)
+  }
+
   const status = currentRun ? currentRun.status === 'paused' ? labels.paused : terminal(currentRun.status) ? terminalLabels[currentRun.terminal_outcome || ''] || labels[currentRun.status] : labels[currentRun.phase || currentRun.stage || ''] || labels[currentRun.status] || currentRun.status : 'Готов к сообщению'
   const content = [...transcript.messages.filter((message) => ['user', 'assistant'].includes(message.role)), ...optimistic]
   const latestAssistant = [...content].reverse().find((message) => message.role === 'assistant' && message.run_id === currentRun?.id)
   const hasPartial = !!latestAssistant?.content.trim()
+  useEffect(() => {
+    if (!currentRun) return
+    if (readingRun.current.id !== currentRun.id) readingRun.current = { id: currentRun.id, openSaved: currentRun.mode === 'research' && (terminal(currentRun.status) || currentRun.status === 'paused'), positioned: false }
+    if (!readingRun.current.openSaved || readingRun.current.positioned || !latestAssistant) return
+    readingRun.current.positioned = true
+    setFollow(false)
+    if (centerRef.current) centerRef.current.scrollTop = 0
+    if (listRef.current) {
+      const article = [...listRef.current.querySelectorAll<HTMLElement>('article[data-message-id]')].find((element) => element.dataset.messageId === latestAssistant.id)
+      listRef.current.scrollTop = !window.matchMedia('(max-width: 48rem)').matches && latestAssistant.content.trim() && article
+        ? listRef.current.scrollTop + article.getBoundingClientRect().top - listRef.current.getBoundingClientRect().top
+        : 0
+    }
+  }, [currentRun?.id, currentRun?.mode, currentRun?.status, latestAssistant?.id, latestAssistant?.content])
+
+  function readAnswer(focus = true) {
+    const article = [...(listRef.current?.querySelectorAll<HTMLElement>('article[data-message-id]') ?? [])].find((element) => element.dataset.messageId === latestAssistant?.id)
+    if (!article) return
+    setFollow(false)
+    article.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' })
+    if (focus) article.focus({ preventScroll: true })
+  }
   const terminalFailure = publicResearchEvents(transcript.stream.events).filter((event) => event.task_id === currentRun?.id && event.type === 'task.failed').at(-1)
   const failurePayload = terminalFailure?.payload
   const failureMessage = typeof failurePayload?.message === 'string' ? failurePayload.message.slice(0, 1000) : ''
@@ -321,6 +404,9 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
     fallbackTimerRef.current = window.setTimeout(() => {
       fallbackTimerRef.current = undefined
       if (!alive.current) return
+      // Background tabs do not need a polling fallback. Keep the SSE cursor
+      // intact and reconcile once the tab becomes visible again.
+      if (pageHiddenRef.current) return
       const latestRun = currentRunRef.current
       if (latestRun && terminal(latestRun.status)) { closeEventStreamRef.current(); setConnection('terminal'); return }
       setConnection('degraded')
@@ -332,6 +418,23 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
     }, fallbackDelayRef.current)
   }, [details, mode])
   fallbackSchedulerRef.current = scheduleFallback
+  useEffect(() => {
+    const handleVisibility = () => {
+      pageHiddenRef.current = document.hidden
+      if (document.hidden || !runID) return
+      fallbackDelayRef.current = 15000
+      const latestRun = currentRunRef.current
+      if (latestRun && terminal(latestRun.status)) return
+      // A hidden tab may have missed resource refreshes while the browser
+      // throttled timers. Reconcile canonical state on return without
+      // forcing a second EventSource connection.
+      const resources = ['messages', 'run', 'runtime', 'conversation', 'events']
+      if (details && mode === 'research') resources.push('plan', 'sources', 'evidence')
+      syncSchedulerRef.current(resources, 'fallback_poll')
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [details, mode, runID])
   useEffect(() => {
     if (!runID) { setConnection('idle'); return }
     let disposed = false
@@ -476,24 +579,27 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
     scheduleSync(resources, 'sse_resync')
   }, [transcript.stream.needsSync, mode, scheduleSync])
   const backendReady = health.data?.status === 'ok' && health.data.database === 'ok' && !health.error
-  const modelReady = doctor.data?.checks.llm?.status === 'ok'
-  const detailsContent = <ResearchInspector resources={{ ...research, runtime, pdfCapability: doctor.data?.pdf_extractor }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onRetry={() => operate('retry')} onPause={() => void action(async () => { await api.pause(runID); await run.reload('user_action'); await runtime.reload('user_action') })} onResume={() => void action(async () => { await api.resume(runID); await run.reload('user_action'); await runtime.reload('user_action') })} />
+  const modelReady = doctor.data?.checks?.llm?.status === 'ok'
+  const currentRuntime = runtime.data?.task_id === currentRun?.id ? runtime.data ?? null : null
+  const pauseRun = () => void action(async () => { await api.pause(runID); await run.reload('user_action'); await runtime.reload('user_action') })
+  const resumeRun = () => void action(async () => { await api.resume(runID); await run.reload('user_action'); await runtime.reload('user_action') })
+  const detailsContent = <ResearchInspector resources={{ ...research, runtime, pdfCapability: doctor.data?.pdf_extractor }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onRetry={() => operate('retry')} onPause={pauseRun} onResume={resumeRun} onDiagnostics={requestDiagnostics} diagnosticsLoading={diagnosticsRequested && doctor.loading} diagnosticsError={doctor.error} />
 
   return <main className={`chat-main ${details ? 'chat-has-details' : ''}`}>
     <header className="chat-header"><button className="chat-mobile-menu" type="button" aria-label="Открыть разговоры" onClick={onSidebar}>☰</button><div className="chat-heading">{editing ? <form onSubmit={(event) => { event.preventDefault(); if (title.trim()) void action(async () => { const next = await api.updateConversation(id, { title: title.trim() }); if (alive.current) { conversation.setData(next); setEditing(false); void onChanged() } }) }}><input aria-label="Название разговора" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} autoFocus /><button type="submit" disabled={busy || !title.trim()}>Сохранить</button><button type="button" onClick={() => setEditing(false)}>Отмена</button></form> : <><h1>{conversation.data?.title || 'Новый разговор'}</h1><p>{mode === 'research' ? 'Deep Research' : 'Локальный чат'}<span aria-hidden="true"> · </span>{status}</p></>}</div><div className="chat-header-actions">{id && <><button type="button" onClick={() => setEditing(true)} disabled={busy} aria-label="Переименовать разговор">Название</button><button type="button" onClick={() => void action(async () => { await api.deleteConversation(id); if (alive.current) { void onChanged(); onSelect('') } })} disabled={busy || active} title={active ? 'Сначала остановите текущую генерацию' : 'Архивировать разговор'}>Удалить</button></>}<button type="button" aria-expanded={details} onClick={() => setDetails((value) => !value)}>Детали</button></div></header>
-    <div className="chat-body"><section className="chat-center" aria-label="Текущий разговор"><div className="chat-health" role="status"><span className={backendReady ? 'chat-online' : ''}>Backend: {health.error ? 'нет связи' : backendReady ? 'доступен' : 'не проверен'}</span><span className={modelReady && !doctor.error ? 'chat-online' : ''}>Qwen: {doctor.error ? 'не проверена' : modelReady ? 'доступна' : 'недоступна / не проверена'}</span></div>
+    <div className="chat-body"><section className="chat-center" ref={centerRef} onScroll={(event) => { if (window.matchMedia('(max-width: 48rem)').matches) observeScroll(event.currentTarget) }} aria-label="Текущий разговор"><div className="chat-health"><span className={backendReady ? 'chat-online' : ''}>Приложение: {health.error ? 'нет связи' : backendReady ? 'доступно' : 'проверяем соединение'}</span><span className={modelReady && !doctor.error ? 'chat-online' : ''}>Qwen: {doctor.error ? 'проверка недоступна' : modelReady ? 'проверена по запросу' : health.data?.model?.status === 'configured' ? 'локальная · проверка по запросу' : 'доступность не проверена'}</span></div>
       <ResourceStatus resource={conversation} /><ResourceStatus resource={snapshots} />{runID && <ResourceStatus resource={run} />}{history.error && <ResourceStatus resource={history} />}
-      <div className="chat-transcript" ref={listRef} onScroll={() => { const el = listRef.current; if (el) setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 100) }}>
-        <ChatTranscript messages={content} loading={snapshots.loading} active={active} runID={runID} run={currentRun} references={references} evidenceCache={evidenceCache} onExample={(nextMode, prompt) => { setMode(nextMode); setDetails(nextMode === 'research'); setText(prompt) }} />
-        {busy && optimistic.length > 0 && <p className="chat-muted" role="status">Готовлю ответ…</p>}
+      <ResearchOverview run={currentRun} runtime={currentRuntime} events={transcript.stream.events} answer={latestAssistant ?? null} evidence={research.evidence} busy={busy} onDetails={() => setDetails(true)} onReadAnswer={() => readAnswer()} onPause={pauseRun} onResume={resumeRun} onStop={stopRun} />
+      <div className="chat-transcript" ref={listRef} onScroll={(event) => { if (!window.matchMedia('(max-width: 48rem)').matches) observeScroll(event.currentTarget) }}>
+        <ChatTranscript messages={content} loading={snapshots.loading} active={active} runID={runID} run={currentRun} references={references} evidenceCache={evidenceCache} submissionState={optimistic.length ? busy ? 'sending' : error ? 'failed' : 'sending' : undefined} onExample={(nextMode, prompt) => { setMode(nextMode); setText(prompt) }} />
       </div>
       {!follow && <button type="button" className="chat-to-bottom" onClick={() => setFollow(true)}>К последнему сообщению ↓</button>}
       {currentRun?.status === 'failed' && <div className="chat-action-error" role="alert"><strong>{currentRun.terminal_outcome === 'blocked' ? 'Ответ заблокирован проверкой' : 'Не удалось завершить ответ'}</strong><p>{failureMessage || currentRun.error_message || 'Можно повторить запрос.'}{currentRun.error_code ? ` Код: ${currentRun.error_code}` : typeof failurePayload?.error_code === 'string' ? ` Код: ${failurePayload.error_code}` : ''}</p><FailureDetails payload={failurePayload} />{verificationSummary && <p>{verificationSummary}</p>}{missingCriteria.length > 0 && <div className="chat-failure-missing"><strong>Не хватает критических критериев</strong><ul>{missingCriteria.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></div>}</div>}
-      {currentRun?.status === 'cancelled' && <p className="chat-muted" role="status">Генерация остановлена. Полученный текст сохранён.</p>}
+      {currentRun?.status === 'cancelled' && <p className="chat-muted" role="status">Генерация остановлена. {hasPartial ? 'Полученный текст сохранён.' : 'Текст ответа не сформирован.'}</p>}
       {currentRun?.status === 'waiting_approval' && <p role="status">Нужно ваше решение. <a href="#/workspace">Открыть подтверждения в рабочем пространстве</a></p>}
       {error && <div className="chat-action-error" role="alert"><p>{error}</p>{actionRetry && <button type="button" onClick={actionRetry} disabled={busy}>Повторить действие</button>}</div>}
       {currentRun && !active && <div className="chat-answer-actions"><button type="button" disabled={busy} onClick={() => operate('retry')}>Повторить ответ</button><button type="button" disabled={busy || !hasPartial} title={!hasPartial ? 'Нет текста для продолжения' : 'Продолжить ответ новым запуском'} onClick={() => operate('continue')}>Продолжить ответ</button></div>}
-        <ChatComposer mode={mode} privacyMode={doctor.data?.research_limits?.privacy_mode} contextBudget={doctor.data?.context_budget} onModeChange={changeMode} text={text} onTextChange={setText} onSend={send} busy={busy} active={active} run={currentRun} onStop={stopRun} researchContextRunID={researchContextRunID} researchContextReady={researchContextReady} onEnableResearchContext={enableResearchContext} onClearResearchContext={() => { setResearchContextRunID(''); submissionKey.current = null }} />
+        <ChatComposer mode={mode} privacyMode={currentRuntime?.privacy_mode || configuration.data?.research_limits?.privacy_mode} contextBudget={currentRuntime?.context_budget || doctor.data?.context_budget} onModeChange={changeMode} text={text} onTextChange={setText} onSend={send} busy={busy} active={active} run={currentRun} onStop={stopRun} researchContextRunID={researchContextRunID} researchContextReady={researchContextReady} onEnableResearchContext={enableResearchContext} onClearResearchContext={() => { setResearchContextRunID(''); submissionKey.current = null }} settings={setup} onSettingsChange={optimistic.length ? undefined : changeSettings} settingsError={setupProblem(setup)} settingsDirty={settingsDirty} settingsSaving={busy && settingsDirty} onSaveSettings={id && !active ? saveSettings : undefined} />
       <div className="chat-composer-note"><span>{active ? 'Новый запрос доступен после завершения или остановки.' : 'Enter — отправить · Shift+Enter — новая строка'}</span>{runID && <span role="status">{connection === 'live' ? 'Поток подключён' : connection === 'connecting' ? 'Подключение…' : connection === 'reconnecting' ? 'Переподключение…' : connection === 'degraded' ? 'Резервная синхронизация' : connection === 'invalid' ? 'Ошибка потока' : connection === 'terminal' ? 'Поток завершён' : 'Нет активного потока'}</span>}{active && <button type="button" onClick={() => { recordReload('chat.stream', 'manual_retry'); setReconnect((value) => value + 1) }}>Переподключить</button>}</div>
     </section>{details && !mobile && <aside className="chat-research-desktop" aria-label="Детали исследования">{detailsContent}</aside>}</div>{details && mobile && <Drawer title="Детали исследования" onClose={() => setDetails(false)}>{detailsContent}</Drawer>}
   </main>

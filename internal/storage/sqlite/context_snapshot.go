@@ -123,8 +123,8 @@ func checkpointSnapshot(state any) (domain.ContextSnapshot, bool, error) {
 	return snapshot, true, validateSnapshot(snapshot)
 }
 
-func contextSnapshotTx(ctx context.Context, tx *sql.Tx, taskID string) (domain.ContextSnapshot, []domain.Checkpoint, error) {
-	items, err := verifiedCheckpoints(ctx, tx, taskID)
+func contextSnapshotTx(s *Store, ctx context.Context, tx *sql.Tx, taskID string) (domain.ContextSnapshot, []domain.Checkpoint, error) {
+	items, _, err := s.cachedVerifiedCheckpointsQuery(ctx, tx, taskID)
 	if err != nil {
 		return domain.ContextSnapshot{}, nil, err
 	}
@@ -147,7 +147,7 @@ func (s *Store) ContextSnapshot(ctx context.Context, taskID string) (domain.Cont
 		return domain.ContextSnapshot{}, err
 	}
 	defer tx.Rollback()
-	snapshot, _, err := contextSnapshotTx(ctx, tx, taskID)
+	snapshot, _, err := contextSnapshotTx(s, ctx, tx, taskID)
 	return snapshot, err
 }
 
@@ -169,10 +169,11 @@ func (s *Store) updateContextSnapshot(ctx context.Context, taskID string, snapsh
 	if len(reason) > 256 || strings.TrimSpace(reason) == "" {
 		return domain.ContextSnapshot{}, errors.New("context snapshot reason must contain 1 to 256 bytes")
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return domain.ContextSnapshot{}, err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if err := fenceExecution(ctx, tx, taskID); err != nil {
 		return domain.ContextSnapshot{}, err
@@ -188,7 +189,7 @@ func (s *Store) updateContextSnapshot(ctx context.Context, taskID string, snapsh
 	if cancelled || (task.Status != domain.StatusPlanning && task.Status != domain.StatusRunning && task.Status != domain.StatusVerifying) {
 		return domain.ContextSnapshot{}, ErrConflict
 	}
-	prior, checkpoints, err := contextSnapshotTx(ctx, tx, taskID)
+	prior, checkpoints, err := contextSnapshotTx(s, ctx, tx, taskID)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return domain.ContextSnapshot{}, err
 	}
@@ -301,13 +302,13 @@ func (s *Store) updateContextSnapshot(ctx context.Context, taskID string, snapsh
 		return domain.ContextSnapshot{}, err
 	}
 	state["context_snapshot"] = encoded
-	if _, err := saveCheckpointTx(ctx, tx, taskID, planVersion, seq, state); err != nil {
+	if _, err := s.saveCheckpointTx(ctx, tx, taskID, planVersion, seq, state); err != nil {
 		return domain.ContextSnapshot{}, err
 	}
 	if err := fenceExecution(ctx, tx, taskID); err != nil {
 		return domain.ContextSnapshot{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitCheckpointTx(ctx, tx); err != nil {
 		return domain.ContextSnapshot{}, err
 	}
 	return snapshot, nil

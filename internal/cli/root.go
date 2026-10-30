@@ -793,7 +793,7 @@ func serve(parent context.Context) error {
 	sandboxStatus := sandboxRuntime.Doctor(parent)
 	apiServer.SetSandboxStatus(sandboxStatus.Available, sandboxStatus.Message)
 	handler := apiServer.Handler()
-	server := &http.Server{Addr: cfg.BindAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+	server := &http.Server{Addr: cfg.BindAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	notificationSender, err := notifications.NewSender(cfg.NotificationChannel, cfg.NtfyURL, cfg.NtfyToken)

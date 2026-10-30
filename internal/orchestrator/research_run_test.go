@@ -193,10 +193,10 @@ func assertResearchRunRequest(t *testing.T, request llm.ChatRequest, model domai
 	}
 }
 
-func TestResearchSessionModelClientDisablesPromptCacheWithoutChangingChatPolicy(t *testing.T) {
+func TestResearchSessionModelClientEnablesPromptCacheWithoutChangingChatPolicy(t *testing.T) {
 	modelProfile := domain.ModelProfileSnapshot{Model: "saved-model", BaseURL: "http://127.0.0.1:8000/v1", ContextLength: 32768, MaxOutputTokens: 256, TopP: 0.8}
 	model := &researchRunModel{}
-	researchClient := &sessionModelClient{inner: model, model: modelProfile, disablePromptCache: true}
+	researchClient := &sessionModelClient{inner: model, model: modelProfile, promptCacheEnabled: true}
 	if _, err := researchClient.Complete(context.Background(), llm.ChatRequest{}); err != nil {
 		t.Fatal(err)
 	}
@@ -205,11 +205,25 @@ func TestResearchSessionModelClientDisablesPromptCacheWithoutChangingChatPolicy(
 		t.Fatal(err)
 	}
 	calls := model.calls()
-	if len(calls) != 2 || calls[0].request.CachePrompt == nil || *calls[0].request.CachePrompt {
-		t.Fatalf("research request did not explicitly disable prompt cache: %#v", calls)
+	if len(calls) != 2 || calls[0].request.CachePrompt == nil || !*calls[0].request.CachePrompt {
+		t.Fatalf("research request did not enable prompt cache by default: %#v", calls)
 	}
 	if calls[1].request.CachePrompt != nil {
 		t.Fatalf("chat request unexpectedly inherited research cache policy: %#v", calls[1].request.CachePrompt)
+	}
+}
+
+func TestResearchSessionModelClientPreservesExplicitPromptCacheOptOut(t *testing.T) {
+	modelProfile := domain.ModelProfileSnapshot{Model: "saved-model", BaseURL: "http://127.0.0.1:8000/v1", ContextLength: 32768, MaxOutputTokens: 256, TopP: 0.8}
+	model := &researchRunModel{}
+	researchClient := &sessionModelClient{inner: model, model: modelProfile, promptCacheEnabled: true}
+	disabled := false
+	if _, err := researchClient.Complete(context.Background(), llm.ChatRequest{CachePrompt: &disabled}); err != nil {
+		t.Fatal(err)
+	}
+	calls := model.calls()
+	if len(calls) != 1 || calls[0].request.CachePrompt == nil || *calls[0].request.CachePrompt {
+		t.Fatalf("explicit prompt-cache opt-out was overwritten: %#v", calls)
 	}
 }
 

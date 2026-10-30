@@ -17,6 +17,31 @@ import (
 
 var runtimeUnitNames = []string{"qwenchik-model.service", "qwenchik-app.service"}
 
+// Keep these llama.cpp server options together. --cache-ram is expressed in
+// MiB and --ctx-checkpoints is a bounded number of reusable context prefixes.
+// Both options are supported by the current llama.cpp server interface; the
+// generated unit deliberately does not pass legacy --no-cache-idle-slots,
+// which would disable reuse and silently defeat this bounded cache policy.
+const (
+	runtimeCacheRAMMiB        = "512"
+	runtimeContextCheckpoints = "4"
+	runtimeThreads            = "4"
+	runtimeThreadsBatch       = "4"
+)
+
+func runtimeModelCacheArgs() []string {
+	return []string{"--cache-ram", runtimeCacheRAMMiB, "--ctx-checkpoints", runtimeContextCheckpoints}
+}
+
+// The laptop is thermally constrained and the model already runs almost
+// entirely on Vulkan. Keep CPU-side scheduling bounded and disable llama.cpp
+// busy polling; workers still wake on demand through the normal server queue.
+// These are intentionally separate from cache args so cache A/B experiments
+// can change reuse without accidentally changing CPU scheduling.
+func runtimeModelSchedulingArgs() []string {
+	return []string{"--threads", runtimeThreads, "--threads-batch", runtimeThreadsBatch, "--poll", "0", "--poll-batch", "0"}
+}
+
 type runtimeOptions struct {
 	ModelBin  string
 	ModelPath string
@@ -158,13 +183,15 @@ func renderRuntimeUnits(options runtimeOptions) (map[string][]byte, error) {
 	}
 	context := strconv.Itoa(options.Context)
 	workingDirectory := strings.ReplaceAll(options.Workspace, "%", "%%") + "/."
-	model := "[Unit]\nDescription=Qwenchik local Vulkan model\nStartLimitIntervalSec=0\n\n[Service]\nType=exec\nExecStart=" + execLine(
+	modelArgs := []string{
 		options.ModelBin, "-m", options.ModelPath, "--device", options.Device, "-ngl", "99",
 		"--host", "127.0.0.1", "--port", "8000", "--alias", options.Model,
 		"--jinja", "--parallel", "1", "-c", context, "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0",
-		"--cache-ram", "0", "--ctx-checkpoints", "0", "--no-cache-idle-slots",
-		"--reasoning", "off", "--no-webui",
-	) + "\nRestart=on-failure\nRestartSec=5s\nTimeoutStopSec=30s\n\n[Install]\nWantedBy=default.target\n"
+	}
+	modelArgs = append(modelArgs, runtimeModelCacheArgs()...)
+	modelArgs = append(modelArgs, runtimeModelSchedulingArgs()...)
+	modelArgs = append(modelArgs, "--reasoning", "off", "--no-webui")
+	model := "[Unit]\nDescription=Qwenchik local Vulkan model\nStartLimitIntervalSec=0\n\n[Service]\nType=exec\nExecStart=" + execLine(modelArgs...) + "\nRestart=on-failure\nRestartSec=5s\nTimeoutStopSec=30s\n\n[Install]\nWantedBy=default.target\n"
 	app := "[Unit]\nDescription=Qwenchik API and worker\nWants=qwenchik-model.service\nAfter=qwenchik-model.service\nStartLimitIntervalSec=0\n\n[Service]\nType=exec\nWorkingDirectory=" + workingDirectory + "\nEnvironment=\"PATH=/usr/local/bin:/usr/bin:/bin\"\nEnvironment=\"LLM_CONTEXT_LENGTH=" + context + "\"\nEnvironment=\"SEARCH_ENABLE_DDG=false\"\nExecStartPre=" + execLine(
 		"/usr/bin/curl", "--noproxy", "*", "--fail", "--silent", "--output", "/dev/null",
 		"--connect-timeout", "2", "--max-time", "3", "--retry", "90", "--retry-all-errors",

@@ -57,7 +57,7 @@ func researchLegacyDatabase(t *testing.T, path string, last int) *sql.DB {
 
 func researchMigrationDataSnapshot(t *testing.T, db *sql.DB) map[string][]string {
 	t.Helper()
-	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('schema_migrations','research_sessions','harness_bundles') ORDER BY name`)
+	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('schema_migrations','research_sessions','harness_bundles','checkpoint_chain_state') ORDER BY name`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestResearchAndRefinementMigrationsAddOnlyRequiredTablesAndPreserveAllData(
 		}
 	}
 	sort.Strings(addedTables)
-	if !reflect.DeepEqual(addedTables, []string{"table:harness_bundles", "table:research_sessions"}) {
+	if !reflect.DeepEqual(addedTables, []string{"table:checkpoint_chain_state", "table:harness_bundles", "table:research_sessions"}) {
 		t.Fatalf("unexpected added tables: %v", addedTables)
 	}
 	for _, operation := range []func() error{
@@ -235,7 +235,7 @@ func TestResearchAndRefinementMigrationsAddOnlyRequiredTablesAndPreserveAllData(
 	if !reflect.DeepEqual(researchMigrationSchemaSnapshot(t, s.db), afterSchema) || !reflect.DeepEqual(researchMigrationDataSnapshot(t, s.db), beforeData) {
 		t.Fatal("repeat migration or legacy reads changed persisted data")
 	}
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 12 {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 13 {
 		t.Fatalf("migration ledger: %d %v", count, err)
 	}
 	var checkpointTailIndex string
@@ -312,7 +312,7 @@ func TestResearchSessionMigrationUpgradesEveryExistingVersion(t *testing.T) {
 			if err := s.db.QueryRow(`SELECT COUNT(*) FROM research_sessions`).Scan(&count); err != nil || count != 0 {
 				t.Fatalf("legacy session backfill: %d %v", count, err)
 			}
-			if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 12 {
+			if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 13 {
 				t.Fatalf("migration ledger: %d %v", count, err)
 			}
 		})

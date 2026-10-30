@@ -30,3 +30,31 @@ test('failed evidence is cached until an explicit retry and preserves no cross-r
   assert.equal(cache.get('run-a').data[0].id, 'e-run-a')
   assert.deepEqual(cache.get('run-b').data, undefined)
 })
+
+test('historical evidence cache bounds inactive entries with an LRU policy', async () => {
+  const cache = createRunEvidenceCache(async (runID) => [{ id: runID, task_id: runID }], { maxEntries: 2 })
+  await cache.load('run-a')
+  await cache.load('run-b')
+  cache.get('run-a')
+  await cache.load('run-c')
+  assert.deepEqual(cache.get('run-a').data, [{ id: 'run-a', task_id: 'run-a' }])
+  assert.equal(cache.get('run-b').data, undefined)
+  assert.deepEqual(cache.get('run-c').data, [{ id: 'run-c', task_id: 'run-c' }])
+})
+
+test('historical evidence requests use a bounded concurrency queue', async () => {
+  let requests = 0
+  let active = 0
+  let peak = 0
+  const cache = createRunEvidenceCache(async (runID) => {
+    requests++
+    active++
+    peak = Math.max(peak, active)
+    await new Promise((resolve) => setTimeout(resolve, 1))
+    active--
+    return [{ id: runID, task_id: runID }]
+  }, { maxConcurrent: 2 })
+  await Promise.all(['a', 'b', 'c', 'd', 'e'].map((runID) => cache.load(runID)))
+  assert.equal(requests, 5)
+  assert.equal(peak, 2)
+})

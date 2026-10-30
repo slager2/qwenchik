@@ -35,7 +35,7 @@ func TestPolicyAndBackoff(t *testing.T) {
 	if err := p.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if !p.Enabled || p.MinFreeRAMBytes != 512<<20 || p.MinFreeVRAMMB != 256 || p.GPUTempMaxC != 85 || p.ProcessRSSMaxBytes != 2<<30 || p.RecoveryRAMMarginPercent != 10 || p.RecoveryVRAMMarginPercent != 10 || p.RecoveryGPUTempMarginC != 5 || p.RecoveryRSSMarginPercent != 10 || p.LlamaHealthTimeout != 2*time.Second || p.CheckInterval != 5*time.Second || p.MaxResumeAttempts != 5 {
+	if !p.Enabled || p.MinFreeRAMBytes != 512<<20 || p.MinFreeVRAMMB != 256 || p.CPUTempMaxC != 95 || p.GPUTempMaxC != 85 || p.ProcessRSSMaxBytes != 2<<30 || p.ModelRSSMaxBytes != 5<<30 || p.RecoveryRAMMarginPercent != 10 || p.RecoveryVRAMMarginPercent != 10 || p.RecoveryCPUTempMarginC != 5 || p.RecoveryGPUTempMarginC != 5 || p.RecoveryRSSMarginPercent != 10 || p.LlamaHealthTimeout != 2*time.Second || p.CheckInterval != 5*time.Second || p.MaxResumeAttempts != 5 {
 		t.Fatalf("defaults: %+v", p)
 	}
 	for attempt, want := range map[int]time.Duration{-1: 5 * time.Second, 0: 5 * time.Second, 1: 5 * time.Second, 2: 10 * time.Second, 3: 20 * time.Second, 4: 40 * time.Second, 5: 60 * time.Second, math.MaxInt: 60 * time.Second} {
@@ -49,9 +49,11 @@ func TestPolicyAndBackoff(t *testing.T) {
 	}
 	for _, mutate := range []func(*Policy){
 		func(p *Policy) { p.MinFreeRAMBytes = -1 }, func(p *Policy) { p.MinFreeVRAMMB = -1 }, func(p *Policy) { p.ProcessRSSMaxBytes = -1 },
+		func(p *Policy) { p.CPUTempMaxC = math.NaN() }, func(p *Policy) { p.CPUTempMaxC = -1 },
 		func(p *Policy) { p.GPUTempMaxC = math.NaN() }, func(p *Policy) { p.GPUTempMaxC = math.Inf(1) }, func(p *Policy) { p.GPUTempMaxC = -1 },
 		func(p *Policy) { p.RecoveryRAMMarginPercent = -1 }, func(p *Policy) { p.RecoveryRAMMarginPercent = 101 },
 		func(p *Policy) { p.RecoveryVRAMMarginPercent = 101 }, func(p *Policy) { p.RecoveryRSSMarginPercent = 101 },
+		func(p *Policy) { p.RecoveryCPUTempMarginC = math.NaN() }, func(p *Policy) { p.RecoveryCPUTempMarginC = 96 },
 		func(p *Policy) { p.RecoveryGPUTempMarginC = math.NaN() }, func(p *Policy) { p.RecoveryGPUTempMarginC = 86 },
 		func(p *Policy) { p.LlamaHealthTimeout = 0 }, func(p *Policy) { p.CheckInterval = -1 }, func(p *Policy) { p.MaxResumeAttempts = 0 },
 		func(p *Policy) { p.BackoffBase = -1 }, func(p *Policy) { p.BackoffMax = 1 },
@@ -66,7 +68,7 @@ func TestPolicyAndBackoff(t *testing.T) {
 
 func TestCheckThresholdsAndUnknown(t *testing.T) {
 	p := DefaultPolicy()
-	good := Snapshot{FreeRAMBytes: ptr(p.MinFreeRAMBytes), RSSBytes: ptr(p.ProcessRSSMaxBytes), ModelRSSBytes: ptr(p.ModelRSSMaxBytes / 2), GPUFreeVRAMMB: ptr(p.MinFreeVRAMMB), GPUTempC: ptr(p.GPUTempMaxC), LlamaHealthy: ptr(true)}
+	good := Snapshot{FreeRAMBytes: ptr(p.MinFreeRAMBytes), RSSBytes: ptr(p.ProcessRSSMaxBytes), ModelRSSBytes: ptr(p.ModelRSSMaxBytes / 2), GPUFreeVRAMMB: ptr(p.MinFreeVRAMMB), GPUTempC: ptr(p.GPUTempMaxC), LlamaHealthy: ptr(true), System: &domain.SystemTelemetry{CPUTemperature: domain.NewExactMetric(p.CPUTempMaxC, domain.MetricUnitCelsius, time.Now().UTC())}}
 	if Check(good, p) != nil || Check(Snapshot{}, p) == nil || Check(Snapshot{}, p).Code != "telemetry_unavailable" {
 		t.Fatal("threshold boundary or unknown violated")
 	}
@@ -77,6 +79,7 @@ func TestCheckThresholdsAndUnknown(t *testing.T) {
 		{"low_ram", func(s *Snapshot) { s.FreeRAMBytes = ptr(p.MinFreeRAMBytes - 1) }},
 		{"high_rss", func(s *Snapshot) { s.RSSBytes = ptr(p.ProcessRSSMaxBytes + 1) }},
 		{"low_vram", func(s *Snapshot) { s.GPUFreeVRAMMB = ptr(p.MinFreeVRAMMB - 1) }},
+		{"cpu_temperature", func(s *Snapshot) { s.System.CPUTemperature.Value = ptr(p.CPUTempMaxC + 1) }},
 		{"gpu_temperature", func(s *Snapshot) { s.GPUTempC = ptr(p.GPUTempMaxC + 1) }},
 		{"llama_unhealthy", func(s *Snapshot) { s.LlamaHealthy = ptr(false) }},
 	} {
@@ -103,10 +106,12 @@ func TestRecoveryHysteresisBoundaries(t *testing.T) {
 	p.MinFreeRAMBytes = 100
 	p.MinFreeVRAMMB = 100
 	p.ProcessRSSMaxBytes = 100
+	p.CPUTempMaxC = 95
 	p.GPUTempMaxC = 85
 	p.RecoveryRAMMarginPercent = 10
 	p.RecoveryVRAMMarginPercent = 10
 	p.RecoveryRSSMarginPercent = 10
+	p.RecoveryCPUTempMarginC = 5
 	p.RecoveryGPUTempMarginC = 5
 	good := Snapshot{
 		SnapshotAt:    time.Now().UTC(),
@@ -116,6 +121,7 @@ func TestRecoveryHysteresisBoundaries(t *testing.T) {
 		GPUFreeVRAMMB: ptr(int64(110)),
 		GPUTempC:      ptr(80.0),
 		LlamaHealthy:  ptr(true),
+		System:        &domain.SystemTelemetry{CPUTemperature: domain.NewExactMetric(90.0, domain.MetricUnitCelsius, time.Now().UTC())},
 	}
 	if violation := CheckRecovery(good, p, "low_ram"); violation != nil {
 		t.Fatalf("recovery thresholds should be inclusive at clearance: %+v", violation)
@@ -131,6 +137,7 @@ func TestRecoveryHysteresisBoundaries(t *testing.T) {
 		{"RAM", "low_ram", func(s *Snapshot) { s.FreeRAMBytes = ptr(int64(109)) }},
 		{"RSS", "high_rss", func(s *Snapshot) { s.RSSBytes = ptr(int64(91)) }},
 		{"VRAM", "low_vram", func(s *Snapshot) { s.GPUFreeVRAMMB = ptr(int64(109)) }},
+		{"CPU temperature", "cpu_temperature", func(s *Snapshot) { s.System.CPUTemperature.Value = ptr(90.01) }},
 		{"GPU temperature", "gpu_temperature", func(s *Snapshot) { s.GPUTempC = ptr(80.01) }},
 		{"llama health", "llama_unhealthy", func(s *Snapshot) { s.LlamaHealthy = ptr(false) }},
 	} {
@@ -164,6 +171,7 @@ func TestRecoveryRequiresReasonTelemetryAndStrictTelemetryRecovery(t *testing.T)
 		{"low_ram", func(s *Snapshot) { s.FreeRAMBytes = nil }},
 		{"high_rss", func(s *Snapshot) { s.RSSBytes = nil }},
 		{"low_vram", func(s *Snapshot) { s.GPUFreeVRAMMB = nil }},
+		{"cpu_temperature", func(s *Snapshot) { s.System = nil }},
 		{"gpu_temperature", func(s *Snapshot) { s.GPUTempC = nil }},
 		{"llama_unhealthy", func(s *Snapshot) { s.LlamaHealthy = nil }},
 	} {
@@ -656,6 +664,12 @@ func TestHealthFailuresAndCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	p.run = func(ctx context.Context, _ string, _ ...string) ([]byte, error) { cancel(); return nil, ctx.Err() }
+	// Force the probe path so this assertion exercises cancellation during the
+	// subprocess rather than reusing the successful short-lived GPU cache.
+	p.gpuMu.Lock()
+	p.gpuData = nil
+	p.gpuAt = time.Time{}
+	p.gpuMu.Unlock()
 	if _, err := p.Snapshot(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation swallowed: %v", err)
 	}

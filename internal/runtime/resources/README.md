@@ -1,8 +1,9 @@
 # Resource guard API (canonical Phase 1)
 
 `DefaultPolicy()` enables the laptop guard with 512 MiB minimum free RAM,
-256 MiB minimum free GPU VRAM, 85°C maximum GPU temperature, 2 GiB maximum
-application RSS, a 2 s llama health timeout, a 5 s check interval, five resume
+256 MiB minimum free GPU VRAM, 95°C maximum CPU temperature, 85°C maximum GPU
+temperature, 2 GiB maximum application RSS, 5 GiB maximum llama-server RSS,
+a 2 s llama health timeout, a 5 s check interval, five resume
 attempts and 5–60 s exponential backoff. `Policy.Validate()` rejects invalid
 thresholds, nonfinite temperatures and invalid durations. `policy.Backoff(n)`
 is one-based and saturates without duration overflow; attempts ≤1 use the base.
@@ -52,7 +53,8 @@ it is never successful unknown telemetry. Optional telemetry timeouts are
 unknown, and do not claim healthy hardware.
 
 `Check(snapshot, policy)` is deterministic and has no I/O. Violation codes:
-`low_ram`, `high_rss`, `low_vram`, `gpu_temperature`, `llama_unhealthy`.
+`low_ram`, `high_rss`, `high_model_rss`, `low_vram`, `cpu_temperature`,
+`gpu_temperature`, `llama_unhealthy`.
 Available memory must be at least its minimum; RSS/temperature may equal the
 maximum. Zero disables an individual numeric threshold. Disabled policy
 suppresses violations, while an explicitly called provider still collects.

@@ -95,6 +95,13 @@ func (r contextReader) Read(p []byte) (int, error) {
 	return r.reader.Read(p)
 }
 
+type contextReadCloser struct {
+	contextReader
+	closer io.Closer
+}
+
+func (r contextReadCloser) Close() error { return r.closer.Close() }
+
 func (s *Store) Put(ctx context.Context, taskID, name, mimeType string, content []byte) (domain.Artifact, string, error) {
 	return s.PutReader(ctx, taskID, name, mimeType, bytes.NewReader(content))
 }
@@ -240,6 +247,59 @@ func (s *Store) Read(ctx context.Context, taskID, artifactID string) ([]byte, er
 		return nil, errors.New("artifact exceeds configured size limit")
 	}
 	return content, nil
+}
+
+// Open verifies an artifact without materializing it in memory, then returns a
+// reader positioned at the beginning for streaming HTTP responses. Verification
+// happens before the caller can write headers, preserving the integrity
+// guarantee of Read while keeping peak memory bounded by the copy buffer.
+func (s *Store) Open(ctx context.Context, taskID, artifactID string) (io.ReadCloser, int64, string, error) {
+	if !safeSegment.MatchString(artifactID) {
+		return nil, 0, "", errors.New("invalid artifact identifier")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, 0, "", err
+	}
+	dir, err := s.taskDirectory(taskID, false)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	defer dir.Close()
+	dirInfo, err := dir.Stat()
+	if err != nil {
+		return nil, 0, "", err
+	}
+	if dirInfo.Mode().Perm() != 0700 {
+		return nil, 0, "", errors.New("artifact task directory must be private")
+	}
+	fd, err := syscall.Openat(int(dir.Fd()), artifactID, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	file := os.NewFile(uintptr(fd), artifactID)
+	info, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return nil, 0, "", err
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Size() > s.maxBytes {
+		file.Close()
+		return nil, 0, "", errors.New("artifact is not a bounded private regular file")
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, io.LimitReader(contextReader{ctx, file}, s.maxBytes+1)); err != nil {
+		file.Close()
+		return nil, 0, "", err
+	}
+	if err := ctx.Err(); err != nil {
+		file.Close()
+		return nil, 0, "", err
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		file.Close()
+		return nil, 0, "", err
+	}
+	return contextReadCloser{contextReader: contextReader{ctx: ctx, reader: file}, closer: file}, info.Size(), hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func (s *Store) ReadRange(ctx context.Context, taskID, artifactID string, offset int64, limit int) ([]byte, error) {

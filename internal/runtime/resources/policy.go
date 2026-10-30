@@ -14,11 +14,13 @@ type Policy struct {
 	Enabled                   bool          `json:"enabled"`
 	MinFreeRAMBytes           int64         `json:"min_free_ram_bytes"`
 	MinFreeVRAMMB             int64         `json:"min_free_vram_mb"`
+	CPUTempMaxC               float64       `json:"cpu_temp_max_c"`
 	GPUTempMaxC               float64       `json:"gpu_temp_max_c"`
 	ProcessRSSMaxBytes        int64         `json:"process_rss_max_bytes"`
 	ModelRSSMaxBytes          int64         `json:"model_rss_max_bytes,omitempty"`
 	RecoveryRAMMarginPercent  int           `json:"recovery_ram_margin_percent"`
 	RecoveryVRAMMarginPercent int           `json:"recovery_vram_margin_percent"`
+	RecoveryCPUTempMarginC    float64       `json:"recovery_cpu_temp_margin_c"`
 	RecoveryGPUTempMarginC    float64       `json:"recovery_gpu_temp_margin_c"`
 	RecoveryRSSMarginPercent  int           `json:"recovery_rss_margin_percent"`
 	LlamaHealthTimeout        time.Duration `json:"llama_health_timeout"`
@@ -33,11 +35,13 @@ func DefaultPolicy() Policy {
 		Enabled:                   true,
 		MinFreeRAMBytes:           512 << 20,
 		MinFreeVRAMMB:             256,
-		ModelRSSMaxBytes:          3 << 30,
+		ModelRSSMaxBytes:          5 << 30,
+		CPUTempMaxC:               95,
 		GPUTempMaxC:               85,
 		ProcessRSSMaxBytes:        2 << 30,
 		RecoveryRAMMarginPercent:  10,
 		RecoveryVRAMMarginPercent: 10,
+		RecoveryCPUTempMarginC:    5,
 		RecoveryGPUTempMarginC:    5,
 		RecoveryRSSMarginPercent:  10,
 		LlamaHealthTimeout:        2 * time.Second,
@@ -49,19 +53,34 @@ func DefaultPolicy() Policy {
 }
 
 func (p Policy) Validate() error {
-	if p.MinFreeRAMBytes < 0 || p.MinFreeVRAMMB < 0 || p.ProcessRSSMaxBytes < 0 || p.ModelRSSMaxBytes < 0 || p.GPUTempMaxC < 0 || math.IsNaN(p.GPUTempMaxC) || math.IsInf(p.GPUTempMaxC, 0) {
+	if p.MinFreeRAMBytes < 0 || p.MinFreeVRAMMB < 0 || p.ProcessRSSMaxBytes < 0 || p.ModelRSSMaxBytes < 0 || invalidTemperature(p.CPUTempMaxC) || invalidTemperature(p.GPUTempMaxC) {
 		return errors.New("resource thresholds must be finite and nonnegative")
 	}
 	if p.RecoveryRAMMarginPercent < 0 || p.RecoveryRAMMarginPercent > 100 || p.RecoveryVRAMMarginPercent < 0 || p.RecoveryVRAMMarginPercent > 100 || p.RecoveryRSSMarginPercent < 0 || p.RecoveryRSSMarginPercent > 100 {
 		return errors.New("resource recovery percentage margins must be between 0 and 100")
 	}
-	if p.RecoveryGPUTempMarginC < 0 || p.RecoveryGPUTempMarginC > 150 || math.IsNaN(p.RecoveryGPUTempMarginC) || math.IsInf(p.RecoveryGPUTempMarginC, 0) || p.GPUTempMaxC > 0 && p.RecoveryGPUTempMarginC > p.GPUTempMaxC {
-		return errors.New("GPU temperature recovery margin must be finite, nonnegative, and no greater than the configured maximum")
+	if invalidRecoveryTemperature(p.RecoveryCPUTempMarginC, p.CPUTempMaxC) || invalidRecoveryTemperature(p.RecoveryGPUTempMarginC, p.GPUTempMaxC) {
+		return errors.New("temperature recovery margins must be finite, nonnegative, and no greater than their configured maximum")
 	}
 	if p.LlamaHealthTimeout <= 0 || p.CheckInterval <= 0 || p.MaxResumeAttempts <= 0 || p.BackoffBase <= 0 || p.BackoffMax < p.BackoffBase {
 		return errors.New("resource timeouts, interval, attempts and backoff must be positive and ordered")
 	}
 	return nil
+}
+
+func invalidTemperature(value float64) bool {
+	return value < 0 || math.IsNaN(value) || math.IsInf(value, 0)
+}
+
+func invalidRecoveryTemperature(margin, maximum float64) bool {
+	return margin < 0 || margin > 150 || math.IsNaN(margin) || math.IsInf(margin, 0) || maximum > 0 && margin > maximum
+}
+
+func cpuTemperature(s Snapshot) *float64 {
+	if s.System == nil {
+		return nil
+	}
+	return s.System.CPUTemperature.Value
 }
 
 func (p Policy) Backoff(attempt int) time.Duration { return Backoff(attempt, p) }
@@ -132,6 +151,8 @@ func Check(s Snapshot, p Policy) *Violation {
 		code, message = "high_rss", "process RSS exceeds configured maximum"
 	case s.GPUFreeVRAMMB != nil && *s.GPUFreeVRAMMB < p.MinFreeVRAMMB:
 		code, message = "low_vram", "available GPU VRAM below configured minimum"
+	case cpuTemperature(s) != nil && p.CPUTempMaxC > 0 && *cpuTemperature(s) > p.CPUTempMaxC:
+		code, message = "cpu_temperature", "CPU temperature exceeds configured maximum"
 	case s.GPUTempC != nil && p.GPUTempMaxC > 0 && *s.GPUTempC > p.GPUTempMaxC:
 		code, message = "gpu_temperature", "GPU temperature exceeds configured maximum"
 	case s.LlamaHealthy != nil && !*s.LlamaHealthy:
@@ -177,6 +198,8 @@ func CheckRecovery(s Snapshot, p Policy, pauseReason string) *Violation {
 		code, message = "high_rss", "process RSS has not cleared the recovery margin"
 	case s.GPUFreeVRAMMB != nil && *s.GPUFreeVRAMMB < recoveryMinimum(p.MinFreeVRAMMB, p.RecoveryVRAMMarginPercent):
 		code, message = "low_vram", "available GPU VRAM has not cleared the recovery margin"
+	case cpuTemperature(s) != nil && p.CPUTempMaxC > 0 && *cpuTemperature(s) > p.CPUTempMaxC-p.RecoveryCPUTempMarginC:
+		code, message = "cpu_temperature", "CPU temperature has not cleared the recovery margin"
 	case s.GPUTempC != nil && p.GPUTempMaxC > 0 && *s.GPUTempC > p.GPUTempMaxC-p.RecoveryGPUTempMarginC:
 		code, message = "gpu_temperature", "GPU temperature has not cleared the recovery margin"
 	case s.LlamaHealthy != nil && !*s.LlamaHealthy:
@@ -190,7 +213,7 @@ func CheckRecovery(s Snapshot, p Policy, pauseReason string) *Violation {
 
 func recoveryPauseReasonKnown(reason string) bool {
 	switch reason {
-	case "low_ram", "high_rss", "high_model_rss", "low_vram", "gpu_temperature", "llama_unhealthy",
+	case "low_ram", "high_rss", "high_model_rss", "low_vram", "cpu_temperature", "gpu_temperature", "llama_unhealthy",
 		"telemetry_unavailable", "model_oom", "model_resource", "model_timeout", "context_mismatch", "context_unverified", "context_capacity":
 		return true
 	default:
@@ -218,6 +241,8 @@ func missingRecoveryMetric(s Snapshot, p Policy, pauseReason string) bool {
 		return s.ModelRSSBytes == nil
 	case "low_vram":
 		return s.GPUFreeVRAMMB == nil
+	case "cpu_temperature":
+		return cpuTemperature(s) == nil
 	case "gpu_temperature":
 		return s.GPUTempC == nil
 	case "llama_unhealthy":
@@ -262,6 +287,7 @@ func thresholdWarnings(s *Snapshot, p Policy) {
 		{s.FreeRAMBytes == nil && p.MinFreeRAMBytes > 0, "RAM"},
 		{s.RSSBytes == nil && p.ProcessRSSMaxBytes > 0, "process RSS"},
 		{s.GPUFreeVRAMMB == nil && p.MinFreeVRAMMB > 0, "GPU VRAM"},
+		{cpuTemperature(*s) == nil && p.CPUTempMaxC > 0, "CPU temperature"},
 		{s.GPUTempC == nil && p.GPUTempMaxC > 0, "GPU temperature"},
 		{s.LlamaHealthy == nil, "llama health"},
 	} {

@@ -20,3 +20,24 @@ export function workspaceEventResources(event) {
 }
 
 export const fullWorkspaceResources = () => [...full]
+
+export function applyWorkspaceDelta(current, payload, seq) {
+  if (!payload || typeof payload.stream_id !== 'string' || typeof payload.message_id !== 'string' || typeof payload.delta !== 'string' || !Number.isSafeInteger(payload.chunk_index) || payload.chunk_index < 0 || !Number.isSafeInteger(seq) || seq <= 0) {
+    return { draft: current, accepted: false, needsSync: true, error: 'invalid' }
+  }
+  const sameStream = !!current && current.stream_id === payload.stream_id && current.message_id === payload.message_id
+  if ((!sameStream && payload.chunk_index !== 0) || (sameStream && payload.chunk_index > current.chunk_index + 1)) {
+    // Keep the last verified text visible while the canonical REST snapshot
+    // is being fetched. A gap must never make the UI look empty or erase a
+    // partial answer that has already been validated locally.
+    return { draft: current, accepted: false, needsSync: true, error: 'gap' }
+  }
+  if (!sameStream) return { draft: { ...payload, content: payload.delta, seq }, accepted: true, needsSync: false, error: '' }
+  if (payload.chunk_index <= current.chunk_index) return { draft: { ...current, seq }, accepted: true, needsSync: false, error: '' }
+  return {
+    draft: { ...current, delta: payload.delta, content: current.content + payload.delta, chunk_index: payload.chunk_index, seq },
+    accepted: true,
+    needsSync: false,
+    error: '',
+  }
+}

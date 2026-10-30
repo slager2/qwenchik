@@ -69,10 +69,11 @@ func (s *Store) StartRefinement(ctx context.Context, model domain.ModelProfileSn
 	}
 	fingerprintRaw, _ := json.Marshal(sources)
 	fingerprint := roleInputHash(fingerprintRaw)
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return domain.Task{}, err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	var id, operation, prior string
 	err = tx.QueryRowContext(ctx, `SELECT resource_id,operation,COALESCE(request_sha256,'') FROM idempotency_keys WHERE key=?`, key).Scan(&id, &operation, &prior)
@@ -105,13 +106,13 @@ func (s *Store) StartRefinement(ctx context.Context, model domain.ModelProfileSn
 		return domain.Task{}, err
 	}
 	job := domain.RefinementJob{Base: *model.Bundle, Model: model, SourceTaskIDs: sources, DeadlineAt: deadline}
-	if _, err := saveCheckpointTx(ctx, tx, id, 1, seq, map[string]any{"refinement_job": job, "completed_steps": []string{}}); err != nil {
+	if _, err := s.saveCheckpointTx(ctx, tx, id, 1, seq, map[string]any{"refinement_job": job, "completed_steps": []string{}}); err != nil {
 		return domain.Task{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO idempotency_keys(key,operation,resource_id,created_at,request_sha256) VALUES(?,'refinement.create',?,?,?)`, key, id, stamp(now), fingerprint); err != nil {
 		return domain.Task{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitCheckpointTx(ctx, tx); err != nil {
 		return domain.Task{}, err
 	}
 	return s.GetTask(ctx, id)
@@ -121,10 +122,11 @@ func (s *Store) ReserveRefinementHTTP(ctx context.Context, taskID string) error 
 	if s.RefinementFrozen() {
 		return ErrRefinementFrozen
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if err := invocationAllowed(ctx, tx, taskID, true); err != nil {
 		return err
@@ -136,7 +138,7 @@ func (s *Store) ReserveRefinementHTTP(ctx context.Context, taskID string) error 
 	if count >= 20 {
 		return ErrResearchBudgetExceeded
 	}
-	state, version, err := invocationCheckpointState(ctx, tx, taskID)
+	state, version, err := s.invocationCheckpointState(ctx, tx, taskID)
 	if err != nil {
 		return err
 	}
@@ -144,10 +146,10 @@ func (s *Store) ReserveRefinementHTTP(ctx context.Context, taskID string) error 
 	if err != nil {
 		return err
 	}
-	if _, err := saveCheckpointTx(ctx, tx, taskID, version, seq, state); err != nil {
+	if _, err := s.saveCheckpointTx(ctx, tx, taskID, version, seq, state); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return s.commitCheckpointTx(ctx, tx)
 }
 
 func (s *Store) RefinementRoleLatency(ctx context.Context, taskID, role string) (int64, error) {
@@ -276,10 +278,11 @@ func (s *Store) SaveCandidate(ctx context.Context, taskID string, job domain.Ref
 	if err := patch.Validate(); err != nil {
 		return domain.BundleCandidate{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return domain.BundleCandidate{}, err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if err := invocationAllowed(ctx, tx, taskID, true); err != nil {
 		return domain.BundleCandidate{}, err
@@ -315,7 +318,7 @@ func (s *Store) SaveCandidate(ctx context.Context, taskID string, job domain.Ref
 	if _, err := tx.ExecContext(ctx, `INSERT INTO harness_bundles(hash,base_hash,version,parent_hash,spec_json,patch_json,task_id,status,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'evaluating',0,?,?)`, bundle.BundleHash, bundle.BaseBundleHash, version, job.Base.BundleHash, string(spec), string(proposal), taskID, now, now); err != nil {
 		return domain.BundleCandidate{}, err
 	}
-	state, planVersion, err := invocationCheckpointState(ctx, tx, taskID)
+	state, planVersion, err := s.invocationCheckpointState(ctx, tx, taskID)
 	if err != nil {
 		return domain.BundleCandidate{}, err
 	}
@@ -325,10 +328,10 @@ func (s *Store) SaveCandidate(ctx context.Context, taskID string, job domain.Ref
 	if err != nil {
 		return domain.BundleCandidate{}, err
 	}
-	if _, err := saveCheckpointTx(ctx, tx, taskID, planVersion, seq, state); err != nil {
+	if _, err := s.saveCheckpointTx(ctx, tx, taskID, planVersion, seq, state); err != nil {
 		return domain.BundleCandidate{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitCheckpointTx(ctx, tx); err != nil {
 		return domain.BundleCandidate{}, err
 	}
 	return s.BundleCandidate(ctx, bundle.BundleHash)

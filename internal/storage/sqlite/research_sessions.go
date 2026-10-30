@@ -504,10 +504,11 @@ func writeResearchCounters(ctx context.Context, tx *sql.Tx, taskID string, count
 }
 
 func (s *Store) SyncResearchCheckpoint(ctx context.Context, taskID string, state any) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if err := fenceExecution(ctx, tx, taskID); err != nil {
 		return err
@@ -528,10 +529,10 @@ func (s *Store) SyncResearchCheckpoint(ctx context.Context, taskID string, state
 	if err != nil {
 		return err
 	}
-	if err := insertCheckpoint(ctx, tx, taskID, planVersion, checkpointSeq, state); err != nil {
+	if err := s.insertCheckpoint(ctx, tx, taskID, planVersion, checkpointSeq, state); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return s.commitCheckpointTx(ctx, tx)
 }
 
 func prepareResearchCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, planVersion int, state any) ([]byte, int, error) {

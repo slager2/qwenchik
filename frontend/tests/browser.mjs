@@ -46,6 +46,8 @@ const conversation = (id, mode) => ({ id, title: id === 'a' ? 'Первый ра
 const conversations = [conversation('a', 'chat'), conversation('b', 'research'), { id: 'c', title: 'Заблокированная проверка', mode: 'research', created_at: now, updated_at: now, latest_run_id: 'r-c' }, { id: 'd', title: 'Ресурсная пауза', mode: 'research', created_at: now, updated_at: now, latest_run_id: 'r-d' }]
 conversations.push({ ...conversation('e', 'research'), title: 'Сбой планирования' })
 conversations.push({ ...conversation('f', 'research'), title: 'Поздний сбой планирования' })
+conversations.push({ ...conversation('g', 'research'), title: 'Ручное удержание RSS' })
+conversations.push({ ...conversation('h', 'research'), title: 'Проверка неизвестного исхода' })
 const message = (id, conversation_id, run_id, role, content, status = 'completed', seq = 0) => ({ id, conversation_id, run_id, role, content, status, created_at: now, updated_at: now, last_event_seq: seq })
 const messages = {
   a: [message('u-a', 'a', 'r-a', 'user', 'Первый вопрос'), message('m-a', 'a', 'r-a', 'assistant', 'Ответ первого разговора')],
@@ -56,6 +58,12 @@ const messages = {
   f: [message('u-f', 'f', 'r-f', 'user', 'Составить роадмап'), message('m-f', 'f', 'r-f', 'assistant', '', 'streaming')],
 }
 const runs = Object.fromEntries(conversations.map((item) => [item.latest_run_id, { id: item.latest_run_id, conversation_id: item.id, user_message_id: `u-${item.id}`, assistant_message_id: `m-${item.id}`, mode: item.mode, operation: 'message', status: 'completed', retry_count: 0 }]))
+messages.b[1].content += '\n\n## Ограничения\n\n' + 'Частичный отчёт с сохранёнными ограничениями. '.repeat(50) + '\n\n### Детали ограничения\n\nМатериал не означает независимую проверку.'
+for (const id of ['g', 'h']) {
+  messages[id] = [message(`u-${id}`, id, `r-${id}`, 'user', 'Сохранённое исследование'), message(`m-${id}`, id, `r-${id}`, 'assistant', '', 'paused')]
+  runs[`r-${id}`] = { ...runs[`r-${id}`], status: 'paused', pause_reason: id === 'g' ? 'manual' : 'recovery_required', resource_reason: id === 'g' ? 'high_model_rss' : 'fetch_outcome_unknown', stage: 'verification' }
+}
+const heldRuntime = run => ({ task_id: run.id, cursor: 0, status: 'paused', pause_reason: run.pause_reason, resource_reason: run.resource_reason, profile: 'standard', counters: { llm_calls: 10, search_queries: 2, fetches: 2, evidence: 2 }, research_report: { artifact_id: '', markdown_artifact_id: '', outcome: 'completed', sections: 4, unrepresented_criteria: null }, runtime: { enabled: true } })
 messages.b[1].metadata = { verification: { status: 'supported' } }
 messages.b[1].citations = [{ evidence_id: 'ev-1', url: 'https://example.org/source' }]
 runs['r-b'].terminal_outcome = 'partial'
@@ -99,12 +107,17 @@ let messagesFail = false
 let runtimeGetUnavailable = false
 let workspaceRuntimeGetUnavailable = false
 let doctorBlocked = true
+let doctorRequests = 0
+let policyRequests = 0
+let settingsReject = false
+const settingsWrites = []
 let healthMalformed = false
 let sourceRequests = 0
 let evidenceRequests = 0
 let legacyEvidenceDone = false
 const legacyTask = { id: 'legacy-task', title: 'Существующая задача', description: 'Проверить сохранённую задачу', status: 'failed', priority: 0, version: 1, created_at: now, updated_at: now }
 const activeWorkspaceTask = { id: 'active-workspace-task', title: 'Активный поток Workspace', description: 'Проверить выборочную синхронизацию', status: 'running', stage: 'fetch', priority: 0, version: 1, created_at: now, updated_at: now }
+const pausedWorkspaceTasks = ['manual', 'resource_guard', 'recovery_required'].map((pause_reason, index) => ({ ...legacyTask, id: `workspace-hold-${index}`, title: `Workspace ${pause_reason}`, status: 'paused', pause_reason, resource_reason: 'high_model_rss' }))
 const workspaceEventRequests = []
 const workspaceSSEEvents = [
   { type: 'task.created', payload: { status: 'running' } },
@@ -153,14 +166,97 @@ async function assertPageOverflow(page, description) {
 }
 
 async function expandResearchSections(page) {
+  await openDetails(page)
   const research = page.locator('.chat-research')
   await research.waitFor({ state: 'visible' })
+  const diagnostics = research.getByRole('button', { name: 'Диагностика запуска', exact: true })
+  if (await diagnostics.getAttribute('aria-expanded') === 'false') await diagnostics.click()
   for (const name of ['Поисковые запросы', 'Поисковые провайдеры', 'Действия']) {
     const toggle = research.getByRole('button', { name, exact: true })
     await toggle.waitFor({ state: 'visible' })
     if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click()
     assert.equal(await toggle.getAttribute('aria-expanded'), 'true', `${name} should be expanded`)
   }
+  for (const toggle of await research.getByRole('button', { name: 'Сведения о загрузке', exact: true }).all()) {
+    if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click()
+  }
+}
+
+async function openDetails(page) {
+  const toggle = page.getByRole('button', { name: 'Детали', exact: true })
+  if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click()
+}
+
+async function assertSurfaceLayout(page, description) {
+  const issues = await page.evaluate(() => {
+    const modal = document.querySelector('dialog[open]')
+    const root = modal || document.querySelector('.conversation-shell') || document.body
+    const issues = []
+    for (const element of root.querySelectorAll('button, input, select, textarea, summary, h1, h2, .research-overview, .chat-composer')) {
+      const r = element.getBoundingClientRect()
+      if (!r.width || !r.height || element.closest('[inert], [aria-hidden="true"]') || getComputedStyle(element).visibility === 'hidden' || r.bottom <= 0 || r.top >= innerHeight) continue
+      const control = element.matches('button, input, select, textarea, summary')
+      if (r.left < -1 || r.right > innerWidth + 1 || control && (r.width < 43.5 || r.height < 43.5)) issues.push({ tag: element.tagName, class: element.className, x: r.x, y: r.y, width: r.width, height: r.height })
+    }
+    return issues
+  })
+  assert.deepEqual(issues, [], `${description}: child bounds or 44px action targets`)
+}
+
+async function assertWorkspaceRail(page, width) {
+  const rail = page.getByRole('complementary', { name: 'Основная навигация', exact: true })
+  // Earlier telemetry checks scroll the document; inspect the in-flow rail
+  // after bringing it into view, rather than requiring sticky navigation.
+  await rail.scrollIntoViewIfNeeded()
+  const measured = await rail.evaluate(element => {
+    const rect = node => {
+      const r = node.getBoundingClientRect()
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }
+    }
+    const inside = (r, outer) => r.left >= outer.left - 1 && r.right <= outer.right + 1 && r.top >= outer.top - 1 && r.bottom <= outer.bottom + 1
+    const overlaps = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1
+    const viewport = { left: 0, top: 0, right: innerWidth, bottom: innerHeight }
+    const frame = rect(element)
+    const issues = []
+    const controls = [...element.querySelectorAll('a.rail-link, button.rail-link')]
+    const labels = []
+    if (controls.length !== 4) issues.push(`expected four rail actions, found ${controls.length}`)
+    const actions = controls.map(control => {
+      const bounds = rect(control)
+      const label = control.textContent.trim()
+      if (!inside(bounds, viewport) || !inside(bounds, frame)) issues.push(`${label}: action clipped`)
+      if (bounds.width < 43.5 || bounds.height < 43.5) issues.push(`${label}: action smaller than 44px`)
+      const walker = document.createTreeWalker(control, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) {
+        const text = walker.currentNode
+        if (!text.textContent.trim() || text.parentElement.closest('.rail-glyph')) continue
+        const range = document.createRange()
+        range.selectNodeContents(text)
+        for (const r of range.getClientRects()) {
+          const box = { left: r.left, top: r.top, right: r.right, bottom: r.bottom }
+          if (!inside(box, bounds)) issues.push(`${label}: label escapes its action`)
+          labels.push({ label, ...box })
+        }
+      }
+      return { label, ...bounds }
+    })
+    for (let i = 0; i < actions.length; i++) for (let j = i + 1; j < actions.length; j++) {
+      if (overlaps(actions[i], actions[j])) issues.push(`${actions[i].label}/${actions[j].label}: action overlap`)
+    }
+    for (let i = 0; i < labels.length; i++) for (let j = i + 1; j < labels.length; j++) {
+      if (overlaps(labels[i], labels[j])) issues.push(`${labels[i].label}/${labels[j].label}: label overlap`)
+    }
+    const chrome = ['.brand', '.rail-runtime'].map(selector => {
+      const node = element.querySelector(selector)
+      if (!node) { issues.push(`${selector}: missing`); return { selector } }
+      const bounds = rect(node)
+      if (!inside(bounds, viewport) || !inside(bounds, frame)) issues.push(`${selector}: clipped`)
+      for (const child of node.querySelectorAll('*')) if (!inside(rect(child), bounds)) issues.push(`${selector}: child clipped`)
+      return { selector, ...bounds }
+    })
+    return { issues, frame, actions, labels, chrome }
+  })
+  assert.deepEqual(measured.issues, [], `Workspace rail ${width}px: ${JSON.stringify(measured)}`)
 }
 
 async function checkTelemetry(panel, { cpu, tokens, temperature, ram, description }) {
@@ -219,6 +315,7 @@ function submit(id, content, mode, operation = 'message', previous) {
   conv.active_run_id = runID
   conv.latest_run_id = runID
   events[runID] = [1, 2].map((seq) => ({ id: `${runID}-${seq}`, task_id: runID, seq, type: 'message.delta', schema_version: 1, visibility: 'user', created_at: now, payload: { message_id: assistant.id, stream_id: `stream-${counter}`, chunk_index: seq - 1, delta: seq === 1 ? 'Начало' : ' потока' } }))
+  if (content === 'Проверка автопрокрутки') events[runID][1].payload.delta += '\n\n' + 'Новый фрагмент длинного потокового ответа.\n\n'.repeat(35) + 'Хвост потока'
   return { conversation_id: id, user_message: user, assistant_message: assistant, run }
 }
 
@@ -235,12 +332,19 @@ try {
     const method = request.method()
     const json = (value, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) })
     if (parts[1] === 'tasks' && parts[2] === activeWorkspaceTask.id && method === 'GET') workspaceEventRequests.push(`${parts.slice(3).join('/') || 'task'}`)
-    if (parts[1] === 'doctor') return doctorBlocked ? route.abort('blockedbyclient') : json({ status: 'ok', checks: { app: { status: 'ok' }, database: { status: 'ok' }, worker: { status: 'ok' }, llm: { status: 'ok' } } })
-    if (parts[1] === 'health') return healthMalformed ? route.fulfill({ status: 200, contentType: 'application/json', body: '{invalid json' }) : json({ status: 'ok', database: 'ok' })
+    if (parts[1] === 'doctor') { doctorRequests++; return doctorBlocked ? route.abort('blockedbyclient') : json({ status: 'ok', checks: { app: { status: 'ok' }, database: { status: 'ok' }, worker: { status: 'ok' }, llm: { status: 'ok' } } }) }
+    if (parts[1] === 'lab' && parts[2] === 'policy') { policyRequests++; return json({ hold_resource_pauses: false, research_limits: { configured: true, privacy_mode: 'local_inference_external_search', adaptive_enabled: true, sectioned_report_enabled: true, pdf_allow_unsandboxed_fallback: false, task_fetch_budget_bytes: 134217728, source_fetch_bytes: 16777216, pdf_bytes: 67108864 } }) }
+    if (parts[1] === 'health') return healthMalformed ? route.fulfill({ status: 200, contentType: 'application/json', body: '{invalid json' }) : json({ status: 'ok', database: 'ok', model: { id: 'local-qwen', status: 'configured' }, worker: 'attached', worker_details: { status: 'fresh', busy: false }, runtime: { enabled: true } })
     if (parts[1] === 'providers') return providersFail ? json({ error: { message: 'Провайдеры недоступны' } }, 503) : json({ search: { providers: {} } })
     if (parts[1] === 'memories') return json([])
     if (parts[1] === 'tasks') {
-      if (!parts[2]) return json([legacyTask, activeWorkspaceTask])
+      if (!parts[2]) return json([legacyTask, activeWorkspaceTask, ...pausedWorkspaceTasks])
+      const heldTask = pausedWorkspaceTasks.find(task => task.id === parts[2])
+      if (heldTask) {
+        if (!parts[3]) return json(heldTask)
+        if (parts[3] === 'events' && parts[4] === 'stream') return route.fulfill({ contentType: 'text/event-stream', body: ': idle\n\n' })
+        return json([])
+      }
       if (parts[2] === activeWorkspaceTask.id) {
         if (!parts[3]) return json(activeWorkspaceTask)
         if (parts[3] === 'runtime') return json(runtimeFixture(activeWorkspaceTask.id))
@@ -286,7 +390,8 @@ try {
       if (!id && method === 'GET') return json(conversations)
       if (!id && method === 'POST') {
         const body = request.postDataJSON()
-        const next = { id: `c-${++counter}`, title: body.title, mode: body.mode, created_at: now, updated_at: now }
+        settingsWrites.push({ method, body })
+        const next = { id: `c-${++counter}`, ...body, created_at: now, updated_at: now }
         conversations.push(next)
         messages[next.id] = []
         return json(next, 201)
@@ -294,14 +399,14 @@ try {
       const conv = conversations.find((item) => item.id === id)
       if (!conv) return json({ error: { message: 'Разговор не найден' } }, 404)
       if (!parts[3] && method === 'GET') return json(conv)
-      if (!parts[3] && method === 'PATCH') { Object.assign(conv, request.postDataJSON()); return json(conv) }
+      if (!parts[3] && method === 'PATCH') { const body = request.postDataJSON(); settingsWrites.push({ method, body }); if (settingsReject) { settingsReject = false; return json({ error: { message: 'Сервер отклонил настройки', code: 'invalid_conversation' } }, 400) } Object.assign(conv, body); return json(conv) }
       if (!parts[3] && method === 'DELETE') { conv.archived_at = now; return route.fulfill({ status: 204 }) }
       if (parts[3] === 'messages' && method === 'GET') return messagesFail ? json({ error: { message: 'Сеть недоступна' } }, 503) : json(messages[id])
       if (parts[3] === 'messages' && method === 'POST') {
         const body = request.postDataJSON()
         submissionKeys.push(request.headers()['idempotency-key'])
         if (body.research_run_id) researchContextSubmissions.push(body.research_run_id)
-        await new Promise((resolve) => setTimeout(resolve, 250))
+        await new Promise((resolve) => setTimeout(resolve, 750))
         if (rejectNext) { rejectNext = false; return json({ error: { code: 'unavailable', message: 'Временный сетевой сбой', retryable: true } }, 503) }
         const result = submit(id, body.content, body.mode)
         if (body.research_run_id) result.user_message.metadata = { research_run_id: body.research_run_id, research_context: { run_id: body.research_run_id, verification_status: 'supported', sources: [{ evidence_id: 'ev-1', title: 'Реальный источник', canonical_url: 'https://example.org/source' }] } }
@@ -309,6 +414,8 @@ try {
       }
     }
     if (parts[1] === 'runs') {
+      const heldTask = pausedWorkspaceTasks.find(task => task.id === parts[2])
+      if (heldTask && parts[3] === 'runtime') return json({ ...heldRuntime({ ...heldTask, id: heldTask.id }), task_id: heldTask.id })
       if (parts[3] === 'runtime' && [legacyTask.id, activeWorkspaceTask.id].includes(parts[2])) {
         if (parts[2] === activeWorkspaceTask.id && workspaceRuntimeGetUnavailable) return json({ error: { message: 'Workspace runtime unavailable' } }, 503)
         return json(runtimeFixture(parts[2]))
@@ -316,6 +423,13 @@ try {
       const run = runs[parts[2]]
       if (!run) return json({ error: { message: 'Run not found' } }, 404)
       if (!parts[3]) return json(run)
+      if (['r-g', 'r-h'].includes(run.id)) {
+        if (parts[3] === 'runtime') return json(heldRuntime(run))
+        if (parts[3] === 'evidence') return json([1, 2].map(n => ({ id: `${run.id}-ev-${n}`, task_id: run.id, title: `Сохранённый материал ${n}`, canonical_url: `https://example.org/held-${n}`, excerpt: 'Сохранённый фрагмент', provider: 'offline', extraction_method: 'text', retrieved_at: now })))
+        if (parts[3] === 'events' && parts[4] === 'stream') return route.fulfill({ contentType: 'text/event-stream', body: ': held\n\n' })
+        if (parts[3] === 'plan') return json(null)
+        return json([])
+      }
       if (run.id === 'r-f') {
         if (parts[3] === 'events' && parts[4] === 'stream') {
           await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -355,7 +469,7 @@ try {
         const selected = (events[run.id] || []).filter((item) => item.seq > Math.max(after, Number(request.headers()['last-event-id'] || 0)))
         let telemetryFrames = ''
         if (run.id === 'r-b') {
-          if (runtimeGetUnavailable) await new Promise((resolve) => setTimeout(resolve, 250))
+          if (runtimeGetUnavailable) await new Promise((resolve) => setTimeout(resolve, 1500))
           const runtime = runtimeFixture(run.id, events[run.id]?.at(-1)?.seq || 0)
           runtime.status = run.status
           runtime.terminal_outcome = run.terminal_outcome
@@ -374,7 +488,7 @@ try {
         }
         const body = 'retry: 10000\n\n' + telemetryFrames + selected.map((event) => `id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('')
         const assistant = messages[run.conversation_id].find((item) => item.id === run.assistant_message_id)
-        if (assistant && selected.length && run.status === 'running' && assistant.last_event_seq <= 2) { assistant.content = 'Начало потока'; assistant.last_event_seq = 2 }
+        if (assistant && selected.length && run.status === 'running' && assistant.last_event_seq <= 2) { assistant.content = (events[run.id] || []).filter(event => event.type === 'message.delta').map(event => event.payload.delta).join(''); assistant.last_event_seq = 2 }
         return route.fulfill({ contentType: 'text/event-stream', body })
       }
       if (parts[3] === 'events') return json((events[run.id] || []).filter((event) => event.seq > Number(url.searchParams.get('after') || 0)))
@@ -385,6 +499,87 @@ try {
     return json({ error: { message: `Unmocked: ${method} ${url.pathname}` } }, 404)
   })
 
+  // A real Phase 3 hold shape: checkpoints can contain completed sections while
+  // no answer/artifact was delivered. Never promote those internal fields.
+  for (const id of ['g', 'h', 'd']) {
+    await page.goto(`${base}/#/chat/${id}`)
+    const overview = page.locator('.research-overview')
+    await overview.getByRole('heading', { name: 'Исследование на паузе', exact: true }).waitFor()
+    const resume = overview.getByRole('button', { name: 'Возобновить', exact: true })
+    assert.equal(await resume.isEnabled(), id === 'g', `${id}: backend-compatible resume eligibility`)
+    if (id === 'g') {
+      await overview.getByText('Сохранённых материалов: 2', { exact: true }).waitFor()
+      assert.match(await overview.innerText(), /Превышен лимит памяти модели/)
+      assert.match(await overview.innerText(), /backend повторно проверит ограничения; продолжение не гарантировано/)
+      assert.match(await overview.innerText(), /Текст ответа пока отсутствует · Файл отчёта пока не сохранён/)
+      assert.doesNotMatch(await page.locator('.chat-center').innerText(), /Готовлю ответ|Отчёт сохранён|Результат сохранён/)
+      assert.equal(await page.getByRole('link', { name: /Скачать отчёт/ }).count(), 0)
+    }
+    await openDetails(page)
+    assert.equal(await page.locator('.chat-research').getByRole('button', { name: 'Возобновить', exact: true }).isEnabled(), id === 'g', `${id}: Inspector uses same resume eligibility as Overview`)
+  }
+  for (const width of [320, 375, 414, 768, 1024, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto(`${base}/#/chat/g`)
+    await page.locator('.research-overview').getByText('Сохранённых материалов: 2', { exact: true }).waitFor()
+    assert.equal(await page.locator('dialog[open]').count(), 0, `research navigation must not open a modal at ${width}`)
+    await page.reload()
+    await page.locator('.research-overview').getByText('Сохранённых материалов: 2', { exact: true }).waitFor()
+    assert.equal(await page.locator('dialog[open]').count(), 0, `research reload must not open a modal at ${width}`)
+    await assertSurfaceLayout(page, `paused overview ${width}`)
+  }
+  await page.setViewportSize({ width: 375, height: 560 })
+  await page.goto(`${base}/#/chat`)
+  await page.getByRole('combobox', { name: 'Режим разговора' }).selectOption('research')
+  assert.equal(await page.locator('dialog[open]').count(), 0, 'mobile mode selection leaves composer available')
+  await page.addStyleTag({ content: 'html { font-size: 20px !important; }' })
+  await page.getByRole('textbox', { name: 'Задача исследования', exact: true }).scrollIntoViewIfNeeded()
+  assert.equal(await page.getByRole('textbox', { name: 'Задача исследования', exact: true }).isVisible(), true)
+  assert.ok(await page.getByRole('textbox', { name: 'Задача исследования', exact: true }).evaluate(el => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight }), 'short viewport composer is reachable inside viewport')
+  await assertSurfaceLayout(page, 'short height enlarged text composer')
+  await page.setViewportSize({ width: 900, height: 375 })
+  await page.getByRole('textbox', { name: 'Задача исследования', exact: true }).scrollIntoViewIfNeeded()
+  assert.ok(await page.getByRole('textbox', { name: 'Задача исследования', exact: true }).evaluate(el => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight }), 'landscape composer is reachable inside viewport')
+  await assertSurfaceLayout(page, 'landscape enlarged text composer')
+  for (const width of [1440, 375]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto(`${base}/#/chat/b`)
+    await page.reload() // Fresh saved-run mount, not resize of an already focused answer.
+    await page.locator('.research-overview').getByRole('button', { name: 'Читать ответ', exact: true }).waitFor()
+    await page.getByRole('heading', { name: 'Результат', exact: true }).waitFor()
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    await page.waitForTimeout(250)
+    const initialReading = await page.evaluate(() => {
+      const center = document.querySelector('.chat-center')
+      const transcript = document.querySelector('.chat-transcript')
+      const article = transcript.querySelector('article[data-message-id="m-b"]')
+      const frame = transcript.getBoundingClientRect()
+      return { centerTop: center.scrollTop, transcriptTop: transcript.scrollTop, remaining: transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight, frameHeight: frame.height, answerOffset: article.getBoundingClientRect().top - frame.top }
+    })
+    if (width === 1440) {
+      assert.ok(initialReading.frameHeight >= 192, 'saved desktop report retains a readable transcript, not an 80px sliver')
+      assert.ok(Math.abs(initialReading.answerOffset) <= 32, `desktop opens at assistant start: ${JSON.stringify(initialReading)}`)
+      assert.ok(initialReading.remaining > 100, 'long saved partial report must not open at its end')
+    } else {
+      assert.equal(initialReading.centerTop, 0, 'saved mobile research starts at overview, not the composer/end')
+      assert.equal(initialReading.transcriptTop, 0, 'mobile transcript is not an independent scroll surface')
+      assert.equal(await page.locator('dialog[open]').count(), 0)
+    }
+    const hash = new URL(page.url()).hash
+    await page.locator('.research-overview').getByRole('button', { name: 'Читать ответ', exact: true }).click()
+    assert.equal(new URL(page.url()).hash, hash, 'Read answer preserves conversation hash')
+    assert.ok(await page.locator('article[data-message-id="m-b"]').evaluate(element => document.activeElement === element && element.tabIndex === -1), 'Read answer focuses the selected saved assistant article')
+    if (width === 375) {
+      assert.ok(await page.locator('.chat-center').evaluate(element => element.scrollTop > 0), 'Read answer scrolls the mobile conversation surface')
+      const composer = page.getByRole('textbox', { name: 'Задача исследования', exact: true })
+      await composer.scrollIntoViewIfNeeded()
+      assert.ok(await composer.evaluate(element => { const r = element.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight }), 'composer remains reachable below a long saved mobile answer')
+      assert.equal(await page.locator('.chat-transcript').evaluate(element => element.scrollTop), 0)
+    }
+    await assertSurfaceLayout(page, `saved report reading ${width}`)
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.clock.install()
   await page.goto(`${base}/#/chat/a`)
   await page.getByText('Ответ первого разговора', { exact: true }).waitFor()
   await page.waitForFunction(() => typeof window.__qwenchikDebug?.snapshot === 'function')
@@ -393,19 +588,27 @@ try {
   assert.ok(Object.keys(initialDebug.requests.by_endpoint).every((endpoint) => endpoint.startsWith('GET /api/')), 'HTTP endpoint aggregation should use normalized paths')
   assert.ok(!JSON.stringify(initialDebug).includes('PRIVATE-'), 'debug snapshot must not include request payloads')
   assert.equal(initialDebug.marker, 'QWENCHIK_DEV_NETWORK_DIAGNOSTICS_V1')
-  await page.getByText('Backend: доступен', { exact: true }).waitFor()
-  await page.getByText('Qwen: не проверена', { exact: true }).waitFor()
+  assert.equal(doctorRequests, 0, 'all initial navigation is passive')
+  const policyBefore = policyRequests
+  await page.clock.fastForward(120000)
+  await until(() => policyRequests > policyBefore, 'passive policy refresh')
+  assert.equal(doctorRequests, 0, 'advancing two minutes must not run doctor')
+  await page.clock.resume()
+  await page.getByText('Приложение: доступно', { exact: true }).waitFor()
+  await page.getByText('Qwen: локальная · проверка по запросу', { exact: true }).waitFor()
   const priorFailures = initialDebug.requests.by_endpoint['GET /api/health']?.failures || 0
   healthMalformed = true
   await page.reload()
-  await page.getByText('Backend: нет связи', { exact: true }).waitFor()
+  await page.getByText('Приложение: нет связи', { exact: true }).waitFor()
   await page.waitForFunction((before) => (window.__qwenchikDebug?.snapshot().requests.by_endpoint['GET /api/health']?.failures || 0) > before, priorFailures)
   healthMalformed = false
   await page.reload()
-  await page.getByText('Backend: доступен', { exact: true }).waitFor()
+  await page.getByText('Приложение: доступно', { exact: true }).waitFor()
   doctorBlocked = false
   await page.locator('a[href="#/chat/b"]').click()
   await page.getByRole('heading', { name: 'Результат', exact: true }).waitFor()
+  assert.equal(doctorRequests, 0, 'opening Chat/research must not probe doctor')
+  await openDetails(page)
   const chatRunStatus = page.locator('.chat-heading p')
   await until(async () => (await chatRunStatus.innerText()).includes('Частичный результат'), 'partial terminal status')
   assert.match(await chatRunStatus.innerText(), /Частичный результат/)
@@ -415,10 +618,16 @@ try {
   await readiness.getByText(/Оценки критериев/).click()
   await readiness.getByText('ev-1', { exact: true }).waitFor()
   await page.getByText('Источники временно недоступны', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Диагностика запуска', exact: true }).click()
   for (const name of ['Поисковые запросы', 'Поисковые провайдеры', 'Действия']) {
     assert.equal(await page.locator('.chat-research').getByRole('button', { name, exact: true }).getAttribute('aria-expanded'), 'false', `${name} starts collapsed`)
   }
   await expandResearchSections(page)
+  await page.getByRole('button', { name: 'Проверить модель и поиск', exact: true }).click()
+  await until(() => doctorRequests === 1, 'one explicit Chat doctor request')
+  await page.getByText('Qwen: проверена по запросу', { exact: true }).waitFor()
+  await page.waitForTimeout(200)
+  assert.equal(doctorRequests, 1, 'explicit diagnostics do not start a polling loop')
   await page.getByText('actual public search query', { exact: true }).waitFor()
   await page.getByText('Проверяю официальные источники', { exact: true }).waitFor()
   await page.getByText('Источник не ответил вовремя. Проверьте доступные материалы ниже.', { exact: true }).waitFor()
@@ -428,7 +637,7 @@ try {
   assert.equal(await researchPlan.locator('ol > li[data-status="completed"]').count(), 1)
   assert.ok((await researchPlan.innerText()).includes('Завершено'))
   assert.equal(await page.locator('.chat-step-board').count(), 0, 'plan is not duplicated as a step board')
-  const progress = page.getByRole('progressbar', { name: 'Выполнено этапов', exact: true })
+  const progress = page.getByRole('progressbar', { name: 'Обработано этапов плана', exact: true })
   assert.equal(await progress.getAttribute('value'), '1')
   assert.equal(await progress.getAttribute('max'), '1')
   assert.equal(await page.locator('.chat-markdown a[href="https://example.org/source"]').count(), 2)
@@ -438,6 +647,13 @@ try {
   assert.equal(await citationSources.getByText('example.org', { exact: true }).count(), 1)
   assert.equal(await page.getByText('Ответ первого разговора', { exact: true }).count(), 0)
   assert.equal(await page.locator('.chat-markdown table').count(), 1)
+  const answer = page.getByRole('article', { name: 'Ответ Qwen', exact: true }).last()
+  const outline = answer.getByRole('navigation', { name: 'Разделы ответа', exact: true })
+  await outline.locator('summary').click()
+  const hashBeforeOutline = new URL(page.url()).hash
+  await outline.getByRole('button', { name: 'Детали ограничения', exact: true }).click()
+  assert.equal(new URL(page.url()).hash, hashBeforeOutline, 'outline navigation does not change conversation hash')
+  assert.ok(await answer.evaluate(element => element.contains(document.activeElement) && document.activeElement.textContent === 'Детали ограничения'), 'outline focuses heading in its own answer')
   const pdfCard = page.locator('.chat-source-cards > li').filter({ has: page.getByRole('link', { name: 'PDF с превышением лимита', exact: true }) })
   await pdfCard.getByText('Код: pdf_source_too_large', { exact: true }).waitFor()
   await pdfCard.getByText('Тело не скачивалось', { exact: true }).waitFor()
@@ -488,6 +704,7 @@ try {
   providersFail = false
   runtimeGetUnavailable = true
   await page.reload()
+  await openDetails(page)
   await page.getByText('Runtime snapshot unavailable', { exact: true }).waitFor()
   await page.waitForFunction(() => !document.body.innerText.includes('Runtime snapshot unavailable'))
   await expandResearchSections(page)
@@ -503,12 +720,19 @@ try {
   await expandResearchSections(page)
 
   const detailsToggle = page.getByRole('button', { name: 'Детали', exact: true })
-  if (await detailsToggle.getAttribute('aria-expanded') === 'false') await detailsToggle.click()
-  for (const width of [320, 375, 414, 768, 1440]) {
+  for (const width of [320, 375, 414, 768, 1024, 1280, 1440]) {
+    if (await detailsToggle.getAttribute('aria-expanded') === 'true') {
+      if (await page.locator('dialog[open]').count()) await page.keyboard.press('Escape')
+      else await detailsToggle.click()
+    }
     await page.setViewportSize({ width, height: 900 })
+    assert.equal(await page.locator('dialog[open]').count(), 0, `resize does not automatically open Details at ${width}`)
+    await assertSurfaceLayout(page, `partial report ${width}`)
+    await detailsToggle.click()
     await until(async () => width > 1120 || await page.locator('dialog[open]').count() > 0, `responsive details drawer at ${width}`)
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `page overflow at ${width}`)
     if (width === 375) {
+      await expandResearchSections(page)
       const mobileTelemetry = page.locator('.telemetry-panel').first()
       const toggle = mobileTelemetry.getByRole('button', { name: 'Подробная диагностика', exact: true })
       if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click()
@@ -523,32 +747,49 @@ try {
     if (width <= 1120) {
       const dialog = page.getByRole('dialog', { name: 'Детали исследования', exact: true })
       await dialog.waitFor()
+      await assertSurfaceLayout(page, `Details actions ${width}`)
+      const close = dialog.getByRole('button', { name: 'Закрыть: Детали исследования', exact: true })
+      await close.focus()
+      await page.keyboard.press('Shift+Tab')
+      if (!await dialog.evaluate(element => element.contains(document.activeElement) && document.activeElement !== element.querySelector('button'))) failures.push(`Details ${width}px: reverse Tab failed to wrap from first control past inert disclosures`)
+      await dialog.evaluate(element => {
+        const usable = [...element.querySelectorAll('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')].filter(el => el.getClientRects().length && !el.closest('[inert], [aria-hidden="true"]') && getComputedStyle(el).visibility !== 'hidden')
+        usable.at(-1)?.focus()
+      })
+      await page.keyboard.press('Tab')
+      if (!await close.evaluate(element => element === document.activeElement)) failures.push(`Details ${width}px: forward Tab failed to wrap from last usable control`)
       for (let index = 0; index < 12; index++) {
         await page.keyboard.press('Tab')
         assert.ok(await page.evaluate(() => document.querySelector('dialog[open]')?.contains(document.activeElement)), `focus escaped at ${width}`)
       }
+      for (let index = 0; index < 12; index++) {
+        await page.keyboard.press('Shift+Tab')
+        assert.ok(await page.evaluate(() => document.querySelector('dialog[open]')?.contains(document.activeElement)), `reverse focus escaped at ${width}`)
+      }
       await page.keyboard.press('Escape')
       await until(async () => await page.locator('dialog[open]').count() === 0, 'drawer close')
-      await page.getByRole('button', { name: 'Детали', exact: true }).click()
+      assert.ok(await detailsToggle.evaluate(element => element === document.activeElement), 'Escape restores Details trigger focus')
     }
   }
   if (await detailsToggle.getAttribute('aria-expanded') === 'true') await detailsToggle.click()
   const contextContinue = page.getByRole('button', { name: 'Продолжить с контекстом исследования', exact: true })
   await until(() => contextContinue.isEnabled(), 'research context remains eligible with Details collapsed')
   await contextContinue.click()
-  await page.getByText(/Research context: ON/, { exact: false }).waitFor()
+  await page.getByText(/Контекст исследования · запуск/, { exact: false }).waitFor()
   const bridgeInput = page.getByRole('textbox', { name: 'Сообщение', exact: true })
   await bridgeInput.fill('Explain the checked findings, briefly.')
   await page.getByRole('button', { name: 'Отправить', exact: true }).click()
-  await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor()
+  await page.locator('.chat-composer').getByRole('button', { name: 'Остановить', exact: true }).waitFor()
   assert.equal(researchContextSubmissions.at(-1), 'r-b', 'explicit Chat continuation attaches only the selected completed research run')
   const bridgeCitationSources = page.locator('.chat-citation-sources').last()
   const bridgeCitationSummary = bridgeCitationSources.locator('summary')
   await bridgeCitationSummary.evaluate((element) => element.scrollIntoView({ block: 'center' }))
   await bridgeCitationSummary.click()
   await bridgeCitationSources.getByRole('link', { name: 'Реальный источник', exact: true }).waitFor()
-  await page.getByRole('button', { name: 'Очистить research context', exact: true }).click()
-  assert.equal(await page.getByText(/Research context: ON/, { exact: false }).count(), 0)
+  assert.equal(await page.getByRole('button', { name: 'Убрать контекст исследования', exact: true }).isDisabled(), true, 'active run pins research context')
+  await page.locator('.chat-composer').getByRole('button', { name: 'Остановить', exact: true }).click()
+  await page.getByRole('button', { name: 'Убрать контекст исследования', exact: true }).click()
+  assert.equal(await page.getByText(/Контекст исследования · запуск/, { exact: false }).count(), 0)
   await page.getByRole('button', { name: 'Детали', exact: true }).click()
   await page.getByRole('link', { name: /Первый разговор/ }).click()
   await page.getByText('Ответ первого разговора', { exact: true }).waitFor()
@@ -566,6 +807,7 @@ try {
   await unsafeResume.waitFor()
   assert.equal(await unsafeResume.isDisabled(), true)
   await page.getByRole('link', { name: /Сбой планирования/ }).click()
+  await openDetails(page)
   const planningDiagnostic = page.getByRole('status').filter({ has: page.getByRole('heading', { name: 'Планирование не завершено', exact: true }) })
   await planningDiagnostic.waitFor()
   await planningDiagnostic.getByText('План не был сохранён: ошибка произошла до начала поиска', { exact: true }).waitFor()
@@ -582,13 +824,14 @@ try {
   runs['r-e'].error_code = 'invalid_model_output'
   planningStreamMode = 'offline'
   await page.reload()
+  await openDetails(page)
   await planningDiagnostic.waitFor()
   await planningDiagnostic.getByText('Код: invalid_model_output', { exact: true }).waitFor()
   assert.equal(await page.getByRole('button', { name: 'Продолжить ответ', exact: true }).isDisabled(), true)
   const retryRequest = page.waitForRequest((request) => request.url().endsWith('/api/runs/r-e/retry') && request.method() === 'POST')
   await planningDiagnostic.getByRole('button', { name: 'Повторить ответ', exact: true }).click()
   assert.ok((await retryRequest).headers()['idempotency-key'])
-  await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor()
+  await page.locator('.chat-composer').getByRole('button', { name: 'Остановить', exact: true }).waitFor()
   await page.getByRole('link', { name: /Поздний сбой планирования/ }).click()
   await until(async () => (await chatRunStatus.innerText()).includes('Планирование'), 'late planning run begins')
   const lateDetailsToggle = page.getByRole('button', { name: 'Детали', exact: true })
@@ -611,10 +854,13 @@ try {
   assert.equal(await input.inputValue(), 'Новый вопрос\n')
   rejectNext = true
   await input.press('Enter')
+  await page.getByText('Отправляем сообщение…', { exact: true }).waitFor()
+  assert.equal(await page.getByText('Сообщение не отправлено', { exact: true }).count(), 0, 'pending send is not a failure')
   await page.locator('.chat-role-user').getByText('Новый вопрос', { exact: true }).waitFor()
   await page.getByText('Временный сетевой сбой', { exact: true }).waitFor()
+  await page.getByText('Сообщение не отправлено', { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Повторить действие' }).click()
-  await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor()
+  await page.locator('.chat-composer').getByRole('button', { name: 'Остановить', exact: true }).waitFor()
   await page.getByText('Начало потока', { exact: true }).waitFor()
   await page.waitForTimeout(350)
   const activeRunID = Object.values(runs).at(-1).id
@@ -632,14 +878,14 @@ try {
   await page.getByRole('button', { name: 'Переподключить', exact: true }).click()
   await until(() => streamCursors.some((cursor) => cursor >= 2), 'explicit reconnect cursor')
   assert.equal(await page.getByText('Начало потока', { exact: true }).count(), 1)
-  await page.getByRole('button', { name: 'Остановить', exact: true }).click()
+  await page.locator('.chat-composer').getByRole('button', { name: 'Остановить', exact: true }).click()
   await page.getByText('Генерация остановлена. Полученный текст сохранён.', { exact: true }).waitFor()
   assert.equal(await page.getByText('Начало потока', { exact: true }).count(), 1)
   await page.reload()
   await page.getByText('Начало потока', { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Продолжить ответ', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Продолжить ответ', exact: true }).click()
-  await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor()
+  await page.locator('.chat-composer').getByRole('button', { name: 'Остановить', exact: true }).waitFor()
   let activeRun = Object.values(runs).at(-1)
   activeRun.status = 'completed'
   const canonical = messages.a.find((item) => item.id === activeRun.assistant_message_id)
@@ -650,14 +896,15 @@ try {
   await page.getByText('Финальный ответ без terminal SSE', { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Повторить ответ', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Повторить ответ', exact: true }).click()
-  await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor()
-  await page.getByRole('button', { name: 'Остановить', exact: true }).click()
+  await page.locator('.chat-composer').getByRole('button', { name: 'Остановить', exact: true }).waitFor()
+  await page.locator('.chat-composer').getByRole('button', { name: 'Остановить', exact: true }).click()
   await page.getByRole('button', { name: 'Переименовать разговор' }).click()
   await page.getByRole('textbox', { name: 'Название разговора' }).fill('Переименованный чат')
   await page.getByRole('button', { name: 'Сохранить', exact: true }).click()
   await page.getByRole('heading', { name: 'Переименованный чат', exact: true }).waitFor()
   await page.getByRole('link', { name: 'Рабочее пространство' }).click()
   await page.getByRole('heading', { name: 'Задачи', exact: true }).waitFor()
+  assert.equal(doctorRequests, 1, 'Workspace initial load must be passive')
   await page.getByText('Сохранённое уточнение задачи', { exact: true }).waitFor()
   assert.equal(legacyEvidenceDone, false)
   await page.getByText('Частичный ответ старой задачи', { exact: true }).waitFor()
@@ -680,27 +927,87 @@ try {
   for (const endpoint of ['steps', 'evidence', 'artifacts', 'approvals']) assert.equal(workspaceEventRequests.filter((item) => item === endpoint).length, 2, `${endpoint} should be coalesced to initial + one selective refresh`)
   assert.equal(workspaceEventRequests.filter((item) => item === 'task').length, 2, 'status changes refresh the selected task once')
   assert.equal(workspaceEventRequests.filter((item) => item === 'events/stream').length, 1, 'status transitions do not recreate the workspace SSE connection')
-  for (const width of [320, 375, 414, 680, 768, 1440]) {
+  for (const width of [320, 375, 414, 680, 768, 1024, 1280, 1440]) {
     await page.setViewportSize({ width, height: 900 })
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     await assertPageOverflow(page, `workspace page overflow at ${width}`)
+    if ([320, 375, 414].includes(width)) await assertWorkspaceRail(page, width)
     if (width === 375) await assertTelemetryOverflow(workspaceTelemetry, 'Workspace expanded mobile 375px')
     await page.getByRole('heading', { name: 'Задачи', exact: true }).waitFor()
     await page.locator('.task-card').filter({ hasText: 'Активный поток Workspace' }).waitFor()
   }
   await page.setViewportSize({ width: 1440, height: 1000 })
+  for (const task of pausedWorkspaceTasks) {
+    await page.locator('.task-card').filter({ hasText: task.title }).click()
+    const resume = page.locator('.inspector-actions').getByRole('button', { name: 'Продолжить', exact: true })
+    await resume.waitFor()
+    assert.equal(await resume.isEnabled(), task.pause_reason === 'manual', `Workspace ${task.pause_reason} resume eligibility`)
+    if (task.pause_reason === 'manual') await page.getByText(/При возобновлении backend повторно проверит ограничения/).waitFor()
+  }
+  await page.getByText('Сервисы и диагностика', { exact: true }).click()
+  assert.equal(doctorRequests, 1, 'opening Workspace diagnostics disclosure remains passive')
+  await page.getByRole('button', { name: 'Проверить модель и поиск', exact: true }).click()
+  await until(() => doctorRequests === 2, 'one explicit Workspace doctor request')
+  await page.waitForTimeout(200)
+  assert.equal(doctorRequests, 2)
   await page.getByRole('button', { name: /Память/ }).click()
   await page.getByRole('dialog', { name: 'Память', exact: true }).waitFor()
   await page.keyboard.press('Escape')
   await page.getByRole('link', { name: 'Открыть чаты' }).click()
   await page.getByRole('heading', { name: 'Новый разговор', exact: true }).waitFor()
   await page.getByRole('combobox', { name: 'Режим разговора' }).selectOption('research')
-  await page.getByRole('textbox', { name: 'Сообщение', exact: true }).fill('Исследуй вопрос')
+  await page.getByRole('textbox', { name: 'Задача исследования', exact: true }).fill('Исследуй вопрос')
+  await page.getByText('Настройки следующего запуска', { exact: true }).click()
+  await page.getByRole('combobox', { name: 'Профиль исследования', exact: true }).selectOption('quick')
+  await page.getByRole('spinbutton', { name: /^Лимит времени, мин/ }).fill('2')
+  await page.getByText('Параметры модели', { exact: true }).click()
+  assert.equal(await page.getByRole('spinbutton', { name: /^Температура/ }).inputValue(), '0.2', 'unsaved temperature uses documented client default')
+  assert.equal(await page.getByRole('spinbutton', { name: /^Top-p/ }).inputValue(), '0.8')
+  const outputDefault = await page.getByRole('spinbutton', { name: /^Лимит выходных токенов/ }).inputValue()
+  if (outputDefault !== '5120') failures.push(`Unsaved output-token default: expected configured 5120, received ${outputDefault}`)
+  await page.getByRole('spinbutton', { name: /^Температура/ }).fill('3')
+  const beforeInvalid = submissionKeys.length
   await page.getByRole('button', { name: 'Отправить', exact: true }).click()
-  await page.getByRole('button', { name: 'Остановить', exact: true }).waitFor()
+  await page.waitForTimeout(100)
+  assert.equal(submissionKeys.length, beforeInvalid, 'invalid settings cannot dispatch')
+  await page.getByRole('spinbutton', { name: /^Температура/ }).fill('0')
+  await page.getByRole('spinbutton', { name: /^Top-p/ }).fill('0.8')
+  await page.getByRole('spinbutton', { name: /^Лимит выходных токенов/ }).fill('4096')
+  await page.getByRole('button', { name: 'Отправить', exact: true }).click()
+  await page.locator('.chat-composer').getByRole('button', { name: 'Остановить', exact: true }).waitFor()
   assert.equal(Object.values(runs).at(-1).mode, 'research')
   assert.match(page.url(), /#\/chat\/c-/)
-  await page.getByRole('button', { name: 'Остановить', exact: true }).click()
+  const createdSettings = settingsWrites.filter(write => write.method === 'POST').at(-1).body
+  assert.deepEqual(createdSettings.research_settings, { profile: 'quick', time_budget_seconds: 120 })
+  assert.deepEqual(createdSettings.model_profile, { temperature: 0, top_p: 0.8, max_output_tokens: 4096 })
+  await page.getByText('Настройки следующего запуска', { exact: true }).click()
+  assert.equal(await page.getByRole('combobox', { name: 'Профиль исследования', exact: true }).isDisabled(), true, 'active run pins settings')
+  await page.getByText('Параметры модели', { exact: true }).click()
+  assert.equal(await page.getByRole('spinbutton', { name: /^Температура/ }).isDisabled(), true)
+  await page.locator('.chat-composer').getByRole('button', { name: 'Остановить', exact: true }).click()
+  const settingsPatchCount = () => settingsWrites.filter(write => write.method === 'PATCH' && write.body.model_profile).length
+  const beforeFailedSave = settingsPatchCount()
+  await page.getByRole('spinbutton', { name: /^Температура/ }).fill('0.1')
+  settingsReject = true
+  await page.getByRole('button', { name: 'Сохранить настройки', exact: true }).click()
+  await page.getByText('Сервер отклонил настройки', { exact: true }).waitFor()
+  const staleSettingsRetry = page.getByRole('button', { name: 'Повторить действие', exact: true })
+  await staleSettingsRetry.waitFor()
+  assert.equal(settingsPatchCount(), beforeFailedSave + 1)
+  assert.equal(settingsWrites.filter(write => write.method === 'PATCH' && write.body.model_profile).at(-1).body.model_profile.temperature, 0.1, 'failed Save A captured settings A')
+  await page.getByRole('spinbutton', { name: /^Температура/ }).fill('0')
+  await staleSettingsRetry.waitFor({ state: 'hidden' })
+  assert.equal(settingsPatchCount(), beforeFailedSave + 1, 'editing settings B clears stale retry without dispatching settings A')
+  await page.getByRole('button', { name: 'Сохранить настройки', exact: true }).click()
+  await until(() => settingsPatchCount() === beforeFailedSave + 2, 'normal Save persists edited settings B')
+  const patched = settingsWrites.filter(write => write.method === 'PATCH' && write.body.model_profile).at(-1).body
+  assert.deepEqual(patched.research_settings, { profile: 'quick', time_budget_seconds: 120 })
+  assert.deepEqual(patched.model_profile, { temperature: 0, top_p: 0.8, max_output_tokens: 4096 })
+  await page.reload()
+  await page.getByText('Настройки следующего запуска', { exact: true }).click()
+  assert.equal(await page.getByRole('spinbutton', { name: /^Лимит времени, мин/ }).inputValue(), '2')
+  await page.getByText('Параметры модели', { exact: true }).click()
+  assert.equal(await page.getByRole('spinbutton', { name: /^Температура/ }).inputValue(), '0')
   await page.getByRole('button', { name: 'Удалить', exact: true }).click()
   await page.getByRole('heading', { name: 'Новый разговор', exact: true }).waitFor()
   await page.setViewportSize({ width: 375, height: 900 })
@@ -713,8 +1020,20 @@ try {
   await page.mouse.click(372, 450)
   await until(async () => await page.locator('dialog[open]').count() === 0, 'backdrop dismissal')
   assert.ok(await trigger.evaluate((element) => element === document.activeElement))
+  for (const width of [375, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto(`${base}/#/chat`)
+    await page.getByRole('textbox', { name: 'Сообщение', exact: true }).fill('Проверка автопрокрутки')
+    await page.getByRole('button', { name: 'Отправить', exact: true }).click()
+    await page.locator('.chat-role-assistant .chat-markdown').last().getByText('Хвост потока', { exact: true }).waitFor()
+    const surface = width <= 768 ? '.chat-center' : '.chat-transcript'
+    await until(() => page.locator(surface).evaluate(element => element.scrollHeight - element.scrollTop - element.clientHeight < 100), `new live SSE follows ${surface} at ${width}`)
+    assert.ok(await page.locator(surface).evaluate(element => element.scrollHeight > element.clientHeight + 100), 'autofollow fixture genuinely overflows its scroll surface')
+    await page.locator('.chat-composer').getByRole('button', { name: 'Остановить', exact: true }).click()
+  }
+  console.log('Completed mocked browser scenarios:', JSON.stringify({ widths: [320, 375, 414, 768, 1024, 1280, 1440], chat_pause_cases: 3, workspace_pause_cases: 3, doctor_requests: doctorRequests, passive_policy_requests: policyRequests, collected_failures: failures }))
   assert.deepEqual(failures, [])
-  console.log('PASS: Chrome browser smoke; conversation isolation/refresh, markdown/citations, independent source failure/retry, SSE GPU/RAM ticker and CPU/output-token diagnostics, React disclosure, 330px telemetry panels/375px mobile overflow, abbreviated hashes/full clipboard values, widths 320/375/414/768/1440, drawer focus/Escape, optimistic failure/idempotent retry, streaming/reconnect/stop, continuation/retry, lost terminal polling, rename/create/research/delete, workspace/memory navigation.')
+  console.log('PASS: Chrome browser smoke; manual RSS hold/no false delivery, guarded/recovery resume, passive discovery/idle refresh, explicit-only diagnostics, next-run settings create/PATCH/validation/error/reload/pinning, scoped report outline, child bounds/44px actions, short-height/enlarged-text/reduced-motion, bidirectional drawer wrapping/restoration, plus preserved conversation/citation/source/telemetry/SSE/idempotency/Stop/Retry/Continue/Workspace regressions. All API/SSE responses mocked; no real inference or DB mutation.')
 } finally {
   await browser?.close()
   server.kill('SIGTERM')

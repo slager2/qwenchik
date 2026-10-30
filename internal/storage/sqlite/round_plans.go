@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func requestBoundedRoundTx(ctx context.Context, tx *sql.Tx, s domain.ResearchSession, state map[string]any, version, count int, fingerprint, failure string, missing []string) error {
+func requestBoundedRoundTx(ctx context.Context, store *Store, tx *sql.Tx, s domain.ResearchSession, state map[string]any, version, count int, fingerprint, failure string, missing []string) error {
 	var plans domain.ResearchPlans
 	raw, _ := json.Marshal(state["research_plans"])
 	if json.Unmarshal(raw, &plans) != nil {
@@ -117,11 +117,11 @@ func requestBoundedRoundTx(ctx context.Context, tx *sql.Tx, s domain.ResearchSes
 	if err != nil {
 		return err
 	}
-	if _, err := saveCheckpointTx(context.WithValue(ctx, adaptiveMutationKey{}, true), tx, s.TaskID, version, seq, state); err != nil {
+	if _, err := store.saveCheckpointTx(context.WithValue(ctx, adaptiveMutationKey{}, true), tx, s.TaskID, version, seq, state); err != nil {
 		return err
 	}
 	if err := fenceExecution(ctx, tx, s.TaskID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return store.commitCheckpointTx(ctx, tx)
 }

@@ -157,6 +157,46 @@ func reportFailureRepairable(err error) bool {
 	return errors.Is(err, errInvalidModelOutput) || errors.Is(err, llm.ErrInvalidModelOutput) || errors.Is(err, llm.ErrOutputTruncated) || errors.Is(err, errCitationMapping)
 }
 
+// reportContentBreaker stops spending model calls on a report after the same
+// content failure has happened twice. Budget, infrastructure and input-size
+// failures are deliberately excluded: they need their existing error paths,
+// not a content fallback that could hide a runtime problem.
+type reportContentBreaker struct {
+	code     string
+	failures int
+	tripped  bool
+}
+
+func (b *reportContentBreaker) observe(err error) bool {
+	if b == nil || !reportContentFailure(err) || !reportCircuitFailure(err) {
+		return false
+	}
+	code := reportFailureCode(err)
+	if code == "" {
+		return false
+	}
+	if b.code == code {
+		b.failures++
+	} else {
+		b.code, b.failures = code, 1
+	}
+	if b.failures >= 2 {
+		b.tripped = true
+	}
+	return b.tripped
+}
+
+func (b *reportContentBreaker) success() {
+	if b == nil {
+		return
+	}
+	b.code, b.failures, b.tripped = "", 0, false
+}
+
+func reportCircuitFailure(err error) bool {
+	return errors.Is(err, errInvalidModelOutput) || errors.Is(err, llm.ErrInvalidModelOutput) || errors.Is(err, llm.ErrOutputTruncated) || errors.Is(err, errCitationMapping) || errors.Is(err, errUnsupportedCitationClaim)
+}
+
 func validateReportBody(body string) error {
 	lower := strings.ToLower(body)
 	if strings.Contains(lower, "://") || strings.Contains(lower, "www.") || strings.Contains(lower, "mailto:") || strings.Contains(body, "](") || strings.ContainsAny(body, "<>") {
@@ -185,7 +225,15 @@ func selectReportEvidence(ids []string, catalogue []citationEvidence) []citation
 	return selected
 }
 
-func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal, inputHash string, state *checkpointState, section *domain.ReportSection, catalogue []citationEvidence, claimLimit int) error {
+func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal, inputHash string, state *checkpointState, section *domain.ReportSection, catalogue []citationEvidence, claimLimit int, breaker *reportContentBreaker) error {
+	if breaker != nil && breaker.tripped {
+		section.Status = "fallback_excerpts"
+		section.Limitation = "report_circuit_breaker"
+		section.Body = reportExcerptFallback(catalogue)
+		section.Review = nil
+		section.RejectedDraft = ""
+		return nil
+	}
 	start := 0
 	if section.CorrectionUsed {
 		start = 1
@@ -223,6 +271,9 @@ func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal,
 					}
 				}
 				if err == nil {
+					if breaker != nil {
+						breaker.success()
+					}
 					section.Body = draft.Answer
 					section.Status = "supported"
 					section.Limitation = ""
@@ -238,13 +289,17 @@ func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal,
 		if !reportContentFailure(err) {
 			return err
 		}
+		tripped := breaker != nil && breaker.observe(err)
 		section.RejectedDraft = truncateBytesUTF8(draft.Answer, 20_000)
 		section.Limitation = reportFailureCode(err)
-		if !reportFailureRepairable(err) {
+		if tripped || !reportFailureRepairable(err) {
 			break
 		}
 	}
 	section.Status = "fallback_excerpts"
+	if breaker != nil && breaker.tripped {
+		section.Limitation = "report_circuit_breaker"
+	}
 	if roundPlanSession(ctx) {
 		catalogue = catalogue[:min(len(catalogue), claimLimit)]
 	}
@@ -300,6 +355,9 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 	paragraphBudget, reportByteBudget := claimBudget, 512<<10
 	if session, ok := ctx.Value(researchExecutionKey{}).(domain.ResearchSession); ok && session.Policy.Version == 2 {
 		sectionLimit = min(session.Budget.MaxReportSections, claimBudget)
+		if session.Profile == domain.ResearchProfileStandard || session.Profile == domain.ResearchProfileQuick {
+			sectionLimit = min(sectionLimit, 4)
+		}
 		paragraphBudget = min(session.Budget.MaxReportParagraphs, claimBudget)
 		sectionLimit = min(sectionLimit, paragraphBudget)
 		reportByteBudget = session.Budget.MaxReportBytes
@@ -425,6 +483,7 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 	}
 	covered := map[string]bool{}
 	claimLimit := min(4, min(claimBudget, paragraphBudget)/len(report.Sections))
+	breaker := &reportContentBreaker{}
 	for index := range report.Sections {
 		section := &report.Sections[index]
 		selected := selectReportEvidence(section.EvidenceIDs, catalogue)
@@ -450,7 +509,7 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 				section.Status = "fallback_excerpts"
 				section.Body = reportExcerptFallback(nil)
 				section.Limitation = "evidence_unavailable"
-			} else if err := w.writeReportSection(ctx, task, goal, inputHash, state, section, selected, claimLimit); err != nil {
+			} else if err := w.writeReportSection(ctx, task, goal, inputHash, state, section, selected, claimLimit, breaker); err != nil {
 				return "", err
 			}
 			if _, err := w.repo.SaveCheckpoint(ctx, task.ID, 1, *state); err != nil {
@@ -488,6 +547,9 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 	}
 	for _, section := range report.Sections {
 		fmt.Fprintf(&markdown, "\n## %s\n\n%s\n\nСтатус секции: %s.\n", reportText(section.Title), section.Body, section.Status)
+		if section.Limitation != "" {
+			fmt.Fprintf(&markdown, "Ограничение секции: %s.\n", reportText(section.Limitation))
+		}
 	}
 	markdown.WriteString("\n## Ограничения\n\nПроверка той же локальной моделью не является независимым доказательством фактической истинности. Объём отчёта ограничен доступными excerpts и бюджетом.\n")
 	for _, item := range missing {

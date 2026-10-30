@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -33,6 +34,15 @@ type Client struct {
 	temperature       float64
 	topP              float64
 	contextConfigured int
+
+	// Runtime metadata is shared by the context admission checks performed
+	// before each completion. Keep the cache on the client (rather than in a
+	// package global) so separate local runtimes can never observe each
+	// other's model identity.
+	metadataMu       sync.Mutex
+	metadataFetchMu  sync.Mutex
+	metadataCache    *runtimeMetadataCache
+	metadataCacheTTL time.Duration
 }
 
 func New(baseURL, apiKey, model string, timeout time.Duration, maxTokens int, temperature, topP float64, thinking bool) *Client {
@@ -49,6 +59,7 @@ func New(baseURL, apiKey, model string, timeout time.Duration, maxTokens int, te
 		defaultMaxTokens: maxTokens,
 		temperature:      temperature,
 		topP:             topP,
+		metadataCacheTTL: defaultRuntimeMetadataCacheTTL,
 	}
 }
 

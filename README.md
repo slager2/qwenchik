@@ -16,6 +16,13 @@ by the local regression suite. The [Phase 3 offline comparison](docs/deep-resear
 measured all 12 tasks in both variants: 23 model-RSS pauses, one failed/blocked
 task, and zero delivered reports. Measurement completeness is not research success.
 
+The [Phase 5 frontend](docs/deep-research-phase5-frontend.md) adds a task-first
+research overview, readable saved reports with section navigation, next-run
+settings, explicit mobile Details, shared pause explanations and passive viewing
+without automatic Doctor generation. The shared [design system](design.md) keeps
+the existing Cobalt direction. Its UI verification does not establish research
+quality; Phase 4 was explicitly skipped.
+
 The current implementation includes:
 
 - task create/list/show and lifecycle controls through the API and CLI;
@@ -60,7 +67,9 @@ From a fresh checkout, install the requirements above and run `cp -n .env.exampl
      -m /models/Qwen3.5-4B-Q4_K_M.gguf \
      --host 127.0.0.1 --port 8000 --alias local-qwen \
      --jinja --parallel 1 -c 32768 -fa on \
-     -ctk q8_0 -ctv q8_0
+     -ctk q8_0 -ctv q8_0 \
+     --cache-ram 512 --ctx-checkpoints 4 \
+     --threads 4 --threads-batch 4 --poll 0 --poll-batch 0
    ```
 
 2. Check `curl http://127.0.0.1:8000/v1/models`, then set `LLM_CONTEXT_LENGTH=32768` to match the server. Use an accelerated build/device when available: a CPU-only 4B model can exceed the request timeout while generating a plan. The runtime audit on this machine used the existing Vulkan build with `--device Vulkan1 -ngl 99` on an RTX 3050; these device flags are machine-specific. The server remains single-slot.
@@ -137,7 +146,7 @@ than silently adopting a configured number. Production admission freshly checks
 compaction/persistence bounds remain separate resource limits. Saved context and
 thinking settings are not silently enlarged on recovery.
 
-`MODEL_RSS_MAX_BYTES` separately guards llama-server RSS (default 3 GiB); it is
+`MODEL_RSS_MAX_BYTES` separately guards llama-server RSS (default 5 GiB); it is
 not the Go process RSS cap. Resource problems preserve checkpoints and use bounded
 recovery. `CONTEXT_PROBE_ENABLED=false` keeps the opt-in fixed synthetic load probe
 disabled for normal serving. `lab context-check` records one operator-configured

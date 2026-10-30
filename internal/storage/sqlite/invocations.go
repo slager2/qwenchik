@@ -101,8 +101,8 @@ func invocationAllowed(ctx context.Context, tx *sql.Tx, taskID string, checkDead
 	return researchReservationAllowed(ctx, tx, session)
 }
 
-func invocationCheckpointState(ctx context.Context, tx *sql.Tx, taskID string) (map[string]any, int, error) {
-	items, err := verifiedCheckpoints(ctx, tx, taskID)
+func (s *Store) invocationCheckpointState(ctx context.Context, tx *sql.Tx, taskID string) (map[string]any, int, error) {
+	items, _, err := s.cachedVerifiedCheckpointsQuery(ctx, tx, taskID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -141,15 +141,16 @@ func (s *Store) BeginInvocation(ctx context.Context, in domain.Invocation) (doma
 	if in.Status != "" && in.Status != "started" || in.FinishedAt != nil || in.ErrorCode != "" || in.OutputHash != "" || len(in.Output) != 0 {
 		return domain.Invocation{}, ErrInvocationInvalid
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return domain.Invocation{}, err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if err := invocationAllowed(ctx, tx, in.TaskID, true); err != nil {
 		return domain.Invocation{}, err
 	}
-	state, version, err := invocationCheckpointState(ctx, tx, in.TaskID)
+	state, version, err := s.invocationCheckpointState(ctx, tx, in.TaskID)
 	if err != nil {
 		return domain.Invocation{}, err
 	}
@@ -252,13 +253,13 @@ func (s *Store) BeginInvocation(ctx context.Context, in domain.Invocation) (doma
 	}
 	state["pending_invocation"] = in
 	state["pending_invocation_id"] = in.ID
-	if err := insertCheckpoint(ctx, tx, in.TaskID, version, seq, state); err != nil {
+	if err := s.insertCheckpoint(ctx, tx, in.TaskID, version, seq, state); err != nil {
 		return domain.Invocation{}, err
 	}
 	if err := invocationAllowed(ctx, tx, in.TaskID, true); err != nil {
 		return domain.Invocation{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitCheckpointTx(ctx, tx); err != nil {
 		return domain.Invocation{}, err
 	}
 	return in, nil
@@ -289,21 +290,22 @@ func (s *Store) FinishInvocationWithTelemetry(ctx context.Context, in domain.Inv
 	if len(in.Output) != 0 && !bytes.Equal(in.Output, encoded) {
 		return ErrConflict
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
-	if err := finishInvocationTx(ctx, tx, in, encoded, summary); err != nil {
+	if err := s.finishInvocationTx(ctx, tx, in, encoded, summary); err != nil {
 		return err
 	}
 	if err := invocationAllowed(ctx, tx, in.TaskID, false); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return s.commitCheckpointTx(ctx, tx)
 }
 
-func finishInvocationTx(ctx context.Context, tx *sql.Tx, in domain.Invocation, encoded json.RawMessage, summary *domain.InferenceSummary) error {
+func (s *Store) finishInvocationTx(ctx context.Context, tx *sql.Tx, in domain.Invocation, encoded json.RawMessage, summary *domain.InferenceSummary) error {
 	if err := invocationAllowed(ctx, tx, in.TaskID, false); err != nil {
 		return err
 	}
@@ -324,7 +326,7 @@ func finishInvocationTx(ctx context.Context, tx *sql.Tx, in domain.Invocation, e
 	if !sameInvocationIdentity(in, *prior) {
 		return ErrConflict
 	}
-	state, version, err := invocationCheckpointState(ctx, tx, in.TaskID)
+	state, version, err := s.invocationCheckpointState(ctx, tx, in.TaskID)
 	if err != nil {
 		return err
 	}
@@ -357,7 +359,7 @@ func finishInvocationTx(ctx context.Context, tx *sql.Tx, in domain.Invocation, e
 		delete(state, "pending_invocation_id")
 		delete(state, "pending_invocation")
 	}
-	return insertCheckpoint(ctx, tx, in.TaskID, version, seq, state)
+	return s.insertCheckpoint(ctx, tx, in.TaskID, version, seq, state)
 }
 
 func appendInferenceSummaryBestEffort(ctx context.Context, tx *sql.Tx, in domain.Invocation, summary *domain.InferenceSummary) {
@@ -507,14 +509,14 @@ func (s *Store) InvocationsForOperation(ctx context.Context, taskID, operationID
 		return nil, err
 	}
 	defer tx.Rollback()
-	if _, err := verifiedCheckpoints(ctx, tx, taskID); err != nil {
+	if _, _, err := s.cachedVerifiedCheckpointsQuery(ctx, tx, taskID); err != nil {
 		return nil, err
 	}
 	return invocationsForOperationTx(ctx, tx, taskID, operationID)
 }
 
-func completePendingStepInvocationTx(ctx context.Context, tx *sql.Tx, taskID, stepID, tool string, result any, state any) (any, error) {
-	latest, _, err := invocationCheckpointState(ctx, tx, taskID)
+func (s *Store) completePendingStepInvocationTx(ctx context.Context, tx *sql.Tx, taskID, stepID, tool string, result any, state any) (any, error) {
+	latest, _, err := s.invocationCheckpointState(ctx, tx, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -556,7 +558,7 @@ func completePendingStepInvocationTx(ctx context.Context, tx *sql.Tx, taskID, st
 		return nil, ErrInvocationInvalid
 	}
 	in.Status = "completed"
-	if err := finishInvocationTx(ctx, tx, in, encoded, nil); err != nil {
+	if err := s.finishInvocationTx(ctx, tx, in, encoded, nil); err != nil {
 		return nil, err
 	}
 	raw, err = json.Marshal(state)

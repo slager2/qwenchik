@@ -3,6 +3,19 @@ import remarkGfm from 'remark-gfm'
 import type { Root, RootContent, Parent, Text } from 'mdast'
 import type { CitationReference } from './conversation-state.mjs'
 import { safeURL } from './conversation-state.mjs'
+import { headingID } from './report-outline.mjs'
+
+function headingAnchors(options: { prefix: string }) {
+  return (tree: Root) => {
+    function walk(parent: Parent) {
+      for (const node of parent.children) {
+        if (node.type === 'heading') node.data = { ...node.data, hProperties: { id: headingID(options.prefix, node.position?.start.offset ?? 0), tabIndex: -1 } }
+        if ('children' in node) walk(node as Parent)
+      }
+    }
+    walk(tree)
+  }
+}
 
 function evidenceLinks(options: { references: CitationReference[] }) {
   const known = new Map(options.references.map((item) => [item.id, item]))
@@ -40,9 +53,9 @@ function evidenceLinks(options: { references: CitationReference[] }) {
   }
 }
 
-export default function MarkdownMessage({ content, references = [] }: { content: string; references?: CitationReference[] }) {
+export default function MarkdownMessage({ content, references = [], idPrefix }: { content: string; references?: CitationReference[]; idPrefix?: string }) {
   const safeReferences = references.filter((reference) => safeURL(reference.url))
-  return <div className="chat-markdown"><ReactMarkdown skipHtml remarkPlugins={[remarkGfm, [evidenceLinks, { references: safeReferences }]]} urlTransform={(url) => safeURL(url)} components={{
+  return <div className="chat-markdown"><ReactMarkdown skipHtml remarkPlugins={[remarkGfm, [evidenceLinks, { references: safeReferences }], ...(idPrefix ? [[headingAnchors, { prefix: idPrefix }] as [typeof headingAnchors, { prefix: string }]] : [])]} urlTransform={(url) => safeURL(url)} components={{
     a: ({ href, children, title }) => href ? <a href={href} title={title} target="_blank" rel="noopener noreferrer">{children}</a> : <span>{children}</span>,
     img: ({ alt }) => <span className="chat-image-label">{alt || 'Изображение'}</span>,
     table: ({ children }) => <div className="chat-table-scroll" tabIndex={0} role="region" aria-label="Таблица"><table>{children}</table></div>,

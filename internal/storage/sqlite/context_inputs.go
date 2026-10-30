@@ -339,7 +339,7 @@ func (s *Store) RoleContext(ctx context.Context, taskID, slot string) (json.RawM
 		return nil, err
 	}
 	defer tx.Rollback()
-	items, err := verifiedCheckpoints(ctx, tx, taskID)
+	items, _, err := s.cachedVerifiedCheckpointsQuery(ctx, tx, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -375,15 +375,16 @@ func (s *Store) pinRoleContext(ctx context.Context, taskID, slot string, input j
 	if !roleContextSlot.MatchString(slot) {
 		return nil, ErrCheckpointInvalid
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return nil, err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if err := invocationAllowed(ctx, tx, taskID, true); err != nil {
 		return nil, err
 	}
-	state, planVersion, err := invocationCheckpointState(ctx, tx, taskID)
+	state, planVersion, err := s.invocationCheckpointState(ctx, tx, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -438,13 +439,13 @@ func (s *Store) pinRoleContext(ctx context.Context, taskID, slot string, input j
 	if err != nil {
 		return nil, err
 	}
-	if _, err := saveCheckpointTx(ctx, tx, taskID, planVersion, seq, state); err != nil {
+	if _, err := s.saveCheckpointTx(ctx, tx, taskID, planVersion, seq, state); err != nil {
 		return nil, err
 	}
 	if err := invocationAllowed(ctx, tx, taskID, true); err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitCheckpointTx(ctx, tx); err != nil {
 		return nil, err
 	}
 	return append(json.RawMessage(nil), canonical...), nil

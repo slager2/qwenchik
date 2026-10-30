@@ -59,6 +59,13 @@ test('canonical terminal message wins over stale snapshots without clearing hist
   assert.equal(mergeMessages([completed], [stale])[0].content, 'Final answer')
 })
 
+test('unchanged message snapshots preserve object identity for memoized rows', () => {
+  const current = { ...message, metadata: { source: 'snapshot' }, citations: [] }
+  const incoming = { ...current, metadata: { source: 'snapshot' }, citations: [] }
+  const merged = mergeMessages([current], [incoming])
+  assert.equal(merged[0], current)
+})
+
 test('source normalization and citation references reject unsafe or rejected targets', () => {
   const sources = normalizeSources({ sources: [{ source_id: 's', url: 'https://example.org', status: 'validated' }, { id: 'bad', url: 'javascript:alert(1)' }] })
   assert.equal(sources[0].canonical_url, 'https://example.org/')

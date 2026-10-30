@@ -43,3 +43,15 @@ test('citation source list omits unsafe reference URLs and keeps its count truth
   assert.ok(!html.includes('Unsafe source'))
   assert.ok(!html.includes('javascript:'))
 })
+
+test('optional heading IDs are message scoped, repeat-safe and leave code and raw HTML inert', () => {
+  const content = '# Повтор\n\n```md\n# Не раздел\n```\n\n# Повтор\n\n<script>bad()</script>'
+  const html = renderToStaticMarkup(createElement(MarkdownMessage, { content, idPrefix: 'message-a' }))
+  const other = renderToStaticMarkup(createElement(MarkdownMessage, { content, idPrefix: 'message-b' }))
+  const ids = [...html.matchAll(/<h1 id="([^"]+)" tabindex="-1"/g)].map((match) => match[1])
+  assert.equal(ids.length, 2)
+  assert.equal(new Set(ids).size, 2)
+  assert.ok(ids.every((id) => !other.includes(`id="${id}"`)))
+  assert.match(html, /<code class="language-md"># Не раздел/)
+  assert.doesNotMatch(html, /<script>|href="#/)
+})

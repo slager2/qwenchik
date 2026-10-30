@@ -5,4 +5,5 @@ export interface RunEvidenceCache {
   subscribe(runID: string, listener: () => void): () => void
   load(runID: string, retry?: boolean): Promise<EvidenceCacheEntry>
 }
-export function createRunEvidenceCache(loadEvidence: (runID: string) => Promise<Evidence[]>): RunEvidenceCache
+export interface EvidenceCacheOptions { maxEntries?: number; maxConcurrent?: number }
+export function createRunEvidenceCache(loadEvidence: (runID: string) => Promise<Evidence[]>, options?: EvidenceCacheOptions): RunEvidenceCache

@@ -31,6 +31,42 @@ import (
 
 const maxRequestBytes = 1 << 20
 
+// SSE clients should stay responsive while avoiding a fixed database read
+// every 500ms when a task is idle.  Keep the first retry short, then back off
+// to a bounded interval so event, telemetry, and resource-warning updates
+// remain reasonably fresh without making idle clients a steady SQLite load.
+const (
+	ssePollInitialDelay = 500 * time.Millisecond
+	ssePollMaxDelay     = 2 * time.Second
+)
+
+type ssePollBackoff struct {
+	delay time.Duration
+}
+
+func newSSEPollBackoff() ssePollBackoff {
+	return ssePollBackoff{delay: ssePollInitialDelay}
+}
+
+func (b *ssePollBackoff) Delay() time.Duration {
+	if b.delay <= 0 {
+		b.delay = ssePollInitialDelay
+	}
+	return b.delay
+}
+
+func (b *ssePollBackoff) Advance() {
+	next := b.Delay() * 2
+	if next > ssePollMaxDelay {
+		next = ssePollMaxDelay
+	}
+	b.delay = next
+}
+
+func (b *ssePollBackoff) Reset() {
+	b.delay = ssePollInitialDelay
+}
+
 //go:embed web/dist
 var frontendAssets embed.FS
 
@@ -73,6 +109,14 @@ type WorkerControl interface {
 
 type ArtifactReader interface {
 	Read(context.Context, string, string) ([]byte, error)
+}
+
+// ArtifactStreamReader is an optional bounded-memory download path. The
+// implementation must return a reader positioned at offset zero and verify the
+// file before returning it. The digest and size are checked before any response
+// bytes are written, so corrupted artifacts cannot produce partial downloads.
+type ArtifactStreamReader interface {
+	Open(context.Context, string, string) (io.ReadCloser, int64, string, error)
 }
 
 type Server struct {
@@ -479,15 +523,22 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	flusher.Flush()
-	poll := time.NewTicker(500 * time.Millisecond)
+	pollBackoff := newSSEPollBackoff()
+	poll := time.NewTimer(pollBackoff.Delay())
 	defer poll.Stop()
 	heartbeat := time.NewTicker(15 * time.Second)
 	defer heartbeat.Stop()
 	for {
+		activity := false
 		events, err := s.service.Events(r.Context(), taskID, after, 200)
 		if err != nil {
 			s.logger.Warn("SSE event poll failed", "task_id", taskID, "error", err)
 			return
+		}
+		if len(events) > 0 {
+			// Reset on any durable activity, including internal events which
+			// may advance the cursor without producing a public SSE frame.
+			activity = true
 		}
 		for _, event := range events {
 			if after > 0 && event.Seq > after+1 {
@@ -546,12 +597,14 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				flusher.Flush()
+				activity = true
 			}
 			if !haveTelemetry || revision != lastRevision && !reflect.DeepEqual(telemetry.Inference, lastTelemetry.Inference) {
 				if err := writeSSEData(w, "inference_progress", map[string]any{"telemetry_revision": revision, "inference": telemetry.Inference}); err != nil {
 					return
 				}
 				flusher.Flush()
+				activity = true
 			}
 			lastTelemetry, lastRevision, haveTelemetry = telemetry, revision, true
 		}
@@ -563,6 +616,7 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 			}
 			flusher.Flush()
 			lastWarnings = warnings
+			activity = true
 		}
 		if len(events) == 0 {
 			task, err := s.service.GetTask(r.Context(), taskID)
@@ -574,6 +628,12 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-poll.C:
+			if activity {
+				pollBackoff.Reset()
+			} else {
+				pollBackoff.Advance()
+			}
+			poll.Reset(pollBackoff.Delay())
 		case <-heartbeat.C:
 			if _, err := io.WriteString(w, ": heartbeat\n\n"); err != nil {
 				return
@@ -641,23 +701,50 @@ func (s *Server) artifactContent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "Артефакт не найден.", false)
 		return
 	}
-	content, err := s.artifactReader.Read(r.Context(), taskID, artifactID)
-	if err != nil {
-		s.logger.Warn("artifact read failed", "task_id", taskID, "artifact_id", artifactID, "error", err)
-		writeError(w, http.StatusNotFound, "not_found", "Артефакт не найден в локальном хранилище.", false)
-		return
-	}
-	hash := sha256.Sum256(content)
-	if hex.EncodeToString(hash[:]) != artifact.SHA256 {
-		s.logger.Error("artifact content hash mismatch", "task_id", taskID, "artifact_id", artifactID)
-		writeError(w, http.StatusInternalServerError, "artifact_integrity_error", "Хэш артефакта не совпадает с метаданными.", false)
-		return
+	var content []byte
+	var stream io.ReadCloser
+	var contentSize int64
+	if reader, ok := s.artifactReader.(ArtifactStreamReader); ok {
+		var contentHash string
+		stream, contentSize, contentHash, err = reader.Open(r.Context(), taskID, artifactID)
+		if err != nil {
+			s.logger.Warn("artifact stream open failed", "task_id", taskID, "artifact_id", artifactID, "error", err)
+			writeError(w, http.StatusNotFound, "not_found", "Артефакт не найден в локальном хранилище.", false)
+			return
+		}
+		if contentSize != artifact.SizeBytes || contentHash != artifact.SHA256 {
+			_ = stream.Close()
+			s.logger.Error("artifact content hash or size mismatch", "task_id", taskID, "artifact_id", artifactID)
+			writeError(w, http.StatusInternalServerError, "artifact_integrity_error", "Хэш или размер артефакта не совпадает с метаданными.", false)
+			return
+		}
+		defer stream.Close()
+	} else {
+		content, err = s.artifactReader.Read(r.Context(), taskID, artifactID)
+		if err != nil {
+			s.logger.Warn("artifact read failed", "task_id", taskID, "artifact_id", artifactID, "error", err)
+			writeError(w, http.StatusNotFound, "not_found", "Артефакт не найден в локальном хранилище.", false)
+			return
+		}
+		hash := sha256.Sum256(content)
+		if hex.EncodeToString(hash[:]) != artifact.SHA256 {
+			s.logger.Error("artifact content hash mismatch", "task_id", taskID, "artifact_id", artifactID)
+			writeError(w, http.StatusInternalServerError, "artifact_integrity_error", "Хэш артефакта не совпадает с метаданными.", false)
+			return
+		}
+		contentSize = int64(len(content))
 	}
 	w.Header().Set("Content-Type", artifact.MIMEType)
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": artifact.Name}))
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+	w.Header().Set("Content-Length", strconv.FormatInt(contentSize, 10))
 	w.WriteHeader(http.StatusOK)
+	if stream != nil {
+		if _, err := io.Copy(w, stream); err != nil {
+			s.logger.Warn("artifact stream write failed", "task_id", taskID, "artifact_id", artifactID, "error", err)
+		}
+		return
+	}
 	_, _ = w.Write(content)
 }
 

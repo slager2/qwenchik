@@ -1106,6 +1106,63 @@ func TestUserURLDetectionForcesFetchBeforeSearch(t *testing.T) {
 	}
 }
 
+func TestDeterministicResearchActionUsesOnlyValidatedPlanInputs(t *testing.T) {
+	goal := "Research protocol architecture"
+	step := domain.PlanStep{
+		ID:          "search_1",
+		Kind:        "search",
+		Description: deterministicSearchFacetPrefix + "protocol data structures. User request: " + goal,
+	}
+	decision, deterministic, err := deterministicResearchAction(step, goal, "search", checkpointState{}, nil)
+	if err != nil || !deterministic {
+		t.Fatalf("validated search facet was not deterministic: decision=%+v deterministic=%v err=%v", decision, deterministic, err)
+	}
+	if decision.ToolCall == nil || decision.ToolCall.Name != "search" {
+		t.Fatalf("deterministic search decision=%+v", decision)
+	}
+	var searchArgs struct {
+		Query      string `json:"query"`
+		MaxResults int    `json:"max_results"`
+	}
+	if err := json.Unmarshal(decision.ToolCall.Arguments, &searchArgs); err != nil {
+		t.Fatal(err)
+	}
+	if searchArgs.Query != goal+" protocol data structures" || searchArgs.MaxResults != 8 {
+		t.Fatalf("deterministic search args=%+v", searchArgs)
+	}
+
+	fetchStep := domain.PlanStep{ID: "fetch_1", Kind: "fetch"}
+	decision, deterministic, err = deterministicResearchAction(fetchStep, goal, "fetch_url", checkpointState{}, []string{"https://docs.example.com/protocol"})
+	if err != nil || !deterministic || decision.ToolCall == nil || decision.ToolCall.Name != "fetch_url" {
+		t.Fatalf("validated fetch candidate was not deterministic: decision=%+v deterministic=%v err=%v", decision, deterministic, err)
+	}
+	var fetchArgs struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(decision.ToolCall.Arguments, &fetchArgs); err != nil {
+		t.Fatal(err)
+	}
+	if fetchArgs.URL != "https://docs.example.com/protocol" {
+		t.Fatalf("deterministic fetch URL=%q", fetchArgs.URL)
+	}
+}
+
+func TestDeterministicResearchActionFallsBackForAmbiguousOrRepeatedInputs(t *testing.T) {
+	goal := "Research protocol architecture"
+	step := domain.PlanStep{ID: "search_1", Kind: "search", Description: "Search for protocol architecture"}
+	if _, deterministic, err := deterministicResearchAction(step, goal, "search", checkpointState{}, nil); err != nil || deterministic {
+		t.Fatalf("unvalidated search description bypassed actor: deterministic=%v err=%v", deterministic, err)
+	}
+	validated := domain.PlanStep{ID: "search_1", Kind: "search", Description: deterministicSearchFacetPrefix + "protocol data structures. User request: " + goal}
+	state := checkpointState{SearchQueryHistory: []string{goal + " protocol data structures"}}
+	if _, deterministic, err := deterministicResearchAction(validated, goal, "search", state, nil); err != nil || deterministic {
+		t.Fatalf("repeated search query bypassed duplicate handling: deterministic=%v err=%v", deterministic, err)
+	}
+	if _, deterministic, err := deterministicResearchAction(domain.PlanStep{Kind: "fetch", ID: "fetch_1"}, goal, "fetch_url", checkpointState{}, nil); err != nil || deterministic {
+		t.Fatalf("fetch without validated candidates was deterministic: deterministic=%v err=%v", deterministic, err)
+	}
+}
+
 func TestResearchFetchDependenciesRequireEverySearchAndSearchesStayFirst(t *testing.T) {
 	registry := registerPlanValidationResearchTools(t)
 	worker := New(nil, &scriptedLLM{}, registry, Options{MaxSteps: 12})

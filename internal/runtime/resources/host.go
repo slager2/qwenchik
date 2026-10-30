@@ -54,11 +54,15 @@ type HostProvider struct {
 	procRSSMu          sync.Mutex
 	procRSSAt          time.Time
 	procRSS            domain.Metric[int64]
+	gpuMu              sync.Mutex
+	gpuAt              time.Time
+	gpuData            []byte
 	windows            windowsTelemetrySource
 	windowsMetadataMu  sync.RWMutex
 	windowsMetadata    windowsSystemMetadata
 	windowsPowerStatus windowsPowerStatus
 	windowsPowerError  domain.MetricErrorCode
+	stats              telemetryCounters
 }
 
 type windowsMemorySample struct {
@@ -153,7 +157,15 @@ func NewHostProvider(llamaBaseURL string, policy Policy) (*HostProvider, error) 
 	}, nil
 }
 
-func (p *HostProvider) Snapshot(ctx context.Context) (Snapshot, error) {
+func (p *HostProvider) Snapshot(ctx context.Context) (snapshot Snapshot, err error) {
+	started := time.Now()
+	p.stats.snapshots.Add(1)
+	defer func() {
+		p.stats.lastSnapshotDuration.Store(time.Since(started).Nanoseconds())
+		if err != nil {
+			p.stats.snapshotErrors.Add(1)
+		}
+	}()
 	updatedAt := time.Now().UTC()
 	s := Snapshot{SnapshotAt: updatedAt, PowerSource: PowerUnknown, Warnings: []string{}}
 	if err := ctx.Err(); err != nil {
@@ -683,19 +695,49 @@ func (p *HostProvider) cpuUsage(updatedAt time.Time) (domain.Metric[float64], bo
 }
 
 func (p *HostProvider) collectGPUs(ctx context.Context, snapshot *Snapshot, system *domain.SystemTelemetry, capabilities *domain.TelemetryCapabilities, updatedAt time.Time) {
-	probeCtx, cancel := context.WithTimeout(ctx, gpuProbeTimeout)
-	data, err := p.run(probeCtx, "nvidia-smi", "--query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.free,memory.total,power.draw", "--format=csv,noheader,nounits")
-	cancel()
+	// nvidia-smi is a relatively expensive subprocess and Snapshot can be
+	// requested by several health/status paths in a short burst. Reuse a very
+	// short-lived successful sample while still reparsing it with the current
+	// timestamp, so callers never observe a shared mutable slice or an old
+	// snapshot timestamp. This trims command churn without hiding a thermal
+	// change for more than a couple of seconds.
+	cacheTTL := p.policy.CheckInterval / 2
+	if cacheTTL < 500*time.Millisecond {
+		cacheTTL = 500 * time.Millisecond
+	}
+	if cacheTTL > 2*time.Second {
+		cacheTTL = 2 * time.Second
+	}
+	p.gpuMu.Lock()
+	var data []byte
+	var err error
+	if len(p.gpuData) > 0 && !p.gpuAt.IsZero() && time.Since(p.gpuAt) < cacheTTL {
+		data = append([]byte(nil), p.gpuData...)
+		p.stats.gpuCacheHits.Add(1)
+	} else {
+		p.stats.gpuCacheMisses.Add(1)
+		p.stats.gpuProbeAttempts.Add(1)
+		probeCtx, cancel := context.WithTimeout(ctx, gpuProbeTimeout)
+		data, err = p.run(probeCtx, "nvidia-smi", "--query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.free,memory.total,power.draw", "--format=csv,noheader,nounits")
+		cancel()
+		if err == nil && len(data) > 0 && ctx.Err() == nil {
+			p.gpuData = append(p.gpuData[:0], data...)
+			p.gpuAt = time.Now()
+		}
+	}
+	p.gpuMu.Unlock()
 	if ctx.Err() != nil {
 		return
 	}
 	if err != nil {
+		p.stats.gpuProbeFailures.Add(1)
 		system.GPUs = []domain.GPUTelemetry{}
 		appendWarning(snapshot, "GPU telemetry unavailable")
 		return
 	}
 	gpus, err := parseNVIDIAGPUTelemetry(data, updatedAt)
 	if err != nil {
+		p.stats.gpuProbeFailures.Add(1)
 		system.GPUs = []domain.GPUTelemetry{}
 		appendWarning(snapshot, "GPU telemetry unavailable")
 		return
@@ -796,8 +838,11 @@ func (p *HostProvider) llamaServerRSS(updatedAt time.Time) domain.Metric[int64] 
 	p.procRSSMu.Lock()
 	defer p.procRSSMu.Unlock()
 	if !p.procRSSAt.IsZero() && time.Since(p.procRSSAt) < ttl {
+		p.stats.modelRSSCacheHits.Add(1)
 		return cloneMetric(p.procRSS)
 	}
+	p.stats.modelRSSCacheMisses.Add(1)
+	p.stats.modelRSSScans.Add(1)
 	metric := p.scanLlamaServerRSS(updatedAt)
 	p.procRSS = cloneMetric(metric)
 	p.procRSSAt = time.Now()
@@ -1185,8 +1230,10 @@ func (p *HostProvider) powerSourceAt(ctx context.Context) (PowerSource, time.Tim
 	p.powerMu.Lock()
 	defer p.powerMu.Unlock()
 	if time.Since(p.powerAt) < 30*time.Second {
+		p.stats.powerCacheHits.Add(1)
 		return p.power, p.powerAt
 	}
+	p.stats.powerCacheMisses.Add(1)
 	if runtime.GOOS == "windows" {
 		p.power = PowerUnknown
 		p.windowsPowerStatus = windowsPowerStatus{}

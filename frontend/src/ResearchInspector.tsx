@@ -7,7 +7,8 @@ import FailureDetails, { safeCount } from './FailureDetails'
 import type { ReloadReason } from './network-debug'
 import { safeURL } from './conversation-state.mjs'
 import { diagnosticSummary } from './observability.mjs'
-import { formatSourceBytes, planningFailure, publicResearchEvents, researchError, researchQueries, researchSources, researchSteps } from './research-state.mjs'
+import { researchPlanPresentation, resourceReasonLabel, resumeEligibility } from './run-presentation.mjs'
+import { formatSourceBytes, planningFailure, publicResearchEvents, researchError, researchQueries, researchSources } from './research-state.mjs'
 import type { AgentEvent, DoctorResponse, Evidence, ProvidersResponse, ResearchPlan, Run, RunRuntime, SourceRecord, VerificationCriterionRecord } from './types'
 
 interface Remote<T> { data?: T; error: string; loading: boolean; reload: (reason?: ReloadReason) => Promise<void> }
@@ -53,39 +54,59 @@ function Status({ resource, empty }: { resource: Remote<unknown>; empty?: boolea
   return empty ? <p className="chat-muted">Пока нет данных.</p> : null
 }
 
-export default function ResearchInspector({ resources, events, run, showHeading = true, busy, onPause, onResume, onRetry }: { resources: Resources; events: AgentEvent[]; run: Run | null; showHeading?: boolean; busy?: boolean; onPause?: () => void; onResume?: () => void; onRetry?: () => void }) {
+export default function ResearchInspector({ resources, events, run, showHeading = true, busy, onPause, onResume, onRetry, onDiagnostics, diagnosticsLoading, diagnosticsError }: { resources: Resources; events: AgentEvent[]; run: Run | null; showHeading?: boolean; busy?: boolean; onPause?: () => void; onResume?: () => void; onRetry?: () => void; onDiagnostics?: () => void; diagnosticsLoading?: boolean; diagnosticsError?: string }) {
   const { plan, sources, evidence, providers } = resources
   const currentRuntime = run && resources.runtime?.data?.task_id === run.id ? resources.runtime?.data ?? null : null
-  const failedPlanning = planningFailure(run, events, plan.data)
-  const steps = researchSteps(plan.data, events)
-  const sourceList = researchSources(sources.data ?? [], events)
-  const queries = researchQueries(events)
-  const activity = publicResearchEvents(events).filter((event) => ['search.provider', 'tool.started', 'tool.failed', 'plan.created', 'evidence.created', 'task.status_changed', 'context.compacted', 'continuation.requested', 'verification.completed', 'run.paused', 'run.resumed', 'run.blocked'].includes(event.type))
+  // The events prop is run-scoped by its owner. Retain legacy unscoped public
+  // entries, but never project entries explicitly owned by another run.
+  const currentEvents = publicResearchEvents(events).filter((event) => !event.task_id || event.task_id === run?.id)
+  const selectedPlan = currentRuntime?.active_round_plan ? { subtasks: currentRuntime.active_round_plan.subtasks } : plan.data
+  const failedPlanning = planningFailure(run, currentEvents, selectedPlan)
+  const { steps, completed, skipped, processed, activePlan } = researchPlanPresentation(run, currentRuntime, plan.data, currentEvents)
+  const sourceList = researchSources(sources.data ?? [], currentEvents)
+  const ownedEvidence = evidence.data?.filter((item) => item.task_id === run?.id)
+  const sourcesKnown = sources.data !== undefined || sourceList.length > 0
+  const queries = researchQueries(currentEvents)
+  const activity = currentEvents.filter((event) => ['search.provider', 'tool.started', 'tool.failed', 'plan.created', 'evidence.created', 'task.status_changed', 'context.compacted', 'continuation.requested', 'verification.completed', 'run.paused', 'run.resumed', 'run.blocked'].includes(event.type))
   const terminal = run && ['completed', 'cancelled', 'failed'].includes(run.status)
   const state = run ? run.status === 'paused' ? 'paused' : terminal ? run.status : run.phase || run.stage || run.status : ''
-  const warning = publicResearchEvents(events).filter((event) => event.type === 'research.warning').at(-1)
+  const warning = currentEvents.filter((event) => event.type === 'research.warning').at(-1)
   const partial = warning?.payload.partial === true || sourceList.some((source) => ['rejected', 'failed'].includes(source.status || '') || (terminal && source.status === 'fetching'))
-  const verification = publicResearchEvents(events).filter((event) => event.type === 'verification.updated').at(-1)
+  const verification = currentEvents.filter((event) => event.type === 'verification.updated').at(-1)
   const fallback = verification?.payload.status === 'fallback_excerpts'
-  const readiness = publicResearchEvents(events).filter((event) => event.type === 'verification.completed' && event.payload.phase === 'evidence_readiness').at(-1)
+  const readiness = currentEvents.filter((event) => event.type === 'verification.completed' && event.payload.phase === 'evidence_readiness').at(-1)
   const readinessVerdict = typeof readiness?.payload.verdict === 'string' ? readiness.payload.verdict : ''
   const criticalMissing = stringList(readiness?.payload.missing)
   const supplementaryMissing = stringList(readiness?.payload.supplementary_missing)
   const criteria = verificationCriteria(readiness?.payload.criteria)
-  const plannedSteps = plan.data?.plan?.subtasks ?? plan.data?.subtasks ?? []
-  const completedSteps = steps.filter((step) => ['completed', 'skipped'].includes(step.status)).length
-  const pauseReason = currentRuntime?.pause_reason || run?.pause_reason
+  const plannedSteps = currentRuntime?.active_round_plan?.subtasks ?? plan.data?.plan?.subtasks ?? plan.data?.subtasks ?? []
+  const resume = resumeEligibility(run, currentRuntime)
   const outcome = currentRuntime?.terminal_outcome || run?.terminal_outcome
   const outcomes: Record<string, string> = { partial: 'Частичный результат', blocked: 'Заблокировано проверкой', budget_exhausted: 'Бюджет исчерпан', cancelled: 'Остановлено', failed: 'Ошибка запуска' }
+  const report = currentRuntime?.research_report
+  const reportSaved = !!(report?.artifact_id?.trim() || report?.markdown_artifact_id?.trim())
+  const focusSection = (button: HTMLButtonElement, section: string) => {
+    const heading = button.closest('.chat-research')?.querySelector<HTMLElement>(`[data-research-section="${section}"] h3`)
+    heading?.focus({ preventScroll: true })
+    heading?.scrollIntoView({ block: 'start', inline: 'nearest' })
+  }
   return <div className="chat-research">
-    <ContextNotice budget={currentRuntime?.context_budget} />
-    {currentRuntime?.privacy_mode && <PrivacyNotice mode={currentRuntime.privacy_mode} />}
-    <TelemetryPanel runtime={currentRuntime} />
-    {resources.pdfCapability && <p role="status">PDF: {resources.pdfCapability.state==='isolated_available'?'изолированная среда доступна':resources.pdfCapability.state==='pure_go_fallback_available'?'разрешён process-bounded fallback без OS-изоляции':'извлечение недоступно'}. {resources.pdfCapability.smoke_tested?'Fixture smoke подтверждён.':'Наличие capability не подтверждает извлечение конкретного PDF.'}</p>}
-    {currentRuntime?.research_report?.artifact_id && <section aria-label="Аналитический отчёт"><h3>Аналитический отчёт</h3><p>Секций: {currentRuntime.research_report.sections} · Итог: {currentRuntime.research_report.outcome}</p><a href={`/api/tasks/${encodeURIComponent(currentRuntime.task_id)}/artifacts/${encodeURIComponent(currentRuntime.research_report.artifact_id)}`}>Скачать отчёт с metadata (JSON)</a>{currentRuntime.research_report.markdown_artifact_id && <p><a href={`/api/tasks/${encodeURIComponent(currentRuntime.task_id)}/artifacts/${encodeURIComponent(currentRuntime.research_report.markdown_artifact_id)}`}>Скачать Markdown</a></p>}</section>}
-    {currentRuntime?.adaptive_enabled && <p role="status">Adaptive research · Раунд {currentRuntime.current_round}</p>}
-    {!!currentRuntime?.research_rounds?.length && <section aria-label="Раунды исследования"><h3>Раунды исследования</h3><ol>{currentRuntime.research_rounds.map((round) => <li key={round.number}><strong>Раунд {round.number}</strong><p>Evidence: {round.evidence_count} · Открытых вопросов: {round.frontier_count}</p><ul>{round.critical_missing.map((item,index)=><li key={index}>{item}</li>)}</ul></li>)}</ol>{currentRuntime.research_stop_reason && <p>Причина остановки: {currentRuntime.research_stop_reason}</p>}</section>}
     <header className="research-heading">{showHeading && <h2>{run?.mode === 'chat' ? 'Детали запуска' : 'Детали исследования'}</h2>}<p>{labels[state] || 'Исследование ещё не запущено'}</p></header>
+    <div className="research-progress" aria-label="Состояние исследования">
+      {outcome && outcomes[outcome] && <p className="research-outcome" role="status">{outcomes[outcome]}</p>}
+      {run?.status === 'paused' && <><p>{resourceReasonLabel(currentRuntime?.resource_reason || run.resource_reason || currentRuntime?.pause_reason || run.pause_reason)}</p><p className="chat-muted" role="status">{resume.explanation}</p></>}
+      <div className="research-run-actions">
+        {run && ['planning', 'running', 'verifying'].includes(run.status) && onPause && <button type="button" disabled={busy} onClick={onPause}>Пауза</button>}
+        {run?.status === 'paused' && onResume && <button type="button" disabled={busy || !resume.allowed} onClick={onResume}>Возобновить</button>}
+      </div>
+    </div>
+    {run?.mode === 'research' && <section aria-label="Аналитический отчёт"><h3>Аналитический отчёт</h3>{reportSaved && report && currentRuntime ? <>
+      <p>Файл отчёта сохранён. Текст ответа доступен в разговоре, если он был сохранён.</p>
+      <p>Секций: {safeCount(report.sections) ?? 'неизвестно'} · Итог файла: {outcomes[report.outcome] || (report.outcome === 'completed' ? 'Завершено' : 'Не уточнён')}</p>
+      {report.artifact_id && <a href={`/api/tasks/${encodeURIComponent(currentRuntime.task_id)}/artifacts/${encodeURIComponent(report.artifact_id)}`}>Скачать отчёт с metadata (JSON)</a>}
+      {report.markdown_artifact_id && <p><a href={`/api/tasks/${encodeURIComponent(currentRuntime.task_id)}/artifacts/${encodeURIComponent(report.markdown_artifact_id)}`}>Скачать Markdown</a></p>}
+      {stringList(report.unrepresented_criteria).length > 0 && <><h4>Не отражено в сохранённом отчёте</h4><ul>{stringList(report.unrepresented_criteria).map((item, index) => <li key={index}>{item}</li>)}</ul></>}
+    </> : <p>{!currentRuntime ? 'Наличие файла отчёта неизвестно: сведения запуска недоступны.' : terminal ? 'Файл отчёта не сохранён.' : 'Файл отчёта пока не сохранён. Этапы и внутренние проверки не подтверждают доставку ответа.'}</p>}</section>}
     {failedPlanning && <section className="chat-action-error" aria-label="Ошибка планирования" role="status">
       <h3>Планирование не завершено</h3>
       <p>План не был сохранён: ошибка произошла до начала поиска</p>
@@ -94,20 +115,11 @@ export default function ResearchInspector({ resources, events, run, showHeading 
       <dl><dt>Вызовы LLM</dt><dd>{safeCount(currentRuntime?.counters?.llm_calls) ?? '—'}</dd><dt>Поиски</dt><dd>{safeCount(currentRuntime?.counters?.search_queries) ?? '—'}</dd><dt>Загрузки</dt><dd>{safeCount(currentRuntime?.counters?.fetches) ?? '—'}</dd></dl>
       {onRetry && <button type="button" disabled={busy} onClick={onRetry}>Повторить ответ</button>}
     </section>}
-    <div className="research-progress" aria-label="Прогресс исследования">
-      {steps.length > 0 && <><div className="research-progress__caption"><span>Выполнено этапов</span><strong>{completedSteps} / {steps.length}</strong></div><progress value={completedSteps} max={steps.length} aria-label="Выполнено этапов" /></>}
-      <div className="research-run-actions">
-        {run && ['planning', 'running', 'verifying'].includes(run.status) && onPause && <button type="button" disabled={busy} onClick={onPause}>Пауза</button>}
-        {run?.status === 'paused' && onResume && <button type="button" disabled={busy || pauseReason === 'resource_guard' || pauseReason === 'recovery_required'} onClick={onResume}>Возобновить</button>}
-      </div>
-      {outcome && outcomes[outcome] && <p className="research-outcome" role="status">{outcomes[outcome]}</p>}
-      {run?.status === 'paused' && <p className="chat-muted" role="status">{pauseReason === 'resource_guard' ? 'Возобновление разрешит backend после успешной проверки ресурсов. Можно остановить запуск.' : pauseReason === 'recovery_required' ? 'Нужно проверить неизвестный исход вызова. Состояние сохранено.' : 'Запуск на паузе. Состояние и остаток бюджета сохранены.'}</p>}
-      {!!currentRuntime?.contradictions?.length && <div className="chat-partial-note" role="status"><h4>Неразрешённые противоречия</h4><ul>{currentRuntime.contradictions.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
-    </div>
+    {!!currentRuntime?.contradictions?.length && <div className="chat-partial-note" role="status"><h4>Неразрешённые противоречия</h4><ul>{stringList(currentRuntime.contradictions).map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
     {resources.runtime?.error && <Status resource={resources.runtime} />}
     <nav className="chat-research-shortcuts" aria-label="Разделы исследования">
-      <button type="button" onClick={(event) => event.currentTarget.closest('.chat-research')?.querySelector('[data-research-section="sources"]')?.scrollIntoView({ block: 'start', inline: 'nearest' })}>Источники · {sourceList.length}</button>
-      <button type="button" onClick={(event) => event.currentTarget.closest('.chat-research')?.querySelector('[data-research-section="evidence"]')?.scrollIntoView({ block: 'start', inline: 'nearest' })}>Evidence · {evidence.data?.length ?? 0}</button>
+      <button type="button" onClick={(event) => focusSection(event.currentTarget, 'sources')}>Источники · {sourcesKnown ? sourceList.length : '—'}</button>
+      <button type="button" onClick={(event) => focusSection(event.currentTarget, 'evidence')}>Evidence · {ownedEvidence?.length ?? '—'}</button>
     </nav>
     {fallback && <p className="chat-partial-note" role="status">Показаны дословные выдержки. Синтезированный вывод надёжно подтвердить не удалось.</p>}
     {partial && <p className="chat-partial-note" role="status">Часть источников недоступна или отклонена. Это может ограничить полноту ответа.</p>}
@@ -115,18 +127,17 @@ export default function ResearchInspector({ resources, events, run, showHeading 
       const title = plannedSteps.find((step) => step.id === item.step_id)?.success_criteria?.[item.criterion_index]
       return <li key={`${item.step_id}-${item.criterion_index}`}><strong>{item.classification === 'critical' ? 'Критический' : 'Дополнительный'}</strong>: {title || `Критерий ${item.step_id}.${item.criterion_index + 1}`} · {item.met ? 'выполнен' : 'не подтверждён'}{item.evidence_ids.length > 0 && <p>Evidence IDs: {item.evidence_ids.map((id) => <code key={id}>{id} </code>)}</p>}</li>
     })}</ol></details>}</section>}
-    <section><h3>План</h3>{!failedPlanning && <Status resource={plan} empty={!steps.length} />}
+    <section><h3>{activePlan ? 'План текущего раунда' : 'План'}</h3>
+      {currentRuntime?.adaptive_enabled && <p>Раунд {currentRuntime.current_round ?? 'неизвестен'}</p>}
+      {steps.length > 0 && <div className="research-progress" aria-label="Обработка плана"><div className="research-progress__caption"><span>Обработано этапов</span><strong>{processed} / {steps.length}</strong></div><progress value={processed} max={steps.length} aria-label="Обработано этапов плана" /><p>Выполнено: {completed} · Пропущено: {skipped}. Это обработка плана, а не готовность отчёта.</p></div>}
+      {!failedPlanning && (!activePlan || plan.error) && <Status resource={plan} empty={!steps.length} />}
       {steps.length > 0 && <ol className="chat-plan-list">{steps.map((step) => {
         const lead = step.description.split(/[.!?](?:\s|$)|:\s/)[0]
         const concise = lead.length > 120 ? `${lead.slice(0, 117).trimEnd()}…` : lead
         return <li key={step.id} data-status={step.status}><span className="research-step-mark" aria-hidden="true">{step.status === 'completed' ? '✓' : step.status === 'running' ? '•' : step.status === 'skipped' ? '–' : '·'}</span><div><Expandable title={concise}><p>{step.description}</p></Expandable><small>{labels[step.status] || step.status}</small></div></li>
       })}</ol>}
     </section>
-    <section className="research-secondary"><Expandable title="Поисковые запросы">
-      {queries.queries.length > 0 ? <ul>{queries.queries.map((query) => <li key={query}>{query}</li>)}</ul> : <p className="chat-muted">Точные запросы пока не переданы backend.</p>}
-      {queries.summaries.length > 0 && <><h4>Краткие действия поиска</h4><ul>{queries.summaries.map((summary) => <li key={summary}>{summary}</li>)}</ul></>}
-    </Expandable></section>
-    <section data-research-section="sources"><h3>Источники <span>{sourceList.length}</span></h3><Status resource={sources} empty={!sourceList.length} />
+    <section data-research-section="sources"><h3 tabIndex={-1}>Источники <span>{sourcesKnown ? sourceList.length : '—'}</span></h3><Status resource={sources} empty={sourcesKnown && !sourceList.length} />
       <ul className="chat-source-cards">{sourceList.map((source) => {
         const url = safeURL(source.canonical_url)
         const unavailable = ['rejected', 'failed'].includes(source.status || '') || !!source.error_code
@@ -135,9 +146,11 @@ export default function ResearchInspector({ resources, events, run, showHeading 
           {url ? <a href={url} target="_blank" rel="noopener noreferrer">{source.title || new URL(url).hostname}</a> : <strong>{source.title || 'Источник без доступной ссылки'}</strong>}
           <p>{unfinished ? 'Загрузка не подтверждена' : labels[source.status || ''] || source.status || 'Найден'}{source.provider ? ` · ${source.provider}` : ''}</p>
           {url && <small>{new URL(url).hostname}</small>}
-          {source.query && <p>Запрос: {source.query}</p>}
           {source.snippet && <p>{source.snippet}</p>}
-          {unavailable && <div className="chat-source-error" role="status"><p>{researchError(source.error_code)}</p>{source.error_code && <small>Код: {source.error_code}</small>}</div>}
+          {unavailable && <div className="chat-source-error" role="status"><p>{researchError(source.error_code)}</p></div>}
+          <Expandable title="Сведения о загрузке">
+          {source.query && <p>Запрос: {source.query}</p>}
+          {source.error_code && <small>Код: {source.error_code}</small>}
           {(source.declared_bytes !== undefined || source.effective_limit_bytes !== undefined || source.fetched_bytes !== undefined) && <dl>
             {source.declared_bytes !== undefined && <><dt>Заявленный размер</dt><dd>{formatSourceBytes(source.declared_bytes)}</dd></>}
             {source.effective_limit_bytes !== undefined && <><dt>Применённый лимит</dt><dd>{formatSourceBytes(source.effective_limit_bytes)}</dd></>}
@@ -148,13 +161,26 @@ export default function ResearchInspector({ resources, events, run, showHeading 
           {source.remaining_candidates !== undefined && <p>Осталось кандидатов: {source.remaining_candidates}</p>}
           {unfinished && <p className="chat-muted">Запуск завершён без подтверждения загрузки этого источника.</p>}
           {(source.timestamp || source.retrieved_at) && <time dateTime={source.timestamp || source.retrieved_at}>{stamp((source.timestamp || source.retrieved_at)!)}</time>}
+          </Expandable>
         </li>
       })}</ul>
     </section>
-    <section data-research-section="evidence"><h3>Evidence <span>{evidence.data?.length ?? 0}</span></h3><Status resource={evidence} empty={!evidence.data?.length} />
-      <ul className="chat-source-cards">{(evidence.data ?? []).map((item) => <li key={item.id}><strong>{item.title || 'Сохранённый источник'}</strong><p>{item.excerpt}</p>{safeURL(item.canonical_url) && <a href={safeURL(item.canonical_url)} target="_blank" rel="noopener noreferrer">Открыть источник</a>}<small>{item.provider} · {item.extraction_method}</small></li>)}</ul>
+    <section data-research-section="evidence"><h3 tabIndex={-1}>Evidence <span>{ownedEvidence?.length ?? '—'}</span></h3><Status resource={evidence} empty={ownedEvidence !== undefined && !ownedEvidence.length} />
+      <ul className="chat-source-cards">{(ownedEvidence ?? []).map((item) => <li key={item.id}><strong>{item.title || 'Сохранённый источник'}</strong>{safeURL(item.canonical_url) && <small>{new URL(safeURL(item.canonical_url)).hostname}</small>}<p>Сохранённый материал</p><p>{item.excerpt}</p>{safeURL(item.canonical_url) && <a href={safeURL(item.canonical_url)} target="_blank" rel="noopener noreferrer">Открыть источник</a>}<details><summary>Происхождение материала</summary><small>{item.provider} · {item.extraction_method}</small><code>{item.id}</code></details></li>)}</ul>
       <p className="chat-muted">Ссылки подтверждают наличие источника, а не проверку каждого утверждения.</p>
     </section>
+    <section className="research-secondary"><Expandable title="Диагностика запуска">
+      {onDiagnostics && <><p>Проверка может вызвать локальную модель и поисковые сервисы. Запускается только по вашему действию.</p><button type="button" disabled={diagnosticsLoading} onClick={onDiagnostics}>Проверить модель и поиск</button>{diagnosticsLoading && <p role="status">Проверяем модель и поиск…</p>}</>}
+      {diagnosticsError && <p className="chat-resource-error" role="status">{diagnosticsError}</p>}
+      <ContextNotice budget={currentRuntime?.context_budget} />
+      {currentRuntime?.privacy_mode && <PrivacyNotice mode={currentRuntime.privacy_mode} />}
+      <TelemetryPanel runtime={currentRuntime} />
+      {resources.pdfCapability && <p role="status">PDF: {resources.pdfCapability.state==='isolated_available'?'изолированная среда доступна':resources.pdfCapability.state==='pure_go_fallback_available'?'разрешён process-bounded fallback без OS-изоляции':'извлечение недоступно'}. {resources.pdfCapability.smoke_tested?'Fixture smoke подтверждён.':'Наличие capability не подтверждает извлечение конкретного PDF.'}</p>}
+      {!!currentRuntime?.research_rounds?.length && <section aria-label="Раунды исследования"><h3>Раунды исследования</h3><ol>{currentRuntime.research_rounds.map((round) => <li key={round.number}><strong>Раунд {round.number}</strong><p>Evidence: {safeCount(round.evidence_count) ?? '—'} · Открытых вопросов: {safeCount(round.frontier_count) ?? '—'}</p>{stringList(round.critical_missing).length > 0 && <ul>{stringList(round.critical_missing).map((item,index)=><li key={index}>{item}</li>)}</ul>}</li>)}</ol>{currentRuntime.research_stop_reason && <p>Причина остановки: {currentRuntime.research_stop_reason}</p>}</section>}
+      <Expandable title="Поисковые запросы">
+        {queries.queries.length > 0 ? <ul>{queries.queries.map((query) => <li key={query}>{query}</li>)}</ul> : <p className="chat-muted">Точные запросы пока не переданы backend.</p>}
+        {queries.summaries.length > 0 && <><h4>Краткие действия поиска</h4><ul>{queries.summaries.map((summary) => <li key={summary}>{summary}</li>)}</ul></>}
+      </Expandable>
     <section className="research-secondary"><Expandable title="Поисковые провайдеры"><button type="button" disabled={providers.loading} onClick={() => void providers.reload('manual_retry')}>{providers.loading ? 'Обновляем…' : 'Обновить провайдеров'}</button><Status resource={providers} empty={!providers.data} />{Object.entries(providers.data?.search.providers ?? {}).map(([name, provider]) => <ProviderCard key={name} name={name} provider={provider} checkedLabel={provider.last_checked ? stamp(provider.last_checked) : ''} />)}</Expandable></section>
     <section className="research-secondary"><Expandable title="Действия">{!activity.length && <p className="chat-muted">События появятся во время работы.</p>}
       <ol>{activity.slice(-30).reverse().map((event) => <li key={event.seq}>
@@ -165,6 +191,7 @@ export default function ResearchInspector({ resources, events, run, showHeading 
         {event.type === 'tool.failed' && <p>{researchError(typeof event.payload.error_code === 'string' ? event.payload.error_code : typeof event.payload.code === 'string' ? event.payload.code : '')}</p>}
         <time>{stamp(event.created_at)}</time>
       </li>)}</ol>
+    </Expandable></section>
     </Expandable></section>
   </div>
 }

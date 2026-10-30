@@ -252,10 +252,11 @@ func prepareContextSnapshotCheckpoint(encoded []byte, prior []domain.Checkpoint)
 }
 
 func (s *Store) CommitStepResult(ctx context.Context, taskID, stepID, tool, summary string, result any, state any) (domain.Checkpoint, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if err := fenceExecution(ctx, tx, taskID); err != nil {
 		return domain.Checkpoint{}, err
@@ -267,7 +268,7 @@ func (s *Store) CommitStepResult(ctx context.Context, taskID, stepID, tool, summ
 	if task.Status != domain.StatusRunning {
 		return domain.Checkpoint{}, ErrConflict
 	}
-	state, err = completePendingStepInvocationTx(ctx, tx, taskID, stepID, tool, result, state)
+	state, err = s.completePendingStepInvocationTx(ctx, tx, taskID, stepID, tool, result, state)
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
@@ -289,14 +290,14 @@ func (s *Store) CommitStepResult(ctx context.Context, taskID, stepID, tool, summ
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
-	cp, err := saveCheckpointTx(ctx, tx, taskID, 1, seq, state)
+	cp, err := s.saveCheckpointTx(ctx, tx, taskID, 1, seq, state)
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
 	if err := fenceExecution(ctx, tx, taskID); err != nil {
 		return domain.Checkpoint{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitCheckpointTx(ctx, tx); err != nil {
 		return domain.Checkpoint{}, err
 	}
 	return cp, nil

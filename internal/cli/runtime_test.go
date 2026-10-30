@@ -47,7 +47,7 @@ func TestRuntimeRenderingEscapesSystemdInputsAndKeepsSecretsOut(t *testing.T) {
 		`"--device" "Vulkan2"`, `"-ngl" "99"`, `"-c" "16384"`,
 		`"--host" "127.0.0.1" "--port" "8000"`,
 		`"--parallel" "1"`, `"-ctk" "q8_0" "-ctv" "q8_0"`,
-		`"--cache-ram" "0" "--ctx-checkpoints" "0" "--no-cache-idle-slots"`,
+		`"--cache-ram" "512" "--ctx-checkpoints" "4"`,
 	} {
 		if !strings.Contains(model, want) {
 			t.Errorf("model unit missing %q: %s", want, model)
@@ -78,6 +78,45 @@ func TestRuntimeRenderingEscapesSystemdInputsAndKeepsSecretsOut(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRuntimeModelCacheArgsAreBoundedAndDoNotDisableReuse(t *testing.T) {
+	args := runtimeModelCacheArgs()
+	if len(args) != 4 || args[0] != "--cache-ram" || args[1] != runtimeCacheRAMMiB || args[2] != "--ctx-checkpoints" || args[3] != runtimeContextCheckpoints {
+		t.Fatalf("unexpected runtime cache args: %#v", args)
+	}
+	for _, arg := range args {
+		if arg == "--no-cache-idle-slots" || arg == "0" {
+			t.Fatalf("runtime cache configuration disables reuse: %#v", args)
+		}
+	}
+	model := string(mustRenderRuntimeUnits(t, runtimeFixture(t))[runtimeUnitNames[0]])
+	if strings.Contains(model, "--no-cache-idle-slots") {
+		t.Fatal("generated model unit disables prompt-cache reuse")
+	}
+}
+
+func TestRuntimeModelSchedulingArgsBoundCPUAndDisableBusyPolling(t *testing.T) {
+	args := runtimeModelSchedulingArgs()
+	want := []string{"--threads", "4", "--threads-batch", "4", "--poll", "0", "--poll-batch", "0"}
+	if !bytes.Equal([]byte(strings.Join(args, "\x00")), []byte(strings.Join(want, "\x00"))) {
+		t.Fatalf("unexpected runtime scheduling args: %#v", args)
+	}
+	model := string(mustRenderRuntimeUnits(t, runtimeFixture(t))[runtimeUnitNames[0]])
+	for _, item := range want {
+		if !strings.Contains(model, `"`+item+`"`) {
+			t.Fatalf("generated model unit missing %q: %s", item, model)
+		}
+	}
+}
+
+func mustRenderRuntimeUnits(t *testing.T, options runtimeOptions) map[string][]byte {
+	t.Helper()
+	units, err := renderRuntimeUnits(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return units
 }
 
 func TestRuntimeRenderingRejectsInjectionAndInvalidValues(t *testing.T) {

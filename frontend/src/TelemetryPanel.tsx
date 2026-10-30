@@ -1,9 +1,10 @@
 import { useEffect, useId, useState } from 'react'
 import { nextTelemetryExpiry } from './telemetry-state.mjs'
+import { resourceReasonLabel } from './run-presentation.mjs'
 import type { RunRuntime, TelemetryMetric, TelemetryMetricValue } from './types'
 
 type Metric = TelemetryMetric<TelemetryMetricValue> | null | undefined
-type Quality = 'exact' | 'estimated' | 'unavailable' | 'stale' | 'reported' | 'attention' | 'disabled'
+type Quality = 'exact' | 'estimated' | 'unavailable' | 'stale' | 'unknown' | 'reported' | 'attention' | 'disabled'
 
 export interface TelemetryPanelProps {
   runtime?: RunRuntime | null
@@ -21,6 +22,7 @@ const qualityLabels: Record<Quality, string> = {
   estimated: 'Оценка',
   unavailable: 'Нет данных',
   stale: 'Устарело',
+  unknown: 'Время неизвестно',
   reported: 'Сообщено',
   attention: 'Требует внимания',
   disabled: 'Отключено',
@@ -35,11 +37,24 @@ const reasonLabels: Record<string, string> = {
   resource_guard: 'Защита ресурсов',
   low_ram: 'Недостаточно свободной RAM', low_vram: 'Недостаточно свободной VRAM',
   high_rss: 'Превышен лимит памяти процесса', gpu_temperature: 'Высокая температура GPU',
+  high_model_rss: 'Превышен лимит памяти сервера модели',
   llama_unhealthy: 'Локальная модель недоступна', llama_timeout: 'Истекло ожидание модели',
   model_timeout: 'Истекло ожидание модели', model_oom: 'Модели не хватило памяти',
   telemetry_unavailable: 'Телеметрия ресурсов недоступна', recovery_required: 'Нужна проверка результата вызова',
   manual: 'Пауза пользователя',
+  model_resource: 'Модель остановлена из-за ресурсов',
+  resource_pause: 'Вызов приостановлен из-за ресурсов',
+  context_mismatch: 'Контекст модели не совпадает с настройками',
+  context_unverified: 'Размер контекста модели не подтверждён',
+  context_capacity: 'Запрос не помещается в контекст модели',
+  context_budget_exceeded: 'Исчерпан бюджет контекста',
+  context_admission_mismatch: 'Контекст модели не совпадает с настройками',
+  context_admission_unverified: 'Размер контекста модели не подтверждён',
+  context_admission_capacity: 'Запрос не помещается в контекст модели',
+  cancel_unknown: 'Результат прерванного вызова неизвестен',
 }
+
+const reasonLabel = (reason: string) => reasonLabels[reason] || resourceReasonLabel(reason)
 
 const verdictLabels: Record<string, string> = { PASS: 'Evidence достаточно', PARTIAL: 'Частичный результат', RESEARCH: 'Нужно исследование', REPAIR: 'Нужно исправление', UNCERTAIN: 'Есть противоречия', BLOCK: 'Завершение заблокировано' }
 const notificationLabels: Record<string, string> = { pending: 'В очереди', attempted: 'Доставка начата', failed: 'Повтор доставки запланирован', delivered: 'Принято провайдером', abandoned: 'Доставка недоступна' }
@@ -119,6 +134,10 @@ function metricPresentation(metric: Metric, staleAfterMs: number | undefined, no
     }
   }
 
+  if (!metric.updated_at || !Number.isFinite(Date.parse(metric.updated_at))) {
+    return { value: formatValue(metric.value, metric.unit || ''), quality: 'unknown' as Quality, detail: qualityLabels.unknown }
+  }
+
   return {
     value: formatValue(metric.value, metric.unit || ''),
     quality: metric.source,
@@ -134,7 +153,9 @@ function MetricRows({ rows, staleAfterMs, now }: { rows: MetricRowData[]; staleA
       return <div className="telemetry-panel__metric" key={label}>
         <dt>{label}</dt>
         <dd>
-          <span className="telemetry-panel__value" title={detail}>{presentation.value}</span>
+          <span className="telemetry-panel__value" data-quality={presentation.quality} title={detail}>{presentation.value}</span>
+          <span className="telemetry-panel__freshness">{presentation.detail}{metric?.updated_at && <> · <time dateTime={metric.updated_at}>{metric.updated_at}</time></>}</span>
+          {metric?.error && <span className="telemetry-panel__freshness">{metric.error}</span>}
           <span className="telemetry-panel__sr-only">Качество данных: {detail}</span>
         </dd>
       </div>
@@ -151,6 +172,7 @@ function InfoRow({ label, value, quality = 'reported', detail }: { label: string
     <dt>{label}</dt>
     <dd>
       <span className="telemetry-panel__value" title={detail || qualityLabel}>{text}</span>
+      {unavailable && <span className="telemetry-panel__freshness">{qualityLabel}</span>}
       <span className="telemetry-panel__sr-only">{detail || qualityLabel}</span>
     </dd>
   </div>
@@ -158,6 +180,7 @@ function InfoRow({ label, value, quality = 'reported', detail }: { label: string
 
 function guardState(runtime: RunRuntime | null | undefined): { label: string; quality: Quality } {
   if (!runtime) return { label: 'Нет данных', quality: 'unavailable' }
+  if (runtime.pause_reason === 'manual' && runtime.resource_reason) return { label: 'Пауза удерживается до ручной проверки ресурсов', quality: 'attention' }
   if (runtime.pause_reason === 'resource_guard') return { label: 'Приостановлено защитой ресурсов', quality: 'attention' }
   if (runtime.runtime?.enabled === false) return { label: 'Отключён', quality: 'disabled' }
   if (runtime.resource_reason) return { label: 'Требует внимания', quality: 'attention' }
@@ -188,14 +211,16 @@ function GuardSection({ runtime, headingId }: { runtime: RunRuntime | null | und
     </header>
     <dl className="telemetry-panel__metrics">
       <InfoRow label="Защита включена" value={runtime?.runtime?.enabled == null ? '' : runtime.runtime.enabled ? 'Да' : 'Нет'} quality={runtime?.runtime?.enabled == null ? 'unavailable' : 'reported'} />
-      {pauseReason && <InfoRow label="Причина паузы" value={reasonLabels[pauseReason] || pauseReason} quality="reported" />}
-      {resourceReason && <InfoRow label="Проблема с ресурсами" value={reasonLabels[resourceReason] || resourceReason} quality="reported" />}
+      {pauseReason && <InfoRow label="Причина паузы" value={pauseReason === 'manual' && resourceReason ? 'Ручная пауза с ограничением ресурсов' : reasonLabel(pauseReason)} quality="reported" />}
+      {resourceReason && <InfoRow label="Проблема с ресурсами" value={reasonLabel(resourceReason)} quality="reported" />}
       <InfoRow label="Защита от сна" value={keepAwake} quality={keepAwakeKnown ? 'reported' : 'unavailable'} detail={sleep?.failure_reason || (sleep?.active === false ? 'Запрошено, но не активно' : undefined)} />
       <InfoRow label="Провайдер защиты доступен" value={sleep?.available == null ? '' : sleep.available ? 'Да' : 'Нет'} quality={sleep?.available == null ? 'unavailable' : 'reported'} detail={sleep?.failure_reason || undefined} />
       <InfoRow label="Провайдер защиты" value={sleep?.provider || ''} quality={sleep?.provider ? 'reported' : 'unavailable'} />
       <InfoRow label="Проверок ресурсов" value={runtime?.resource_probe_attempts == null ? '' : number(runtime.resource_probe_attempts)} quality={runtime?.resource_probe_attempts == null ? 'unavailable' : 'reported'} />
       <InfoRow label="Следующая проверка" value={nextProbeLabel} quality={nextProbeLabel ? 'reported' : 'unavailable'} />
     </dl>
+    {pauseReason === 'manual' && resourceReason && <p className="telemetry-panel__note">Автовозобновления нет. Проверьте причину ограничения перед ручным продолжением.</p>}
+    {pauseReason === 'recovery_required' && <p className="telemetry-panel__note">Исход вызова неизвестен. Нужна проверка сохранённого состояния.</p>}
     {runtime?.runtime?.sleep_policy && <p className="telemetry-panel__note">Политика защиты от сна: {runtime.runtime.sleep_policy}</p>}
     {sleep?.failure_reason && <p className="telemetry-panel__warning">Проблема защиты от сна: {sleep.failure_reason}</p>}
   </section>
@@ -204,6 +229,11 @@ function GuardSection({ runtime, headingId }: { runtime: RunRuntime | null | und
 function HashRow({ label, value }: { label: string; value?: string }) {
   const [state, setState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   useEffect(() => { setState('idle') }, [value])
+  useEffect(() => {
+    if (state !== 'success') return
+    const timer = window.setTimeout(() => setState('idle'), 2500)
+    return () => window.clearTimeout(timer)
+  }, [state])
   const copy = async () => {
     if (!value) return
     setState('loading')
@@ -226,6 +256,7 @@ function HashRow({ label, value }: { label: string; value?: string }) {
 
 function statusPresentation(status: string | undefined, updatedAt: string | undefined, staleAfterMs: number | undefined, now: number) {
   if (!status) return { value: 'Нет данных', quality: 'unavailable' as Quality, detail: 'Состояние инференса недоступно' }
+  if (!updatedAt || !Number.isFinite(Date.parse(updatedAt))) return { value: inferenceStatusLabels[status] || status, quality: 'unknown' as Quality, detail: 'Время состояния инференса неизвестно' }
   if (isStale(updatedAt, staleAfterMs, now)) return { value: inferenceStatusLabels[status] || status, quality: 'stale' as Quality, detail: 'Состояние инференса устарело' }
   return { value: inferenceStatusLabels[status] || status, quality: 'reported' as Quality, detail: 'Состояние инференса получено' }
 }
@@ -236,6 +267,7 @@ export default function TelemetryPanel({ runtime, className = '', showWarnings =
   const telemetry = runtime?.telemetry
   const system = telemetry?.system
   const inference = telemetry?.inference
+  const saved = runtime?.inference_summary
   const [expanded, setExpanded] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const staleAfterMs = telemetry?.stale_after_ms ?? 30_000
@@ -258,18 +290,19 @@ export default function TelemetryPanel({ runtime, className = '', showWarnings =
     const value = item.quality === 'unavailable' ? '—' : memory && typeof metric?.value === 'number'
       ? `${number(metric.value / 1024 ** 3)}G`
       : typeof metric?.value === 'number' ? `${number(metric.value)}°` : item.value
-    return <span title={item.detail}>{value}<span className="telemetry-panel__sr-only"> · {item.detail}{memory ? ', GiB свободно' : ', °C'}</span></span>
+    return <span data-quality={item.quality} title={item.detail}>{value}{item.quality !== 'exact' && <small className="telemetry-panel__ticker-quality">{item.detail}</small>}<span className="telemetry-panel__sr-only"> · {item.detail}{memory ? ', GiB свободно' : ', °C'}</span></span>
   }
 
   return <section className={panelClass} aria-label="Телеметрия">
     <div className="telemetry-panel__ticker" aria-label="Ресурсы: первый GPU, свободная память и скорость генерации">
       <span className="telemetry-panel__ticker-item">GPU {tickerValue(gpuList[0]?.temperature)} <span className="telemetry-panel__ticker-memory" title="Свободная VRAM">{tickerValue(gpuList[0]?.vram_free, true)}</span></span>
-      {speed.quality !== 'unavailable' && <span className="telemetry-panel__ticker-item" title={speed.detail}>Speed <strong>{typeof inference?.output_tokens_per_second?.value === 'number' ? number(inference.output_tokens_per_second.value) : '—'}</strong><span>tok/s</span></span>}
+      {speed.quality !== 'unavailable' && <span className="telemetry-panel__ticker-item" title={speed.detail}>Speed <strong>{typeof inference?.output_tokens_per_second?.value === 'number' ? number(inference.output_tokens_per_second.value) : '—'}</strong><span>tok/s</span>{speed.quality !== 'exact' && <small className="telemetry-panel__ticker-quality">{speed.detail}</small>}</span>}
       <span className="telemetry-panel__ticker-item">RAM {tickerValue(system?.ram_free, true)}</span>
     </div>
+    <p className="telemetry-panel__sample-status">{!telemetry ? 'Телеметрия недоступна.' : !sampleTimestampValid ? 'Время снимка неизвестно' : sampleStale ? 'Снимок устарел' : 'Снимок получен'}{sampleTimestampValid && <> · <time dateTime={snapshotTimestamp}>{new Date(snapshotTimestamp!).toLocaleTimeString()}</time></>}</p>
     {showWarnings && <>
-      {runtime?.pause_reason && <p className="telemetry-panel__warning">{runtime.pause_reason === 'resource_guard' ? 'Приостановлено защитой ресурсов' : reasonLabels[runtime.pause_reason] || runtime.pause_reason}</p>}
-      {runtime?.resource_reason && <p className="telemetry-panel__warning">{reasonLabels[runtime.resource_reason] || runtime.resource_reason}</p>}
+      {runtime?.pause_reason && <p className="telemetry-panel__warning">{runtime.pause_reason === 'resource_guard' ? 'Приостановлено защитой ресурсов' : runtime.pause_reason === 'manual' && runtime.resource_reason ? 'Ручная пауза с ограничением ресурсов — автоматического продолжения нет' : reasonLabel(runtime.pause_reason)}</p>}
+      {runtime?.resource_reason && <p className="telemetry-panel__warning">{reasonLabel(runtime.resource_reason)}</p>}
       {warnings.length > 0 && <ul className="telemetry-panel__warnings" aria-label="Предупреждения runtime">{warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
     </>}
     <button type="button" id={headingId} className="telemetry-panel__disclosure" aria-expanded={expanded} aria-controls={`${headingId}-diagnostics`} onClick={() => setExpanded(!expanded)}>
@@ -316,7 +349,7 @@ export default function TelemetryPanel({ runtime, className = '', showWarnings =
       <section className="telemetry-panel__card" aria-labelledby={`${headingId}-inference`}>
         <header className="telemetry-panel__card-heading">
           <h3 id={`${headingId}-inference`}>Инференс</h3>
-          <span className="telemetry-panel__note" title={inferenceStatus.detail}>{inferenceStatus.value}</span>
+          <span className="telemetry-panel__note" title={inferenceStatus.detail}>{inferenceStatus.value}{(inferenceStatus.quality === 'stale' || inferenceStatus.quality === 'unknown') && <> · {inferenceStatus.detail}</>}</span>
         </header>
         {inference?.source && <p className="telemetry-panel__note">Источник данных: {inference.source}</p>}
         <MetricRows staleAfterMs={staleAfterMs} now={now} rows={[
@@ -334,6 +367,24 @@ export default function TelemetryPanel({ runtime, className = '', showWarnings =
           { label: 'Размер окна контекста', metric: inference?.context_window },
         ]} />
       </section>
+
+      {saved && <details className="telemetry-panel__saved">
+        <summary>Последний сохранённый вызов</summary>
+        <p className="telemetry-panel__note">Исторические данные, не текущая скорость или состояние ресурсов.</p>
+        <dl className="telemetry-panel__metrics">
+          <InfoRow label="Вызов" value={saved.invocation_id || ''} />
+          <InfoRow label="Исход вызова" value={({ completed: 'Завершён', failed: 'Ошибка', unknown: 'Неизвестен' } as Record<string, string>)[saved.invocation_status] || 'Неизвестен'} />
+          <div className="telemetry-panel__metric"><dt>Сохранено</dt><dd>{saved.snapshot_at && Number.isFinite(Date.parse(saved.snapshot_at)) ? <time dateTime={saved.snapshot_at}>{saved.snapshot_at}</time> : 'Время неизвестно'}</dd></div>
+          <InfoRow label="Источник" value={saved.inference?.source || ''} />
+        </dl>
+        <MetricRows now={now} rows={[
+          { label: 'Токенов запроса', metric: saved.inference?.prompt_tokens },
+          { label: 'Токенов ответа', metric: saved.inference?.output_tokens },
+          { label: 'Скорость генерации в вызове', metric: saved.inference?.output_tokens_per_second },
+          { label: 'Время генерации', metric: saved.inference?.generation_ms },
+          { label: 'До первого токена', metric: saved.inference?.ttft_ms },
+        ]} />
+      </details>}
 
       <section className="telemetry-panel__card" aria-label="Выполнение">
         <h3>Выполнение</h3>

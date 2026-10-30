@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -39,6 +40,8 @@ type Store struct {
 	db               *sql.DB
 	leaseOwner       string
 	leaseTTL         time.Duration
+	checkpointMu     sync.Mutex
+	checkpointCache  map[string]checkpointHistoryCache
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -67,7 +70,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("connect SQLite database: %w", err)
 	}
-	store := &Store{db: db}
+	store := &Store{db: db, checkpointCache: make(map[string]checkpointHistoryCache)}
 	if err := store.migrate(ctx); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -587,10 +590,11 @@ func (s *Store) SavePlan(ctx context.Context, taskID string, plan domain.Plan, c
 	if err != nil {
 		return 0, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return 0, err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if err := fenceExecution(ctx, tx, taskID); err != nil {
 		return 0, err
@@ -664,10 +668,10 @@ func (s *Store) SavePlan(ctx context.Context, taskID string, plan domain.Plan, c
 	if err != nil {
 		return 0, err
 	}
-	if err := insertCheckpoint(ctx, tx, taskID, 1, seq, checkpointState); err != nil {
+	if err := s.insertCheckpoint(ctx, tx, taskID, 1, seq, checkpointState); err != nil {
 		return 0, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitCheckpointTx(ctx, tx); err != nil {
 		return 0, err
 	}
 	return seq, nil
@@ -936,10 +940,11 @@ func (s *Store) CreateApproval(ctx context.Context, approval domain.Approval, ch
 	if approval.Actor == "" {
 		approval.Actor = "policy"
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return domain.Approval{}, err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if err := fenceExecution(ctx, tx, approval.TaskID); err != nil {
 		return domain.Approval{}, err
@@ -958,11 +963,11 @@ func (s *Store) CreateApproval(ctx context.Context, approval domain.Approval, ch
 			if err := s.moveTaskForApproval(ctx, tx, task, now); err != nil {
 				return domain.Approval{}, err
 			}
-			if err := saveApprovalCheckpoint(ctx, tx, approval.TaskID, checkpointState, existing.ID, string(existing.Status)); err != nil {
+			if err := s.saveApprovalCheckpoint(ctx, tx, approval.TaskID, checkpointState, existing.ID, string(existing.Status)); err != nil {
 				return domain.Approval{}, err
 			}
 		}
-		if err := tx.Commit(); err != nil {
+		if err := s.commitCheckpointTx(ctx, tx); err != nil {
 			return domain.Approval{}, err
 		}
 		return existing, nil
@@ -986,10 +991,10 @@ func (s *Store) CreateApproval(ctx context.Context, approval domain.Approval, ch
 	}); err != nil {
 		return domain.Approval{}, err
 	}
-	if err := saveApprovalCheckpoint(ctx, tx, approval.TaskID, checkpointState, approval.ID, string(approval.Status)); err != nil {
+	if err := s.saveApprovalCheckpoint(ctx, tx, approval.TaskID, checkpointState, approval.ID, string(approval.Status)); err != nil {
 		return domain.Approval{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitCheckpointTx(ctx, tx); err != nil {
 		return domain.Approval{}, err
 	}
 	return approval, nil
@@ -1013,10 +1018,11 @@ func (s *Store) PendingApprovals(ctx context.Context) ([]domain.Approval, error)
 
 func (s *Store) ExpireApprovals(ctx context.Context) (int, error) {
 	now := time.Now().UTC()
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return 0, err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	rows, err := tx.QueryContext(ctx, `SELECT id,task_id FROM approvals WHERE status='pending' AND expires_at<=? ORDER BY expires_at LIMIT 100`, stamp(now))
 	if err != nil {
@@ -1055,11 +1061,11 @@ func (s *Store) ExpireApprovals(ctx context.Context) (int, error) {
 				return 0, err
 			}
 		}
-		if err := saveApprovalCheckpoint(ctx, tx, item.taskID, nil, item.id, string(domain.ApprovalExpired)); err != nil {
+		if err := s.saveApprovalCheckpoint(ctx, tx, item.taskID, nil, item.id, string(domain.ApprovalExpired)); err != nil {
 			return 0, err
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitCheckpointTx(ctx, tx); err != nil {
 		return 0, err
 	}
 	return len(expired), nil
@@ -1077,10 +1083,11 @@ func (s *Store) DecideApproval(ctx context.Context, id string, approve bool, act
 	if actor == "" {
 		actor = "local_user"
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return domain.Approval{}, err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if idempotencyKey != "" {
 		resourceID, err := findIdempotency(ctx, tx, idempotencyKey, operation)
@@ -1107,7 +1114,7 @@ func (s *Store) DecideApproval(ctx context.Context, id string, approve bool, act
 				return domain.Approval{}, err
 			}
 		}
-		if err := tx.Commit(); err != nil {
+		if err := s.commitCheckpointTx(ctx, tx); err != nil {
 			return domain.Approval{}, err
 		}
 		return approval, nil
@@ -1136,7 +1143,7 @@ func (s *Store) DecideApproval(ctx context.Context, id string, approve bool, act
 				return domain.Approval{}, err
 			}
 		}
-		if err := saveApprovalCheckpoint(ctx, tx, approval.TaskID, nil, id, string(domain.ApprovalExpired)); err != nil {
+		if err := s.saveApprovalCheckpoint(ctx, tx, approval.TaskID, nil, id, string(domain.ApprovalExpired)); err != nil {
 			return domain.Approval{}, err
 		}
 		if idempotencyKey != "" {
@@ -1144,7 +1151,7 @@ func (s *Store) DecideApproval(ctx context.Context, id string, approve bool, act
 				return domain.Approval{}, err
 			}
 		}
-		if err := tx.Commit(); err != nil {
+		if err := s.commitCheckpointTx(ctx, tx); err != nil {
 			return domain.Approval{}, err
 		}
 		return approval, ErrApprovalExpired
@@ -1172,7 +1179,7 @@ func (s *Store) DecideApproval(ctx context.Context, id string, approve bool, act
 	if _, err := appendEvent(ctx, tx, approval.TaskID, decisionEvent, nil, "user", map[string]any{"approval_id": id, "actor": actor}); err != nil {
 		return domain.Approval{}, err
 	}
-	if err := saveApprovalCheckpoint(ctx, tx, approval.TaskID, nil, id, string(approvalStatus)); err != nil {
+	if err := s.saveApprovalCheckpoint(ctx, tx, approval.TaskID, nil, id, string(approvalStatus)); err != nil {
 		return domain.Approval{}, err
 	}
 	if idempotencyKey != "" {
@@ -1180,7 +1187,7 @@ func (s *Store) DecideApproval(ctx context.Context, id string, approve bool, act
 			return domain.Approval{}, err
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitCheckpointTx(ctx, tx); err != nil {
 		return domain.Approval{}, err
 	}
 	return approval, nil
@@ -1331,7 +1338,7 @@ func transitionStatusTx(ctx context.Context, tx *sql.Tx, task domain.Task, to do
 	return updateResearchSessionStatus(ctx, tx, task.ID, to, phase, false, "", now)
 }
 
-func saveApprovalCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, state any, approvalID, status string) error {
+func (s *Store) saveApprovalCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, state any, approvalID, status string) error {
 	planVersion := 1
 	if state == nil {
 		var stateJSON string
@@ -1360,7 +1367,7 @@ func saveApprovalCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, stat
 	if err != nil {
 		return err
 	}
-	return insertCheckpoint(ctx, tx, taskID, planVersion, seq, state)
+	return s.insertCheckpoint(ctx, tx, taskID, planVersion, seq, state)
 }
 
 func insertApprovalIdempotency(ctx context.Context, tx *sql.Tx, key, operation, approvalID string) error {
@@ -1439,9 +1446,12 @@ func (s *Store) SaveCheckpoint(ctx context.Context, taskID string, planVersion i
 	// Validate and materialize the immutable history before opening the write
 	// transaction. A plain SELECT does not reserve SQLite's single writer slot,
 	// so heartbeats and API writes remain responsive while a long chain is
-	// hashed/decompressed. The tail is checked again after the write lock is
-	// acquired to reject a concurrent append.
-	prior, err := verifiedCheckpoints(ctx, s.db, taskID)
+	// hashed/decompressed. On the ordinary single-worker append path this uses
+	// a generation-guarded in-memory tail, so a long research run does not
+	// re-decode every historical snapshot for every new checkpoint. Any direct
+	// checkpoint/event mutation, a restart, or a competing writer invalidates
+	// that tail and forces the original full fail-closed validation again.
+	prior, generation, err := s.cachedVerifiedCheckpoints(ctx, taskID)
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
@@ -1455,6 +1465,13 @@ func (s *Store) SaveCheckpoint(ctx context.Context, taskID string, planVersion i
 	}
 	if _, err := getTask(ctx, tx, taskID); err != nil {
 		return domain.Checkpoint{}, err
+	}
+	currentGeneration, err := checkpointChainGeneration(ctx, tx, taskID)
+	if err != nil {
+		return domain.Checkpoint{}, err
+	}
+	if currentGeneration != generation {
+		return domain.Checkpoint{}, ErrConflict
 	}
 	if err := checkpointTailUnchanged(ctx, tx, taskID, prior); err != nil {
 		return domain.Checkpoint{}, err
@@ -1470,6 +1487,12 @@ func (s *Store) SaveCheckpoint(ctx context.Context, taskID string, planVersion i
 	if err := tx.Commit(); err != nil {
 		return domain.Checkpoint{}, err
 	}
+	// SaveCheckpoint itself appends one immutable checkpoint. The trigger in
+	// migration 013 advances the generation for that chain mutation; unrelated
+	// event appends intentionally do not invalidate the verified tail. If
+	// another checkpoint writer commits afterward, its newer generation
+	// will make this cache entry ineligible on the next call.
+	s.rememberCheckpointHistory(taskID, generation+1, []domain.Checkpoint{checkpoint})
 	return checkpoint, nil
 }
 
@@ -1509,26 +1532,22 @@ func (s *Store) Checkpoints(ctx context.Context, taskID string) ([]domain.Checkp
 }
 
 func (s *Store) LatestCheckpoint(ctx context.Context, taskID string) (domain.Checkpoint, error) {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return domain.Checkpoint{}, err
-	}
-	defer tx.Rollback()
-	items, err := verifiedCheckpoints(ctx, tx, taskID)
+	items, _, err := s.cachedVerifiedCheckpoints(ctx, taskID)
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
 	if len(items) == 0 {
 		return domain.Checkpoint{}, ErrNotFound
 	}
-	return items[len(items)-1], nil
+	return cloneCheckpoint(items[len(items)-1])
 }
 
 func (s *Store) CompleteTask(ctx context.Context, taskID, answer string, checkpointState any) (domain.Task, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, checkpointCtx, err := s.beginCheckpointTx(ctx)
 	if err != nil {
 		return domain.Task{}, err
 	}
+	ctx = checkpointCtx
 	defer tx.Rollback()
 	if err := fenceExecution(ctx, tx, taskID); err != nil {
 		return domain.Task{}, err
@@ -1606,13 +1625,13 @@ func (s *Store) CompleteTask(ctx context.Context, taskID, answer string, checkpo
 	if err := syncConversationTerminal(ctx, tx, taskID, domain.StatusCompleted, nil); err != nil {
 		return domain.Task{}, err
 	}
-	if err := insertCheckpoint(ctx, tx, taskID, 1, seq, checkpointState); err != nil {
+	if err := s.insertCheckpoint(ctx, tx, taskID, 1, seq, checkpointState); err != nil {
 		return domain.Task{}, err
 	}
 	if err := clearLease(ctx, tx, taskID); err != nil {
 		return domain.Task{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitCheckpointTx(ctx, tx); err != nil {
 		return domain.Task{}, err
 	}
 	task.Status = domain.StatusCompleted
@@ -1716,7 +1735,7 @@ func (s *Store) RecoverInterrupted(ctx context.Context) (int64, error) {
 	}
 	for _, item := range tasks {
 		now := time.Now().UTC()
-		checkpoints, err := verifiedCheckpoints(ctx, tx, item.id)
+		checkpoints, _, err := s.cachedVerifiedCheckpointsQuery(ctx, tx, item.id)
 		if err != nil {
 			return 0, err
 		}
@@ -1912,17 +1931,25 @@ func closeStageStatus(status domain.TaskStatus) string {
 	}
 }
 
-func insertCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, planVersion int, seq int64, state any) error {
-	_, err := saveCheckpointTx(ctx, tx, taskID, planVersion, seq, state)
+func (s *Store) insertCheckpoint(ctx context.Context, tx *sql.Tx, taskID string, planVersion int, seq int64, state any) error {
+	_, err := s.saveCheckpointTx(ctx, tx, taskID, planVersion, seq, state)
 	return err
 }
 
-func saveCheckpointTx(ctx context.Context, tx *sql.Tx, taskID string, planVersion int, seq int64, state any) (domain.Checkpoint, error) {
-	prior, err := verifiedCheckpoints(ctx, tx, taskID)
+func (s *Store) saveCheckpointTx(ctx context.Context, tx *sql.Tx, taskID string, planVersion int, seq int64, state any) (domain.Checkpoint, error) {
+	prior, _, err := s.cachedVerifiedCheckpointsQuery(ctx, tx, taskID)
 	if err != nil {
 		return domain.Checkpoint{}, err
 	}
-	return saveCheckpointTxWithPrior(ctx, tx, taskID, planVersion, seq, state, prior)
+	checkpoint, err := saveCheckpointTxWithPrior(ctx, tx, taskID, planVersion, seq, state, prior)
+	if err != nil {
+		return domain.Checkpoint{}, err
+	}
+	// The context state is committed by the owning top-level writer. If this
+	// function is called directly (for example by a low-level test), no cache
+	// publication is attempted.
+	s.rememberCheckpointAfterCommit(ctx, tx, checkpoint)
+	return checkpoint, nil
 }
 
 func saveCheckpointTxWithPrior(ctx context.Context, tx *sql.Tx, taskID string, planVersion int, seq int64, state any, prior []domain.Checkpoint) (domain.Checkpoint, error) {

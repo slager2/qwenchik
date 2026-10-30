@@ -1,3 +1,5 @@
+@import '../../tokens.css';
+
 /* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V5
  * Audience: local-agent operators · use: inspect and control tasks · tone: technical
  * Macrostructure: task-first workbench adaptation · nav: N3 side rail · theme: Cobalt
@@ -493,3 +495,138 @@ input.text-field { height: 39px; padding: 0 11px; }
 .health-blocked, .health-unavailable { border-left: 3px solid var(--color-danger); }
 .health-no_results, .health-filtered, .health-degraded { border-left: 3px solid var(--color-warning); }
 .task-failure { display: block; margin: 16px; }
+
+/* Hallmark · genre: modern-minimal · macrostructure: task-first Workbench · tone: technical · anchor hue: 256 · design-system: design.md · designed-as-app
+ * Phase 5 source self-critique: P4 H4 E3 S4 R4 V3; final integrated visual review pending.
+ */
+html, body { overflow-x: clip; }
+:is(h1, h2, h3, h4) { min-width: 0; font-style: normal; overflow-wrap: anywhere; }
+:is(h1, h2, h3, h4) :is(em, i) { font-style: normal; }
+.workspace { min-width: 0; min-height: 100dvh; }
+.workspace h1 { margin-top: 0; font-size: var(--text-heading-lg); line-height: 1.3; letter-spacing: -.025em; }
+.workspace :is(.page-subtitle, .provider-card p, .selection-empty p, .task-card p) { font-size: var(--text-ui); line-height: 1.6; color: var(--color-readable); }
+.workspace :is(.breadcrumb, .summary-label, .board-meta, .column-empty, .task-id, .task-card-bottom, .action-feedback, .app-footer, .privacy-note) { color: var(--color-readable); font-size: var(--text-caption); }
+.workspace :is(.field-label, .text-field, .column-title-wrap h2, .status-tag, .inspector-actions .button, .text-button) { font-size: var(--text-ui); }
+.workspace :is(.text-field::placeholder, .field-label span) { color: var(--color-readable); }
+.workspace :is(.button, .icon-button, .text-button, .notice button, .memory-actions .button), .rail-link { min-width: var(--size-control); min-height: var(--size-control); }
+.workspace :is(input.text-field, select.text-field) { height: var(--size-control); }
+.workspace :is(.button, .icon-button, .text-button), .rail-link { transition: transform var(--dur-micro) var(--ease-out); }
+.workspace .text-field { border-color: var(--color-control-rule); transition: none; }
+.workspace .button-primary { color: var(--color-accent-ink); background: var(--color-accent-dark); }
+.workspace .status-completed { color: var(--color-success-ink); }
+.workspace .text-field:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; box-shadow: none; }
+.workspace .page-heading { padding-block: var(--space-lg); align-items: center; }
+.workspace .summary-strip { border: 0; background: none; padding-inline: 0; }
+.workspace .task-card { padding: var(--space-md); transition: none; }
+.workspace .task-card:hover { transform: none; }
+.workspace .task-card h3 { font-size: var(--text-reading); line-height: 1.45; }
+.workspace .task-card.is-selected { background: var(--color-paper-raised); }
+.workspace :is(.provider-card, .approval-card) { border: 0; border-top: 1px solid var(--color-rule); border-radius: 0; background: none; }
+.workspace .provider-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.workspace :is(.inspector, .create-panel, .memory-manager, .top-actions, .topbar) { min-width: 0; }
+.workspace .app-footer { gap: var(--space-sm); line-height: 1.5; }
+@media (max-width: 48rem) {
+  .workspace .summary-strip { flex-wrap: wrap; gap: var(--space-md); min-height: 0; }
+  .workspace .topbar { flex-wrap: wrap; padding-block: var(--space-sm); }
+  .workspace .top-actions { flex-wrap: wrap; }
+  .workspace .board-grid, .workspace .column-items { grid-template-columns: minmax(0, 1fr); }
+  .workspace .inspector-header { flex-wrap: wrap; }
+  .workspace .page-heading { padding-block: var(--space-md); }
+  .workspace .summary-label { max-width: none; white-space: nowrap; }
+  .rail { min-height: 60px; }
+}
+
+/* Phase 5 DOM alignment: the service panel is a secondary native disclosure. */
+.workspace details.provider-panel { margin-block: 0 var(--space-lg); border-block: 1px solid var(--color-rule); }
+.workspace .provider-panel > summary {
+  min-height: var(--size-control); align-content: center; cursor: pointer;
+  color: var(--color-readable); font-size: var(--text-ui); font-weight: 500; white-space: nowrap;
+}
+.workspace .provider-panel > summary:hover { color: var(--color-ink); }
+.workspace .provider-panel > summary:active { color: var(--color-accent-dark); }
+.workspace .provider-panel > summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.workspace .provider-panel > section { min-width: 0; padding-block: var(--space-sm) var(--space-md); }
+.workspace .provider-panel > section > h2 { margin-bottom: var(--space-sm); font: 600 var(--text-heading-sm)/1.4 var(--font-display); }
+.workspace .provider-panel > section > p { max-width: var(--reading-measure); margin-block: var(--space-sm); color: var(--color-readable); font-size: var(--text-ui); line-height: 1.6; }
+.workspace .provider-panel .provider-grid { margin-block: var(--space-md); gap: var(--space-md) var(--space-lg); }
+.workspace .provider-panel .provider-card { min-width: 0; padding: var(--space-md) 0; }
+.workspace .provider-panel .provider-card small { font-size: var(--text-caption); color: var(--color-readable); }
+.workspace .provider-panel > section > button { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.workspace .button-secondary { border-color: var(--color-control-rule); }
+@media (prefers-reduced-motion: reduce) {
+  .workspace :is(.button, .task-card, .icon-button, .text-button), .rail-link { transition: none; transform: none; }
+  .workspace :is(.button, .task-card):is(:hover, :active) { transform: none; }
+}
+
+/* Phase 5 live Workspace correction: existing navigation stays in document
+ * flow, with identity/status above four equally sized navigation targets.
+ */
+@media (max-width: 48rem) {
+  .rail {
+    position: static;
+    inset: auto;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: auto auto;
+    align-items: center;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    gap: var(--space-sm) var(--space-xs);
+    padding: var(--space-sm);
+    border-right: 0;
+    border-bottom: 1px solid var(--color-rule);
+  }
+  .rail > .brand {
+    grid-column: 1 / span 3;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    justify-self: start;
+    gap: var(--space-sm);
+    min-width: var(--size-control);
+    min-height: var(--size-control);
+  }
+  .rail > .rail-runtime {
+    grid-column: 4;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-xs);
+    min-width: 0;
+    min-height: var(--size-control);
+    padding: 0;
+    color: var(--color-readable);
+    font: 400 var(--text-caption)/1.4 var(--font-body);
+    white-space: nowrap;
+  }
+  .rail > :is(.rail-divider, .rail-spacer) { display: none; }
+  .rail > .rail-link {
+    grid-row: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    width: 100%;
+    min-width: var(--size-control);
+    min-height: var(--size-control);
+    padding: var(--space-xs);
+    color: var(--color-readable);
+    font-size: var(--text-caption);
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+  .rail > a.rail-link { grid-column: 1; }
+  .rail > button.rail-link:nth-of-type(1) { grid-column: 2; }
+  .rail > button.rail-link:nth-of-type(2) { grid-column: 3; }
+  .rail > button.rail-link:nth-of-type(3) { grid-column: 4; }
+  .rail .rail-glyph {
+    flex: 0 0 var(--text-ui);
+    font-size: var(--text-ui);
+    line-height: 1;
+  }
+  .rail > .rail-link.is-current { color: var(--color-accent-dark); }
+  .rail + .workspace { width: 100%; margin-left: 0; }
+}
