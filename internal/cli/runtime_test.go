@@ -274,6 +274,23 @@ func TestRuntimeInstallFlags(t *testing.T) {
 	}
 }
 
+func TestRuntimeRenderingSupportsMatchedExperimental64KContext(t *testing.T) {
+	options := runtimeFixture(t)
+	options.Context = 65536
+	units := mustRenderRuntimeUnits(t, options)
+	model := string(units[runtimeUnitNames[0]])
+	app := string(units[runtimeUnitNames[1]])
+	if !strings.Contains(model, `"-c" "65536"`) {
+		t.Fatalf("experimental model unit does not use 64K context: %s", model)
+	}
+	if !strings.Contains(app, `Environment="LLM_CONTEXT_LENGTH=65536"`) {
+		t.Fatalf("experimental app unit does not match the model context: %s", app)
+	}
+	if strings.Contains(model, `"-c" "32768"`) || strings.Contains(app, `Environment="LLM_CONTEXT_LENGTH=32768"`) {
+		t.Fatal("experimental units retained the production context default")
+	}
+}
+
 func TestRuntimeInstallRejectsContextBelowOutputReserveBeforeWriting(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configDir)

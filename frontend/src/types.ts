@@ -218,6 +218,40 @@ export interface MemoryMatch {
 
 export type ConversationMode = 'chat' | 'research'
 
+export interface Space {
+  id: string
+  title: string
+  name: string
+  description: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SpaceContextItem {
+  run_id: string
+  conversation_id: string
+  conversation_title: string
+  verification_status: string
+  summary: string
+  sources: Array<{ evidence_id: string; title: string; canonical_url: string }>
+  updated_at: string
+}
+
+export interface SpaceResearchRun {
+  run: Run
+  conversation_title: string
+  goal: string
+  verification_status?: string
+  completed_at?: string
+}
+
+export interface SpaceState {
+  version: 1
+  spaces: Space[]
+  assignments: Record<string, string>
+  active_space_id: string
+}
+
 export type ResearchProfile = 'quick' | 'standard' | 'deep_laptop' | 'long_laptop' | 'overnight_laptop'
 
 export interface ConversationSetup {
@@ -237,6 +271,7 @@ export interface Conversation {
   id: string
   title: string
   mode: ConversationMode
+  space_id?: string
   created_at: string
   updated_at: string
   active_run_id?: string

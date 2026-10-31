@@ -98,6 +98,19 @@ The server holds an OS lock for its database so a second `qagent serve` process 
 
 For frontend development, keep the backend running on `8080`, then run `make frontend-dev` in another terminal. Open <http://127.0.0.1:5173>; Vite proxies `/api` to the backend. The model API is <http://127.0.0.1:8000/v1>; optional SearXNG is <http://127.0.0.1:8081>. `make build` embeds frontend assets before compiling Go; restart the app after rebuilding to serve the new UI.
 
+### Docker all-in-one launch
+
+To avoid manually starting the app and llama-server, use the root `compose.yaml`. It builds the embedded frontend and Qwenchik image, starts the official Vulkan llama.cpp server, waits for its healthcheck, and then starts the app. The two containers share a network namespace so the app keeps its loopback-only LLM policy; only `127.0.0.1:8080` is published. Full setup and GPU caveats are in [docs/docker.md](docs/docker.md).
+
+```sh
+mkdir -p models
+# copy a GGUF into ./models, or set MODEL_FILE/MODELS_DIR in local .env
+docker compose config -q
+docker compose up -d --build
+```
+
+The Docker stack is intentionally conservative (`parallel=1`, context `32768`, bounded CPU/RAM/PIDs). Docker does not remove thermal limits: check `sensors` before starting a model. The app container does not receive `docker.sock`; sandbox and isolated PDF extraction therefore remain unavailable in this first containerized profile.
+
 Optional local web search can be started with the included Compose configuration:
 
 ```sh
@@ -154,6 +167,31 @@ rung through the existing shared guard and worker. See the measured
 [Phase 2 context report](docs/deep-research-phase2-context-ladder.md): 32K/64K load
 probes passed, 96K/128K hit the fixed 120s timeout, and multi-call research remained
 model-RSS-limited. These are not overnight or general 128K-support claims.
+
+The supported production default remains **32768**. A **65536 experimental
+opt-in** is available for controlled single-slot measurements only. It is not a
+claim that 64K multi-call research is stable on this laptop: the recorded 64K
+retention probe passed, but its research run paused on `high_model_rss` and
+reached 81°C GPU temperature. Do not enable it while another heavy workload is
+running or while CPU, GPU, or RAM sensors are in alarm. Keep `--parallel 1`,
+q8_0 K/V caches, the bounded 512 MiB prompt cache, and the existing resource
+guards. Do not use 96K or 128K as a normal runtime configuration.
+
+Changing only `.env` is insufficient. The installed model unit's `-c` value and
+the app unit's `LLM_CONTEXT_LENGTH` must both be 65536; `runtime install
+--context 65536` renders that matched pair. The installer deliberately refuses
+to overwrite different existing units, so archive and review the old unit files
+before installing the experimental pair. Keep the 32K units available for an
+immediate rollback. After starting, verify `/api/doctor` reports configured and
+server context 65536 before sending any inference. A mismatch or unavailable
+runtime observation fails closed.
+
+Existing conversations and research sessions retain their immutable model
+snapshot. Enabling the experimental runtime does not rewrite a saved 32K session
+to 64K; retry/continue preserves its original context. Start a new session for a
+64K experiment. Validate it in stages: three cold retention probes, a bounded
+15-minute multi-call research run, then a 60-minute soak. Roll back to 32K on any
+OOM/restart, `high_model_rss`, sensor alarm, missing output, or context mismatch.
 
 ### Controlled offline comparison
 
@@ -255,7 +293,7 @@ Build the app with `make build`, then install persistent model and app services 
 ./qagent runtime status
 ```
 
-Both model paths are required; adapt them and the GPU device to your machine. Quote paths containing spaces. `--device` defaults to `Vulkan1` and `--context` to `32768`. The installed Vulkan build must support GPU offload, Jinja templates, and q8_0 K/V caches. Keep its shared libraries alongside the executable.
+Both model paths are required; adapt them and the GPU device to your machine. Quote paths containing spaces. `--device` defaults to `Vulkan1` and `--context` to the production default `32768`; `--context 65536` is an experimental opt-in subject to the staged acceptance and rollback rules above. The installed Vulkan build must support GPU offload, Jinja templates, and q8_0 K/V caches. Keep its shared libraries alongside the executable.
 
 Installation rejects a context that leaves fewer than 2304 tokens after `LLM_MAX_OUTPUT_TOKENS`, and rejects temporary `go run` executable paths. Use a persistent built binary.
 

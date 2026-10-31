@@ -48,3 +48,36 @@ func TestModelContextDiscoveryNeverSubstitutesConfiguredCapacity(t *testing.T) {
 		}
 	}
 }
+
+func TestExperimental64KContextRequiresMatchingLiveRuntime(t *testing.T) {
+	for _, fixture := range []struct {
+		name          string
+		serverContext int
+		want          int
+		status        string
+	}{
+		{name: "matched", serverContext: 65536, want: 65536, status: "matched"},
+		{name: "server_still_32k", serverContext: 32768, want: 0, status: "context_mismatch"},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/props" {
+					fmt.Fprintf(w, `{"default_generation_settings":{"n_ctx":%d},"total_slots":1,"model_alias":"local","chat_template":"fixture","build_info":"fixture-build","model_path":"fixture.gguf","model_ftype":"Q4_K"}`, fixture.serverContext)
+					return
+				}
+				fmt.Fprintf(w, `{"data":[{"id":"local","meta":{"n_ctx":%d,"n_ctx_train":262144,"size":1000}}]}`, fixture.serverContext)
+			}))
+			defer server.Close()
+
+			cfg := config.Config{LLMBaseURL: server.URL + "/v1", LLMAPIKey: "test-local-key", LLMModel: "local", LLMContextLength: 65536, LLMMaxOutputTokens: 4096}
+			got := effectiveModelContext(context.Background(), cfg)
+			diagnostic, err := discoverModelContext(context.Background(), cfg)
+			if diagnostic.ContextStatus != fixture.status || (fixture.status == "matched") != (err == nil) {
+				t.Fatalf("diagnostics=%+v err=%v", diagnostic, err)
+			}
+			if got != fixture.want {
+				t.Fatalf("effective context=%d want=%d", got, fixture.want)
+			}
+		})
+	}
+}

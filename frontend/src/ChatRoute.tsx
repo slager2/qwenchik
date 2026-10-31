@@ -134,6 +134,7 @@ function transcriptReducer(state: Transcript, action: TranscriptAction): Transcr
 
 function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; onSelect: (id: string) => void; onChanged: () => Promise<void>; onSidebar: () => void }) {
   const conversation = useRemote(useCallback((signal) => id ? api.conversation(id, signal) : Promise.resolve<Conversation | null>(null), [id]), id ? 30000 : 0, 'chat.conversation')
+  const spaces = useRemote(useCallback((signal) => api.spaces(signal), []), 60000, 'chat.spaces')
   const snapshots = useRemote(useCallback((signal) => id ? api.conversationMessages(id, signal) : Promise.resolve<ConversationMessage[]>([]), [id]), 0, 'chat.messages')
   const [transcript, dispatch] = useReducer(transcriptReducer, { messages: [], stream: createStreamState('') })
   const [evidenceCache] = useState(() => createRunEvidenceCache((sourceRunID: string) => api.runEvidence(sourceRunID)))
@@ -322,6 +323,16 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
       if (!alive.current) return
       conversation.setData(result); setMode(next)
       if (next === 'research') { setResearchContextRunID(''); submissionKey.current = null }
+      void onChanged()
+    })
+  }
+
+  function moveToSpace(nextSpaceID: string) {
+    if (!id || active || busy || nextSpaceID === (conversation.data?.space_id || '')) return
+    void action(async () => {
+      const updated = await api.updateConversation(id, { space_id: nextSpaceID })
+      if (!alive.current) return
+      conversation.setData(updated)
       void onChanged()
     })
   }
@@ -586,7 +597,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const detailsContent = <ResearchInspector resources={{ ...research, runtime, pdfCapability: doctor.data?.pdf_extractor }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onRetry={() => operate('retry')} onPause={pauseRun} onResume={resumeRun} onDiagnostics={requestDiagnostics} diagnosticsLoading={diagnosticsRequested && doctor.loading} diagnosticsError={doctor.error} />
 
   return <main className={`chat-main ${details ? 'chat-has-details' : ''}`}>
-    <header className="chat-header"><button className="chat-mobile-menu" type="button" aria-label="Открыть разговоры" onClick={onSidebar}>☰</button><div className="chat-heading">{editing ? <form onSubmit={(event) => { event.preventDefault(); if (title.trim()) void action(async () => { const next = await api.updateConversation(id, { title: title.trim() }); if (alive.current) { conversation.setData(next); setEditing(false); void onChanged() } }) }}><input aria-label="Название разговора" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} autoFocus /><button type="submit" disabled={busy || !title.trim()}>Сохранить</button><button type="button" onClick={() => setEditing(false)}>Отмена</button></form> : <><h1>{conversation.data?.title || 'Новый разговор'}</h1><p>{mode === 'research' ? 'Deep Research' : 'Локальный чат'}<span aria-hidden="true"> · </span>{status}</p></>}</div><div className="chat-header-actions">{id && <><button type="button" onClick={() => setEditing(true)} disabled={busy} aria-label="Переименовать разговор">Название</button><button type="button" onClick={() => void action(async () => { await api.deleteConversation(id); if (alive.current) { void onChanged(); onSelect('') } })} disabled={busy || active} title={active ? 'Сначала остановите текущую генерацию' : 'Архивировать разговор'}>Удалить</button></>}<button type="button" aria-expanded={details} onClick={() => setDetails((value) => !value)}>Детали</button></div></header>
+    <header className="chat-header"><button className="chat-mobile-menu" type="button" aria-label="Открыть разговоры" onClick={onSidebar}>☰</button><div className="chat-heading">{editing ? <form onSubmit={(event) => { event.preventDefault(); if (title.trim()) void action(async () => { const next = await api.updateConversation(id, { title: title.trim() }); if (alive.current) { conversation.setData(next); setEditing(false); void onChanged() } }) }}><input aria-label="Название разговора" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} autoFocus /><button type="submit" disabled={busy || !title.trim()}>Сохранить</button><button type="button" onClick={() => setEditing(false)}>Отмена</button></form> : <><h1>{conversation.data?.title || 'Новый разговор'}</h1><p>{mode === 'research' ? 'Deep Research' : 'Локальный чат'}<span aria-hidden="true"> · </span>{status}</p></>}</div><div className="chat-header-actions">{id && <><label className="chat-space-picker"><span>Пространство</span><select aria-label="Пространство разговора" value={conversation.data?.space_id || ''} disabled={busy || active || spaces.loading} onChange={(event) => moveToSpace(event.target.value)}><option value="">Без пространства</option>{(spaces.data || []).map((item) => <option key={item.id} value={item.id}>{item.name || item.title}</option>)}</select></label><button type="button" onClick={() => setEditing(true)} disabled={busy} aria-label="Переименовать разговор">Название</button><button type="button" onClick={() => void action(async () => { await api.deleteConversation(id); if (alive.current) { void onChanged(); onSelect('') } })} disabled={busy || active} title={active ? 'Сначала остановите текущую генерацию' : 'Архивировать разговор'}>Удалить</button></>}<button type="button" aria-expanded={details} onClick={() => setDetails((value) => !value)}>Детали</button></div></header>
     <div className="chat-body"><section className="chat-center" ref={centerRef} onScroll={(event) => { if (window.matchMedia('(max-width: 48rem)').matches) observeScroll(event.currentTarget) }} aria-label="Текущий разговор"><div className="chat-health"><span className={backendReady ? 'chat-online' : ''}>Приложение: {health.error ? 'нет связи' : backendReady ? 'доступно' : 'проверяем соединение'}</span><span className={modelReady && !doctor.error ? 'chat-online' : ''}>Qwen: {doctor.error ? 'проверка недоступна' : modelReady ? 'проверена по запросу' : health.data?.model?.status === 'configured' ? 'локальная · проверка по запросу' : 'доступность не проверена'}</span></div>
       <ResourceStatus resource={conversation} /><ResourceStatus resource={snapshots} />{runID && <ResourceStatus resource={run} />}{history.error && <ResourceStatus resource={history} />}
       <ResearchOverview run={currentRun} runtime={currentRuntime} events={transcript.stream.events} answer={latestAssistant ?? null} evidence={research.evidence} busy={busy} onDetails={() => setDetails(true)} onReadAnswer={() => readAnswer()} onPause={pauseRun} onResume={resumeRun} onStop={stopRun} />

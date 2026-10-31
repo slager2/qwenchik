@@ -1,5 +1,6 @@
 import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import ChatRoute from './ChatRoute'
+import SpacesRoute from './SpacesRoute'
 
 const WorkspaceRoute = lazy(() => import('./WorkspaceRoute'))
 
@@ -13,15 +14,16 @@ class WorkspaceLoadBoundary extends Component<{ children: ReactNode }, { failed:
 }
 
 export default function App() {
-  const [workspace, setWorkspace] = useState(() => window.location.hash.startsWith('#/workspace'))
+  const [route, setRoute] = useState(() => window.location.hash)
 
   useEffect(() => {
-    const navigate = () => setWorkspace(window.location.hash.startsWith('#/workspace'))
+    const navigate = () => setRoute(window.location.hash)
     window.addEventListener('hashchange', navigate)
     return () => window.removeEventListener('hashchange', navigate)
   }, [])
 
-  if (!workspace) return <ChatRoute />
+  if (route.startsWith('#/spaces')) return <SpacesRoute />
+  if (!route.startsWith('#/workspace')) return <ChatRoute />
 
   return <WorkspaceLoadBoundary><Suspense fallback={<main className="workspace-loading" role="status" aria-live="polite">Загрузка рабочего пространства…</main>}><WorkspaceRoute /></Suspense></WorkspaceLoadBoundary>
 }

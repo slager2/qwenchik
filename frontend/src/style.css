@@ -31,6 +31,7 @@
   --color-warning-ink: oklch(47% 0.1 75);
   --color-success-rule: oklch(88% 0.035 155);
   --color-overlay: oklch(20% 0.02 258 / 0.28);
+  --color-shadow: oklch(20% 0.02 258 / 0.16);
   --color-rule: oklch(89% 0.012 255);
   --color-rule-strong: oklch(81% 0.018 255);
   --color-focus: oklch(58% 0.2 256);

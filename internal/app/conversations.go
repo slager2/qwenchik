@@ -163,6 +163,12 @@ func (s *Service) UpdateConversation(ctx context.Context, id string, patch map[s
 				return c, domain.ErrInvalidConversation
 			}
 			c.Mode = s
+		case "space_id":
+			spaceID, ok := v.(string)
+			if !ok {
+				return c, domain.ErrInvalidConversation
+			}
+			c.SpaceID = strings.TrimSpace(spaceID)
 		case "archived":
 			if _, ok := v.(bool); !ok {
 				return c, domain.ErrInvalidConversation

@@ -10,6 +10,7 @@ var ErrInvalidConversation = errors.New("invalid conversation request")
 
 type Conversation struct {
 	ID               string         `json:"id"`
+	SpaceID          string         `json:"space_id,omitempty"`
 	Title            string         `json:"title"`
 	Mode             string         `json:"mode"`
 	CreatedAt        time.Time      `json:"created_at"`

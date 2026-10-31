@@ -32,6 +32,9 @@ export default function ChatComposer({
   settingsSaving?: boolean
   onSaveSettings?: () => void
 }) {
+  const estimatedTokens = Math.ceil(text.length / 4)
+  const availableTokens = contextBudget?.available_input_tokens ?? null
+  const tokenWarning = availableTokens !== null && estimatedTokens > availableTokens
   return <>
     {contextBudget?.context_status !== 'matched' && <ContextNotice budget={contextBudget} />}
     {mode === 'research' && <PrivacyNotice mode={privacyMode} />}
@@ -43,6 +46,11 @@ export default function ChatComposer({
       <div className="chat-composer-controls">
         <label>Режим<select aria-label="Режим разговора" value={mode} disabled={busy || active} onChange={(event) => onModeChange(event.target.value as ConversationMode)}><option value="chat">Chat</option><option value="research">Deep Research</option></select></label>
         {active ? <button className="chat-primary" type="button" disabled={busy || !run} onClick={onStop}>{busy ? 'Останавливаем…' : 'Остановить'}</button> : <button className="chat-primary" type="submit" disabled={busy || !text.trim()}>{busy ? 'Отправляем…' : 'Отправить'}</button>}
+      </div>
+      <div className={`chat-token-meter${tokenWarning ? ' is-warning' : ''}`} role="status">
+        <span>{estimatedTokens.toLocaleString('ru-RU')} токенов в черновике</span>
+        {availableTokens !== null && <span>доступно ~{availableTokens.toLocaleString('ru-RU')} из {(contextBudget?.configured_context || 32768).toLocaleString('ru-RU')}</span>}
+        {contextBudget?.context_status === 'context_mismatch' && <span>модель заблокирована: контекст не совпал</span>}
       </div>
       {settings && <ResearchSettings mode={mode} value={settings} onChange={onSettingsChange} disabled={busy || active} error={settingsError} dirty={settingsDirty} saving={settingsSaving} onSave={onSaveSettings} />}
     </form>

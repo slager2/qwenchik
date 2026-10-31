@@ -1,0 +1,130 @@
+name: qwenchik
+
+services:
+  # The two services intentionally share a network namespace. This lets the app
+  # keep its loopback-only LLM policy while exposing only the app port to the host.
+  model:
+    image: ${LLAMA_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-vulkan}
+    restart: unless-stopped
+    gpus: all
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    volumes:
+      - type: bind
+        source: ${MODELS_DIR:-./models}
+        target: /models
+        read_only: true
+    command:
+      - -m
+      - /models/${MODEL_FILE:-Qwen3.5-4B-Q4_K_M.gguf}
+      - --host
+      - 127.0.0.1
+      - --port
+      - "8000"
+      - --alias
+      - ${LLM_MODEL:-local-qwen}
+      - --jinja
+      - --parallel
+      - "1"
+      - -c
+      - "${LLM_CONTEXT_LENGTH:-32768}"
+      - -fa
+      - on
+      - -ctk
+      - q8_0
+      - -ctv
+      - q8_0
+      - --threads
+      - "${LLAMA_THREADS:-4}"
+      - --threads-batch
+      - "${LLAMA_THREADS_BATCH:-4}"
+      - --poll
+      - "0"
+      - --poll-batch
+      - "0"
+      - -ngl
+      - "${LLAMA_GPU_LAYERS:-99}"
+      - --device
+      - "${LLAMA_DEVICE:-Vulkan1}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "${LLAMA_CPUS:-4}"
+          memory: "${LLAMA_MEMORY:-8g}"
+          pids: ${LLAMA_PIDS:-256}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 2m
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${QWENCHIK_IMAGE:-qwenchik:local}
+    restart: unless-stopped
+    network_mode: service:model
+    depends_on:
+      model:
+        condition: service_healthy
+        restart: true
+    environment:
+      APP_BIND_ADDR: 127.0.0.1:8080
+      DATABASE_PATH: /app/data/qagent.db
+      ARTIFACTS_PATH: /app/data/artifacts
+      WORKSPACE_ROOT: /app/data/workspaces
+      FETCH_TEMP_DIR: /app/data/fetch-temp
+      LLM_BASE_URL: http://127.0.0.1:8000/v1
+      LLM_API_KEY: ${LLM_API_KEY:-EMPTY}
+      LLM_MODEL: ${LLM_MODEL:-local-qwen}
+      LLM_CONTEXT_LENGTH: "${LLM_CONTEXT_LENGTH:-32768}"
+      LLM_MAX_OUTPUT_TOKENS: "${LLM_MAX_OUTPUT_TOKENS:-4096}"
+      LLM_TEMPERATURE: "${LLM_TEMPERATURE:-0.2}"
+      LLM_TOP_P: "${LLM_TOP_P:-0.8}"
+      LLM_ENABLE_THINKING: "${LLM_ENABLE_THINKING:-false}"
+      LLM_REQUEST_TIMEOUT_SECONDS: "${LLM_REQUEST_TIMEOUT_SECONDS:-120}"
+      LLM_MAX_CONCURRENCY: "${LLM_MAX_CONCURRENCY:-1}"
+      SEARCH_ENABLE_DDG: "${SEARCH_ENABLE_DDG:-true}"
+      SEARCH_PROVIDER_POLICY: "${SEARCH_PROVIDER_POLICY:-local_primary}"
+      RESEARCH_PRIVACY_MODE: "${RESEARCH_PRIVACY_MODE:-local_inference_external_search}"
+      SANDBOX_RUNTIME: auto
+      SANDBOX_NETWORK: disabled
+      PDF_ALLOW_UNSANDBOXED_FALLBACK: "false"
+      RESOURCE_GUARD_ENABLED: "${RESOURCE_GUARD_ENABLED:-true}"
+      CPU_TEMP_MAX_C: "${CPU_TEMP_MAX_C:-95}"
+      GPU_TEMP_MAX_C: "${GPU_TEMP_MAX_C:-85}"
+      MODEL_RSS_MAX_BYTES: "${MODEL_RSS_MAX_BYTES:-5368709120}"
+      TAVILY_API_KEY: "${TAVILY_API_KEY:-}"
+    volumes:
+      - qwenchik-data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "${APP_CPUS:-2}"
+          memory: "${APP_MEMORY:-1g}"
+          pids: ${APP_PIDS:-128}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  qwenchik-data:

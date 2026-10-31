@@ -32,6 +32,11 @@
 .chat-conversations a:hover { background: var(--color-paper-pressed); }
 .chat-conversations a[aria-current] { background: var(--color-accent-soft); color: var(--color-accent-dark); }
 .chat-workspace-link { display: flex; justify-content: space-between; align-items: center; min-height: 44px; font-size: 13px; white-space: nowrap; }
+.chat-spaces-link { display:flex; min-height:48px; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--color-accent-rule); border-radius:var(--radius-control); color:var(--color-accent-dark)!important; background:var(--color-accent-soft); text-decoration:none; }
+.chat-spaces-link > span:nth-child(2) { display:grid; min-width:0; gap:3px; flex:1; }
+.chat-spaces-link strong { font-size:12px; font-weight:600; }
+.chat-spaces-link small { color:var(--color-muted); font-size:10px; }
+.chat-spaces-link:hover { border-color:var(--color-accent); background:var(--color-paper-raised); }
 .chat-sidebar-note { color: var(--color-muted); font-size: 11px; }
 .chat-main { min-width: 0; flex: 1; display: flex; flex-direction: column; }
 .chat-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-height: 80px; padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--color-rule); }
@@ -41,6 +46,8 @@
 .chat-heading form { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .chat-heading input { width: min(100%, 250px); }
 .chat-header-actions { display: flex; gap: var(--space-2); flex-shrink: 0; }
+.chat-space-picker { display:grid; min-width:130px; gap:3px; color:var(--color-muted); font-size:9px; }
+.chat-space-picker select { min-height:34px!important; padding:6px 8px!important; font-size:11px!important; }
 .conversation-shell .chat-mobile-menu { display: none; }
 .chat-body { display: flex; min-height: 0; flex: 1; }
 .chat-center { display: flex; position: relative; flex: 1; min-width: 0; min-height: 0; flex-direction: column; padding: 0 max(var(--space-6), calc((100% - 820px) / 2)); }
@@ -89,6 +96,8 @@
 .conversation-shell .chat-primary { background: var(--color-accent-dark); color: var(--color-accent-ink); border-color: var(--color-accent-dark); }
 .conversation-shell .chat-primary:hover:not(:disabled) { background: var(--color-accent); }
 .chat-composer-note { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-4); padding: 10px 0 max(12px, env(safe-area-inset-bottom)); color: var(--color-muted); font-size: 11px; }
+.chat-token-meter { display:flex; flex-wrap:wrap; gap:4px 12px; padding:0 var(--space-3) var(--space-2); color:var(--color-muted); font:10px/1.4 var(--font-mono); }
+.chat-token-meter.is-warning { color:var(--color-danger); }
 .chat-composer-note button { font-size: 11px; }
 .chat-muted { color: var(--color-muted); font-size: 13px; line-height: 1.6; }
 .chat-action-error, .chat-resource-error { padding: 12px; border: 1px solid var(--color-danger-rule); background: var(--color-danger-soft); color: var(--color-danger); border-radius: var(--radius-control); font-size: 13px; line-height: 1.6; margin-bottom: var(--space-2); }

@@ -62,6 +62,7 @@ func (s *Server) createConversation(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Title            string         `json:"title"`
 		Mode             string         `json:"mode"`
+		SpaceID          string         `json:"space_id"`
 		ModelProfile     map[string]any `json:"model_profile"`
 		ResearchSettings map[string]any `json:"research_settings"`
 	}
@@ -69,7 +70,7 @@ func (s *Server) createConversation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid_request", "Некорректный разговор.", false)
 		return
 	}
-	c, e := v.CreateConversationIdempotent(r.Context(), domain.Conversation{Title: in.Title, Mode: in.Mode, ModelProfile: in.ModelProfile, ResearchSettings: in.ResearchSettings}, r.Header.Get("Idempotency-Key"))
+	c, e := v.CreateConversationIdempotent(r.Context(), domain.Conversation{Title: in.Title, Mode: in.Mode, SpaceID: in.SpaceID, ModelProfile: in.ModelProfile, ResearchSettings: in.ResearchSettings}, r.Header.Get("Idempotency-Key"))
 	if e != nil {
 		s.writeServiceError(w, e)
 		return

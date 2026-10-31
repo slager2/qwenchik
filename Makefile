@@ -1,4 +1,4 @@
-.PHONY: test test-race build run vet frontend frontend-dev pdf-extractor-image doctor providers search-smoke runtime-build runtime-install runtime-start runtime-status
+.PHONY: test test-race build run vet frontend frontend-dev pdf-extractor-image doctor providers search-smoke runtime-build runtime-install runtime-start runtime-status docker-config docker-up docker-down
 
 test:
 	go test -tags sqlite_fts5 ./...
@@ -48,3 +48,12 @@ runtime-start:
 
 runtime-status:
 	./qagent runtime status
+
+docker-config:
+	docker compose config -q
+
+docker-up:
+	docker compose up -d --build
+
+docker-down:
+	docker compose down

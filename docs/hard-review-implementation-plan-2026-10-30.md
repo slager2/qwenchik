@@ -259,7 +259,7 @@
 - post-commit checkpoint tail публикуется только после успешной транзакции и проверяет generation/latest id;
 - deterministic search/fetch actor bypass добавлен только для канонизированных входов;
 - report standard/quick ограничен четырьмя секциями, добавлен report-wide circuit breaker после повторяющихся content failures;
-- `/props` и `/models` получили короткий TTL-cache с сериализацией cache miss; строгий fingerprint pin выполняется на первом research admission и для явно pinned/direct клиентов, а последующие research вызовы используют bounded TTL; `/apply-template` и `/tokenize` намеренно остались live;
+- `/props` и `/models` получили короткий TTL-cache с сериализацией cache miss: initial research admission force-refreshes the pinned fingerprint once, while subsequent unpinned calls may reuse the bounded TTL. An observed pinned-identity mismatch blocks dispatch; ambiguous/incomplete metadata and failed template/tokenizer/context admission invalidate the cache. `/apply-template` and `/tokenize` remain live on every admission;
 - SSE event polling переведён с фиксированных 500 ms на bounded backoff 500 ms → 1 s → 2 s с reset при активности;
 - `nvidia-smi` telemetry sample получил короткий bounded cache и hit/miss counters;
 - generated llama runtime unit теперь ограничивает CPU-side work (`--threads 4`, `--threads-batch 4`) и отключает busy polling (`--poll 0`, `--poll-batch 0`), сохраняя single-slot и cache limits.

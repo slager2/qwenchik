@@ -562,6 +562,7 @@ func TestResearchSessionSnapshotsAreImmutableAcrossRetryContinueAndSend(t *testi
 	}
 	policy, budget, model := standardResearchSessionDefaults()
 	model.Model = "replacement-model"
+	model.ContextLength = 65536
 	model.StopSequences = []string{"replacement-stop"}
 	for _, operation := range []string{"retry", "continue"} {
 		priorID := first.Run.ID

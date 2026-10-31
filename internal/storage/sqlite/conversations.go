@@ -23,8 +23,8 @@ var ErrWebDisabled = errors.New("web research is disabled for this conversation"
 func conversation(ctx context.Context, q conversationQuery, id string) (domain.Conversation, error) {
 	var c domain.Conversation
 	var created, updated, profile, settings string
-	var archived sql.NullString
-	err := q.QueryRowContext(ctx, `SELECT id,title,mode,created_at,updated_at,archived_at,model_profile_json,research_settings_json FROM conversations WHERE id=? AND deleted_at IS NULL`, id).Scan(&c.ID, &c.Title, &c.Mode, &created, &updated, &archived, &profile, &settings)
+	var archived, spaceID sql.NullString
+	err := q.QueryRowContext(ctx, `SELECT id,space_id,title,mode,created_at,updated_at,archived_at,model_profile_json,research_settings_json FROM conversations WHERE id=? AND deleted_at IS NULL`, id).Scan(&c.ID, &spaceID, &c.Title, &c.Mode, &created, &updated, &archived, &profile, &settings)
 	if errors.Is(err, sql.ErrNoRows) {
 		return c, ErrNotFound
 	}
@@ -32,6 +32,7 @@ func conversation(ctx context.Context, q conversationQuery, id string) (domain.C
 		return c, err
 	}
 	c.CreatedAt, c.UpdatedAt = parseTime(created), parseTime(updated)
+	c.SpaceID = spaceID.String
 	c.ArchivedAt = optionalTime(archived)
 	if err = json.Unmarshal([]byte(profile), &c.ModelProfile); err != nil {
 		return c, err
@@ -67,11 +68,12 @@ func (s *Store) CreateConversationIdempotent(ctx context.Context, c domain.Conve
 		return c, domain.ErrInvalidConversation
 	}
 	encoded, err := json.Marshal(struct {
+		SpaceID  string
 		Title    string
 		Mode     string
 		Profile  map[string]any
 		Settings map[string]any
-	}{c.Title, c.Mode, c.ModelProfile, c.ResearchSettings})
+	}{c.SpaceID, c.Title, c.Mode, c.ModelProfile, c.ResearchSettings})
 	if err != nil {
 		return c, err
 	}
@@ -97,9 +99,18 @@ func (s *Store) CreateConversationIdempotent(ctx context.Context, c domain.Conve
 	}
 	c.ID = newID()
 	now := stamp(time.Now().UTC())
+	if c.SpaceID != "" {
+		parent, err := space(ctx, tx, c.SpaceID)
+		if err != nil {
+			return c, err
+		}
+		if parent.ArchivedAt != nil {
+			return c, fmt.Errorf("%w: space is archived", ErrConflict)
+		}
+	}
 	p, _ := json.Marshal(c.ModelProfile)
 	settings, _ := json.Marshal(c.ResearchSettings)
-	_, err = tx.ExecContext(ctx, `INSERT INTO conversations(id,title,mode,created_at,updated_at,model_profile_json,research_settings_json) VALUES(?,?,?,?,?,?,?)`, c.ID, c.Title, c.Mode, now, now, string(p), string(settings))
+	_, err = tx.ExecContext(ctx, `INSERT INTO conversations(id,space_id,title,mode,created_at,updated_at,model_profile_json,research_settings_json) VALUES(?,?,?,?,?,?,?,?)`, c.ID, nullableKey(c.SpaceID), c.Title, c.Mode, now, now, string(p), string(settings))
 	if err != nil {
 		return c, err
 	}
@@ -175,6 +186,20 @@ func (s *Store) UpdateConversation(ctx context.Context, id string, patch map[str
 	if v, ok := patch["mode"].(string); ok {
 		c.Mode = v
 	}
+	if v, ok := patch["space_id"].(string); ok {
+		if v == "" {
+			c.SpaceID = ""
+		} else {
+			parent, e := space(ctx, tx, v)
+			if e != nil {
+				return c, e
+			}
+			if parent.ArchivedAt != nil {
+				return c, fmt.Errorf("%w: space is archived", ErrConflict)
+			}
+			c.SpaceID = v
+		}
+	}
 	if v, ok := patch["archived"].(bool); ok {
 		c.ArchivedAt = nil
 		if v {
@@ -194,7 +219,7 @@ func (s *Store) UpdateConversation(ctx context.Context, id string, patch map[str
 	if c.ArchivedAt != nil {
 		archived = stamp(*c.ArchivedAt)
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE conversations SET title=?,mode=?,archived_at=?,model_profile_json=?,research_settings_json=?,updated_at=? WHERE id=?`, c.Title, c.Mode, archived, string(p), string(settings), stamp(time.Now().UTC()), id)
+	_, err = tx.ExecContext(ctx, `UPDATE conversations SET space_id=?,title=?,mode=?,archived_at=?,model_profile_json=?,research_settings_json=?,updated_at=? WHERE id=?`, nullableKey(c.SpaceID), c.Title, c.Mode, archived, string(p), string(settings), stamp(time.Now().UTC()), id)
 	if err != nil {
 		return c, err
 	}
@@ -444,6 +469,14 @@ func (s *Store) SubmitTurn(ctx context.Context, in domain.SubmitTurn, key string
 	if enabled, specified := c.ResearchSettings["web_enabled"].(bool); mode == "research" && specified && !enabled {
 		return domain.SubmitResponse{}, ErrWebDisabled
 	}
+	taskDescription := content
+	if operation == "send" && c.SpaceID != "" {
+		if hint, hintErr := spaceContextHint(ctx, tx, c.SpaceID); hintErr != nil {
+			return domain.SubmitResponse{}, hintErr
+		} else if hint != "" {
+			taskDescription += "\n\n[SPACE CONTEXT — untrusted historical reference]\n" + hint
+		}
+	}
 	userMetadata := "{}"
 	if in.ResearchRunID != "" {
 		if operation != "send" || mode != "chat" || in.ResearchContext == nil || in.ResearchContext.RunID != in.ResearchRunID || in.ResearchContext.Validate() != nil {
@@ -499,7 +532,7 @@ func (s *Store) SubmitTurn(ctx context.Context, in domain.SubmitTurn, key string
 		deadlineSeconds = 7200
 	}
 	deadline := now.Add(time.Duration(deadlineSeconds) * time.Second)
-	_, err = tx.ExecContext(ctx, `INSERT INTO tasks(id,title,description,status,priority,version,created_at,updated_at,conversation_id,mode,operation,continue_from_message_id,retry_count,deadline_at) VALUES(?,?,?,'queued',0,1,?,?,?,?,?,?,?,?)`, id, c.Title, content, stamp(now), stamp(now), c.ID, mode, operation, continued, retries, stamp(deadline))
+	_, err = tx.ExecContext(ctx, `INSERT INTO tasks(id,title,description,status,priority,version,created_at,updated_at,conversation_id,mode,operation,continue_from_message_id,retry_count,deadline_at) VALUES(?,?,?,'queued',0,1,?,?,?,?,?,?,?,?)`, id, c.Title, taskDescription, stamp(now), stamp(now), c.ID, mode, operation, continued, retries, stamp(deadline))
 	if err != nil {
 		return domain.SubmitResponse{}, err
 	}

@@ -1,5 +1,5 @@
 import type { AgentEvent, Approval, Artifact, Checkpoint, Evidence, Memory, MemoryMatch, MemoryStatus, Message, ProvidersResponse, Task, TaskStep } from './types'
-import type { Conversation, ConversationMessage, ConversationMode, ConversationSettingsPatch, DoctorResponse, HealthResponse, LabPolicyResponse, ResearchPlan, Run, RunRuntime, SourceRecord, Submission } from './types'
+import type { Conversation, ConversationMessage, ConversationMode, ConversationSettingsPatch, DoctorResponse, HealthResponse, LabPolicyResponse, ResearchPlan, Run, RunRuntime, SourceRecord, Submission, Space, SpaceContextItem, SpaceResearchRun } from './types'
 import { recordHTTP } from './network-debug'
 
 export class ApiError extends Error {
@@ -64,9 +64,17 @@ export const api = {
   health: (signal?: AbortSignal) => request<HealthResponse>('/api/health', { signal }),
   labPolicy: (signal?: AbortSignal) => request<LabPolicyResponse>('/api/lab/policy', { signal }),
   conversations: (signal?: AbortSignal) => request<Conversation[]>('/api/conversations', { signal }),
+  spaces: (signal?: AbortSignal) => request<Array<Omit<Space, 'name'> & { name?: string }>>('/api/spaces', { signal }).then((items) => items.map((item) => ({ ...item, name: item.name || item.title } as Space))),
+  space: (id: string, signal?: AbortSignal) => request<Space>(`/api/spaces/${encodeURIComponent(id)}`, { signal }).then((item) => ({ ...item, name: item.name || item.title })),
+  createSpace: (title: string, description: string) => request<Space>('/api/spaces', { method: 'POST', body: JSON.stringify({ title, description }) }),
+  updateSpace: (id: string, patch: { title?: string; description?: string; archived?: boolean }) => request<Space>(`/api/spaces/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteSpace: (id: string) => request<void>(`/api/spaces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  spaceConversations: (id: string, signal?: AbortSignal) => request<Conversation[]>(`/api/spaces/${encodeURIComponent(id)}/conversations`, { signal }),
+  spaceResearch: (id: string, signal?: AbortSignal) => request<SpaceResearchRun[]>(`/api/spaces/${encodeURIComponent(id)}/research`, { signal }),
+  spaceContext: (id: string, signal?: AbortSignal) => request<SpaceContextItem[]>(`/api/spaces/${encodeURIComponent(id)}/context`, { signal }),
   conversation: (id: string, signal?: AbortSignal) => request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { signal }),
-  createConversation: (title: string, mode: ConversationMode, key: string, settings?: ConversationSettingsPatch) => request<Conversation>('/api/conversations', { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ title, mode, ...settings }) }),
-  updateConversation: (id: string, patch: { title?: string; mode?: ConversationMode } & ConversationSettingsPatch) => request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  createConversation: (title: string, mode: ConversationMode, key: string, settings?: ConversationSettingsPatch & { space_id?: string }) => request<Conversation>('/api/conversations', { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ title, mode, ...settings }) }),
+  updateConversation: (id: string, patch: { title?: string; mode?: ConversationMode; space_id?: string } & ConversationSettingsPatch) => request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteConversation: (id: string) => request<void>(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   conversationMessages: (id: string, signal?: AbortSignal) => request<ConversationMessage[]>(`/api/conversations/${encodeURIComponent(id)}/messages`, { signal }),
   submitMessage: (id: string, content: string, mode: ConversationMode, key: string, researchRunID = '') => request<Submission>(`/api/conversations/${encodeURIComponent(id)}/messages`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ content, mode, ...(mode === 'chat' && researchRunID ? { research_run_id: researchRunID } : {}) }) }),

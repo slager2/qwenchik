@@ -170,6 +170,7 @@ func New(service TaskService, worker WorkerControl, dbPing func(context.Context)
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.conversationRoutes(mux)
+	s.spaceRoutes(mux)
 	assets, err := fs.Sub(frontendAssets, "web/dist")
 	if err == nil {
 		fileServer := http.FileServer(http.FS(assets))

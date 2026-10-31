@@ -109,7 +109,7 @@ func newRuntimeCommand() *cobra.Command {
 	install.Flags().StringVar(&options.ModelBin, "model-bin", "", "Path to the Vulkan llama-server executable (required)")
 	install.Flags().StringVar(&options.ModelPath, "model-path", "", "Path to the readable GGUF model (required)")
 	install.Flags().StringVar(&options.Device, "device", "Vulkan1", "llama-server GPU device")
-	install.Flags().IntVar(&options.Context, "context", 32768, "Model and app context length")
+	install.Flags().IntVar(&options.Context, "context", 32768, "Model and app context length (32768 default; 65536 experimental opt-in)")
 	install.Flags().BoolVar(&enable, "enable", false, "Reload units and enable login autostart without starting services")
 	command.AddCommand(install)
 	for _, action := range []string{"start", "status"} {
