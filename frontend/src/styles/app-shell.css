@@ -27,6 +27,9 @@
 .q-app-shell[data-collapsed] .q-app-shell__sidebar { align-items: stretch; padding-inline: var(--space-2); }
 .q-app-shell[data-collapsed] .q-app-shell__sidebar-top, .q-app-shell[data-collapsed] .q-app-shell__brand, .q-app-shell[data-collapsed] .q-app-shell__new-chat, .q-app-shell[data-collapsed] .q-app-shell__nav-link, .q-app-shell[data-collapsed] .q-app-shell__status { justify-content: center; padding-inline: 0; }
 .q-app-shell__content { min-width: 0; }
+.q-app-shell__content > .app-shell { min-height: calc(100dvh - 4rem); }
+.q-app-shell__content > .app-shell .rail { display: none; }
+.q-app-shell__content > .app-shell .workspace { width: 100%; margin-left: 0; }
 .q-app-shell__desktop-tools { display: flex; min-height: 4rem; justify-content: flex-end; align-items: center; padding-inline: clamp(var(--space-4), 3vw, var(--space-8)); border-bottom: 1px solid var(--color-rule); }
 .q-command-trigger { display: inline-flex; min-height: var(--size-control); align-items: center; gap: var(--space-2); padding: 0 var(--space-2) 0 var(--space-3); border: 1px solid var(--color-rule); border-radius: var(--radius-control); background: var(--color-paper-raised); color: var(--color-readable); font-size: var(--text-sm); }
 .q-command-trigger:hover { color: var(--color-ink); background: var(--color-paper-muted); }

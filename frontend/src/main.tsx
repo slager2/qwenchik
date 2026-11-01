@@ -17,6 +17,7 @@ import './style.css'
 import './TelemetryPanel.css'
 import './styles/chat-redesign.css'
 import './styles/research-redesign.css'
+import './styles/tasks-projects-redesign.css'
 import App from './App'
 
 createRoot(document.getElementById('root')!).render(

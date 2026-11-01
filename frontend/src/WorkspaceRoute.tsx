@@ -14,6 +14,7 @@ import { mergeRuntimeSnapshot } from './telemetry-state.mjs'
 import TelemetryPanel from './TelemetryPanel'
 import { resumeEligibility } from './run-presentation.mjs'
 import type { HealthResponse } from './types'
+import AppShell from './AppShell'
 
 const columns: { id: string; title: string; statuses: TaskStatus[] }[] = [
   { id: 'inbox', title: 'Входящие', statuses: ['inbox'] },
@@ -581,6 +582,7 @@ export default function WorkspaceRoute() {
   const apiReady = health?.status === 'ok' && health.database === 'ok' && health.worker === 'attached'
 
   return (
+    <AppShell activeSection="tasks">
     <div className="app-shell">
       <aside className="rail" aria-label="Основная навигация">
         <a className="brand" href="#/workspace" aria-label="Qwenchik, доска задач">
@@ -624,7 +626,7 @@ export default function WorkspaceRoute() {
 
         <section className="page-heading">
           <div>
-            <div className="eyebrow"><span className="eyebrow-line" /> ЛОКАЛЬНЫЙ АГЕНТ · ОДИН WORKER</div>
+            <div className="eyebrow"><span className="eyebrow-line" /> ЛОКАЛЬНОЕ ВЫПОЛНЕНИЕ · ОДИН ПОТОК</div>
             <h1>Задачи</h1>
             <p className="page-subtitle">План, состояние и реальные события выполнения — в одном месте.</p>
           </div>
@@ -668,7 +670,7 @@ export default function WorkspaceRoute() {
         )}
 
         <div className="board-toolbar">
-          <div className="board-label"><span className="board-indicator" /> KANBAN <span className="board-count">{tasks.length}</span></div>
+          <div className="board-label"><span className="board-indicator" /> ДОСКА ЗАДАЧ <span className="board-count">{tasks.length}</span></div>
           <div className="board-meta"><span>{refreshing ? 'Обновление…' : 'Обновляется автоматически'}</span><button className="text-button" type="button" onClick={() => void refreshTasks()} disabled={refreshing}>{refreshing ? 'Обновляем' : 'Обновить'}</button></div>
         </div>
 
@@ -706,12 +708,13 @@ export default function WorkspaceRoute() {
           )}
         </div>
 
-        <footer className="app-footer"><span>QWENCHIK · LOCAL-FIRST</span><span>События и прогресс принадлежат backend</span></footer>
+        <footer className="app-footer"><span>QWENCHIK · ЛОКАЛЬНАЯ РАБОТА</span><span>События и прогресс приходят из локального сервиса</span></footer>
       </main>
 
       {paletteOpen && <CommandPalette tasks={tasks} onClose={() => setPaletteOpen(false)} onExecute={(command) => void executeCommand(command)} />}
       {memoryOpen && <MemoryManager onClose={() => setMemoryOpen(false)} />}
     </div>
+    </AppShell>
   )
 }
 

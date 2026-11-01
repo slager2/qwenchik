@@ -1,0 +1,314 @@
+/* Hallmark · genre: modern-minimal · macrostructure: task-first Workbench · design-system: design.md · designed-as-app */
+/* Phase 5/6 presentation layer. Data flow and route state stay in their owners. */
+
+/* Tasks: make the board scannable at a glance and give the next decision a clear visual priority. */
+.workspace .board-toolbar {
+  min-height: 3.25rem;
+  gap: var(--space-4);
+}
+
+.workspace .board-label {
+  color: var(--color-ink);
+  font-size: var(--text-xs);
+  letter-spacing: .06em;
+}
+
+.workspace .board-meta {
+  color: var(--color-readable);
+  font-size: var(--text-xs);
+}
+
+.workspace .board-grid {
+  gap: var(--space-6) var(--space-4);
+}
+
+.workspace .board-column {
+  border-radius: var(--radius-card);
+}
+
+.workspace .column-heading {
+  min-height: 2.75rem;
+  margin-bottom: var(--space-2);
+  padding-inline: var(--space-1);
+}
+
+.workspace .column-title-wrap h2 {
+  color: var(--color-ink);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.workspace .column-count {
+  min-width: 1.75rem;
+  height: 1.75rem;
+  color: var(--color-readable);
+  font-size: var(--text-xs);
+}
+
+.workspace .column-approval .column-heading {
+  border-bottom-color: var(--color-warning-rule);
+}
+
+.workspace .column-approval .column-title-wrap h2 {
+  color: var(--color-warning-ink);
+}
+
+.workspace .column-items {
+  gap: var(--space-2);
+}
+
+.workspace .task-card {
+  min-height: 10.5rem;
+  padding: var(--space-3);
+  border-color: var(--color-rule-strong);
+  border-radius: var(--radius-card);
+}
+
+.workspace .task-card:hover {
+  border-color: var(--color-accent);
+  background: var(--color-paper-raised);
+}
+
+.workspace .task-card:focus-visible {
+  position: relative;
+  z-index: 1;
+}
+
+.workspace .task-card.is-selected {
+  border-width: 2px;
+  padding: calc(var(--space-3) - 1px);
+}
+
+.workspace .task-card h3 {
+  margin-top: var(--space-3);
+  color: var(--color-ink);
+  font-size: var(--text-reading);
+  line-height: 1.35;
+}
+
+.workspace .task-card p {
+  min-height: 2.75rem;
+  margin-top: var(--space-2);
+  color: var(--color-readable);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.workspace .task-card .status-tag {
+  min-height: 1.75rem;
+  padding-inline: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.workspace .task-card .task-id {
+  font-size: var(--text-xs);
+}
+
+.workspace .task-card-bottom {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  color: var(--color-readable);
+  font-size: var(--text-xs);
+}
+
+.workspace .task-card-approval-hint {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--color-warning-ink);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.workspace .task-card.is-approval-required {
+  border: 2px solid var(--color-warning);
+  padding: calc(var(--space-3) - 1px);
+  background: var(--color-warning-soft);
+}
+
+.workspace .task-card.is-approval-required:hover,
+.workspace .task-card.is-approval-required.is-selected {
+  border-color: var(--color-warning-ink);
+  background: var(--color-warning-soft);
+}
+
+.workspace .column-empty {
+  min-height: 4rem;
+  padding-inline: var(--space-3);
+  color: var(--color-readable);
+  font-size: var(--text-sm);
+}
+
+/* The approval decision is the primary task action, so it should read as a callout. */
+.workspace .approval-card {
+  margin: var(--space-4) var(--space-5) 0;
+  padding: var(--space-5);
+  border-width: 2px;
+  border-left-width: .375rem;
+  border-radius: var(--radius-card);
+}
+
+.workspace .approval-kicker {
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.workspace .approval-card h3 {
+  margin-top: var(--space-2);
+  font-size: var(--text-heading-sm);
+}
+
+.workspace .approval-details {
+  gap: var(--space-3);
+  margin-block: var(--space-4);
+}
+
+.workspace .approval-details dt,
+.workspace .approval-details dd {
+  font-size: var(--text-sm);
+}
+
+.workspace .approval-details pre {
+  font-size: var(--text-xs);
+}
+
+.workspace .approval-actions {
+  justify-content: stretch;
+}
+
+.workspace .approval-actions .button {
+  min-height: var(--size-control);
+  flex: 1 1 0;
+  font-size: var(--text-sm);
+}
+
+/* Projects: present a project as a durable home for decisions, conversations and sources. */
+.spaces-shell .spaces-nav-copy,
+.spaces-shell .spaces-muted,
+.spaces-shell .spaces-empty,
+.spaces-shell .spaces-loading,
+.spaces-shell .spaces-error,
+.spaces-shell .spaces-heading p,
+.spaces-shell .spaces-stats-note {
+  font-size: var(--text-base);
+}
+
+.spaces-shell .spaces-nav {
+  background: var(--color-paper-muted);
+}
+
+.spaces-shell .spaces-nav h1 {
+  font-size: var(--text-heading);
+  letter-spacing: -.035em;
+}
+
+.spaces-shell .spaces-nav nav a {
+  min-height: var(--size-control);
+  padding: var(--space-2) var(--space-3);
+}
+
+.spaces-shell .spaces-nav nav strong {
+  font-size: var(--text-base);
+}
+
+.spaces-shell .spaces-nav nav small {
+  color: var(--color-readable);
+  font-size: var(--text-sm);
+}
+
+.spaces-shell .spaces-panel {
+  padding: var(--space-5);
+  border-color: var(--color-rule-strong);
+}
+
+.spaces-shell .spaces-panel h3 {
+  color: var(--color-ink);
+  font-size: var(--text-heading-sm);
+}
+
+.spaces-shell .spaces-conversations small,
+.spaces-shell .spaces-research small {
+  color: var(--color-readable);
+  font-size: var(--text-sm);
+}
+
+.spaces-shell .spaces-context-meta {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.spaces-shell .spaces-context article p {
+  color: var(--color-readable);
+  font-size: var(--text-base);
+}
+
+.spaces-shell .spaces-context details {
+  font-size: var(--text-sm);
+}
+
+.spaces-shell .spaces-research li {
+  min-height: var(--size-control);
+  padding-block: var(--space-2);
+}
+
+.spaces-shell .spaces-research strong {
+  font-size: var(--text-base);
+}
+
+.spaces-shell .spaces-count {
+  min-width: 1.75rem;
+  height: 1.75rem;
+  color: var(--color-readable);
+  font-size: var(--text-xs);
+}
+
+.spaces-shell .spaces-empty-state p {
+  color: var(--color-readable);
+  font-size: var(--text-reading);
+}
+
+.spaces-shell .spaces-primary,
+.spaces-shell .spaces-quiet-button,
+.spaces-shell .spaces-icon-button {
+  min-height: var(--size-control);
+  font-size: var(--text-base);
+}
+
+@media (max-width: 64rem) {
+  .workspace .board-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 48rem) {
+  .workspace .board-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4) var(--space-3);
+  }
+
+  .workspace .task-card {
+    min-height: 11rem;
+  }
+
+  .workspace .approval-card {
+    margin-inline: var(--space-4);
+  }
+}
+
+@media (max-width: 34rem) {
+  .workspace .board-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace .task-card:hover {
+    transform: none;
+  }
+}
