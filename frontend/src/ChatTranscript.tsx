@@ -17,7 +17,7 @@ export default function ChatTranscript({ messages, loading, active, runID, run, 
   submissionState?: 'sending' | 'failed'
 }) {
   return <>
-    {!messages.length && !loading && <div className="chat-empty"><h2>В разговоре пока нет сообщений</h2><p>Напишите сообщение или задачу исследования. Можно начать с примера:</p><div><button type="button" onClick={() => onExample('chat', 'Помоги разобраться в сложной теме')}>Объяснить тему</button><button type="button" onClick={() => onExample('research', 'Сравни варианты и приведи проверяемые источники')}>Исследовать вопрос</button></div></div>}
+    {!messages.length && !loading && <div className="chat-empty"><p className="chat-empty-kicker">Локальный рабочий чат</p><h2>С чего начнём?</h2><p>Напишите сообщение или задачу исследования. Можно начать с примера:</p><div><button type="button" onClick={() => onExample('chat', 'Помоги разобраться в сложной теме')}>Объяснить тему</button><button type="button" onClick={() => onExample('research', 'Сравни варианты и приведи проверяемые источники')}>Исследовать вопрос</button></div></div>}
     {messages.map((message) => {
       const current = message.role === 'assistant' && !!message.run_id && runID === message.run_id && run?.id === message.run_id
       const hasContent = !!message.content.trim()
@@ -40,11 +40,22 @@ export default function ChatTranscript({ messages, loading, active, runID, run, 
 const MessageContent = memo(function MessageContent({ message, runID, references, evidenceCache }: { message: ConversationMessage; runID: string; references: CitationReference[]; evidenceCache: RunEvidenceCache }) {
   const prefix = useId()
   const container = useRef<HTMLDivElement>(null)
+  const [copied, setCopied] = useState(false)
   const headings = useMemo(() => message.role === 'assistant' ? reportOutline(message.content, prefix) : [], [message.content, message.role, prefix])
   const historicalRunID = message.role === 'assistant' && message.run_id && message.run_id !== runID ? message.run_id : ''
   const historical = useRunEvidence(evidenceCache, historicalRunID)
   const refs = message.run_id === runID ? references : citationReferences(historical.data ?? [])
-  return <div ref={container}>{headings.length >= 2 && <nav className="report-outline" aria-label="Разделы ответа"><details><summary>Разделы ответа · {headings.length}</summary><div className="report-outline-links">{headings.map((heading) => <button key={heading.id} type="button" title={heading.text} onClick={() => focusReportHeading(container.current, heading.id)}>{heading.text}</button>)}</div></details></nav>}<MarkdownMessage content={message.content} idPrefix={prefix} references={message.role === 'assistant' ? refs : []} />{historicalRunID && historical.error && <p className="chat-muted">{historical.error} <button type="button" onClick={() => void historical.retry()}>Загрузить источники</button></p>}</div>
+  const copyMessage = async () => {
+    try {
+      if (!navigator.clipboard) return
+      await navigator.clipboard.writeText(message.content)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      setCopied(false)
+    }
+  }
+  return <div ref={container}>{headings.length >= 2 && <nav className="report-outline" aria-label="Разделы ответа"><details><summary>Разделы ответа · {headings.length}</summary><div className="report-outline-links">{headings.map((heading) => <button key={heading.id} type="button" title={heading.text} onClick={() => focusReportHeading(container.current, heading.id)}>{heading.text}</button>)}</div></details></nav>}<MarkdownMessage content={message.content} idPrefix={prefix} references={message.role === 'assistant' ? refs : []} />{message.role === 'assistant' && <div className="chat-message-actions"><button type="button" onClick={() => void copyMessage()} disabled={!message.content.trim()} aria-label="Скопировать ответ">{copied ? 'Скопировано' : 'Копировать'}</button>{copied && <span className="chat-muted" role="status">Ответ скопирован</span>}</div>}{historicalRunID && historical.error && <p className="chat-muted">{historical.error} <button type="button" onClick={() => void historical.retry()}>Загрузить источники</button></p>}</div>
 })
 
 function useRunEvidence(cache: RunEvidenceCache, runID: string) {
