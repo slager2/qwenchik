@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -304,12 +305,54 @@ func TestExecutionAndRefinementMigrationsPreserveExistingTables(t *testing.T) {
 		t.Fatal("existing data changed")
 	}
 	after := researchMigrationSchemaSnapshot(t, s.db)
-	if len(after) != len(schema)+13 {
-		t.Fatal("unexpected schema objects added beyond execution/refinement objects and the checkpoint tail index")
+	// A database at migration 009 must acquire exactly the objects introduced by
+	// migrations 010--014. Keep this list explicit instead of relying only on a
+	// count: SQLite creates implicit indexes for PRIMARY KEY/UNIQUE constraints,
+	// so a new migration can otherwise silently add an unexpected object while
+	// preserving the same total after another change.
+	expectedAdded := map[string]bool{
+		"table:harness_bundles":                           true,
+		"index:sqlite_autoindex_harness_bundles_1":        true,
+		"index:sqlite_autoindex_harness_bundles_2":        true,
+		"index:harness_active_bundle":                     true,
+		"index:harness_bundle_task":                       true,
+		"index:idx_checkpoints_task_event_seq":            true,
+		"table:checkpoint_chain_state":                    true,
+		"index:sqlite_autoindex_checkpoint_chain_state_1": true,
+		"trigger:checkpoint_chain_event_update":           true,
+		"trigger:checkpoint_chain_event_delete":           true,
+		"trigger:checkpoint_chain_checkpoint_insert":      true,
+		"trigger:checkpoint_chain_checkpoint_update":      true,
+		"trigger:checkpoint_chain_checkpoint_delete":      true,
+		"table:spaces":                          true,
+		"index:sqlite_autoindex_spaces_1":       true,
+		"index:idx_spaces_updated":              true,
+		"index:idx_conversations_space_updated": true,
+	}
+	added := make(map[string]bool)
+	for name := range after {
+		if _, existed := schema[name]; !existed {
+			added[name] = true
+		}
+	}
+	if !reflect.DeepEqual(added, expectedAdded) {
+		t.Fatalf("unexpected schema objects added: got %v, want %v", added, expectedAdded)
 	}
 	for name, sql := range schema {
-		if name != "table:tasks" && name != "table:checkpoints" && after[name] != sql {
+		if name != "table:tasks" && name != "table:checkpoints" && name != "table:conversations" && after[name] != sql {
 			t.Fatalf("object changed: %s", name)
+		}
+	}
+	for _, required := range []struct {
+		name, fragment string
+	}{
+		{"table:conversations", "space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL"},
+		{"table:spaces", "archived_at TEXT"},
+		{"index:idx_spaces_updated", "spaces(deleted_at, archived_at, updated_at, id)"},
+		{"index:idx_conversations_space_updated", "conversations(space_id, deleted_at, updated_at, id)"},
+	} {
+		if !strings.Contains(after[required.name], required.fragment) {
+			t.Fatalf("missing required schema change %s: %q", required.name, after[required.name])
 		}
 	}
 	if fts != ftsSchemaSnapshot(t, s.db) {

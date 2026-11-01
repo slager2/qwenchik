@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -77,7 +78,9 @@ func TestWorkerOptionalURLFailureContinuesIndependentDiscovery(t *testing.T) {
 			respond := model.respond
 			verifierSawSkipped := false
 			model.respond = func(request llm.ChatRequest, index int) (string, error) {
-				if index == 0 {
+				schema := string(request.JSONSchema)
+				switch {
+				case strings.Contains(schema, `"subtasks"`):
 					encoded, err := respond(request, 0)
 					if err != nil {
 						return "", err
@@ -94,17 +97,7 @@ func TestWorkerOptionalURLFailureContinuesIndependentDiscovery(t *testing.T) {
 					plan.MaxSteps = len(plan.Subtasks)
 					out, err := json.Marshal(plan)
 					return string(out), err
-				}
-				if index == 1 {
-					return `{"status":"continue","summary":"Inspect supplied PDF","tool_call":{"name":"fetch_url","arguments":{"url":"https://docs.example.com/protocol","original_query":"optional supplied source"}}}`, nil
-				}
-				if index == 4 {
-					return `{"status":"continue","summary":"Inspect discovered reference","tool_call":{"name":"fetch_url","arguments":{"url":"https://reference.example.net/protocol","original_query":"protocol architecture"}}}`, nil
-				}
-				if index == 5 {
-					return `{"status":"continue","summary":"Inspect independent compatibility source","tool_call":{"name":"fetch_url","arguments":{"url":"https://benchmark.example.org/protocol","original_query":"protocol compatibility"}}}`, nil
-				}
-				if index == 6 {
+				case strings.Contains(schema, `"criterion_assessments"`):
 					var input struct {
 						Skipped []string    `json:"skipped_steps"`
 						Plan    domain.Plan `json:"plan"`
@@ -118,21 +111,40 @@ func TestWorkerOptionalURLFailureContinuesIndependentDiscovery(t *testing.T) {
 							t.Error("verifier requires failed optional PDF")
 						}
 					}
-				}
-				if index == 6 || index == 7 {
-					var input map[string]any
-					if err := json.Unmarshal([]byte(request.Messages[1].Content), &input); err != nil {
+					var verifierInput map[string]any
+					if err := json.Unmarshal([]byte(request.Messages[1].Content), &verifierInput); err != nil {
 						return "", err
 					}
-					results := input["tool_results"].(map[string]any)
+					results, ok := verifierInput["tool_results"].(map[string]any)
+					if !ok {
+						return "", fmt.Errorf("verifier tool results have unexpected type %T", verifierInput["tool_results"])
+					}
 					results["fetch_1"], results["fetch_2"] = results["fetch_2"], results["fetch_3"]
-					encoded, err := json.Marshal(input)
+					encoded, err := json.Marshal(verifierInput)
 					if err != nil {
 						return "", err
 					}
 					request.Messages[1].Content = string(encoded)
+					return respond(request, 5)
+				case strings.Contains(schema, `"answer"`):
+					var finalizerInput map[string]any
+					if err := json.Unmarshal([]byte(request.Messages[1].Content), &finalizerInput); err != nil {
+						return "", err
+					}
+					results, ok := finalizerInput["tool_results"].(map[string]any)
+					if !ok {
+						return "", fmt.Errorf("finalizer tool results have unexpected type %T", finalizerInput["tool_results"])
+					}
+					results["fetch_1"], results["fetch_2"] = results["fetch_2"], results["fetch_3"]
+					encoded, err := json.Marshal(finalizerInput)
+					if err != nil {
+						return "", err
+					}
+					request.Messages[1].Content = string(encoded)
+					return respond(request, 6)
+				default:
+					return "", fmt.Errorf("unexpected model request %d", index)
 				}
-				return respond(request, index-1)
 			}
 			worker := New(store, model, registry, Options{TaskTimeout: time.Minute, MaxSteps: 8, MaxSearchQueries: 4, MaxFetchBytes: 4096})
 			worker.runTask(ctx, claimed)

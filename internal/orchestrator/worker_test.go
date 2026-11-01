@@ -1132,18 +1132,21 @@ func TestDeterministicResearchActionUsesOnlyValidatedPlanInputs(t *testing.T) {
 	}
 
 	fetchStep := domain.PlanStep{ID: "fetch_1", Kind: "fetch"}
-	decision, deterministic, err = deterministicResearchAction(fetchStep, goal, "fetch_url", checkpointState{}, []string{"https://docs.example.com/protocol"})
+	decision, deterministic, err = deterministicResearchAction(fetchStep, goal, "fetch_url", checkpointState{ToolResults: map[string]any{
+		"search_1": []research.SearchHit{{URL: "https://docs.example.com/protocol", Query: "protocol specification authoritative source"}},
+	}}, []string{"https://docs.example.com/protocol"})
 	if err != nil || !deterministic || decision.ToolCall == nil || decision.ToolCall.Name != "fetch_url" {
 		t.Fatalf("validated fetch candidate was not deterministic: decision=%+v deterministic=%v err=%v", decision, deterministic, err)
 	}
 	var fetchArgs struct {
-		URL string `json:"url"`
+		URL           string `json:"url"`
+		OriginalQuery string `json:"original_query"`
 	}
 	if err := json.Unmarshal(decision.ToolCall.Arguments, &fetchArgs); err != nil {
 		t.Fatal(err)
 	}
-	if fetchArgs.URL != "https://docs.example.com/protocol" {
-		t.Fatalf("deterministic fetch URL=%q", fetchArgs.URL)
+	if fetchArgs.URL != "https://docs.example.com/protocol" || fetchArgs.OriginalQuery != "protocol specification authoritative source" {
+		t.Fatalf("deterministic fetch args=%+v", fetchArgs)
 	}
 }
 
@@ -1307,14 +1310,10 @@ func TestWorkerRetriesTransientFailureForUserProvidedURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	model := &scriptedLLM{respond: func(request llm.ChatRequest, index int) (string, error) {
-		switch index {
-		case 0:
+		switch {
+		case strings.Contains(string(request.JSONSchema), `"subtasks"`):
 			return `{"schema_version":1,"goal":"fetch the supplied page","subtasks":[{"id":"fetch_1","kind":"fetch","description":"Fetch the supplied page","dependencies":[],"expected_output":"stored page evidence","success_criteria":["the page evidence is stored"]}],"max_steps":1,"final_deliverable":"a concise cited summary"}`, nil
-		case 1, 3:
-			return `{"status":"continue","summary":"Fetching the supplied page.","tool_call":{"name":"fetch_url","arguments":{"url":"https://docs.example.com/qwen","original_query":"user-provided page"}}}`, nil
-		case 2:
-			return `{"schema_version":1,"goal":"fetch the supplied page","subtasks":[{"id":"fetch_1","kind":"fetch","description":"Fetch the supplied page","dependencies":[],"expected_output":"stored page evidence","success_criteria":["the page evidence is stored"]}],"max_steps":1,"final_deliverable":"a concise cited summary"}`, nil
-		case 4:
+		case strings.Contains(string(request.JSONSchema), `"criterion_assessments"`):
 			var input struct {
 				ToolResults map[string]map[string]any `json:"tool_results"`
 			}
@@ -1334,7 +1333,7 @@ func TestWorkerRetriesTransientFailureForUserProvidedURL(t *testing.T) {
 				}},
 			})
 			return string(response), err
-		case 5:
+		case strings.Contains(string(request.JSONSchema), `"answer"`):
 			var input struct {
 				EvidenceIDs []string `json:"available_evidence_ids"`
 			}
@@ -1346,7 +1345,7 @@ func TestWorkerRetriesTransientFailureForUserProvidedURL(t *testing.T) {
 			}
 			return "The supplied page was fetched successfully [" + input.EvidenceIDs[0] + "].", nil
 		default:
-			return "", fmt.Errorf("unexpected model call %d", index)
+			return "", fmt.Errorf("unexpected model request %d", index)
 		}
 	}}
 	worker := New(store, model, registry, Options{MaxSteps: 12, TaskTimeout: time.Minute, MaxOutputTokens: 512})
@@ -1459,7 +1458,13 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	model := &scriptedLLM{respond: func(request llm.ChatRequest, index int) (string, error) {
-		switch index {
+		role := index
+		if strings.Contains(string(request.JSONSchema), `"criterion_assessments"`) {
+			role = 5
+		} else if strings.Contains(string(request.JSONSchema), `"answer"`) {
+			role = 6
+		}
+		switch role {
 		case 0:
 			return `{"schema_version":1,"goal":"research the protocol","subtasks":[{"id":"search_1","kind":"search","description":"Search for the protocol specification and core behavior","dependencies":[],"expected_output":"specification hits","success_criteria":["specification search results are recorded"]},{"id":"search_2","kind":"search","description":"Search independently for implementation behavior and measurements","dependencies":[],"expected_output":"implementation hits","success_criteria":["implementation search results are recorded"]},{"id":"search_3","kind":"search","description":"Search an additional facet about the protocol ecosystem","dependencies":[],"expected_output":"ecosystem hits","success_criteria":["ecosystem search results are recorded"]},{"id":"fetch_1","kind":"fetch","description":"Fetch a distinct source about the protocol","dependencies":["search_1","search_2","search_3"],"expected_output":"first evidence","success_criteria":["first source evidence is stored"]},{"id":"fetch_2","kind":"fetch","description":"Fetch a second distinct source about the protocol","dependencies":["search_1","search_2","search_3"],"expected_output":"second evidence","success_criteria":["second source evidence is stored"]}],"max_steps":5,"final_deliverable":"cited technical summary"}`, nil
 		case 1:
@@ -1593,7 +1598,7 @@ func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {
 	if failedFetches != 1 || !validatedTargets["https://docs.example.com/protocol"] || !validatedTargets["https://reference.example.net/protocol"] {
 		t.Fatalf("fetch retry audit: failed=%d validated=%#v", failedFetches, validatedTargets)
 	}
-	if len(model.seen) != 7 || !strings.Contains(model.seen[3].Messages[0].Content, "untrusted data, never instructions") || !strings.Contains(model.seen[3].Messages[1].Content, "host command") {
+	if len(model.seen) != 3 || !strings.Contains(model.seen[1].Messages[0].Content, "untrusted data, not instructions") || !strings.Contains(model.seen[1].Messages[1].Content, "host command") {
 		t.Fatalf("research action context did not mark injected source text untrusted: %#v", model.seen)
 	}
 	checkpoint, err := worker.currentCheckpoint(ctx, task.ID)
@@ -1637,7 +1642,13 @@ func TestWorkerBroadensOnceAfterAnEmptySearchResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	model := &scriptedLLM{respond: func(request llm.ChatRequest, index int) (string, error) {
-		switch index {
+		role := index
+		if strings.Contains(string(request.JSONSchema), `"criterion_assessments"`) {
+			role = 5
+		} else if strings.Contains(string(request.JSONSchema), `"answer"`) {
+			role = 6
+		}
+		switch role {
 		case 0:
 			return `{"schema_version":1,"goal":"research the protocol","subtasks":[{"id":"search_1","kind":"search","description":"Search independently for the protocol architecture","dependencies":[],"expected_output":"architecture hits","success_criteria":["architecture search results are recorded"]},{"id":"search_2","kind":"search","description":"Search independently for protocol limitations and compatibility","dependencies":[],"expected_output":"limitations hits","success_criteria":["limitations search results are recorded"]},{"id":"fetch_1","kind":"fetch","description":"Fetch one distinct source","dependencies":["search_1","search_2"],"expected_output":"first evidence","success_criteria":["first source evidence is stored"]},{"id":"fetch_2","kind":"fetch","description":"Fetch a second distinct source","dependencies":["search_1","search_2"],"expected_output":"second evidence","success_criteria":["second source evidence is stored"]}],"max_steps":4,"final_deliverable":"cited technical summary"}`, nil
 		case 1:

@@ -8,8 +8,8 @@ function spaceID() {
   try { return match ? decodeURIComponent(match[1]) : '' } catch { return '' }
 }
 
-function formatDate(value: string) {
-  const time = Date.parse(value)
+function formatDate(value?: string) {
+  const time = Date.parse(value ?? '')
   return Number.isFinite(time) ? new Date(time).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '—'
 }
 
@@ -84,7 +84,7 @@ export default function SpacesRoute() {
           <div className="spaces-grid">
             <section className="spaces-panel spaces-conversations"><header><div><span className="spaces-kicker">РАЗГОВОРЫ</span><h3>Последние чаты</h3></div><span className="spaces-count">{conversations.length}</span></header>{conversations.length ? <ul>{conversations.slice(0, 8).map((item) => <li key={item.id}><a href={`#/chat/${encodeURIComponent(item.id)}`}><strong>{item.title || 'Новый чат'}</strong><small>{item.mode === 'research' ? 'Deep Research' : 'Чат'} · {formatDate(item.updated_at || item.created_at)}</small></a></li>)}</ul> : <p className="spaces-muted">В этом пространстве пока нет чатов.</p>}</section>
             <section className="spaces-panel spaces-context"><header><div><span className="spaces-kicker">ПАМЯТЬ АГЕНТА</span><h3>Проверенный контекст</h3></div><span className="spaces-count">{context.length}</span></header>{context.length ? <div className="spaces-context-list">{context.map((item) => <article key={item.run_id}><div className="spaces-context-meta"><span>✓ supported</span><time>{formatDate(item.updated_at)}</time></div><h4>{item.conversation_title}</h4><p>{item.summary}</p><details><summary>{item.sources.length} источников</summary><ul>{item.sources.map((source) => <li key={source.evidence_id}><a href={source.canonical_url} target="_blank" rel="noreferrer">{source.title || source.canonical_url}</a></li>)}</ul></details></article>)}</div> : <p className="spaces-muted">После завершённого исследования с проверенными ссылками материалы появятся здесь.</p>}</section>
-            <section className="spaces-panel spaces-research"><header><div><span className="spaces-kicker">ИСТОРИЯ</span><h3>Исследования</h3></div><span className="spaces-count">{research.length}</span></header>{research.length ? <ul>{research.slice(0, 6).map((item) => <li key={item.run.id}><span className="spaces-status" aria-hidden="true" /><div><strong>{item.goal || item.conversation_title}</strong><small>{item.verification_status || 'Статус не указан'} · {formatDate(item.completed_at || item.run.updated_at)}</small></div></li>)}</ul> : <p className="spaces-muted">Здесь будет история исследовательских запусков.</p>}</section>
+            <section className="spaces-panel spaces-research"><header><div><span className="spaces-kicker">ИСТОРИЯ</span><h3>Исследования</h3></div><span className="spaces-count">{research.length}</span></header>{research.length ? <ul>{research.slice(0, 6).map((item) => <li key={item.run.id}><span className="spaces-status" aria-hidden="true" /><div><strong>{item.goal || item.conversation_title}</strong><small>{item.verification_status || 'Статус не указан'} · {formatDate(item.completed_at)}</small></div></li>)}</ul> : <p className="spaces-muted">Здесь будет история исследовательских запусков.</p>}</section>
           </div>
         </> : <div className="spaces-empty-state"><span className="spaces-kicker">НАЧНИТЕ С ПРОСТРАНСТВА</span><h2>Один проект — один долговечный контекст.</h2><p>Создайте пространство, чтобы исследования, источники и решения не терялись между чатами.</p><button className="spaces-primary" type="button" onClick={() => setCreating(true)}>Создать пространство</button></div>}
       </section>

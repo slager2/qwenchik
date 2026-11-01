@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -210,7 +211,7 @@ func TestHTTPResearchIntegration(t *testing.T) {
 				t.Fatal(err)
 			}
 			if scenario.failure != "" {
-				if current.Status != domain.StatusFailed || failures != 1 || retries != 0 || fetches != 0 || len(evidence) != 0 || model.requests != 2 || stages[domain.StageVerification] || stages[domain.StageFinalization] {
+				if current.Status != domain.StatusFailed || failures != 1 || retries != 0 || fetches != 0 || len(evidence) != 0 || model.requests != 1 || stages[domain.StageVerification] || stages[domain.StageFinalization] {
 					t.Fatalf("failed execution: status=%s failures=%d retries=%d fetches=%d evidence=%d model=%d stages=%v", current.Status, failures, retries, fetches, len(evidence), model.requests, stages)
 				}
 				return
@@ -222,7 +223,7 @@ func TestHTTPResearchIntegration(t *testing.T) {
 					t.Fatalf("empty search did not broaden: queries=%v codes=%v", gotQueries, codes)
 				}
 			}
-			if current.Status != domain.StatusCompleted || failures != 0 || retries != wantRetries || fetches != 2 || len(evidence) != 2 || model.requests != 7 || !codes["search_ok"] {
+			if current.Status != domain.StatusCompleted || failures != 0 || retries != wantRetries || fetches != 2 || len(evidence) != 2 || model.requests != 3 || !codes["search_ok"] {
 				t.Fatalf("completion: status=%s failures=%d retries=%d fetches=%d evidence=%d model=%d codes=%v", current.Status, failures, retries, fetches, len(evidence), model.requests, codes)
 			}
 			messages, err := store.Messages(ctx, task.ID)
@@ -252,7 +253,13 @@ func TestHTTPResearchIntegration(t *testing.T) {
 
 func integrationResearchModel() *scriptedLLM {
 	return &scriptedLLM{respond: func(request llm.ChatRequest, index int) (string, error) {
-		switch index {
+		role := index
+		if strings.Contains(string(request.JSONSchema), `"criterion_assessments"`) {
+			role = 5
+		} else if strings.Contains(string(request.JSONSchema), `"answer"`) {
+			role = 6
+		}
+		switch role {
 		case 0:
 			return `{"schema_version":1,"goal":"Research protocol architecture and limitations","subtasks":[{"id":"search_1","kind":"search","description":"Find protocol architecture specifications","dependencies":[],"expected_output":"architecture hits","success_criteria":["results recorded"]},{"id":"search_2","kind":"search","description":"Find independent limitations and compatibility references","dependencies":[],"expected_output":"limitations hits","success_criteria":["results recorded"]},{"id":"fetch_1","kind":"fetch","description":"Inspect the specification","dependencies":["search_1","search_2"],"expected_output":"source evidence","success_criteria":["evidence stored"]},{"id":"fetch_2","kind":"fetch","description":"Inspect an independent reference","dependencies":["search_1","search_2"],"expected_output":"independent evidence","success_criteria":["evidence stored"]}],"max_steps":4,"final_deliverable":"Cited protocol review"}`, nil
 		case 1:
@@ -267,30 +274,70 @@ func integrationResearchModel() *scriptedLLM {
 			return fmt.Sprintf(`{"status":"continue","summary":"Inspect source","tool_call":{"name":"fetch_url","arguments":{"url":%q,"original_query":"protocol architecture and limitations"}}}`, url), nil
 		case 5, 6:
 			var input struct {
-				ToolResults map[string]any `json:"tool_results"`
+				ToolResults      map[string]any `json:"tool_results"`
+				CriterionCatalog []struct {
+					ID          string   `json:"id"`
+					Kind        string   `json:"kind"`
+					EvidenceIDs []string `json:"available_evidence_ids"`
+				} `json:"criterion_catalog"`
 			}
 			if err := json.Unmarshal([]byte(request.Messages[1].Content), &input); err != nil {
 				return "", err
 			}
-			assessments := make([]map[string]any, 0, 4)
-			answer := "Protocol review:"
-			for _, step := range []string{"search_1", "search_2", "fetch_1", "fetch_2"} {
-				ids := []string{}
-				if strings.HasPrefix(step, "fetch_") {
-					result, _ := input.ToolResults[step].(map[string]any)
-					id, _ := result["evidence_id"].(string)
-					if id == "" {
-						return "", fmt.Errorf("missing evidence for %s", step)
+			evidenceIDs := make(map[string]bool)
+			for _, result := range input.ToolResults {
+				if result, ok := result.(map[string]any); ok {
+					if id, _ := result["evidence_id"].(string); id != "" {
+						evidenceIDs[id] = true
 					}
-					ids = append(ids, id)
-					answer += " Source describes protocol behavior [" + id + "]."
 				}
-				assessments = append(assessments, map[string]any{"step_id": step, "criterion_index": 0, "met": true, "evidence_ids": ids, "rationale": "Recorded result supports the criterion."})
 			}
-			if index == 6 {
+			ids := make([]string, 0, len(evidenceIDs))
+			for id := range evidenceIDs {
+				ids = append(ids, id)
+			}
+			sort.Strings(ids)
+			answer := "Protocol review:"
+			for _, id := range ids {
+				answer += " Source describes protocol behavior [" + id + "]."
+			}
+			if role == 6 {
 				return answer, nil
 			}
-			encoded, err := json.Marshal(map[string]any{"ready_to_answer": true, "summary": "Two distinct sources inspected.", "missing": []string{}, "supplementary_criteria": []string{}, "criterion_assessments": fixtureVerdicts(assessments)})
+			if len(input.CriterionCatalog) == 0 {
+				var outputSchema struct {
+					Properties map[string]struct {
+						Properties map[string]struct {
+							Properties map[string]struct {
+								Items struct {
+									Enum []string `json:"enum"`
+								} `json:"items"`
+							} `json:"properties"`
+						} `json:"properties"`
+					} `json:"properties"`
+				}
+				if err := json.Unmarshal(request.JSONSchema, &outputSchema); err != nil {
+					return "", err
+				}
+				assessmentProperties := outputSchema.Properties["criterion_assessments"].Properties
+				for id, assessment := range assessmentProperties {
+					input.CriterionCatalog = append(input.CriterionCatalog, struct {
+						ID          string   `json:"id"`
+						Kind        string   `json:"kind"`
+						EvidenceIDs []string `json:"available_evidence_ids"`
+					}{ID: id, EvidenceIDs: assessment.Properties["evidence_ids"].Items.Enum})
+				}
+				sort.Slice(input.CriterionCatalog, func(i, j int) bool { return input.CriterionCatalog[i].ID < input.CriterionCatalog[j].ID })
+			}
+			assessments := make(map[string]any, len(input.CriterionCatalog))
+			for _, criterion := range input.CriterionCatalog {
+				criterionEvidence := append([]string{}, criterion.EvidenceIDs...)
+				if criterion.Kind == "fetch" && len(criterionEvidence) == 0 {
+					criterionEvidence = append([]string(nil), ids...)
+				}
+				assessments[criterion.ID] = map[string]any{"met": criterion.Kind != "fetch" || len(criterionEvidence) > 0, "evidence_ids": criterionEvidence, "rationale": "Recorded result supports the criterion."}
+			}
+			encoded, err := json.Marshal(map[string]any{"ready_to_answer": true, "summary": "Recorded sources were inspected.", "missing": []string{}, "supplementary_criteria": []string{}, "criterion_assessments": assessments})
 			return string(encoded), err
 		default:
 			return "", errors.New("unexpected model request")

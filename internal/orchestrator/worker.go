@@ -2177,7 +2177,11 @@ func deterministicResearchAction(step domain.PlanStep, goal, expectedTool string
 		if err != nil {
 			return actionDecision{}, false, nil
 		}
-		arguments, err := json.Marshal(map[string]any{"url": selected})
+		argumentsValue := map[string]any{"url": selected}
+		if originalQuery := fetchOriginalQuery(selected, state, goal); originalQuery != "" {
+			argumentsValue["original_query"] = originalQuery
+		}
+		arguments, err := json.Marshal(argumentsValue)
 		if err != nil {
 			return actionDecision{}, false, err
 		}
@@ -2207,6 +2211,68 @@ func deterministicResearchAction(step domain.PlanStep, goal, expectedTool string
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
 	}{Name: "search", Arguments: arguments}}, true, nil
+}
+
+// fetchOriginalQuery keeps the provenance link between a deterministic fetch
+// and the search result that selected its URL. The actor used to supply this
+// field, so it must be reconstructed when the safe, deterministic fast path
+// skips that actor call. If the URL was supplied directly or its search result
+// is no longer available in the checkpoint, the user goal remains the most
+// accurate durable source of intent.
+func fetchOriginalQuery(rawURL string, state checkpointState, goal string) string {
+	selected, err := provenance.CanonicalURL(rawURL)
+	if err == nil {
+		keys := make([]string, 0, len(state.ToolResults))
+		for key := range state.ToolResults {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			if query := searchResultQueryForURL(state.ToolResults[key], selected); query != "" {
+				return query
+			}
+		}
+	}
+	return validOriginalQuery(goal)
+}
+
+func searchResultQueryForURL(value any, selectedURL string) string {
+	match := func(rawURL, query string) string {
+		canonical, err := provenance.CanonicalURL(rawURL)
+		if err != nil || canonical != selectedURL {
+			return ""
+		}
+		return validOriginalQuery(query)
+	}
+	switch hits := value.(type) {
+	case []research.SearchHit:
+		for _, hit := range hits {
+			if query := match(hit.URL, hit.Query); query != "" {
+				return query
+			}
+		}
+	case []any:
+		for _, item := range hits {
+			hit, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			rawURL, _ := hit["url"].(string)
+			queryText, _ := hit["query"].(string)
+			if query := match(rawURL, queryText); query != "" {
+				return query
+			}
+		}
+	}
+	return ""
+}
+
+func validOriginalQuery(query string) string {
+	query = strings.TrimSpace(query)
+	if query == "" || len(query) > 1000 || strings.ContainsAny(query, "\x00\r\n") {
+		return ""
+	}
+	return strings.Join(strings.Fields(query), " ")
 }
 
 func deterministicSearchQuery(description, goal string) string {

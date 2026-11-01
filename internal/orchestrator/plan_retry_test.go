@@ -79,37 +79,41 @@ func TestManualVerificationRetryUsesFreshPlanObservations(t *testing.T) {
 			}
 			base := integrationResearchModel()
 			var oldIDs []string
+			planCalls := 0
+			verificationCalls := 0
 			model := &scriptedLLM{respond: func(request llm.ChatRequest, index int) (string, error) {
-				local := index
-				if index >= 6 {
-					local -= 6
-				}
-				if index >= 6 && local > 0 {
-					for _, id := range oldIDs {
-						if strings.Contains(request.Messages[1].Content, id) {
-							t.Errorf("historical evidence leaked into active model input: %s", id)
-						}
+				schema := string(request.JSONSchema)
+				switch {
+				case strings.Contains(schema, `"subtasks"`):
+					planCalls++
+					response, err := base.respond(request, 0)
+					if err != nil || !scenario.duplicateFacet || planCalls != 2 {
+						return response, err
 					}
-				}
-				if index == 7 {
-					var input struct {
-						Prior []string `json:"prior_search_queries_untrusted"`
-					}
-					if err := json.Unmarshal([]byte(request.Messages[1].Content), &input); err != nil {
+					var plan domain.Plan
+					if err := json.Unmarshal([]byte(response), &plan); err != nil {
 						return "", err
 					}
-					if len(input.Prior) != 0 {
-						t.Errorf("new attempt inherited prompt history: %v", input.Prior)
+					for i := range plan.Subtasks {
+						if plan.Subtasks[i].ID == "search_2" {
+							plan.Subtasks[i].Description = "Find protocol architecture specifications"
+						}
 					}
-					if scenario.emptyInitial {
-						return `{"status":"continue","summary":"Search again","tool_call":{"name":"search","arguments":{"query":"protocol architecture alternate specification details","language":null,"recency":null,"max_results":8}}}`, nil
+					encoded, err := json.Marshal(plan)
+					return string(encoded), err
+				case strings.Contains(schema, `"criterion_assessments"`):
+					verificationCalls++
+					if verificationCalls > 1 {
+						for _, id := range oldIDs {
+							if strings.Contains(request.Messages[1].Content, id) {
+								t.Errorf("historical evidence leaked into active verifier input: %s", id)
+							}
+						}
 					}
-				}
-				if index == 8 && scenario.duplicateFacet {
-					return base.respond(request, 1)
-				}
-				response, err := base.respond(request, local)
-				if index == 5 && err == nil {
+					response, err := base.respond(request, 5)
+					if verificationCalls != 1 || err != nil {
+						return response, err
+					}
 					var verdict map[string]any
 					if err := json.Unmarshal([]byte(response), &verdict); err != nil {
 						return "", err
@@ -118,8 +122,11 @@ func TestManualVerificationRetryUsesFreshPlanObservations(t *testing.T) {
 					verdict["missing"] = []string{"The inspected sources lack the required compatibility information."}
 					encoded, err := json.Marshal(verdict)
 					return string(encoded), err
+				case strings.Contains(schema, `"answer"`):
+					return base.respond(request, 6)
+				default:
+					return "", fmt.Errorf("unexpected model request %d", index)
 				}
-				return response, err
 			}}
 			worker := New(store, model, registry, Options{TaskTimeout: time.Minute, MaxSteps: 8, MaxSearchQueries: scenario.budget})
 			task, err := store.CreateTask(ctx, domain.Task{ID: "manual-retry", Title: "Protocol review", Description: "Research protocol architecture and limitations."}, "")
