@@ -1,0 +1,7 @@
+/* Shared primitives. Route CSS composes these during the gradual migration. */
+.ui-button, .ui-field, .ui-badge, .ui-notice { font-size: var(--text-base); }
+.ui-button { display: inline-flex; min-height: 2.75rem; align-items: center; justify-content: center; gap: var(--space-2); padding-inline: var(--space-3); border: 1px solid var(--color-rule-strong); border-radius: var(--radius-control); background: var(--color-paper-raised); color: var(--color-ink-2); font-weight: 500; }
+.ui-button--primary { border-color: var(--color-accent); background: var(--color-accent); color: var(--color-accent-ink); } .ui-button--danger { border-color: transparent; background: transparent; color: var(--color-danger); }
+.ui-field { min-height: 2.75rem; border: 1px solid var(--color-rule-strong); border-radius: var(--radius-control); background: var(--color-paper-raised); }
+.ui-badge { display: inline-flex; min-height: 1.5rem; align-items: center; padding-inline: var(--space-2); border: 1px solid var(--color-rule); border-radius: 999px; color: var(--color-muted); }
+.ui-notice { padding: var(--space-3); border: 1px solid var(--color-rule); border-radius: var(--radius-control); background: var(--color-paper-muted); }

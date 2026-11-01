@@ -1,0 +1,256 @@
+{
+  "version": 1,
+  "origin": "http://127.0.0.1:5173",
+  "policy": "GET/HEAD only; external origins blocked",
+  "captures": [
+    {
+      "route": "chat",
+      "viewport": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900
+      },
+      "file": "chat-1440x900.png"
+    },
+    {
+      "route": "projects",
+      "viewport": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900
+      },
+      "file": "projects-1440x900.png"
+    },
+    {
+      "route": "tasks",
+      "viewport": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900
+      },
+      "file": "tasks-1440x900.png"
+    },
+    {
+      "route": "chat",
+      "viewport": {
+        "name": "tablet",
+        "width": 1024,
+        "height": 768
+      },
+      "file": "chat-1024x768.png"
+    },
+    {
+      "route": "projects",
+      "viewport": {
+        "name": "tablet",
+        "width": 1024,
+        "height": 768
+      },
+      "file": "projects-1024x768.png"
+    },
+    {
+      "route": "tasks",
+      "viewport": {
+        "name": "tablet",
+        "width": 1024,
+        "height": 768
+      },
+      "file": "tasks-1024x768.png"
+    },
+    {
+      "route": "chat",
+      "viewport": {
+        "name": "mobile",
+        "width": 375,
+        "height": 812
+      },
+      "file": "chat-375x812.png"
+    },
+    {
+      "route": "projects",
+      "viewport": {
+        "name": "mobile",
+        "width": 375,
+        "height": 812
+      },
+      "file": "projects-375x812.png"
+    },
+    {
+      "route": "tasks",
+      "viewport": {
+        "name": "mobile",
+        "width": 375,
+        "height": 812
+      },
+      "file": "tasks-375x812.png"
+    }
+  ],
+  "computed": [
+    {
+      "element": "a",
+      "label": "Qqwenchik",
+      "font_size": "24px",
+      "line_height": "normal",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "0px 8px",
+      "gap": "12px",
+      "width": 263,
+      "height": 32
+    },
+    {
+      "element": "button",
+      "label": "+ Новый чат",
+      "font_size": "15px",
+      "line_height": "normal",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "8px 12px",
+      "gap": "normal",
+      "width": 263,
+      "height": 44
+    },
+    {
+      "element": "input",
+      "label": "",
+      "font_size": "14px",
+      "line_height": "normal",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "10px 12px",
+      "gap": "normal",
+      "width": 247,
+      "height": 44
+    },
+    {
+      "element": "a",
+      "label": "Новый чатЧат · 1 нояб.",
+      "font_size": "14px",
+      "line_height": "normal",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "8px 16px",
+      "gap": "5px",
+      "width": 263,
+      "height": 57
+    },
+    {
+      "element": "small",
+      "label": "Чат · 1 нояб.",
+      "font_size": "12px",
+      "line_height": "18px",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "0px",
+      "gap": "normal",
+      "width": 231,
+      "height": 18
+    },
+    {
+      "element": "a",
+      "label": "Live adaptive recovery retestИсследование · 29 о",
+      "font_size": "14px",
+      "line_height": "normal",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "8px 16px",
+      "gap": "5px",
+      "width": 263,
+      "height": 57
+    },
+    {
+      "element": "small",
+      "label": "Исследование · 29 окт.",
+      "font_size": "12px",
+      "line_height": "18px",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "0px",
+      "gap": "normal",
+      "width": 231,
+      "height": 18
+    },
+    {
+      "element": "a",
+      "label": "Live recovery smokeИсследование · 29 окт.",
+      "font_size": "14px",
+      "line_height": "normal",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "8px 16px",
+      "gap": "5px",
+      "width": 263,
+      "height": 57
+    },
+    {
+      "element": "small",
+      "label": "Исследование · 29 окт.",
+      "font_size": "12px",
+      "line_height": "18px",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "0px",
+      "gap": "normal",
+      "width": 231,
+      "height": 18
+    },
+    {
+      "element": "a",
+      "label": "Hard review live researchИсследование · 29 окт.",
+      "font_size": "14px",
+      "line_height": "normal",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "8px 16px",
+      "gap": "5px",
+      "width": 263,
+      "height": 57
+    },
+    {
+      "element": "small",
+      "label": "Исследование · 29 окт.",
+      "font_size": "12px",
+      "line_height": "18px",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "0px",
+      "gap": "normal",
+      "width": 231,
+      "height": 18
+    },
+    {
+      "element": "a",
+      "label": "Lab heldout-protocolИсследование · 28 окт.",
+      "font_size": "14px",
+      "line_height": "normal",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "8px 16px",
+      "gap": "5px",
+      "width": 263,
+      "height": 57
+    },
+    {
+      "element": "small",
+      "label": "Исследование · 28 окт.",
+      "font_size": "12px",
+      "line_height": "18px",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "0px",
+      "gap": "normal",
+      "width": 231,
+      "height": 18
+    },
+    {
+      "element": "a",
+      "label": "Lab heldout-protocolИсследование · 28 окт.",
+      "font_size": "14px",
+      "line_height": "normal",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "8px 16px",
+      "gap": "5px",
+      "width": 263,
+      "height": 57
+    },
+    {
+      "element": "small",
+      "label": "Исследование · 28 окт.",
+      "font_size": "12px",
+      "line_height": "18px",
+      "font_family": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "padding": "0px",
+      "gap": "normal",
+      "width": 231,
+      "height": 18
+    }
+  ],
+  "errors": []
+}

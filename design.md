@@ -31,13 +31,14 @@ application; extend this document rather than selecting a new theme per route.
 
 ## Typography and rhythm
 
-- Display: Space Grotesk Variable, 500–650, roman, functional 18–28px headings.
-- Body: Inter Variable, 400–600; reading text 15–16px, line-height 1.65–1.75,
+- Display and body: IBM Plex Sans, 400–600, with local Cyrillic and Latin subsets.
+  It is the only UI family; reading text is 15–17px with a 1.65–1.75 line-height,
   approximately 68–76 characters per line where viewport space permits.
-- Technical values/code: JetBrains Mono, 400–500. Long hashes are abbreviated
+- Technical values/code: IBM Plex Mono, 400–500. Long hashes are abbreviated
   accessibly with a full copy target.
-- Four-point spacing: 4, 8, 12, 16, 20, 24, 32, 40px; new scale extensions and
-  size/easing tokens live in `tokens.css`. Preserve existing CSS token names.
+- Four-point spacing: 4, 8, 12, 16, 20, 24, 32, 40px; canonical frontend-local
+  tokens live in `frontend/src/styles/tokens.css`. Preserve aliases only while a
+  route is being migrated; no external fonts or CDN resources.
 - Control radius 6px; content radius 10px. Every touch control has a 44px target.
 - Headings wrap within their container; interactive labels stay on one line.
 
@@ -95,8 +96,8 @@ deepen contrast without replacing the established palette.
 
 ## Exports and implementation boundaries
 
-- Core existing token block: `frontend/src/style.css` (retained for compatibility).
-- Additive CSS system export: root `tokens.css`, imported by the frontend.
+- Canonical token block: `frontend/src/styles/tokens.css`; `base.css` and
+  `components.css` sit beside it. Route CSS consumes those semantic roles.
 - Existing React/TypeScript/Vite and Go-embedded asset build remain in place.
 - Extend components in place; no route/component deletion or new backend system.
 - Documentation is not copied into application content. No fabricated sources,
