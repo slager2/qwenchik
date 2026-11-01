@@ -9,6 +9,7 @@ import { safeURL } from './conversation-state.mjs'
 import { diagnosticSummary } from './observability.mjs'
 import { researchPlanPresentation, resourceReasonLabel, resumeEligibility } from './run-presentation.mjs'
 import { formatSourceBytes, planningFailure, publicResearchEvents, researchError, researchQueries, researchSources } from './research-state.mjs'
+import ResearchProgress from './ResearchProgress'
 import type { AgentEvent, DoctorResponse, Evidence, ProvidersResponse, ResearchPlan, Run, RunRuntime, SourceRecord, VerificationCriterionRecord } from './types'
 
 interface Remote<T> { data?: T; error: string; loading: boolean; reload: (reason?: ReloadReason) => Promise<void> }
@@ -90,9 +91,10 @@ export default function ResearchInspector({ resources, events, run, showHeading 
     heading?.focus({ preventScroll: true })
     heading?.scrollIntoView({ block: 'start', inline: 'nearest' })
   }
-  return <div className="chat-research">
-    <header className="research-heading">{showHeading && <h2>{run?.mode === 'chat' ? 'Детали запуска' : 'Детали исследования'}</h2>}<p>{labels[state] || 'Исследование ещё не запущено'}</p></header>
-    <div className="research-progress" aria-label="Состояние исследования">
+  return <div className="chat-research q-research-inspector">
+    <header className="research-heading q-research-inspector__heading">{showHeading && <><p className="q-research-inspector__eyebrow">Панель исследования</p><h2>{run?.mode === 'chat' ? 'Детали запуска' : 'Детали исследования'}</h2></>}<p>{labels[state] || 'Исследование ещё не запущено'}</p></header>
+    <ResearchProgress status={run?.status} phase={run?.phase || run?.stage} />
+    <div className="research-progress q-research-inspector__summary" aria-label="Состояние исследования">
       {outcome && outcomes[outcome] && <p className="research-outcome" role="status">{outcomes[outcome]}</p>}
       {run?.status === 'paused' && <><p>{resourceReasonLabel(currentRuntime?.resource_reason || run.resource_reason || currentRuntime?.pause_reason || run.pause_reason)}</p><p className="chat-muted" role="status">{resume.explanation}</p></>}
       <div className="research-run-actions">
@@ -117,9 +119,9 @@ export default function ResearchInspector({ resources, events, run, showHeading 
     </section>}
     {!!currentRuntime?.contradictions?.length && <div className="chat-partial-note" role="status"><h4>Неразрешённые противоречия</h4><ul>{stringList(currentRuntime.contradictions).map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
     {resources.runtime?.error && <Status resource={resources.runtime} />}
-    <nav className="chat-research-shortcuts" aria-label="Разделы исследования">
-      <button type="button" onClick={(event) => focusSection(event.currentTarget, 'sources')}>Источники · {sourcesKnown ? sourceList.length : '—'}</button>
-      <button type="button" onClick={(event) => focusSection(event.currentTarget, 'evidence')}>Evidence · {ownedEvidence?.length ?? '—'}</button>
+    <nav className="chat-research-shortcuts q-research-tabs" aria-label="Разделы исследования" role="tablist">
+      <button type="button" role="tab" aria-controls="research-sources-section" onClick={(event) => focusSection(event.currentTarget, 'sources')}>Источники · {sourcesKnown ? sourceList.length : '—'}</button>
+      <button type="button" role="tab" aria-controls="research-evidence-section" onClick={(event) => focusSection(event.currentTarget, 'evidence')}>Подтверждения · {ownedEvidence?.length ?? '—'}</button>
     </nav>
     {fallback && <p className="chat-partial-note" role="status">Показаны дословные выдержки. Синтезированный вывод надёжно подтвердить не удалось.</p>}
     {partial && <p className="chat-partial-note" role="status">Часть источников недоступна или отклонена. Это может ограничить полноту ответа.</p>}
@@ -137,7 +139,7 @@ export default function ResearchInspector({ resources, events, run, showHeading 
         return <li key={step.id} data-status={step.status}><span className="research-step-mark" aria-hidden="true">{step.status === 'completed' ? '✓' : step.status === 'running' ? '•' : step.status === 'skipped' ? '–' : '·'}</span><div><Expandable title={concise}><p>{step.description}</p></Expandable><small>{labels[step.status] || step.status}</small></div></li>
       })}</ol>}
     </section>
-    <section data-research-section="sources"><h3 tabIndex={-1}>Источники <span>{sourcesKnown ? sourceList.length : '—'}</span></h3><Status resource={sources} empty={sourcesKnown && !sourceList.length} />
+    <section id="research-sources-section" className="q-research-inspector__section" data-research-section="sources"><h3 tabIndex={-1}>Источники <span>{sourcesKnown ? sourceList.length : '—'}</span></h3><Status resource={sources} empty={sourcesKnown && !sourceList.length} />
       <ul className="chat-source-cards">{sourceList.map((source) => {
         const url = safeURL(source.canonical_url)
         const unavailable = ['rejected', 'failed'].includes(source.status || '') || !!source.error_code
@@ -165,7 +167,7 @@ export default function ResearchInspector({ resources, events, run, showHeading 
         </li>
       })}</ul>
     </section>
-    <section data-research-section="evidence"><h3 tabIndex={-1}>Evidence <span>{ownedEvidence?.length ?? '—'}</span></h3><Status resource={evidence} empty={ownedEvidence !== undefined && !ownedEvidence.length} />
+    <section id="research-evidence-section" className="q-research-inspector__section" data-research-section="evidence"><h3 tabIndex={-1}>Evidence <span className="q-research-inspector__human-label">Подтверждения</span> <span>{ownedEvidence?.length ?? '—'}</span></h3><Status resource={evidence} empty={ownedEvidence !== undefined && !ownedEvidence.length} />
       <ul className="chat-source-cards">{(ownedEvidence ?? []).map((item) => <li key={item.id}><strong>{item.title || 'Сохранённый источник'}</strong>{safeURL(item.canonical_url) && <small>{new URL(safeURL(item.canonical_url)).hostname}</small>}<p>Сохранённый материал</p><p>{item.excerpt}</p>{safeURL(item.canonical_url) && <a href={safeURL(item.canonical_url)} target="_blank" rel="noopener noreferrer">Открыть источник</a>}<details><summary>Происхождение материала</summary><small>{item.provider} · {item.extraction_method}</small><code>{item.id}</code></details></li>)}</ul>
       <p className="chat-muted">Ссылки подтверждают наличие источника, а не проверку каждого утверждения.</p>
     </section>

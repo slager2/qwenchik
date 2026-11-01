@@ -27,9 +27,15 @@ export default function ResearchOverview({ run, runtime, events, answer, evidenc
   const paused = run.status === 'paused'
   const active = !['completed', 'failed', 'cancelled'].includes(run.status)
   return <section className="research-overview" aria-labelledby={headingID} aria-busy={busy || undefined}>
-    <h2 className="research-overview__heading" id={headingID}>{view.heading}</h2>
+    <div className="q-research-overview__heading-row">
+      <div>
+        <p className="q-research-overview__eyebrow">Исследование</p>
+        <h2 className="research-overview__heading" id={headingID}>{view.heading}</h2>
+      </div>
+      {busy && <span className="q-research-overview__live" role="status">Обновляется</span>}
+    </div>
     {view.state && <p className="research-overview__state">{view.state}</p>}
-    <ul className="research-overview__facts"><li>{view.answerLabel} · {view.reportLabel}</li><li>{view.evidenceLabel}</li></ul>
+    <ul className="research-overview__facts"><li><span className="q-research-overview__fact-label">Ответ и отчёт</span>{view.answerLabel} · {view.reportLabel}</li><li><span className="q-research-overview__fact-label">Материалы</span>{view.evidenceLabel}</li></ul>
     {paused && <p className="research-overview__note" id={noteID}>{resume.explanation}</p>}
     {(view.criticalMissing.length > 0 || view.reportGaps.length > 0 || view.fallback) && <details className="research-overview__note">
       <summary>{view.criticalMissing.length > 0 ? 'Есть критические пробелы' : view.reportGaps.length > 0 ? 'Ограничения отчёта' : 'Сохранены дословные выдержки'}</summary>
@@ -39,11 +45,11 @@ export default function ResearchOverview({ run, runtime, events, answer, evidenc
       <p>Полные сведения доступны в деталях исследования.</p>
     </details>}
     <div className="research-overview__actions">
-      {answer?.run_id === run.id && !!answer.content.trim() && onReadAnswer && <button type="button" onClick={onReadAnswer}>Читать ответ</button>}
-      {paused && onResume && <button type="button" disabled={busy || !resume.allowed} aria-describedby={noteID} onClick={onResume}>Возобновить</button>}
-      {['planning', 'running', 'verifying'].includes(run.status) && onPause && <button type="button" disabled={busy} onClick={onPause}>Пауза</button>}
-      {active && onStop && <button type="button" disabled={busy} onClick={onStop}>Остановить</button>}
-      <button type="button" onClick={onDetails}>План и источники</button>
+      {answer?.run_id === run.id && !!answer.content.trim() && onReadAnswer && <button type="button" className="ui-button ui-button--primary" onClick={onReadAnswer}>Читать ответ</button>}
+      {paused && onResume && <button type="button" aria-describedby={noteID} disabled={busy || !resume.allowed} onClick={onResume}>Возобновить</button>}
+      {['planning', 'running', 'verifying'].includes(run.status) && onPause && <button type="button" className="ui-button" disabled={busy} onClick={onPause}>Пауза</button>}
+      {active && onStop && <button type="button" className="ui-button ui-button--danger" disabled={busy} onClick={onStop}>Остановить</button>}
+      <button type="button" className="ui-button" onClick={onDetails}>План и источники</button>
     </div>
   </section>
 }
