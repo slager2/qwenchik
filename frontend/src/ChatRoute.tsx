@@ -8,6 +8,7 @@ import ChatTranscript from './ChatTranscript'
 import { applyRunEvent, canUseResearchContext, citationReferences, explicitResearchContextReferences, createStreamState, mergeMessages, mergeRunEventHistory, normalizeSources, terminal, type StreamState } from './conversation-state.mjs'
 import ResearchInspector from './ResearchInspector'
 import ResearchOverview from './ResearchOverview'
+import AppShell from './AppShell'
 import { conversationSetup, defaultSetup, settingsPatch, setupProblem } from './research-settings.mjs'
 import FailureDetails from './FailureDetails'
 import { publicResearchEvents } from './research-state.mjs'
@@ -118,7 +119,7 @@ export default function ChatRoute() {
     setSidebar(false)
   }
   const navigation = <ChatSidebar conversations={conversations.data ?? []} error={conversations.error} loading={conversations.loading} selected={selected} onSelect={select} onNew={() => select('')} onRetry={() => void conversations.reload('manual_retry')} />
-  return <div className="conversation-shell"><aside className="chat-sidebar" aria-label="Навигация по чатам">{navigation}</aside><ConversationView key={selected || `new-${newVersion}`} id={selected} onSelect={select} onChanged={conversations.reload} onSidebar={() => setSidebar(true)} />{sidebar && <Drawer title="Разговоры" onClose={() => setSidebar(false)}>{navigation}</Drawer>}</div>
+  return <AppShell activeSection="chat" sidebar={navigation} onNewChat={() => select('')}><div className="conversation-shell"><ConversationView key={selected || `new-${newVersion}`} id={selected} onSelect={select} onChanged={conversations.reload} onSidebar={() => setSidebar(true)} />{sidebar && <Drawer title="Разговоры" onClose={() => setSidebar(false)}>{navigation}</Drawer>}</div></AppShell>
 }
 
 interface Transcript { messages: ConversationMessage[]; stream: StreamState }
