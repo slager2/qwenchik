@@ -23,7 +23,7 @@ export default function ChatSidebar({ conversations, error, loading, selected, o
     const label = time === undefined || !Number.isFinite(time) ? 'Без даты' : time >= today ? 'Сегодня' : time >= yesterday ? 'Вчера' : date!.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
     groups.set(label, [...(groups.get(label) || []), item])
   }
-  return <>
+  return <aside className="chat-sidebar">
     <a className="chat-wordmark" href="#/chat" aria-label="Qwenchik — новый чат" onClick={(event) => { event.preventDefault(); onNew() }}><span className="chat-wordmark-mark" aria-hidden="true">Q</span><span>Qwenchik</span></a>
     <button className="chat-new" type="button" onClick={onNew}>+ Новый чат</button>
     <label className="chat-search">Найти разговор<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="По названию" /></label>
@@ -35,5 +35,5 @@ export default function ChatSidebar({ conversations, error, loading, selected, o
     <a className="chat-spaces-link" href="#/spaces"><span aria-hidden="true">◈</span><span><strong>Проекты</strong><small>Сохранённый контекст</small></span></a>
     <a className="chat-workspace-link" href="#/workspace" aria-label="Рабочее пространство">Задачи</a>
     <p className="chat-sidebar-note">Задачи, подтверждения и память</p>
-  </>
+  </aside>
 }

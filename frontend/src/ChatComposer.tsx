@@ -44,19 +44,12 @@ export default function ChatComposer({
     <form className="chat-composer" onSubmit={onSend}>
       <div className="chat-composer-heading">
         <label htmlFor="conversation-input">{mode === 'research' ? 'Задача исследования' : 'Сообщение'}</label>
-        <span className="chat-privacy-chip" title="Настройки приватности определяются локальной конфигурацией"><span aria-hidden="true" className="chat-privacy-dot" />{privacyLabel}</span>
+        <span className="chat-privacy-chip" aria-label="Режим приватности определяется локальной конфигурацией"><span aria-hidden="true" className="chat-privacy-dot" />{privacyLabel}</span>
       </div>
       <textarea id="conversation-input" rows={3} value={text} maxLength={20000} aria-describedby="conversation-input-help" placeholder={mode === 'research' ? 'Что нужно исследовать?' : 'Напишите сообщение…'} onChange={(event) => onTextChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} />
       <p id="conversation-input-help" className="chat-composer-hint">Enter — отправить · Shift+Enter — новая строка</p>
       <div className="chat-composer-controls">
-        <div className="chat-mode-control">
-          <span className="chat-mode-label" id="chat-mode-label">Режим</span>
-          <div className="chat-mode-switch" role="group" aria-labelledby="chat-mode-label">
-            <button className={mode === 'chat' ? 'is-selected' : ''} type="button" aria-pressed={mode === 'chat'} disabled={busy || active} onClick={() => onModeChange('chat')}>Chat</button>
-            <button className={mode === 'research' ? 'is-selected' : ''} type="button" aria-pressed={mode === 'research'} disabled={busy || active} onClick={() => onModeChange('research')}>Исследование</button>
-          </div>
-          <label className="chat-mode-fallback">Режим разговора<select aria-label="Режим разговора" value={mode} disabled={busy || active} onChange={(event) => onModeChange(event.target.value as ConversationMode)}><option value="chat">Chat</option><option value="research">Исследование</option></select></label>
-        </div>
+        <label className="chat-mode-control">Режим разговора<select aria-label="Режим разговора" value={mode} disabled={busy || active} onChange={(event) => onModeChange(event.target.value as ConversationMode)}><option value="chat">Чат</option><option value="research">Исследование</option></select></label>
         {active ? <button className="chat-primary" type="button" disabled={busy || !run} onClick={onStop}>{busy ? 'Останавливаем…' : 'Остановить'}</button> : <button className="chat-primary" type="submit" disabled={busy || !text.trim()}>{busy ? 'Отправляем…' : 'Отправить'}</button>}
       </div>
       <div className={`chat-token-meter${tokenWarning ? ' is-warning' : ''}`} role="status">

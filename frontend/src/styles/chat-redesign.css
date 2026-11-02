@@ -324,6 +324,38 @@
   font-size: var(--text-xs);
 }
 
+/* The shared shell owns branding and global navigation. Keep this route rail
+ * focused on conversation history and give the drawer a full-width history. */
+.chat-drawer .chat-sidebar {
+  width: 100%;
+  flex-basis: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* Keep a single, native-select mode control. The select remains the stable
+ * keyboard and browser-test contract while avoiding two competing controls. */
+.conversation-shell .chat-mode-control {
+  min-height: var(--size-control);
+  color: var(--color-readable);
+  font-size: var(--text-xs);
+}
+
+.conversation-shell .chat-mode-control select {
+  min-width: 9.25rem;
+  max-width: 14rem;
+}
+
+.chat-composer-note:empty { display: none; }
+
+/* Desktop keeps one scroll surface for the transcript; mobile lets the whole
+ * conversation move naturally so the composer never gets trapped below it. */
+.conversation-shell .chat-center { overflow: hidden; }
+.conversation-shell .chat-transcript { min-height: clamp(12rem, 35dvh, 24rem); }
+.conversation-shell .chat-empty { min-height: 0; padding-block: clamp(var(--space-md), 5vh, var(--space-section)); }
+
 @media (max-width: 48rem) {
   .conversation-shell .chat-composer-heading {
     padding-inline: var(--space-sm);
@@ -367,6 +399,16 @@
     max-width: none;
   }
 
+  .conversation-shell .chat-mode-control {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .conversation-shell .chat-mode-control select {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+
   .conversation-shell .chat-primary {
     width: 100%;
   }
@@ -385,6 +427,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  .conversation-shell .chat-center { overflow-y: auto; }
+  .conversation-shell .chat-transcript { overflow: visible; }
 }
 
 @media (prefers-reduced-motion: reduce) {
