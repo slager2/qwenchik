@@ -51,7 +51,7 @@ function readTextScale(): TextScale {
 
 function Navigation({ activeSection, onNavigate }: { activeSection?: AppSection; onNavigate?: () => void }) {
   return <nav className="q-app-shell__nav" aria-label="Основная навигация">
-    {navigation.map((item) => <a key={item.id} className="q-app-shell__nav-link" data-active={item.id === activeSection || undefined} href={item.href} aria-label={item.id === 'chat' ? 'Открыть чаты' : undefined} aria-current={item.id === activeSection ? 'page' : undefined} onClick={onNavigate}>
+    {navigation.map((item) => <a key={item.id} className="q-app-shell__nav-link" data-active={item.id === activeSection || undefined} href={item.href} aria-label={item.id === 'chat' ? 'Открыть чаты' : item.id === 'tasks' ? 'Рабочее пространство' : undefined} aria-current={item.id === activeSection ? 'page' : undefined} onClick={onNavigate}>
       <Icon name={item.icon} /><span>{item.label}</span>
     </a>)}
   </nav>
