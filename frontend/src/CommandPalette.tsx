@@ -41,7 +41,12 @@ export default function CommandPalette({ actions, onFocusComposer }: CommandPale
       }
     }
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    const onOpenRequest = () => setOpen(true)
+    window.addEventListener('qwenchik:open-command-palette', onOpenRequest)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('qwenchik:open-command-palette', onOpenRequest)
+    }
   }, [onFocusComposer])
 
   useEffect(() => {

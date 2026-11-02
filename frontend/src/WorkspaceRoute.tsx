@@ -582,7 +582,7 @@ export default function WorkspaceRoute() {
   const apiReady = health?.status === 'ok' && health.database === 'ok' && health.worker === 'attached'
 
   return (
-    <AppShell activeSection="tasks" onMemory={() => setMemoryOpen(true)}>
+    <AppShell activeSection="tasks" commandPalette={false} onMemory={() => setMemoryOpen(true)}>
     <div className="app-shell">
       <aside className="rail" aria-label="Основная навигация">
         <a className="brand" href="#/workspace" aria-label="Qwenchik, доска задач">

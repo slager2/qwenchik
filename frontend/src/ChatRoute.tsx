@@ -119,7 +119,8 @@ export default function ChatRoute() {
     setSidebar(false)
   }
   const navigation = <ChatSidebar conversations={conversations.data ?? []} error={conversations.error} loading={conversations.loading} selected={selected} onSelect={select} onNew={() => select('')} onRetry={() => void conversations.reload('manual_retry')} />
-  return <AppShell activeSection="chat" sidebar={navigation} onNewChat={() => select('')}><div className="conversation-shell"><ConversationView key={selected || `new-${newVersion}`} id={selected} onSelect={select} onChanged={conversations.reload} onSidebar={() => setSidebar(true)} />{sidebar && <Drawer title="Разговоры" onClose={() => setSidebar(false)}>{navigation}</Drawer>}</div></AppShell>
+  const focusComposer = useCallback(() => document.getElementById('conversation-input')?.focus(), [])
+  return <AppShell activeSection="chat" sidebar={navigation} onNewChat={() => select('')} composerFocus={focusComposer}><div className="conversation-shell"><ConversationView key={selected || `new-${newVersion}`} id={selected} onSelect={select} onChanged={conversations.reload} onSidebar={() => setSidebar(true)} />{sidebar && <Drawer title="Разговоры" onClose={() => setSidebar(false)}>{navigation}</Drawer>}</div></AppShell>
 }
 
 interface Transcript { messages: ConversationMessage[]; stream: StreamState }
