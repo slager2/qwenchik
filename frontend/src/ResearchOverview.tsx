@@ -35,7 +35,7 @@ export default function ResearchOverview({ run, runtime, events, answer, evidenc
       {busy && <span className="q-research-overview__live" role="status">Обновляется</span>}
     </div>
     {view.state && <p className="research-overview__state">{view.state}</p>}
-    <ul className="research-overview__facts"><li><span className="q-research-overview__fact-label">Ответ и отчёт</span>{view.answerLabel} · {view.reportLabel}</li><li><span className="q-research-overview__fact-label">Материалы</span>{view.evidenceLabel}</li></ul>
+    <ul className="research-overview__facts"><li><span className="q-research-overview__fact-label">Ответ и отчёт</span>{view.answerLabel} · {view.reportLabel}</li><li><span className="q-research-overview__fact-label">{view.evidenceLabel}</span></li></ul>
     {paused && <p className="research-overview__note" id={noteID}>{resume.explanation}</p>}
     {(view.criticalMissing.length > 0 || view.reportGaps.length > 0 || view.fallback) && <details className="research-overview__note">
       <summary>{view.criticalMissing.length > 0 ? 'Есть критические пробелы' : view.reportGaps.length > 0 ? 'Ограничения отчёта' : 'Сохранены дословные выдержки'}</summary>

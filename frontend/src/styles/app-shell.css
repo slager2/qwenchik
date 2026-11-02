@@ -17,10 +17,16 @@
 .q-app-shell__nav-link:hover, .q-app-shell__status:hover { background: var(--color-paper-muted); color: var(--color-ink); }
 .q-app-shell__nav-link[data-active] { background: var(--color-accent-soft); color: var(--color-accent-dark); font-weight: 600; }
 .q-app-shell__nav-link svg { width: 1.25rem; height: 1.25rem; flex: 0 0 auto; }
-.q-app-shell__route-sidebar { min-width: 0; overflow: auto; border-top: 1px solid var(--color-rule); padding-top: var(--space-3); }
+.q-app-shell__route-sidebar { min-width: 0; min-height: 0; flex: 1 1 auto; overflow: auto; border-top: 1px solid var(--color-rule); padding-top: var(--space-3); }
 .q-app-shell__route-sidebar .chat-sidebar { width: 100%; min-height: 0; padding: 0; border: 0; background: transparent; }
 .q-app-shell__route-sidebar .chat-sidebar .chat-wordmark, .q-app-shell__route-sidebar .chat-sidebar .chat-new { display: none; }
+.q-app-shell__route-sidebar .spaces-nav { min-width: 0; padding: 0; border: 0; background: transparent; }
+.q-app-shell__route-sidebar .spaces-nav h1 { margin-top: var(--space-1); font-size: var(--text-heading-sm); }
+.q-app-shell__route-sidebar .spaces-nav-copy { margin-block: var(--space-3) var(--space-4); }
+.q-app-shell__route-sidebar .spaces-nav nav { max-height: min(38dvh, 24rem); overflow: auto; }
+.q-app-shell__route-sidebar .spaces-nav nav a { min-height: var(--size-control); }
 .q-app-shell__content > .conversation-shell { height: calc(100dvh - 4rem); }
+.q-app-shell__content > .spaces-shell { min-height: calc(100dvh - 4rem); }
 .q-app-shell__sidebar-bottom { display: grid; gap: var(--space-1); margin-top: auto; border-top: 1px solid var(--color-rule); padding-top: var(--space-3); }
 .q-status-dot { width: .625rem; height: .625rem; flex: 0 0 auto; border-radius: 50%; background: var(--color-success); }
 .q-app-shell[data-collapsed] .q-app-shell__brand > span, .q-app-shell[data-collapsed] .q-app-shell__new-chat > span, .q-app-shell[data-collapsed] .q-app-shell__nav-link > span, .q-app-shell[data-collapsed] .q-app-shell__status > span:last-child, .q-app-shell[data-collapsed] .q-app-shell__route-sidebar { display: none; }
@@ -36,6 +42,11 @@
 .q-command-trigger svg { width: 1rem; height: 1rem; }
 .q-command-trigger kbd, .q-command-palette kbd { min-width: 1.5rem; padding: .125rem .25rem; border: 1px solid var(--color-rule); border-radius: .25rem; background: var(--color-paper-muted); color: var(--color-muted); font: 500 var(--text-xs)/1 var(--font-mono); text-align: center; }
 .q-app-shell__mobile-bar, .q-app-shell__mobile-dialog { display: none; }
+.q-app-shell__mobile-route-sidebar { margin: var(--space-2) var(--space-3) var(--space-3); border-top: 1px solid var(--color-rule); padding-top: var(--space-3); }
+.q-app-shell__mobile-route-sidebar .spaces-nav { padding: 0; border: 0; background: transparent; }
+.q-app-shell__mobile-route-sidebar .spaces-nav h1 { margin-top: var(--space-1); font-size: var(--text-heading-sm); }
+.q-app-shell__mobile-route-sidebar .spaces-nav-copy { margin-block: var(--space-3); }
+.q-app-shell__mobile-route-sidebar .spaces-nav nav { max-height: 14rem; overflow: auto; }
 .q-command-palette, .q-app-shell__status-dialog { width: min(31rem, calc(100vw - 2rem)); padding: 0; border: 1px solid var(--color-rule-strong); border-radius: var(--radius-card); background: var(--color-paper-raised); color: var(--color-ink); box-shadow: 0 1.5rem 4rem var(--color-shadow); }
 .q-command-palette::backdrop, .q-app-shell__status-dialog::backdrop, .q-app-shell__mobile-dialog::backdrop { background: var(--color-overlay); }
 .q-command-palette__header, .q-app-shell__status-dialog header, .q-app-shell__mobile-dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: var(--space-5); border-bottom: 1px solid var(--color-rule); }
@@ -51,10 +62,14 @@
 @media (max-width: 48rem) {
   .q-app-shell, .q-app-shell[data-collapsed] { display: block; }
   .q-app-shell__sidebar, .q-app-shell__desktop-tools { display: none; }
+  .q-app-shell__content > .app-shell .rail { display: grid; }
+  .q-app-shell__content > .app-shell .workspace { width: 100%; margin-left: 0; }
+  .q-app-shell__content > .spaces-shell { min-height: calc(100dvh - 4rem); }
   .q-app-shell__mobile-bar { display: flex; min-height: 4rem; align-items: center; justify-content: space-between; gap: var(--space-2); padding-inline: var(--space-3); border-bottom: 1px solid var(--color-rule); background: var(--color-paper-raised); }
   .q-app-shell__mobile-brand { margin-right: auto; }
   .q-command-trigger > span { display: none; }
   .q-app-shell__mobile-dialog { width: min(22rem, calc(100vw - 2rem)); margin: auto; padding: 0; border: 1px solid var(--color-rule-strong); border-radius: var(--radius-card); background: var(--color-paper-raised); color: var(--color-ink); }
+  .q-app-shell__mobile-dialog[open] { display: block; max-height: calc(100dvh - 2rem); overflow-y: auto; }
   .q-app-shell__mobile-dialog section { display: grid; gap: var(--space-2); padding-bottom: var(--space-3); }
   .q-app-shell__mobile-dialog .q-app-shell__nav, .q-app-shell__mobile-dialog .q-app-shell__new-chat, .q-app-shell__mobile-dialog .q-app-shell__nav-link { margin-inline: var(--space-3); }
   .q-app-shell__content > .conversation-shell { height: calc(100dvh - 4rem); }

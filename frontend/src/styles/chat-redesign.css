@@ -103,7 +103,7 @@
 }
 
 .conversation-shell .chat-mode-switch button {
-  min-height: 2.25rem;
+  min-height: var(--size-control);
   min-width: 4.25rem;
   padding: 0 var(--space-sm);
   border: 0;
@@ -240,7 +240,7 @@
 }
 
 .conversation-shell .chat-message-actions button {
-  min-height: 2.25rem;
+  min-height: var(--size-control);
   padding-inline: var(--space-sm);
   border-color: transparent;
   background: transparent;

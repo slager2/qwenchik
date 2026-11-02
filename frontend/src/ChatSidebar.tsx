@@ -33,7 +33,7 @@ export default function ChatSidebar({ conversations, error, loading, selected, o
       {!loading && !error && visible.length === 0 && <p className="chat-muted">{query ? 'Разговоры не найдены. Измените запрос.' : 'Разговоров пока нет. Нажмите «Новый чат», чтобы начать.'}</p>}
     </nav>
     <a className="chat-spaces-link" href="#/spaces"><span aria-hidden="true">◈</span><span><strong>Проекты</strong><small>Сохранённый контекст</small></span></a>
-    <a className="chat-workspace-link" href="#/workspace">Задачи</a>
+    <a className="chat-workspace-link" href="#/workspace" aria-label="Рабочее пространство">Задачи</a>
     <p className="chat-sidebar-note">Задачи, подтверждения и память</p>
   </>
 }
