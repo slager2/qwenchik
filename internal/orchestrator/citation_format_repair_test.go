@@ -21,7 +21,7 @@ func TestBundledResearchRepairsCitationFormatOnceBeforeCritic(t *testing.T) {
 			base := integrationResearchModel()
 			streams, critics := 0, 0
 			model := &researchRunModel{respond: func(_ context.Context, request llm.ChatRequest, index int, streaming bool) (string, error) {
-				if index < 6 {
+				if isPlannerRequest(request) || isVerifierRequest(request) {
 					return base.respond(request, index)
 				}
 				if streaming {
