@@ -202,7 +202,9 @@ func openWorkerLockFileRelative(parent windows.Handle, name string, security *wi
 	attributes.Length = uint32(unsafe.Sizeof(attributes))
 	var status windows.IO_STATUS_BLOCK
 	var handle windows.Handle
-	access := uint32(windows.GENERIC_READ | windows.GENERIC_WRITE | windows.READ_CONTROL)
+	// FILE_SYNCHRONOUS_IO_NONALERT requires SYNCHRONIZE in the requested access;
+	// without it NtCreateFile fails with STATUS_INVALID_PARAMETER.
+	access := uint32(windows.GENERIC_READ | windows.GENERIC_WRITE | windows.READ_CONTROL | windows.SYNCHRONIZE)
 	options := uint32(windows.FILE_NON_DIRECTORY_FILE | windows.FILE_OPEN_REPARSE_POINT | windows.FILE_SYNCHRONOUS_IO_NONALERT)
 	err = windows.NtCreateFile(&handle, access, &attributes, &status, nil, windows.FILE_ATTRIBUTE_NORMAL,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, windows.FILE_OPEN_IF, options, 0, 0)
@@ -261,7 +263,7 @@ func verifyWorkerLockFile(handle windows.Handle, userSID *windows.SID) error {
 		return errors.New("worker lock ACL is not current-user-only")
 	}
 	var ace *windows.ACCESS_ALLOWED_ACE
-	if err := windows.GetAce(dacl, 0, &ace); err != nil || ace == nil || ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Header.AceFlags != 0 || ace.Mask != windows.GENERIC_ALL {
+	if err := windows.GetAce(dacl, 0, &ace); err != nil || ace == nil || ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Header.AceFlags != 0 || !fullFileAccess(ace.Mask) {
 		return errors.New("worker lock ACL is not current-user-only")
 	}
 	aceSID := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
@@ -284,3 +286,14 @@ func (l *Lock) Close() error {
 	}
 	return closeErr
 }
+
+// fullFileAccess reports whether an ACE grants full control. The lock file is
+// created with a GENERIC_ALL ACE, which the file system stores mapped to the
+// specific FILE_ALL_ACCESS rights.
+func fullFileAccess(mask windows.ACCESS_MASK) bool {
+	return mask == windows.GENERIC_ALL || mask == fileAllAccess
+}
+
+// fileAllAccess is FILE_ALL_ACCESS (STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0x1FF),
+// which golang.org/x/sys/windows does not export.
+const fileAllAccess windows.ACCESS_MASK = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0x1FF
