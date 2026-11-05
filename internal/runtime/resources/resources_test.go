@@ -322,6 +322,7 @@ func TestHostCPUUsageUsesLockedBaseline(t *testing.T) {
 }
 
 func TestLlamaServerRSSRequiresOneStableExactProcess(t *testing.T) {
+	skipOnWindows(t)
 	tests := []struct {
 		name      string
 		pids      []string
@@ -415,6 +416,7 @@ func TestLlamaServerRSSRequiresOneStableExactProcess(t *testing.T) {
 }
 
 func TestLlamaServerRSSScanIsCachedAndReturnedValuesAreIndependent(t *testing.T) {
+	skipOnWindows(t)
 	pidScans := 0
 	p := &HostProvider{
 		policy: DefaultPolicy(),
@@ -448,6 +450,7 @@ func TestLlamaServerRSSScanIsCachedAndReturnedValuesAreIndependent(t *testing.T)
 }
 
 func TestPowerSourceCachePreservesOriginalSampleTime(t *testing.T) {
+	skipOnWindows(t)
 	calls := 0
 	p := &HostProvider{run: func(context.Context, string, ...string) ([]byte, error) {
 		calls++
@@ -461,6 +464,7 @@ func TestPowerSourceCachePreservesOriginalSampleTime(t *testing.T) {
 }
 
 func TestCPUTemperatureSelectsExplicitCPUOnly(t *testing.T) {
+	skipOnWindows(t)
 	readDirs := map[string][]string{
 		"/sys/class/hwmon":        {"hwmon0"},
 		"/sys/class/hwmon/hwmon0": {"temp1_input", "temp2_input", "temp3_input"},
@@ -574,6 +578,7 @@ func fakeHost(t *testing.T, base string) *HostProvider {
 }
 
 func TestHostHealthLocalOnly(t *testing.T) {
+	skipOnWindows(t)
 	for _, raw := range []string{"https://example.com/v1", "http://192.168.1.1", "http://user:secret@127.0.0.1", "http://127.0.0.1?x=1", "http://127.0.0.1?", "http://127.0.0.1/#fragment", "ftp://127.0.0.1", "http://localhost.evil", "http://127.0.0.1/other", "http://127.0.0.1/%76%31", "http://127.0.0.1:99999"} {
 		if _, err := NewHostProvider(raw, DefaultPolicy()); err == nil {
 			t.Fatalf("accepted %s", raw)
@@ -676,6 +681,7 @@ func TestHealthFailuresAndCancellation(t *testing.T) {
 }
 
 func TestUnknownTelemetryAndPowerCache(t *testing.T) {
+	skipOnWindows(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, `{"status":"ok"}`) }))
 	defer server.Close()
 	p := fakeHost(t, server.URL)
@@ -737,6 +743,7 @@ func TestParentCancelDuringHealth(t *testing.T) {
 }
 
 func TestTelemetryDeadlineAndUnknownOnOptionalFailure(t *testing.T) {
+	skipOnWindows(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `{"status":"ok"}`)
 	}))

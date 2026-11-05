@@ -33,6 +33,7 @@ func TestModelRSSGuardIsSeparateFromAgentRSSAndRequiresRecoveryMargin(t *testing
 }
 
 func TestModelRSSStatsCountOnlyBoundedCollectionWork(t *testing.T) {
+	skipOnWindows(t)
 	p := &HostProvider{
 		policy:   DefaultPolicy(),
 		procPIDs: func(int) ([]string, error) { return []string{"4242"}, nil },

@@ -58,6 +58,7 @@ func (f *fakeRunner) Run(_ context.Context, name string, args []string, stdout, 
 }
 
 func TestDockerSandboxUsesRootlessIsolatedContainer(t *testing.T) {
+	skipOnWindows(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	runner := &fakeRunner{security: ` ["name=seccomp,profile=builtin","name=rootless"] `, image: true, stdout: "ok"}
@@ -97,6 +98,7 @@ func TestSandboxUnavailableNeverRunsCommandOnHost(t *testing.T) {
 }
 
 func TestSandboxDoctorRunsOnlyBoundedIsolatedSmoke(t *testing.T) {
+	skipOnWindows(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	runner := &fakeRunner{security: `["name=rootless"]`, image: true}
@@ -115,6 +117,7 @@ func TestSandboxDoctorRunsOnlyBoundedIsolatedSmoke(t *testing.T) {
 }
 
 func TestSandboxRejectsRemoteDockerEndpoint(t *testing.T) {
+	skipOnWindows(t)
 	t.Setenv("DOCKER_CONTEXT", "")
 	t.Setenv("DOCKER_HOST", "tcp://docker.example:2376")
 	runner := &fakeRunner{security: `["name=rootless"]`, image: true}
@@ -129,6 +132,7 @@ func TestSandboxRejectsRemoteDockerEndpoint(t *testing.T) {
 }
 
 func TestSandboxBoundsOutputAndRejectsInvalidRequests(t *testing.T) {
+	skipOnWindows(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	runner := &fakeRunner{security: `["name=rootless"]`, image: true, stdout: strings.Repeat("x", 128)}
@@ -156,6 +160,7 @@ func TestSandboxBoundsOutputAndRejectsInvalidRequests(t *testing.T) {
 }
 
 func TestWorkspaceCleanupIsTaskScoped(t *testing.T) {
+	skipOnWindows(t)
 	root := filepath.Join(t.TempDir(), "workspaces")
 	runtime, err := New("golang:1.23-alpine", root, &fakeRunner{})
 	if err != nil {
@@ -184,6 +189,7 @@ func TestWorkspaceCleanupIsTaskScoped(t *testing.T) {
 }
 
 func TestSandboxCleansContainerAfterRunnerFailure(t *testing.T) {
+	skipOnWindows(t)
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_CONTEXT", "")
 	runner := &fakeRunner{security: `["name=rootless"]`, image: true, runErr: errors.New("docker client interrupted")}
