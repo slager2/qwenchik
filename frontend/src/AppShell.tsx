@@ -1,30 +1,33 @@
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import CommandPalette from './CommandPalette'
 import { Icon, type IconName } from './icons'
-import './styles/app-shell.css'
+import { cx, Drawer, IconButton } from './ui'
+import './styles/shell.css'
 
 export type AppSection = 'chat' | 'projects' | 'tasks' | 'memory'
 
 type AppShellProps = {
   children: ReactNode
-  /** Optional route-specific content rendered below the shared navigation. */
+  /** Route-specific content rendered below the shared navigation (e.g. conversations). */
   sidebar?: ReactNode
-  /** Optional compact route navigation for the mobile drawer. */
+  /** Route content for the mobile navigation sheet; defaults to `sidebar`. */
   mobileSidebar?: ReactNode
   activeSection?: AppSection
   onNewChat?: () => void
   onMemory?: () => void
   commandPalette?: boolean
   composerFocus?: () => void
+  /** Title of the mobile navigation sheet and the trigger's accessible name. */
+  navigationTitle?: string
+  navigationLabel?: string
 }
 
-type NavItem = { id: AppSection; label: string; href: string; icon: IconName }
+type NavItem = { id: AppSection; label: string; href: string; icon: IconName; aria?: string }
 
 const navigation: NavItem[] = [
-  { id: 'chat', label: 'Чат', href: '#/chat', icon: 'chat' },
+  { id: 'chat', label: 'Чат', href: '#/chat', icon: 'chat', aria: 'Открыть чаты' },
   { id: 'projects', label: 'Проекты', href: '#/spaces', icon: 'projects' },
-  { id: 'tasks', label: 'Задачи', href: '#/workspace', icon: 'tasks' },
-  { id: 'memory', label: 'Память', href: '#/memory', icon: 'memory' },
+  { id: 'tasks', label: 'Задачи', href: '#/workspace', icon: 'tasks', aria: 'Рабочее пространство' },
 ]
 
 const SIDEBAR_KEY = 'qwenchik.sidebar.collapsed'
@@ -49,25 +52,41 @@ function readTextScale(): TextScale {
   try { return window.localStorage.getItem(TEXT_SCALE_KEY) === 'large' ? 'large' : 'default' } catch { return 'default' }
 }
 
-function Navigation({ activeSection, onNavigate }: { activeSection?: AppSection; onNavigate?: () => void }) {
-  return <nav className="q-app-shell__nav" aria-label="Основная навигация">
-    {navigation.map((item) => <a key={item.id} className="q-app-shell__nav-link" data-active={item.id === activeSection || undefined} href={item.href} aria-label={item.id === 'chat' ? 'Открыть чаты' : item.id === 'tasks' ? 'Рабочее пространство' : undefined} aria-current={item.id === activeSection ? 'page' : undefined} onClick={onNavigate}>
+function systemDark() {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches
+}
+
+const ShellContext = createContext<{ openNavigation: () => void; navigationLabel: string }>({ openNavigation: () => {}, navigationLabel: 'Открыть навигацию' })
+
+/** Route top bar. Renders the mobile navigation trigger, a title area and quiet actions. */
+export function TopBar({ title, subtitle, actions, className, children }: { title?: ReactNode; subtitle?: ReactNode; actions?: ReactNode; className?: string; children?: ReactNode }) {
+  const shell = useContext(ShellContext)
+  return <header className={cx('shell-topbar', className)}>
+    <IconButton className="shell-topbar__menu" label={shell.navigationLabel} icon={<Icon name="menu" />} onClick={shell.openNavigation} />
+    <div className="shell-topbar__title">{children ?? <>{title && <h1>{title}</h1>}{subtitle && <p>{subtitle}</p>}</>}</div>
+    {actions && <div className="shell-topbar__actions">{actions}</div>}
+  </header>
+}
+
+function Navigation({ activeSection }: { activeSection?: AppSection }) {
+  return <nav className="shell-nav" aria-label="Основная навигация">
+    {navigation.map((item) => <a key={item.id} className="shell-nav__link" href={item.href} aria-label={item.aria} title={item.label} aria-current={item.id === activeSection ? 'page' : undefined}>
       <Icon name={item.icon} /><span>{item.label}</span>
     </a>)}
   </nav>
 }
 
 /**
- * Shared, presentation-only application frame. It deliberately owns no route, API,
- * SSE, or task state, so existing pages can migrate into it independently.
+ * Application frame: collapsible sidebar, mobile navigation sheet and
+ * appearance preferences. It owns no route, API, SSE or task state.
  */
-export default function AppShell({ children, sidebar, mobileSidebar, activeSection, onNewChat, onMemory, commandPalette = true, composerFocus }: AppShellProps) {
+export default function AppShell({ children, sidebar, mobileSidebar, activeSection, onNewChat, onMemory, commandPalette = true, composerFocus, navigationTitle = 'Навигация', navigationLabel = 'Открыть навигацию' }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [theme, setTheme] = useState<Theme>(readTheme)
   const [textScale, setTextScale] = useState<TextScale>(readTextScale)
-  const mobileDialogRef = useRef<HTMLDialogElement>(null)
-  const statusDialogRef = useRef<HTMLDialogElement>(null)
-  const mobileDialogTitle = useId()
+  const [navOpen, setNavOpen] = useState(false)
+  const preferencesRef = useRef<HTMLDialogElement>(null)
+  const preferencesTitle = useId()
 
   useEffect(() => {
     try { window.localStorage.setItem(SIDEBAR_KEY, String(collapsed)) } catch { /* Private mode can deny storage. */ }
@@ -83,38 +102,65 @@ export default function AppShell({ children, sidebar, mobileSidebar, activeSecti
     try { window.localStorage.setItem(TEXT_SCALE_KEY, textScale) } catch { /* Private mode can deny storage. */ }
   }, [textScale])
 
-  const openDialog = (dialog: HTMLDialogElement | null) => { if (dialog && !dialog.open) dialog.showModal() }
-  const closeMobileNavigation = () => mobileDialogRef.current?.close()
-  const toggleTheme = () => setTheme((value) => value === 'dark' ? 'light' : 'dark')
-  const themeLabel = theme === 'dark' ? 'Тёмная тема' : theme === 'light' ? 'Светлая тема' : 'Тема: системная'
+  useEffect(() => {
+    const close = () => setNavOpen(false)
+    window.addEventListener('hashchange', close)
+    return () => window.removeEventListener('hashchange', close)
+  }, [])
 
-  return <div className="q-app-shell" data-collapsed={collapsed || undefined}>
-    <aside className="q-app-shell__sidebar" aria-label="Qwenchik">
-      <div className="q-app-shell__sidebar-top">
-        <a className="q-app-shell__brand" href="#/chat" aria-label="Qwenchik, открыть чат"><Icon name="brand" /><span>Qwenchik</span></a>
-        <button className="q-icon-button q-app-shell__collapse" type="button" onClick={() => setCollapsed((value) => !value)} aria-label={collapsed ? 'Развернуть боковую панель' : 'Свернуть боковую панель'} aria-pressed={collapsed}><Icon name="panel-left" /></button>
-      </div>
-      {onNewChat && <button className="q-app-shell__new-chat" type="button" onClick={onNewChat}><Icon name="plus" /><span>Новый чат</span></button>}
-      <Navigation activeSection={activeSection} />
-      {sidebar && <div className="q-app-shell__route-sidebar">{sidebar}</div>}
-      <div className="q-app-shell__sidebar-bottom">
-        <button className="q-app-shell__status" type="button" onClick={() => openDialog(statusDialogRef.current)}><span className="q-status-dot" aria-hidden="true" /><span>Статус системы</span></button>
-        <button className="q-app-shell__status q-app-shell__theme-toggle" type="button" onClick={toggleTheme} aria-label="Переключить светлую и тёмную тему"><span className="q-theme-glyph" aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span>{themeLabel}</span></button>
-        {onMemory && <button className="q-app-shell__status" type="button" onClick={onMemory}><Icon name="memory" /><span>Память</span></button>}
-        <a className="q-app-shell__nav-link" href="#/settings"><Icon name="settings" /><span>Настройки</span></a>
-      </div>
-    </aside>
-    <header className="q-app-shell__mobile-bar">
-      <button className="q-icon-button" type="button" onClick={() => openDialog(mobileDialogRef.current)} aria-label="Открыть навигацию"><Icon name="menu" /></button>
-      <a className="q-app-shell__mobile-brand" href="#/chat"><Icon name="brand" /><span>Qwenchik</span></a>
-      {commandPalette && <button className="q-command-trigger" type="button" onClick={() => window.dispatchEvent(new Event('qwenchik:open-command-palette'))} aria-label="Открыть командную палитру"><Icon name="search" /><span>Команды</span><kbd>⌘K</kbd></button>}
-    </header>
-    <div className="q-app-shell__content"><div className="q-app-shell__desktop-tools">{commandPalette && <CommandPalette onFocusComposer={composerFocus} />}</div>{children}</div>
-    <dialog ref={mobileDialogRef} className="q-app-shell__mobile-dialog" aria-labelledby={mobileDialogTitle} onClick={(event) => { const target = event.target as HTMLElement; if (event.target === event.currentTarget || (target.closest('a,button') && !target.closest('.q-icon-button'))) closeMobileNavigation() }}>
-      <section><header><div><p className="q-dialog-eyebrow">Навигация</p><h2 id={mobileDialogTitle}>Qwenchik</h2></div><button className="q-icon-button" type="button" onClick={closeMobileNavigation} aria-label="Закрыть навигацию"><Icon name="close" /></button></header><Navigation activeSection={activeSection} onNavigate={closeMobileNavigation} />{onNewChat && <button className="q-app-shell__new-chat" type="button" onClick={() => { onNewChat(); closeMobileNavigation() }}><Icon name="plus" />Новый чат</button>}<button className="q-app-shell__status q-app-shell__theme-toggle" type="button" onClick={() => { toggleTheme(); closeMobileNavigation() }} aria-label="Переключить светлую и тёмную тему"><span className="q-theme-glyph" aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span>{themeLabel}</span></button>{onMemory && <button className="q-app-shell__status" type="button" onClick={() => { onMemory(); closeMobileNavigation() }}><Icon name="memory" /><span>Память</span></button>}{mobileSidebar && <div className="q-app-shell__mobile-route-sidebar">{mobileSidebar}</div>}<a className="q-app-shell__nav-link" href="#/settings" onClick={closeMobileNavigation}><Icon name="settings" /><span>Настройки</span></a></section>
-    </dialog>
-    <dialog ref={statusDialogRef} className="q-app-shell__status-dialog" aria-labelledby="q-status-dialog-title" onClick={(event) => { if (event.target === event.currentTarget) statusDialogRef.current?.close() }}>
-      <section><header><div><p className="q-dialog-eyebrow">Локальная среда</p><h2 id="q-status-dialog-title">Статус системы</h2></div><button className="q-icon-button" type="button" onClick={() => statusDialogRef.current?.close()} aria-label="Закрыть статус"><Icon name="close" /></button></header><p>Подключите данные сервиса на уровне маршрута. Оболочка не делает сетевых запросов и не меняет состояние задач.</p><div className="q-shell-preferences"><fieldset><legend>Тема</legend><div className="q-shell-preference-group" role="group" aria-label="Тема оформления"><button className="q-shell-preference-button" type="button" aria-pressed={theme === 'system'} onClick={() => setTheme('system')}>Системная</button><button className="q-shell-preference-button" type="button" aria-pressed={theme === 'light'} onClick={() => setTheme('light')}>Светлая</button><button className="q-shell-preference-button" type="button" aria-pressed={theme === 'dark'} onClick={() => setTheme('dark')}>Тёмная</button></div></fieldset><fieldset><legend>Размер текста</legend><div className="q-shell-preference-group" role="group" aria-label="Размер текста"><button className="q-shell-preference-button" type="button" aria-pressed={textScale === 'default'} onClick={() => setTextScale('default')}>Обычный</button><button className="q-shell-preference-button" type="button" aria-pressed={textScale === 'large'} onClick={() => setTextScale('large')}>Увеличенный</button></div></fieldset></div></section>
-    </dialog>
+  const openNavigation = useCallback(() => setNavOpen(true), [])
+  const dark = theme === 'dark' || (theme === 'system' && systemDark())
+  const toggleTheme = () => setTheme(dark ? 'light' : 'dark')
+  const themeLabel = dark ? 'Светлая тема' : 'Тёмная тема'
+  const openPreferences = () => { const dialog = preferencesRef.current; if (dialog && !dialog.open) dialog.showModal() }
+  const closeOnNavigate = (event: MouseEvent) => { if ((event.target as HTMLElement).closest('a[href], [data-close-navigation]')) setNavOpen(false) }
+
+  const newChat = onNewChat
+    ? <button className="shell-nav__link shell-new-chat" type="button" onClick={onNewChat} title="Новый чат" data-close-navigation><Icon name="edit" /><span>Новый чат</span></button>
+    : <a className="shell-nav__link shell-new-chat" href="#/chat" title="Новый чат"><Icon name="edit" /><span>Новый чат</span></a>
+
+  const footer = <div className="shell-sidebar__footer">
+    {commandPalette && <button className="shell-nav__link" type="button" title="Команды" onClick={() => window.dispatchEvent(new Event('qwenchik:open-command-palette'))} data-close-navigation><Icon name="search" /><span>Команды</span><kbd className="ui-kbd">⌘K</kbd></button>}
+    {onMemory && <button className="shell-nav__link" type="button" title="Память" onClick={onMemory} data-close-navigation><Icon name="memory" /><span>Память</span></button>}
+    <button className="shell-nav__link" type="button" onClick={toggleTheme} aria-label="Переключить светлую и тёмную тему" title={themeLabel}><Icon name={dark ? 'sun' : 'moon'} /><span>{themeLabel}</span></button>
+    <button className="shell-nav__link" type="button" onClick={openPreferences} title="Настройки" data-close-navigation><Icon name="settings" /><span>Настройки</span></button>
   </div>
+
+  return <ShellContext.Provider value={{ openNavigation, navigationLabel }}>
+    <div className="shell" data-collapsed={collapsed || undefined}>
+      <aside className="shell-sidebar" aria-label="Qwenchik">
+        <div className="shell-sidebar__top">
+          <a className="shell-brand" href="#/chat" aria-label="Qwenchik, открыть чат"><span className="shell-brand__mark" aria-hidden="true">Q</span><span>Qwenchik</span></a>
+          <IconButton className="shell-sidebar__collapse" label={collapsed ? 'Развернуть боковую панель' : 'Свернуть боковую панель'} aria-pressed={collapsed} icon={<Icon name="panel-left" />} onClick={() => setCollapsed((value) => !value)} />
+        </div>
+        <div className="shell-sidebar__primary">{newChat}<Navigation activeSection={activeSection} /></div>
+        {sidebar && <div className="shell-sidebar__route">{sidebar}</div>}
+        {footer}
+      </aside>
+      <div className="shell-main">
+        {commandPalette && <CommandPalette onFocusComposer={composerFocus} />}
+        {children}
+      </div>
+      {navOpen && <Drawer title={navigationTitle} side="left" className="shell-drawer" onClose={() => setNavOpen(false)}>
+        <div className="shell-drawer__content" onClick={closeOnNavigate}>
+          <div className="shell-sidebar__primary">{newChat}<Navigation activeSection={activeSection} /></div>
+          {(mobileSidebar ?? sidebar) && <div className="shell-sidebar__route">{mobileSidebar ?? sidebar}</div>}
+          {footer}
+        </div>
+      </Drawer>}
+      <dialog ref={preferencesRef} className="shell-preferences" aria-labelledby={preferencesTitle} onClick={(event) => { if (event.target === event.currentTarget) preferencesRef.current?.close() }}>
+        <section>
+          <header><h2 id={preferencesTitle}>Настройки</h2><IconButton label="Закрыть настройки" icon={<Icon name="close" />} onClick={() => preferencesRef.current?.close()} /></header>
+          <fieldset><legend>Тема</legend><div className="shell-segmented" role="group" aria-label="Тема оформления">
+            {(['system', 'light', 'dark'] as Theme[]).map((value) => <button key={value} type="button" aria-pressed={theme === value} onClick={() => setTheme(value)}>{value === 'system' ? 'Системная' : value === 'light' ? 'Светлая' : 'Тёмная'}</button>)}
+          </div></fieldset>
+          <fieldset><legend>Размер текста</legend><div className="shell-segmented" role="group" aria-label="Размер текста">
+            <button type="button" aria-pressed={textScale === 'default'} onClick={() => setTextScale('default')}>Обычный</button>
+            <button type="button" aria-pressed={textScale === 'large'} onClick={() => setTextScale('large')}>Увеличенный</button>
+          </div></fieldset>
+          <p className="ui-muted">Настройки оформления хранятся только в этом браузере.</p>
+        </section>
+      </dialog>
+    </div>
+  </ShellContext.Provider>
 }

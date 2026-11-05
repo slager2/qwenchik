@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './icons'
+import { IconButton } from './ui'
 
 export type CommandPaletteAction = {
   id: string
@@ -63,15 +64,12 @@ export default function CommandPalette({ actions, onFocusComposer }: CommandPale
   }
 
   return <>
-    <button className="q-command-trigger" type="button" onClick={() => setOpen(true)} aria-label="Открыть командную палитру">
-      <Icon name="search" /><span>Команды</span><kbd>⌘K</kbd>
-    </button>
     <dialog ref={dialogRef} className="q-command-palette" aria-labelledby="q-command-palette-title" onClose={close} onClick={(event) => { if (event.target === event.currentTarget) close() }}>
-      <header className="q-command-palette__header"><div><p className="q-command-palette__eyebrow">Быстрые действия</p><h2 id="q-command-palette-title">Командная палитра</h2></div><button type="button" className="q-icon-button" onClick={close} aria-label="Закрыть командную палитру"><Icon name="close" /></button></header>
+      <header className="q-command-palette__header"><h2 id="q-command-palette-title">Команды</h2><IconButton label="Закрыть командную палитру" icon={<Icon name="close" />} onClick={close} /></header>
       <div className="q-command-palette__list" role="list">
         {commands.map((action) => action.href
-          ? <a key={action.id} className="q-command-palette__action" href={action.href} role="listitem" onClick={() => select(action)}><span><strong>{action.label}</strong>{action.hint && <small>{action.hint}</small>}</span>{action.shortcut && <kbd>{action.shortcut}</kbd>}</a>
-          : <button key={action.id} className="q-command-palette__action" type="button" role="listitem" onClick={() => select(action)}><span><strong>{action.label}</strong>{action.hint && <small>{action.hint}</small>}</span>{action.shortcut && <kbd>{action.shortcut}</kbd>}</button>,
+          ? <a key={action.id} className="q-command-palette__action" href={action.href} role="listitem" onClick={() => select(action)}><span><strong>{action.label}</strong>{action.hint && <small>{action.hint}</small>}</span>{action.shortcut && <kbd className="ui-kbd">{action.shortcut}</kbd>}</a>
+          : <button key={action.id} className="q-command-palette__action" type="button" role="listitem" onClick={() => select(action)}><span><strong>{action.label}</strong>{action.hint && <small>{action.hint}</small>}</span>{action.shortcut && <kbd className="ui-kbd">{action.shortcut}</kbd>}</button>,
         )}
       </div>
     </dialog>
