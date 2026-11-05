@@ -54,8 +54,8 @@ func TestCompletionGovernorRunsBoundedTargetedContinuation(t *testing.T) {
 					}
 					return "", errors.New("injected partial finalizer failure")
 				}
-				if index < 5 {
-					return base.respond(request, index)
+				if isPlannerRequest(request) {
+					return base.respond(request, 0)
 				}
 				var input struct {
 					Catalog   []verificationCriterion    `json:"criterion_catalog"`
