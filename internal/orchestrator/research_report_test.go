@@ -47,7 +47,7 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 	t.Helper()
 	base := integrationResearchModel()
 	return &researchRunModel{respond: func(_ context.Context, request llm.ChatRequest, index int, _ bool) (string, error) {
-		if index < 6 {
+		if isPlannerRequest(request) || isVerifierRequest(request) {
 			return base.respond(request, index)
 		}
 		if request.Model != "saved-local-model" || request.BaseURL != "http://127.0.0.1:8001/v1" {
@@ -150,12 +150,16 @@ func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
 			if state.Report == nil || state.Report.ArtifactID == "" || state.Report.MarkdownArtifactID == "" || len(state.Report.Sections) != 2 {
 				t.Fatalf("report artifacts/state missing: %+v", state.Report)
 			}
-			for _, section := range state.Report.Sections {
+			for index, section := range state.Report.Sections {
 				want := "supported"
 				if mode == "fallback" || (mode == "coverage_gap" && len(section.Criteria) > 0) {
 					want = "fallback_excerpts"
 				}
-				if section.Status != want || ((mode == "correction" || mode == "fallback") && !section.CorrectionUsed) {
+				// After the first section fails the same content check twice
+				// (draft + correction), the report circuit breaker skips further
+				// model calls and later sections fall back directly.
+				corrected := section.CorrectionUsed || (mode == "fallback" && index > 0 && section.Limitation == "report_circuit_breaker")
+				if section.Status != want || ((mode == "correction" || mode == "fallback") && !corrected) {
 					t.Fatalf("section validation/correction failed: %+v", section)
 				}
 			}
@@ -185,7 +189,8 @@ func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
 			if search.calls.Load() != 2 || fetcher.calls.Load() != 2 {
 				t.Fatal("report restart repeated discovery/fetch")
 			}
-			if (mode == "valid" || mode == "artifact_recovery") && len(model.calls()) != 11 {
+			// planner + verifier + outline + two sections + two section critics.
+			if (mode == "valid" || mode == "artifact_recovery") && len(model.calls()) != 7 {
 				t.Fatalf("completed report calls replayed after reopen: count=%d", len(model.calls()))
 			}
 			items, err := f.store.Artifacts(ctx, f.task.ID)
