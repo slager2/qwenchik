@@ -47,7 +47,6 @@ export default function ResearchProgress({ status, phase, processed, total, chil
   return <section className="q-research-progress" aria-label="Этапы исследования" data-active-stage={active}>
     <div className="q-research-progress__header">
       <div>
-        <p className="q-research-progress__eyebrow">Ход исследования</p>
         <p className="q-research-progress__status" role="status">{statusText(status)}</p>
       </div>
       {hasPlan && <span className="q-research-progress__count">{boundedProcessed} из {total} этапов</span>}

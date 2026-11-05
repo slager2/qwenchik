@@ -92,7 +92,7 @@ export default function ResearchInspector({ resources, events, run, showHeading 
     heading?.scrollIntoView({ block: 'start', inline: 'nearest' })
   }
   return <div className="chat-research q-research-inspector">
-    <header className="research-heading q-research-inspector__heading">{showHeading && <><p className="q-research-inspector__eyebrow">Панель исследования</p><h2>{run?.mode === 'chat' ? 'Детали запуска' : 'Детали исследования'}</h2></>}<p>{labels[state] || 'Исследование ещё не запущено'}</p></header>
+    <header className="research-heading q-research-inspector__heading">{showHeading && <><h2>{run?.mode === 'chat' ? 'Детали запуска' : 'Детали исследования'}</h2></>}<p>{labels[state] || 'Исследование ещё не запущено'}</p></header>
     <ResearchProgress status={run?.status} phase={run?.phase || run?.stage} />
     <div className="research-progress q-research-inspector__summary" aria-label="Состояние исследования">
       {outcome && outcomes[outcome] && <p className="research-outcome" role="status">{outcomes[outcome]}</p>}

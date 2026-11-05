@@ -8,7 +8,7 @@ import ChatTranscript from './ChatTranscript'
 import { canUseResearchContext, citationReferences, explicitResearchContextReferences, createStreamState, terminal } from './conversation-state.mjs'
 import ResearchInspector from './ResearchInspector'
 import ResearchOverview from './ResearchOverview'
-import AppShell from './AppShell'
+import AppShell, { TopBar } from './AppShell'
 import { conversationSetup, defaultSetup, settingsPatch, setupProblem } from './research-settings.mjs'
 import FailureDetails from './FailureDetails'
 import { publicResearchEvents } from './research-state.mjs'
@@ -19,8 +19,10 @@ import { failure, ResourceStatus, useRemote } from './hooks/useRemote'
 import { useResearch } from './hooks/useResearch'
 import { useRunEventStream } from './hooks/useRunEventStream'
 import { transcriptReducer } from './hooks/transcript'
-import { Drawer } from './ui'
-import './chat.css'
+import { Button, Drawer, IconButton, Input } from './ui'
+import { Icon } from './icons'
+import './styles/chat.css'
+import './styles/research.css'
 
 const terminalLabels: Record<string, string> = { partial: 'Частичный результат', blocked: 'Заблокировано проверкой', budget_exhausted: 'Бюджет исчерпан' }
 const labels: Record<string, string> = { queued: 'В очереди', planning: 'Планирование', running: 'В работе', verifying: 'Проверка', completed: 'Готово', failed: 'Не удалось завершить', cancelled: 'Остановлено', paused: 'На паузе', waiting_approval: 'Нужно решение', search: 'Поиск источников', searching: 'Поиск источников', fetch: 'Чтение источников', fetching: 'Чтение источников', extract: 'Извлечение текста', synthesis: 'Подготовка ответа', synthesizing: 'Подготовка ответа', verification: 'Сверка источников', finalization: 'Завершение', discovered: 'Найден', validated: 'Проверен', rejected: 'Отклонён', extracted: 'Текст извлечён', cited: 'Использован в ответе' }
@@ -32,11 +34,10 @@ function chatID() {
 
 export default function ChatRoute() {
   const [selected, setSelected] = useState(chatID)
-  const [sidebar, setSidebar] = useState(false)
   const [newVersion, setNewVersion] = useState(0)
   const conversations = useRemote(useCallback((signal) => api.conversations(signal), []), 30000, 'chat.conversations')
   useEffect(() => {
-    const navigate = () => { setSelected(chatID()); setSidebar(false) }
+    const navigate = () => setSelected(chatID())
     window.addEventListener('hashchange', navigate)
     return () => window.removeEventListener('hashchange', navigate)
   }, [])
@@ -44,14 +45,13 @@ export default function ChatRoute() {
     if (!id) setNewVersion((value) => value + 1)
     window.location.hash = id ? `/chat/${encodeURIComponent(id)}` : '/chat'
     setSelected(id)
-    setSidebar(false)
   }
-  const navigation = <ChatSidebar conversations={conversations.data ?? []} error={conversations.error} loading={conversations.loading} selected={selected} onSelect={select} onNew={() => select('')} onRetry={() => void conversations.reload('manual_retry')} />
+  const navigation = <ChatSidebar conversations={conversations.data ?? []} error={conversations.error} loading={conversations.loading} selected={selected} onSelect={select} onRetry={() => void conversations.reload('manual_retry')} />
   const focusComposer = useCallback(() => document.getElementById('conversation-input')?.focus(), [])
-  return <AppShell activeSection="chat" sidebar={navigation} onNewChat={() => select('')} composerFocus={focusComposer}><div className="conversation-shell"><ConversationView key={selected || `new-${newVersion}`} id={selected} onSelect={select} onChanged={conversations.reload} onSidebar={() => setSidebar(true)} />{sidebar && <Drawer title="Разговоры" side="left" className="chat-drawer" bodyClassName="chat-drawer-body" onClose={() => setSidebar(false)}>{navigation}</Drawer>}</div></AppShell>
+  return <AppShell activeSection="chat" sidebar={navigation} onNewChat={() => select('')} composerFocus={focusComposer} navigationTitle="Разговоры" navigationLabel="Открыть разговоры"><div className="conversation-shell"><ConversationView key={selected || `new-${newVersion}`} id={selected} onSelect={select} onChanged={conversations.reload} /></div></AppShell>
 }
 
-function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; onSelect: (id: string) => void; onChanged: () => Promise<void>; onSidebar: () => void }) {
+function ConversationView({ id, onSelect, onChanged }: { id: string; onSelect: (id: string) => void; onChanged: () => Promise<void> }) {
   const conversation = useRemote(useCallback((signal) => id ? api.conversation(id, signal) : Promise.resolve<Conversation | null>(null), [id]), id ? 30000 : 0, 'chat.conversation')
   const spaces = useRemote(useCallback((signal) => api.spaces(signal), []), 60000, 'chat.spaces')
   const snapshots = useRemote(useCallback((signal) => id ? api.conversationMessages(id, signal) : Promise.resolve<ConversationMessage[]>([]), [id]), 0, 'chat.messages')
@@ -410,22 +410,53 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
   const resumeRun = () => void action(async () => { await api.resume(runID); await run.reload('user_action'); await runtime.reload('user_action') })
   const detailsContent = <ResearchInspector resources={{ ...research, runtime, pdfCapability: doctor.data?.pdf_extractor }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onRetry={() => operate('retry')} onPause={pauseRun} onResume={resumeRun} onDiagnostics={requestDiagnostics} diagnosticsLoading={diagnosticsRequested && doctor.loading} diagnosticsError={doctor.error} />
 
+  const connectionLabel = connection === 'live' ? 'Поток подключён' : connection === 'connecting' ? 'Подключение…' : connection === 'reconnecting' ? 'Переподключение…' : connection === 'degraded' ? 'Резервная синхронизация' : connection === 'invalid' ? 'Ошибка потока' : connection === 'terminal' ? 'Поток завершён' : 'Нет активного потока'
+  const renameConversation = (event: FormEvent) => { event.preventDefault(); if (title.trim()) void action(async () => { const next = await api.updateConversation(id, { title: title.trim() }); if (alive.current) { conversation.setData(next); setEditing(false); void onChanged() } }) }
+  const deleteConversation = () => void action(async () => { await api.deleteConversation(id); if (alive.current) { void onChanged(); onSelect('') } })
+  const spacePicker = <label className="chat-space-picker" title="Проект разговора"><Icon name="projects" size={16} /><span className="sr-only">Пространство</span><select aria-label="Пространство разговора" value={conversation.data?.space_id || ''} disabled={busy || active || spaces.loading} onChange={(event) => moveToSpace(event.target.value)}><option value="">Без проекта</option>{(spaces.data || []).map((item) => <option key={item.id} value={item.id}>{item.name || item.title}</option>)}</select></label>
+  const headerActions = <>
+    {id && <>
+      <span className="chat-header__inline">
+        {spacePicker}
+        <IconButton label="Переименовать разговор" icon={<Icon name="edit" />} onClick={() => setEditing(true)} disabled={busy} />
+        <IconButton label="Удалить" title={active ? 'Сначала остановите текущую генерацию' : 'Удалить разговор'} icon={<Icon name="trash" />} onClick={deleteConversation} disabled={busy || active} />
+      </span>
+      <details className="chat-more" onToggle={(event) => { const menu = event.currentTarget; if (menu.open) { const close = (pointer: PointerEvent) => { if (!menu.contains(pointer.target as Node)) { menu.open = false; document.removeEventListener('pointerdown', close) } }; document.addEventListener('pointerdown', close) } }}>
+        <summary aria-label="Действия с разговором" title="Действия с разговором"><Icon name="more" /></summary>
+        <div className="chat-more__menu">
+          {spacePicker}
+          <Button variant="ghost" icon={<Icon name="edit" />} onClick={(event) => { (event.currentTarget.closest('details') as HTMLDetailsElement).open = false; setEditing(true) }} disabled={busy}>Переименовать</Button>
+          <Button variant="ghost" icon={<Icon name="trash" />} onClick={deleteConversation} disabled={busy || active}>Удалить разговор</Button>
+        </div>
+      </details>
+    </>}
+    <IconButton label="Детали" title={details ? 'Скрыть детали' : 'Детали запуска и источники'} aria-expanded={details} className="chat-details-toggle" icon={<Icon name="panel-right" />} onClick={() => setDetails((value) => !value)} />
+  </>
+
   return <main className={`chat-main ${details ? 'chat-has-details' : ''}`}>
-    <header className="chat-header"><button className="chat-mobile-menu" type="button" aria-label="Открыть разговоры" onClick={onSidebar}>☰</button><div className="chat-heading">{editing ? <form onSubmit={(event) => { event.preventDefault(); if (title.trim()) void action(async () => { const next = await api.updateConversation(id, { title: title.trim() }); if (alive.current) { conversation.setData(next); setEditing(false); void onChanged() } }) }}><input aria-label="Название разговора" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} autoFocus /><button type="submit" disabled={busy || !title.trim()}>Сохранить</button><button type="button" onClick={() => setEditing(false)}>Отмена</button></form> : <><h1>{conversation.data?.title || 'Новый разговор'}</h1><p>{mode === 'research' ? 'Deep Research' : 'Локальный чат'}<span aria-hidden="true"> · </span>{status}</p></>}</div><div className="chat-header-actions">{id && <><label className="chat-space-picker"><span>Пространство</span><select aria-label="Пространство разговора" value={conversation.data?.space_id || ''} disabled={busy || active || spaces.loading} onChange={(event) => moveToSpace(event.target.value)}><option value="">Без пространства</option>{(spaces.data || []).map((item) => <option key={item.id} value={item.id}>{item.name || item.title}</option>)}</select></label><button type="button" onClick={() => setEditing(true)} disabled={busy} aria-label="Переименовать разговор">Название</button><button type="button" onClick={() => void action(async () => { await api.deleteConversation(id); if (alive.current) { void onChanged(); onSelect('') } })} disabled={busy || active} title={active ? 'Сначала остановите текущую генерацию' : 'Удалить разговор'}>Удалить</button></>}<button type="button" aria-expanded={details} onClick={() => setDetails((value) => !value)}>Детали</button></div></header>
-    <div className="chat-body"><section className="chat-center" ref={centerRef} onScroll={(event) => { if (window.matchMedia('(max-width: 48rem)').matches) observeScroll(event.currentTarget) }} aria-label="Текущий разговор"><div className="chat-health"><span className={backendReady ? 'chat-online' : ''}>Приложение: {health.error ? 'нет связи' : backendReady ? 'доступно' : 'проверяем соединение'}</span><span className={modelReady && !doctor.error ? 'chat-online' : ''}>Qwen: {doctor.error ? 'проверка недоступна' : modelReady ? 'проверена по запросу' : health.data?.model?.status === 'configured' ? 'локальная · проверка по запросу' : 'доступность не проверена'}</span></div>
+    <TopBar className="chat-header" actions={headerActions}><div className="chat-heading">{editing
+      ? <form onSubmit={renameConversation}><Input aria-label="Название разговора" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} autoFocus /><Button type="submit" variant="primary" size="sm" disabled={busy || !title.trim()}>Сохранить</Button><Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Отмена</Button></form>
+      : <><h1>{conversation.data?.title || 'Новый разговор'}</h1><p>{mode === 'research' ? 'Deep Research' : 'Чат'}<span aria-hidden="true"> · </span>{status}</p></>}</div></TopBar>
+    <div className="chat-body"><section className="chat-center" ref={centerRef} onScroll={(event) => { if (window.matchMedia('(max-width: 48rem)').matches) observeScroll(event.currentTarget) }} aria-label="Текущий разговор">
       <ResourceStatus resource={conversation} /><ResourceStatus resource={snapshots} />{runID && <ResourceStatus resource={run} />}{history.error && <ResourceStatus resource={history} />}
       <ResearchOverview run={currentRun} runtime={currentRuntime} events={transcript.stream.events} answer={latestAssistant ?? null} evidence={research.evidence} busy={busy} onDetails={() => setDetails(true)} onReadAnswer={() => readAnswer()} onPause={pauseRun} onResume={resumeRun} onStop={stopRun} />
       <div className="chat-transcript" ref={listRef} onScroll={(event) => { if (!window.matchMedia('(max-width: 48rem)').matches) observeScroll(event.currentTarget) }}>
         <ChatTranscript messages={content} loading={snapshots.loading} active={active} runID={runID} run={currentRun} references={references} evidenceCache={evidenceCache} submissionState={optimistic.length ? busy ? 'sending' : error ? 'failed' : 'sending' : undefined} onExample={(nextMode, prompt) => { setMode(nextMode); setText(prompt) }} />
+        {currentRun?.status === 'failed' && <div className="chat-action-error" role="alert"><Icon name="alert" size={18} /><div><strong>{currentRun.terminal_outcome === 'blocked' ? 'Ответ заблокирован проверкой' : 'Не удалось завершить ответ'}</strong><p>{failureMessage || currentRun.error_message || 'Можно повторить запрос.'}{currentRun.error_code ? ` Код: ${currentRun.error_code}` : typeof failurePayload?.error_code === 'string' ? ` Код: ${failurePayload.error_code}` : ''}</p><FailureDetails payload={failurePayload} />{verificationSummary && <p>{verificationSummary}</p>}{missingCriteria.length > 0 && <div className="chat-failure-missing"><strong>Не хватает критических критериев</strong><ul>{missingCriteria.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></div>}</div></div>}
+        {currentRun?.status === 'cancelled' && <p className="chat-notice" role="status">Генерация остановлена. {hasPartial ? 'Полученный текст сохранён.' : 'Текст ответа не сформирован.'}</p>}
+        {currentRun?.status === 'waiting_approval' && <p className="chat-notice" role="status">Нужно ваше решение. <a href="#/workspace">Открыть подтверждения в рабочем пространстве</a></p>}
+        {currentRun && !active && <div className="chat-answer-actions"><Button size="sm" variant="ghost" icon={<Icon name="refresh" size={16} />} disabled={busy} onClick={() => operate('retry')}>Повторить ответ</Button><Button size="sm" variant="ghost" icon={<Icon name="play" size={16} />} disabled={busy || !hasPartial} title={!hasPartial ? 'Нет текста для продолжения' : 'Продолжить ответ новым запуском'} onClick={() => operate('continue')}>Продолжить ответ</Button></div>}
       </div>
-      {!follow && <button type="button" className="chat-to-bottom" onClick={() => setFollow(true)}>К последнему сообщению ↓</button>}
-      {currentRun?.status === 'failed' && <div className="chat-action-error" role="alert"><strong>{currentRun.terminal_outcome === 'blocked' ? 'Ответ заблокирован проверкой' : 'Не удалось завершить ответ'}</strong><p>{failureMessage || currentRun.error_message || 'Можно повторить запрос.'}{currentRun.error_code ? ` Код: ${currentRun.error_code}` : typeof failurePayload?.error_code === 'string' ? ` Код: ${failurePayload.error_code}` : ''}</p><FailureDetails payload={failurePayload} />{verificationSummary && <p>{verificationSummary}</p>}{missingCriteria.length > 0 && <div className="chat-failure-missing"><strong>Не хватает критических критериев</strong><ul>{missingCriteria.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></div>}</div>}
-      {currentRun?.status === 'cancelled' && <p className="chat-muted" role="status">Генерация остановлена. {hasPartial ? 'Полученный текст сохранён.' : 'Текст ответа не сформирован.'}</p>}
-      {currentRun?.status === 'waiting_approval' && <p role="status">Нужно ваше решение. <a href="#/workspace">Открыть подтверждения в рабочем пространстве</a></p>}
-      {error && <div className="chat-action-error" role="alert"><p>{error}</p>{actionRetry && <button type="button" onClick={actionRetry} disabled={busy}>Повторить действие</button>}</div>}
-      {currentRun && !active && <div className="chat-answer-actions"><button type="button" disabled={busy} onClick={() => operate('retry')}>Повторить ответ</button><button type="button" disabled={busy || !hasPartial} title={!hasPartial ? 'Нет текста для продолжения' : 'Продолжить ответ новым запуском'} onClick={() => operate('continue')}>Продолжить ответ</button></div>}
-        <ChatComposer mode={mode} privacyMode={currentRuntime?.privacy_mode || configuration.data?.research_limits?.privacy_mode} contextBudget={currentRuntime?.context_budget || doctor.data?.context_budget} onModeChange={changeMode} text={text} onTextChange={setText} onSend={send} busy={busy} active={active} run={currentRun} onStop={stopRun} researchContextRunID={researchContextRunID} researchContextReady={researchContextReady} onEnableResearchContext={enableResearchContext} onClearResearchContext={() => { setResearchContextRunID(''); submissionKey.current = null }} settings={setup} onSettingsChange={optimistic.length ? undefined : changeSettings} settingsError={setupProblem(setup)} settingsDirty={settingsDirty} settingsSaving={busy && settingsDirty} onSaveSettings={id && !active ? saveSettings : undefined} />
-      <div className="chat-composer-note">{active && <span>Новый запрос доступен после завершения или остановки.</span>}{runID && <span role="status">{connection === 'live' ? 'Поток подключён' : connection === 'connecting' ? 'Подключение…' : connection === 'reconnecting' ? 'Переподключение…' : connection === 'degraded' ? 'Резервная синхронизация' : connection === 'invalid' ? 'Ошибка потока' : connection === 'terminal' ? 'Поток завершён' : 'Нет активного потока'}</span>}{active && <button type="button" onClick={() => { recordReload('chat.stream', 'manual_retry'); setReconnect((value) => value + 1) }}>Переподключить</button>}</div>
+      {!follow && <IconButton className="chat-to-bottom" variant="secondary" label="К последнему сообщению" icon={<Icon name="arrow-down" />} onClick={() => setFollow(true)} />}
+      {error && <div className="chat-action-error" role="alert"><Icon name="alert" size={18} /><div><p>{error}</p>{actionRetry && <Button size="sm" variant="secondary" onClick={actionRetry} disabled={busy}>Повторить действие</Button>}</div></div>}
+      <ChatComposer mode={mode} privacyMode={currentRuntime?.privacy_mode || configuration.data?.research_limits?.privacy_mode} contextBudget={currentRuntime?.context_budget || doctor.data?.context_budget} onModeChange={changeMode} text={text} onTextChange={setText} onSend={send} busy={busy} active={active} run={currentRun} onStop={stopRun} researchContextRunID={researchContextRunID} researchContextReady={researchContextReady} onEnableResearchContext={enableResearchContext} onClearResearchContext={() => { setResearchContextRunID(''); submissionKey.current = null }} settings={setup} onSettingsChange={optimistic.length ? undefined : changeSettings} settingsError={setupProblem(setup)} settingsDirty={settingsDirty} settingsSaving={busy && settingsDirty} onSaveSettings={id && !active ? saveSettings : undefined} />
+      <div className="chat-composer-note">
+        <span className={backendReady ? 'chat-online' : 'chat-offline'}>Приложение: {health.error ? 'нет связи' : backendReady ? 'доступно' : 'проверяем соединение'}</span>
+        <span className={modelReady && !doctor.error ? 'chat-online' : ''}>Qwen: {doctor.error ? 'проверка недоступна' : modelReady ? 'проверена по запросу' : health.data?.model?.status === 'configured' ? 'локальная · проверка по запросу' : 'доступность не проверена'}</span>
+        {runID && <span role="status">{connectionLabel}</span>}
+        {active && <span>Новый запрос — после завершения или остановки.</span>}
+        {active && <Button size="sm" variant="ghost" onClick={() => { recordReload('chat.stream', 'manual_retry'); setReconnect((value) => value + 1) }}>Переподключить</Button>}
+      </div>
     </section>{details && !mobile && <aside className="chat-research-desktop" aria-label="Детали исследования">{detailsContent}</aside>}</div>{details && mobile && <Drawer title="Детали исследования" className="chat-drawer" bodyClassName="chat-drawer-body" onClose={() => setDetails(false)}>{detailsContent}</Drawer>}
   </main>
 }
