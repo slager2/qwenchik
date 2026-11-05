@@ -69,6 +69,9 @@ type requestBody struct {
 	MaxTokens          int               `json:"max_tokens"`
 	Temperature        float64           `json:"temperature"`
 	TopP               float64           `json:"top_p"`
+	TopK               *int              `json:"top_k,omitempty"`
+	MinP               *float64          `json:"min_p,omitempty"`
+	PresencePenalty    *float64          `json:"presence_penalty,omitempty"`
 	Stop               []string          `json:"stop,omitempty"`
 	Stream             bool              `json:"stream"`
 	StreamOptions      *streamOptions    `json:"stream_options,omitempty"`
@@ -569,6 +572,7 @@ func (c *Client) prepare(request llm.ChatRequest, stream bool) requestBody {
 		Model: model, Messages: request.Messages, MaxTokens: maxTokens,
 		Temperature: temperature, TopP: topP, Stop: append([]string(nil), request.Stop...), Stream: stream,
 		ChatTemplateKwargs: map[string]bool{"enable_thinking": c.thinking},
+		TopK:               request.TopK, MinP: request.MinP, PresencePenalty: request.PresencePenalty,
 	}
 	if request.EnableThinking != nil {
 		body.ChatTemplateKwargs["enable_thinking"] = *request.EnableThinking

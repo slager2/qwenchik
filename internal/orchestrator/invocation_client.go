@@ -92,6 +92,14 @@ func modelInvocationHash(request llm.ChatRequest) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if request.TopK != nil || request.MinP != nil || request.PresencePenalty != nil {
+		// Sampler overrides change the output distribution. Unset overrides
+		// keep the historical hash so in-flight runs still resume.
+		base, err = invocationHash([]any{base, request.TopK, request.MinP, request.PresencePenalty})
+		if err != nil {
+			return "", err
+		}
+	}
 	// The identity, not whether this particular request revalidates it, is
 	// part of the durable input: a resumed run re-pins the fingerprint on its
 	// first request only, and must still match the attempt recorded before.

@@ -35,14 +35,19 @@ type ChatRequest struct {
 	// RuntimeIdentity is the pinned session runtime identity used for durable
 	// invocation identity. Unlike RuntimeFingerprint it never forces a live
 	// metadata refresh, so it can be attached to every request of a run.
-	RuntimeIdentity       string `json:"-"`
-	EnableThinking        *bool  `json:"-"`
-	CachePrompt           *bool  `json:"-"`
-	MaxTokens             int
-	Temperature           float64
-	TemperatureSet        bool
-	TopP                  float64
-	TopPSet               bool
+	RuntimeIdentity string `json:"-"`
+	EnableThinking  *bool  `json:"-"`
+	CachePrompt     *bool  `json:"-"`
+	MaxTokens       int
+	Temperature     float64
+	TemperatureSet  bool
+	TopP            float64
+	TopPSet         bool
+	// Optional llama.cpp sampler overrides. Nil keeps the server default, so
+	// requests and invocation hashes are unchanged unless a role opts in.
+	TopK                  *int     `json:",omitempty"`
+	MinP                  *float64 `json:",omitempty"`
+	PresencePenalty       *float64 `json:",omitempty"`
 	JSONMode              bool
 	JSONSchema            json.RawMessage
 	BeforeFallbackAttempt func() error `json:"-"`

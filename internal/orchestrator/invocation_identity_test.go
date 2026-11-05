@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/slager2/qwenchik/internal/domain"
@@ -68,5 +69,32 @@ func TestSessionInvocationHashIsStableAcrossResumeFingerprintRevalidation(t *tes
 	}
 	if otherHash == original {
 		t.Fatal("a different pinned runtime identity must change the invocation hash")
+	}
+}
+
+func TestInvocationHashIncludesSamplerOverridesOnlyWhenSet(t *testing.T) {
+	request := llm.ChatRequest{Messages: []llm.ChatMessage{{Role: "user", Content: "x"}}, Temperature: 0.2, TopP: 0.8}
+	plain, err := modelInvocationHash(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := invocationHash(struct {
+		Model, BaseURL          string
+		Stop                    []string
+		Messages                []llm.ChatMessage
+		Schema                  json.RawMessage
+		JSONMode                bool
+		MaxTokens               int
+		Temperature, TopP       float64
+		TemperatureSet, TopPSet bool
+	}{Messages: request.Messages, Temperature: 0.2, TopP: 0.8})
+	if err != nil || plain != legacy {
+		t.Fatalf("unset sampler overrides changed the historical invocation hash: %v", err)
+	}
+	topK := 20
+	request.TopK = &topK
+	withTopK, err := modelInvocationHash(request)
+	if err != nil || withTopK == plain {
+		t.Fatalf("top_k override did not change the invocation hash: %v", err)
 	}
 }
