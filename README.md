@@ -294,6 +294,20 @@ qwenchik status | open | logs [model|app]
 
 The model and app run natively because GPU offload is unavailable inside the Docker Desktop VM. Only SearXNG runs in a container (`compose.searxng.yml`). Its secret is generated once into `~/.config/qwenchik/searxng.env`. Without SearXNG, search falls back to the other configured providers. When run without a terminal (for example from a desktop menu entry with `Exec=~/.local/bin/qwenchik start`), the launcher reports results through desktop notifications.
 
+### Windows
+
+`qagent runtime install` uses systemd and is Linux-only. On Windows, use `scripts/qwenchik.ps1` (Windows PowerShell 5.1 or PowerShell 7) with a Vulkan build of `llama-server.exe`:
+
+```powershell
+.\scripts\qwenchik.ps1 setup -ModelBin C:\llama\llama-server.exe -ModelPath C:\models\Qwen3.5-4B-Q4_K_M.gguf -Device Vulkan0
+.\scripts\qwenchik.ps1 build          # qagent.exe with the embedded UI (needs Go)
+.\scripts\qwenchik.ps1 start          # or the "Qwenchik" desktop shortcut created by setup
+.\scripts\qwenchik.ps1 stop           # or the "Qwenchik - stop" shortcut
+.\scripts\qwenchik.ps1 status | open | logs model|app
+```
+
+Run `llama-server.exe --list-devices` to pick `-Device`. Processes run hidden; logs and PIDs are kept in `%LOCALAPPDATA%\qwenchik`. On Windows, keep-awake and desktop notifications are no-ops, and the PDF extraction sandbox is untested. CI runs the Go test suite and launcher smoke checks on `windows-latest`.
+
 ## Persistent login-user runtime
 
 Build the app with `make build`, then install persistent model and app services from the repository root:
