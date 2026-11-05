@@ -10,7 +10,7 @@
 .chat-research li { margin-block: var(--space-1); }
 .chat-research small, .chat-research time { display: block; margin-top: 2px; color: var(--text-tertiary); font-size: var(--text-xs); }
 .chat-research code { font-size: var(--text-xs); overflow-wrap: anywhere; }
-.chat-research dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-1) var(--space-3); margin: var(--space-2) 0; font-size: var(--text-xs); }
+.chat-research dl:not(.telemetry-panel__metrics) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-1) var(--space-3); margin: var(--space-2) 0; font-size: var(--text-xs); }
 .chat-research dt { color: var(--text-tertiary); }
 .chat-research dd { margin: 0; }
 .chat-research > section, .chat-research > div, .chat-research > nav, .chat-research > p { margin-bottom: var(--space-4); }
