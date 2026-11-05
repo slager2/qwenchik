@@ -42,16 +42,7 @@ jobs:
       - name: Test
         shell: bash
         # Surface failing tests as annotations so they are readable without log access.
-        run: |
-          set +e
-          go test -tags sqlite_fts5 ./... > test.log 2>&1
-          rc=$?
-          cat test.log
-          if [ $rc -ne 0 ]; then
-            grep -E -- '--- FAIL|^FAIL|panic:|_test\.go:[0-9]+:|\.go:[0-9]+:[0-9]+:' test.log | head -60 > failures.txt
-            echo "::error title=Windows test failures::$(sed 's/%/%25/g' failures.txt | awk '{printf "%s%%0A", $0}')"
-          fi
-          exit $rc
+        run: go test -json -tags sqlite_fts5 ./... 2>&1 | python .github/scripts/test-failures.py
       - name: Build qagent.exe
         run: go build -tags sqlite_fts5 -o qagent.exe ./cmd/qagent
       - name: Launcher parses (PowerShell 7)
