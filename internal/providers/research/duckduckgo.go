@@ -32,7 +32,14 @@ type DuckDuckGo struct {
 }
 
 func NewDuckDuckGo() *DuckDuckGo {
-	fetcher := NewSafeFetcherWithPolicy(duckDuckGoMaxBody, duckDuckGoTimeout, nil, []string{duckDuckGoHost})
+	return NewDuckDuckGoWithTempRoot("")
+}
+
+// NewDuckDuckGoWithTempRoot builds the DuckDuckGo provider with the configured
+// fetch temp root (FETCH_TEMP_DIR). An empty root keeps DefaultFetchPolicy's
+// working-directory relative default.
+func NewDuckDuckGoWithTempRoot(tempRoot string) *DuckDuckGo {
+	fetcher := newSafeFetcherWithTempRoot(duckDuckGoMaxBody, duckDuckGoTimeout, nil, []string{duckDuckGoHost}, tempRoot)
 	provider, _ := NewDuckDuckGoWithFetcher(fetcher)
 	return provider
 }

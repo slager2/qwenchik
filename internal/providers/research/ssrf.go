@@ -70,7 +70,14 @@ func NewSafeFetcherWithResolver(maxBytes int64, timeout time.Duration, resolver 
 }
 
 func NewSafeFetcherWithPolicy(maxBytes int64, timeout time.Duration, resolver IPResolver, allowedDomains []string) *SafeFetcher {
+	return newSafeFetcherWithTempRoot(maxBytes, timeout, resolver, allowedDomains, "")
+}
+
+func newSafeFetcherWithTempRoot(maxBytes int64, timeout time.Duration, resolver IPResolver, allowedDomains []string, tempRoot string) *SafeFetcher {
 	p := DefaultFetchPolicy()
+	if strings.TrimSpace(tempRoot) != "" {
+		p.TempRoot = tempRoot
+	}
 	if maxBytes > 0 {
 		p.SourceFetchBytes = min(maxBytes, p.SourceFetchBytes)
 		p.PDFBytes = min(maxBytes, p.PDFBytes)

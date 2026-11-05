@@ -910,7 +910,7 @@ func configuredSearchProvider(cfg config.Config) (research.SearchProvider, error
 		tavily = provider
 	}
 	if cfg.SearchEnableDDG {
-		ddg = research.NewDuckDuckGo()
+		ddg = research.NewDuckDuckGoWithTempRoot(cfg.FetchTempDir)
 		providers = append(providers, ddg)
 	}
 	if len(providers) == 0 {
