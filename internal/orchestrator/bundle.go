@@ -10,12 +10,19 @@ import (
 	"github.com/slager2/qwenchik/internal/tools"
 )
 
-//go:embed worker.go citations.go schemas.go chat.go context.go
+// roleContractFiles hold the role prompts, schemas and validation contracts
+// fingerprinted into PromptHash. worker.go was split by phase, so every phase
+// file is listed; TestRoleContractFilesMatchEmbed keeps this list and the
+// embed directive identical.
+//
+//go:embed worker.go plan_phase.go act_phase.go verify_phase.go synthesis.go model_io.go checkpoint_recovery.go citations.go schemas.go chat.go context.go
 var roleContractSource embed.FS
+
+var roleContractFiles = []string{"worker.go", "plan_phase.go", "act_phase.go", "verify_phase.go", "synthesis.go", "model_io.go", "checkpoint_recovery.go", "citations.go", "schemas.go", "chat.go", "context.go"}
 
 func ResearchAgentBundle(model string, registry *tools.Registry) domain.AgentBundle {
 	digest := sha256.New()
-	for _, name := range []string{"worker.go", "citations.go", "schemas.go", "chat.go", "context.go"} {
+	for _, name := range roleContractFiles {
 		data, err := roleContractSource.ReadFile(name)
 		if err != nil {
 			panic(err)
