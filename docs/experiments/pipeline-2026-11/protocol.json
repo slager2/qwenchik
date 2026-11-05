@@ -1,0 +1,1 @@
+{"experiment":"pipeline-optimization-2026-11","variant":"adaptive","cases":["dev-fasta","dev-rnaseq","heldout-citations"],"model":"Qwen3.5-4B-Q4_K_M local-qwen","context":32768,"max_output_tokens":5120,"case_timeout":"30m","note":"same cases and env before/after; only the binary changes"}
