@@ -204,11 +204,11 @@ async function assertSurfaceLayout(page, description) {
 }
 
 async function assertWorkspaceRail(page, width) {
-  const rail = page.getByRole('complementary', { name: 'Основная навигация', exact: true })
-  // Earlier telemetry checks scroll the document; inspect the in-flow rail
-  // after bringing it into view, rather than requiring sticky navigation.
-  await rail.scrollIntoViewIfNeeded()
-  const measured = await rail.evaluate(element => {
+  // The workspace has no private rail any more: on narrow screens the shared
+  // shell top bar carries navigation and the page actions.
+  const bar = page.locator('.workspace-page > .shell-topbar')
+  await bar.scrollIntoViewIfNeeded()
+  const measured = await bar.evaluate(element => {
     const rect = node => {
       const r = node.getBoundingClientRect()
       return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }
@@ -218,45 +218,24 @@ async function assertWorkspaceRail(page, width) {
     const viewport = { left: 0, top: 0, right: innerWidth, bottom: innerHeight }
     const frame = rect(element)
     const issues = []
-    const controls = [...element.querySelectorAll('a.rail-link, button.rail-link')]
-    const labels = []
-    if (controls.length !== 4) issues.push(`expected four rail actions, found ${controls.length}`)
+    const controls = [...element.querySelectorAll('a[href], button')].filter(control => control.getClientRects().length && getComputedStyle(control).visibility !== 'hidden')
+    if (!controls.some(control => control.getAttribute('aria-label') === 'Открыть навигацию')) issues.push('navigation trigger missing')
     const actions = controls.map(control => {
       const bounds = rect(control)
-      const label = control.textContent.trim()
+      const label = control.getAttribute('aria-label') || control.textContent.trim()
       if (!inside(bounds, viewport) || !inside(bounds, frame)) issues.push(`${label}: action clipped`)
       if (bounds.width < 43.5 || bounds.height < 43.5) issues.push(`${label}: action smaller than 44px`)
-      const walker = document.createTreeWalker(control, NodeFilter.SHOW_TEXT)
-      while (walker.nextNode()) {
-        const text = walker.currentNode
-        if (!text.textContent.trim() || text.parentElement.closest('.rail-glyph')) continue
-        const range = document.createRange()
-        range.selectNodeContents(text)
-        for (const r of range.getClientRects()) {
-          const box = { left: r.left, top: r.top, right: r.right, bottom: r.bottom }
-          if (!inside(box, bounds)) issues.push(`${label}: label escapes its action`)
-          labels.push({ label, ...box })
-        }
-      }
       return { label, ...bounds }
     })
     for (let i = 0; i < actions.length; i++) for (let j = i + 1; j < actions.length; j++) {
       if (overlaps(actions[i], actions[j])) issues.push(`${actions[i].label}/${actions[j].label}: action overlap`)
     }
-    for (let i = 0; i < labels.length; i++) for (let j = i + 1; j < labels.length; j++) {
-      if (overlaps(labels[i], labels[j])) issues.push(`${labels[i].label}/${labels[j].label}: label overlap`)
-    }
-    const chrome = ['.brand', '.rail-runtime'].map(selector => {
-      const node = element.querySelector(selector)
-      if (!node) { issues.push(`${selector}: missing`); return { selector } }
-      const bounds = rect(node)
-      if (!inside(bounds, viewport) || !inside(bounds, frame)) issues.push(`${selector}: clipped`)
-      for (const child of node.querySelectorAll('*')) if (!inside(rect(child), bounds)) issues.push(`${selector}: child clipped`)
-      return { selector, ...bounds }
-    })
-    return { issues, frame, actions, labels, chrome }
+    const heading = element.querySelector('h1')
+    if (!heading) issues.push('heading missing')
+    else if (!inside(rect(heading), frame)) issues.push('heading clipped')
+    return { issues, frame, actions }
   })
-  assert.deepEqual(measured.issues, [], `Workspace rail ${width}px: ${JSON.stringify(measured)}`)
+  assert.deepEqual(measured.issues, [], `Workspace top bar ${width}px: ${JSON.stringify(measured)}`)
 }
 
 async function checkTelemetry(panel, { cpu, tokens, temperature, ram, description }) {

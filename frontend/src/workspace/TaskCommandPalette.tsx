@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { Task } from '../types'
+import { Icon } from '../icons'
 import { columns } from './labels'
 
 interface PaletteProps {
@@ -40,12 +41,12 @@ export default function TaskCommandPalette({ tasks, onClose, onExecute }: Palett
   return (
     <div className="palette-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <section className="command-palette" role="dialog" aria-modal="true" aria-label="Командная палитра">
-        <div className="palette-search"><span className="palette-icon">⌕</span><input ref={inputRef} value={query} onChange={(event) => { setQuery(event.target.value); setActive(0) }} onKeyDown={handleKey} placeholder="Найти команду…" aria-label="Найти команду" /><kbd>ESC</kbd></div>
+        <div className="palette-search"><Icon name="search" size={18} className="palette-icon" /><input ref={inputRef} value={query} onChange={(event) => { setQuery(event.target.value); setActive(0) }} onKeyDown={handleKey} placeholder="Найти команду…" aria-label="Найти команду" /><kbd className="ui-kbd">Esc</kbd></div>
         <div className="palette-results" role="listbox" aria-label="Команды">
-          {commands.map((command, index) => <button className={`palette-option ${active === index ? 'is-active' : ''}`} type="button" role="option" aria-selected={active === index} key={command.id} onMouseEnter={() => setActive(index)} onClick={() => onExecute(command.id)}><span>{command.label}</span><small>{command.hint}</small><span className="palette-arrow">↵</span></button>)}
+          {commands.map((command, index) => <button className={`palette-option ${active === index ? 'is-active' : ''}`} type="button" role="option" aria-selected={active === index} key={command.id} onMouseEnter={() => setActive(index)} onClick={() => onExecute(command.id)}><span>{command.label}</span><small>{command.hint}</small></button>)}
           {commands.length === 0 && <div className="palette-empty">Команд не найдено</div>}
         </div>
-        <footer className="palette-footer"><span>{tasks.length} задач</span><span><kbd>↑</kbd><kbd>↓</kbd> навигация <kbd>↵</kbd> выбрать</span></footer>
+        <footer className="palette-footer"><span>{tasks.length} задач</span><span><kbd className="ui-kbd">↑</kbd><kbd className="ui-kbd">↓</kbd> навигация <kbd className="ui-kbd">↵</kbd> выбрать</span></footer>
       </section>
     </div>
   )

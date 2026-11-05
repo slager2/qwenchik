@@ -9,7 +9,10 @@ import WorkspaceBoard from './workspace/WorkspaceBoard'
 import { ProviderCard } from './diagnostic-ui.mjs'
 import type { AgentEvent, Approval, Artifact, Checkpoint, DraftMessage, Evidence, HealthResponse, InferenceTelemetry, Message, MessageDeltaPayload, ProvidersResponse, RunRuntime, RuntimeTelemetry, Task, TaskStatus, TaskStep } from './types'
 import { mergeRuntimeSnapshot } from './telemetry-state.mjs'
-import AppShell from './AppShell'
+import AppShell, { TopBar } from './AppShell'
+import { Icon } from './icons'
+import { Badge, Button, EmptyState, IconButton, Input, Textarea } from './ui'
+import './styles/workspace.css'
 import { columns, eventLabels, stageLabels, statusLabels, timeLabel } from './workspace/labels'
 import TaskInspector from './workspace/TaskInspector'
 import MemoryManager from './workspace/MemoryManager'
@@ -491,139 +494,87 @@ export default function WorkspaceRoute() {
   const modelCheck = doctor?.checks.llm
   const apiReady = health?.status === 'ok' && health.database === 'ok' && health.worker === 'attached'
 
+  const summary = [`${counts.total} ${counts.total === 1 ? 'задача' : counts.total >= 2 && counts.total <= 4 ? 'задачи' : 'задач'}`, counts.active ? `${counts.active} в работе` : '', counts.approvals ? `${counts.approvals} ждут решения` : ''].filter(Boolean).join(' · ')
+
   return (
     <AppShell activeSection="tasks" commandPalette={false} onMemory={() => setMemoryOpen(true)}>
-    <div className="app-shell">
-      <aside className="rail" aria-label="Основная навигация">
-        <a className="brand" href="#/workspace" aria-label="Qwenchik, доска задач">
-          <span className="brand-mark">Q</span>
-          <span className="brand-name">qwenchik</span>
-        </a>
-        <div className="rail-divider" />
-        <a className="rail-link" href="#/chat" aria-label="Открыть чаты">Чаты</a>
-        <button className="rail-link is-current" type="button" aria-current="page" onClick={() => document.getElementById('board')?.scrollIntoView()}>
-          <span className="rail-glyph">▦</span><span>Доска</span>
-        </button>
-        <button className="rail-link" type="button" onClick={() => selectedTask && document.getElementById('timeline')?.scrollIntoView({ behavior: 'smooth' })} disabled={!selectedTask}>
-          <span className="rail-glyph">≋</span><span>События</span>
-        </button>
-        <button className="rail-link" type="button" onClick={() => setMemoryOpen(true)} aria-haspopup="dialog">
-          <span className="rail-glyph">⌘</span><span>Память</span>
-        </button>
-        <div className="rail-spacer" />
-        <div className="rail-runtime" title={modelCheck?.message ?? 'Проверка локальной модели не выполнена'}>
-          <span className={`health-dot ${modelCheck?.status === 'ok' ? 'is-ok' : 'is-warning'}`} />
-          <span>Qwen</span>
-        </div>
-      </aside>
+      <main className="workspace-page" id="board">
+        <TopBar title="Задачи" subtitle={summary} actions={<>
+          <span className="workspace-health" title={modelCheck?.message ?? 'Проверка локальной модели не выполнена'}><Badge tone={apiReady ? 'success' : 'warning'}>{apiReady ? 'Сервис доступен' : 'Соединение не подтверждено'}</Badge></span>
+          <IconButton label="Открыть командную палитру" title="Команды (⌘K)" icon={<Icon name="search" />} onClick={() => setPaletteOpen(true)} />
+          <IconButton label={refreshing ? 'Обновляем' : 'Обновить'} icon={<Icon name="refresh" />} onClick={() => void refreshTasks()} disabled={refreshing} />
+          <Button variant="primary" size="sm" icon={<Icon name="plus" />} onClick={() => setCreateOpen((open) => !open)}>Новая задача</Button>
+        </>} />
 
-      <main className="workspace" id="board">
-        <header className="topbar">
-          <div className="breadcrumb"><span>Рабочее пространство</span><span className="crumb-sep">/</span><strong>Задачи</strong></div>
-          <div className="top-actions">
-            <span className={`service-pill ${apiReady ? 'is-online' : ''}`}>
-              <span className="health-dot" />
-              {apiReady ? 'Приложение и worker доступны' : 'Соединение не подтверждено'}
-            </span>
-            <button className="button button-quiet palette-trigger" type="button" onClick={() => setPaletteOpen(true)} aria-label="Открыть командную палитру">
-              <span>Команды</span><kbd>⌘ K</kbd>
-            </button>
-            <button className="button button-primary" type="button" onClick={() => setCreateOpen((open) => !open)}>
-              <span className="button-plus">+</span> Новая задача
-            </button>
+        <div className={`workspace-layout ${selectedTask ? 'has-selection' : ''}`}>
+          <div className="workspace-list">
+            {(error || detailError) && <div className="workspace-notice" role="alert"><Icon name="alert" size={18} /><span>{error || detailError}</span><IconButton label="Закрыть сообщение" icon={<Icon name="close" />} onClick={() => { setError(''); setDetailError('') }} /></div>}
+
+            {createOpen && (
+              <form className="workspace-create" onSubmit={createTask}>
+                <div className="workspace-create__heading"><h2>Новая задача</h2><IconButton label="Закрыть форму" icon={<Icon name="close" />} onClick={() => setCreateOpen(false)} /></div>
+                <label className="ui-field" htmlFor="new-task-title">Название <small>необязательно</small></label>
+                <Input id="new-task-title" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} placeholder="Коротко обозначьте результат" maxLength={200} />
+                <label className="ui-field" htmlFor="new-task-description">Описание задачи</label>
+                <Textarea id="new-task-description" value={createDescription} onChange={(event) => setCreateDescription(event.target.value)} placeholder="Опишите цель и ограничения" maxLength={20000} required rows={3} />
+                <div className="workspace-create__footer"><span className="ui-muted">Задача сохранится в локальной базе.</span><Button variant="primary" type="submit" loading={busy} disabled={busy || !createDescription.trim()}>{busy ? 'Создаём…' : 'Создать задачу'}</Button></div>
+              </form>
+            )}
+
+            <WorkspaceBoard columns={columns} tasks={tasks} selectedID={selectedID} statusLabels={statusLabels} stageLabels={stageLabels} onSelect={setSelectedID} formatTime={timeLabel} />
+            {tasks.length === 0 && !error && <EmptyState icon={<Icon name="tasks" />} title="Задач пока нет" description="Создайте задачу, и агент выполнит её в фоне: план, события и результат появятся здесь." action={<Button variant="secondary" icon={<Icon name="plus" />} onClick={() => setCreateOpen(true)}>Новая задача</Button>} />}
+
+            <details className="workspace-services"><summary>Сервисы и диагностика</summary><section aria-label="Поисковые провайдеры">
+              <h2>Поисковые провайдеры</h2>
+              <p className="ui-muted">Конфигурация и последнее реальное обращение. До первого запроса здоровье неизвестно.</p>
+              <p className="ui-muted">{privacyMode === 'offline' ? 'Offline: поиск и чтение ограничены импортированным корпусом; сетевые источники отключены.' : privacyMode ? 'Модель работает локально; поисковые запросы передаются включённым внешним сервисам. Локальный SearXNG также обращается к публичным поисковикам.' : 'Режим приватности пока не загружен. Конфигурация провайдера не подтверждает его доступность.'}</p>
+              {providersError && <p role="status">{providersError}</p>}
+              {!providers && !providersError && <p className="ui-muted">Загрузка состояния…</p>}
+              <div className="provider-grid">{Object.entries(providers?.search.providers ?? {}).map(([name, provider]) => <ProviderCard key={name} name={name} provider={provider} checkedLabel={provider.last_checked ? timeLabel(provider.last_checked) : ''} />)}</div>
+              <div className="workspace-services__actions">
+                <Button variant="secondary" size="sm" onClick={() => void refreshProviders('manual_retry')}>Обновить состояние провайдеров</Button>
+                <Button variant="secondary" size="sm" loading={diagnosticsBusy} disabled={diagnosticsBusy} onClick={() => void requestDiagnostics()}>{diagnosticsBusy ? 'Проверяем…' : 'Проверить модель и поиск'}</Button>
+              </div>
+              <p className="ui-muted">Проверка по запросу может выполнить короткую генерацию и обращение к поиску.</p>
+              {doctor && <p role="status">Последняя явная проверка: {doctor.status === 'ok' ? 'проверки пройдены' : doctor.status === 'warning' ? 'есть ограничения' : 'есть ошибки'}. Модель: {modelCheck?.status === 'ok' ? 'доступна на момент проверки' : 'доступность не подтверждена'}.</p>}
+              {diagnosticsError && <p role="alert">{diagnosticsError}</p>}
+            </section></details>
           </div>
-        </header>
 
-        <section className="page-heading">
-          <div>
-            <div className="eyebrow"><span className="eyebrow-line" /> ЛОКАЛЬНОЕ ВЫПОЛНЕНИЕ · ОДИН ПОТОК</div>
-            <h1>Задачи</h1>
-            <p className="page-subtitle">План, состояние и реальные события выполнения — в одном месте.</p>
+          <div className="workspace-detail">
+            {selectedTask ? (
+              <TaskInspector
+                task={selectedTask}
+                messages={messages}
+                draft={draft}
+                events={events}
+                checkpoints={checkpoints}
+                steps={steps}
+                artifacts={artifacts}
+                evidence={evidence}
+                approvals={approvals}
+                runtime={runtime}
+                runtimeError={runtimeError}
+                connection={connection}
+                busy={busy}
+                chatText={chatText}
+                setChatText={setChatText}
+                onRun={() => void runTask(selectedTask.id)}
+                onPause={() => void controlTask('pause', selectedTask.id)}
+                onResume={() => void controlTask('resume', selectedTask.id)}
+                onCancel={() => void controlTask('cancel', selectedTask.id)}
+                onApprove={(id) => void decideApproval('approve', id)}
+                onReject={(id) => void decideApproval('reject', id)}
+                onRefresh={() => void refreshDetail(selectedTask.id, undefined, 'manual_retry')}
+                onSend={sendMessage}
+              />
+            ) : tasks.length > 0 && <EmptyState icon={<Icon name="panel-right" />} title="Выберите задачу" description="План, сообщения и поток событий появятся здесь." />}
           </div>
-          <div className="summary-strip" aria-label="Сводка задач">
-            <div className="summary-item"><span className="summary-value">{counts.total}</span><span className="summary-label">всего</span></div>
-            <div className="summary-rule" />
-            <div className="summary-item"><span className="summary-value">{counts.active}</span><span className="summary-label">в работе</span></div>
-            <div className="summary-rule" />
-            <div className="summary-item"><span className="summary-value">{counts.approvals}</span><span className="summary-label">ожидают решения</span></div>
-          </div>
-        </section>
-
-        {(error || detailError) && <div className="notice notice-error" role="alert"><span className="notice-marker">!</span><span>{error || detailError}</span><button type="button" onClick={() => { setError(''); setDetailError('') }} aria-label="Закрыть сообщение">×</button></div>}
-
-        <details className="provider-panel"><summary>Сервисы и диагностика</summary><section aria-label="Поисковые провайдеры">
-          <h2>Поисковые провайдеры</h2>
-          <p>Конфигурация и последнее реальное обращение. До первого запроса здоровье неизвестно.</p>
-          <p>{privacyMode === 'offline' ? 'Offline: поиск и чтение ограничены импортированным корпусом; сетевые источники отключены.' : privacyMode ? 'Модель работает локально; поисковые запросы передаются включённым внешним сервисам. Локальный SearXNG также обращается к публичным поисковикам.' : 'Режим приватности пока не загружен. Конфигурация провайдера не подтверждает его доступность.'}</p>
-          <button className="button button-secondary" type="button" onClick={() => void refreshProviders('manual_retry')}>Обновить состояние провайдеров</button>
-          {providersError && <p role="status">{providersError}</p>}
-          {!providers && !providersError && <p>Загрузка состояния…</p>}
-          <div className="provider-grid">{Object.entries(providers?.search.providers ?? {}).map(([name, provider]) => <ProviderCard key={name} name={name} provider={provider} checkedLabel={provider.last_checked ? timeLabel(provider.last_checked) : ''} />)}</div>
-          <button className="button button-secondary" type="button" disabled={diagnosticsBusy} onClick={() => void requestDiagnostics()}>{diagnosticsBusy ? 'Проверяем…' : 'Проверить модель и поиск'}</button>
-          <p>Проверка по запросу может выполнить короткую генерацию и обращение к поиску.</p>
-          {doctor && <p role="status">Последняя явная проверка: {doctor.status === 'ok' ? 'проверки пройдены' : doctor.status === 'warning' ? 'есть ограничения' : 'есть ошибки'}. Модель: {modelCheck?.status === 'ok' ? 'доступна на момент проверки' : 'доступность не подтверждена'}.</p>}
-          {diagnosticsError && <p role="alert">{diagnosticsError}</p>}
-        </section></details>
-
-        {createOpen && (
-          <form className="create-panel" onSubmit={createTask}>
-            <div className="create-heading">
-              <div><span className="eyebrow">НОВАЯ РАБОТА</span><h2>Что нужно сделать?</h2></div>
-              <button className="icon-button" type="button" onClick={() => setCreateOpen(false)} aria-label="Закрыть форму">×</button>
-            </div>
-            <label className="field-label" htmlFor="new-task-title">Название <span>необязательно</span></label>
-            <input id="new-task-title" className="text-field" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} placeholder="Коротко обозначьте результат" maxLength={200} />
-            <label className="field-label" htmlFor="new-task-description">Описание задачи</label>
-            <textarea id="new-task-description" className="text-field text-area" value={createDescription} onChange={(event) => setCreateDescription(event.target.value)} placeholder="Опишите цель и ограничения. Задача сохранится локально." maxLength={20000} required rows={3} />
-            <div className="create-footer"><span className="privacy-note"><span className="lock-mark">⌑</span> Сохранится в локальной SQLite-базе</span><button className="button button-primary" type="submit" disabled={busy || !createDescription.trim()}>{busy ? 'Создаём…' : 'Создать задачу'}</button></div>
-          </form>
-        )}
-
-        <div className="board-toolbar">
-          <div className="board-label"><span className="board-indicator" /> ДОСКА ЗАДАЧ <span className="board-count">{tasks.length}</span></div>
-          <div className="board-meta"><span>{refreshing ? 'Обновление…' : 'Обновляется автоматически'}</span><button className="text-button" type="button" onClick={() => void refreshTasks()} disabled={refreshing}>{refreshing ? 'Обновляем' : 'Обновить'}</button></div>
         </div>
 
-        <WorkspaceBoard columns={columns} tasks={tasks} selectedID={selectedID} statusLabels={statusLabels} stageLabels={stageLabels} onSelect={setSelectedID} formatTime={timeLabel} />
-
-        <div className={`detail-layout ${selectedTask ? 'has-selection' : ''}`}>
-          {selectedTask ? (
-            <TaskInspector
-              task={selectedTask}
-              messages={messages}
-              draft={draft}
-              events={events}
-              checkpoints={checkpoints}
-              steps={steps}
-              artifacts={artifacts}
-              evidence={evidence}
-              approvals={approvals}
-              runtime={runtime}
-              runtimeError={runtimeError}
-              connection={connection}
-              busy={busy}
-              chatText={chatText}
-              setChatText={setChatText}
-              onRun={() => void runTask(selectedTask.id)}
-              onPause={() => void controlTask('pause', selectedTask.id)}
-              onResume={() => void controlTask('resume', selectedTask.id)}
-              onCancel={() => void controlTask('cancel', selectedTask.id)}
-              onApprove={(id) => void decideApproval('approve', id)}
-              onReject={(id) => void decideApproval('reject', id)}
-              onRefresh={() => void refreshDetail(selectedTask.id, undefined, 'manual_retry')}
-              onSend={sendMessage}
-            />
-          ) : (
-            <div className="selection-empty"><span className="selection-glyph">↖</span><div><strong>Выберите задачу</strong><p>План, чат и поток событий появятся здесь.</p></div></div>
-          )}
-        </div>
-
-        <footer className="app-footer"><span>QWENCHIK · ЛОКАЛЬНАЯ РАБОТА</span><span>События и прогресс приходят из локального сервиса</span></footer>
+        {paletteOpen && <TaskCommandPalette tasks={tasks} onClose={() => setPaletteOpen(false)} onExecute={(command) => void executeCommand(command)} />}
+        {memoryOpen && <MemoryManager onClose={() => setMemoryOpen(false)} />}
       </main>
-
-      {paletteOpen && <TaskCommandPalette tasks={tasks} onClose={() => setPaletteOpen(false)} onExecute={(command) => void executeCommand(command)} />}
-      {memoryOpen && <MemoryManager onClose={() => setMemoryOpen(false)} />}
-    </div>
     </AppShell>
   )
 }
