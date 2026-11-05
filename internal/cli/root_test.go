@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -96,7 +97,7 @@ func TestConfiguredSearchProviderRespectsDisabledDDG(t *testing.T) {
 	if err != nil || provider != nil {
 		t.Fatalf("disabled providers = %T err=%v", provider, err)
 	}
-	provider, err = configuredSearchProvider(config.Config{SearchEnableDDG: true})
+	provider, err = configuredSearchProvider(config.Config{SearchEnableDDG: true, FetchTempDir: filepath.Join(t.TempDir(), "fetch-temp")})
 	if err != nil || provider == nil {
 		t.Fatalf("enabled fallback = %T err=%v", provider, err)
 	}

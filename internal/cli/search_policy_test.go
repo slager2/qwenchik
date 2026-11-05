@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/slager2/qwenchik/internal/config"
@@ -10,7 +11,7 @@ import (
 func TestConfiguredSearchProviderPolicy(t *testing.T) {
 	for _, policy := range []string{"", "local_primary", "parallel"} {
 		for _, ddg := range []bool{false, true} {
-			cfg := config.Config{SearchProviderPolicy: policy, SearXNGURL: "http://127.0.0.1:8081", TavilyAPIKey: "test-key", SearchEnableDDG: ddg}
+			cfg := config.Config{SearchProviderPolicy: policy, SearXNGURL: "http://127.0.0.1:8081", TavilyAPIKey: "test-key", SearchEnableDDG: ddg, FetchTempDir: filepath.Join(t.TempDir(), "fetch-temp")}
 			provider, err := configuredSearchProvider(cfg)
 			if err != nil {
 				t.Fatal(err)

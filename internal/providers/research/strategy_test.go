@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -237,7 +238,7 @@ func TestLocalPrimaryUnattemptedProvidersRemainConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ddg := NewDuckDuckGo()
+	ddg := NewDuckDuckGoWithTempRoot(filepath.Join(t.TempDir(), "fetch-temp"))
 	ddg.fetcher.client = blockedClient
 	s := NewLocalPrimarySearch(primary, secondary, ddg)
 	report, err := s.SearchWithDiagnostics(context.Background(), SearchOptions{Query: "fixture", MaxResults: 5})

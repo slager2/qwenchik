@@ -190,10 +190,12 @@ func TestPDFPreflightRejectsUnavailableExtractorBeforeDownload(t *testing.T) {
 		ContentType: "application/pdf", ContentSHA256: "pdf-hash", Body: []byte("%PDF-1.7"),
 	}}
 	extractor := &pdfPreflightExtractorStub{preflightErr: errors.Join(research.ErrPDFExtractorUnavailable, pdfextract.ErrUnavailable)}
+	fetchPolicy := research.DefaultFetchPolicy()
+	fetchPolicy.TempRoot = filepath.Join(t.TempDir(), "fetch-temp")
 	registry := NewRegistry()
 	if err := RegisterResearchTools(registry, ResearchTools{
 		Fetcher: fetcher, Extractor: extractor, Artifacts: artifactStore, Repository: &fileResearchRepo{},
-		MaxFetchBytes: 1 << 20, PDFPolicy: pdfextract.DefaultPolicy(), FetchPolicy: research.DefaultFetchPolicy(),
+		MaxFetchBytes: 1 << 20, PDFPolicy: pdfextract.DefaultPolicy(), FetchPolicy: fetchPolicy,
 	}); err != nil {
 		t.Fatal(err)
 	}
