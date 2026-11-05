@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# qwenchik — запуск по требованию вместо постоянного автозапуска.
+#
+#   qwenchik start [--search] [--no-open]   поднять модель + приложение (и SearXNG в Docker)
+#   qwenchik stop                            остановить всё, что поднимал start
+#   qwenchik status                          что сейчас запущено
+#   qwenchik open                            открыть UI в браузере
+#   qwenchik logs [model|app]                хвост журналов
+#
+# Модель и приложение работают нативно через systemd user units (GPU/Vulkan
+# доступен только так). В Docker живёт только SearXNG — он не нужен для GPU и
+# поднимается лишь с флагом --search.
+set -euo pipefail
+
+APP_URL="http://127.0.0.1:8080"
+MODEL_HEALTH="http://127.0.0.1:8000/health"
+SEARXNG_URL_LOCAL="http://127.0.0.1:8081"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/qwenchik"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/qwenchik"
+SEARXNG_ENV="$CONFIG_DIR/searxng.env"
+DOCKER_MARK="$STATE_DIR/started-docker-desktop"
+
+# Каталог проекта: рядом со скриптом (scripts/..), даже если вызван через симлинк.
+PROJECT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+# Без терминала (запуск из меню) сообщаем через уведомления рабочего стола.
+notify() { [[ -t 1 ]] || ! command -v notify-send >/dev/null || notify-send -a Qwenchik Qwenchik "$*" || true; }
+say() { printf '\033[1m›\033[0m %s\n' "$*"; }
+die() { printf '\033[31m✗\033[0m %s\n' "$*" >&2; notify "Ошибка: $*"; exit 1; }
+
+wait_url() { # url seconds
+  local url=$1 deadline=$((SECONDS + $2))
+  until curl --noproxy '*' -fs -m 2 -o /dev/null "$url"; do
+    ((SECONDS < deadline)) || return 1
+    sleep 1
+  done
+}
+
+unit_active() { systemctl --user is-active --quiet "$1"; }
+
+docker_ready() { docker --context desktop-linux info >/dev/null 2>&1; }
+
+start_search() {
+  command -v docker >/dev/null || die "docker не установлен"
+  mkdir -p "$STATE_DIR" "$CONFIG_DIR"
+  if [[ ! -f "$SEARXNG_ENV" ]]; then
+    umask 077
+    printf 'SEARXNG_SECRET=%s\n' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" >"$SEARXNG_ENV"
+  fi
+  if ! docker_ready; then
+    say "Запускаю Docker Desktop (только для SearXNG)…"
+    systemctl --user start docker-desktop.service
+    touch "$DOCKER_MARK"
+    local deadline=$((SECONDS + 120))
+    until docker_ready; do
+      ((SECONDS < deadline)) || die "Docker Desktop не поднялся за 2 минуты"
+      sleep 2
+    done
+  fi
+  say "Поднимаю SearXNG…"
+  docker --context desktop-linux compose -p qwenchik-search \
+    -f "$PROJECT_DIR/compose.searxng.yml" --env-file "$SEARXNG_ENV" up -d >/dev/null
+  wait_url "$SEARXNG_URL_LOCAL" 60 || say "SearXNG пока не отвечает — поиск пойдёт через другие провайдеры"
+}
+
+stop_search() {
+  if docker_ready; then
+    docker --context desktop-linux compose -p qwenchik-search \
+      -f "$PROJECT_DIR/compose.searxng.yml" --env-file "$SEARXNG_ENV" down >/dev/null 2>&1 || true
+  fi
+  if [[ -f "$DOCKER_MARK" ]]; then
+    say "Останавливаю Docker Desktop…"
+    systemctl --user stop docker-desktop.service || true
+    rm -f "$DOCKER_MARK"
+  fi
+}
+
+cmd_start() {
+  local search=0 open=1
+  for arg in "$@"; do
+    case $arg in
+      --search) search=1 ;;
+      --no-open) open=0 ;;
+      *) die "неизвестный флаг: $arg" ;;
+    esac
+  done
+  ((search)) && start_search
+  say "Запускаю модель…"
+  systemctl --user start qwenchik-model.service
+  wait_url "$MODEL_HEALTH" 180 || die "модель не ответила за 3 минуты: qwenchik logs model"
+  say "Запускаю приложение…"
+  systemctl --user start qwenchik-app.service
+  wait_url "$APP_URL/api/health" 60 || die "приложение не ответило: qwenchik logs app"
+  say "Готово: $APP_URL"
+  notify "Запущен: $APP_URL"
+  ((open)) && cmd_open
+  return 0
+}
+
+cmd_stop() {
+  say "Останавливаю приложение и модель…"
+  systemctl --user stop qwenchik-app.service qwenchik-model.service || true
+  stop_search
+  say "Всё остановлено, ресурсы освобождены."
+  notify "Остановлен, память освобождена"
+}
+
+cmd_status() {
+  local u
+  for u in qwenchik-model qwenchik-app docker-desktop; do
+    if unit_active "$u"; then printf '  %-16s запущен\n' "$u"; else printf '  %-16s остановлен\n' "$u"; fi
+  done
+  if docker_ready && docker --context desktop-linux ps --format '{{.Names}}' | grep -q qwenchik-search; then
+    printf '  %-16s запущен\n' searxng
+  else
+    printf '  %-16s остановлен\n' searxng
+  fi
+}
+
+cmd_open() { xdg-open "$APP_URL" >/dev/null 2>&1 & disown || true; }
+
+cmd_logs() {
+  case ${1:-app} in
+    model) journalctl --user -u qwenchik-model -n 80 -f ;;
+    app) journalctl --user -u qwenchik-app -n 80 -f ;;
+    *) die "logs model|app" ;;
+  esac
+}
+
+case ${1:-} in
+  start) shift; cmd_start "$@" ;;
+  stop) cmd_stop ;;
+  status) cmd_status ;;
+  open) cmd_open ;;
+  logs) shift; cmd_logs "$@" ;;
+  *) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

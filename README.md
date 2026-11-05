@@ -280,6 +280,20 @@ Worker generation and API doctor inference use a shared, single-slot model guard
 
 CLI doctor first checks local app health. If the app responds, it makes one bounded `/api/doctor` request and returns the running process's sanitized `research_limits`, PDF runtime snapshot and check statuses. It does not substitute newly edited local policy or run a second model/runtime/storage probe. Delegation has a 34-second timeout, honors caller cancellation, disables proxies and redirects, and bounds the response body. Unavailable/malformed diagnostics produce a warning with unknown policy rather than a guessed local value. Without an app, standalone checks report local effective policy and retain the worker-ownership guard before inference.
 
+## On-demand launch (recommended)
+
+The model holds ~1.6 GB RAM and ~3.3 GB VRAM while running, so it should not autostart. Install the units **without** `--enable` (see below), then use the launcher:
+
+```sh
+ln -sfn "$PWD/scripts/qwenchik" ~/.local/bin/qwenchik
+qwenchik start            # model + app natively (GPU/Vulkan), opens the browser
+qwenchik start --search   # also SearXNG in Docker; starts Docker Desktop only if it was not running
+qwenchik stop             # stops everything start brought up and frees RAM/VRAM
+qwenchik status | open | logs [model|app]
+```
+
+The model and app run natively because GPU offload is unavailable inside the Docker Desktop VM. Only SearXNG runs in a container (`compose.searxng.yml`). Its secret is generated once into `~/.config/qwenchik/searxng.env`. Without SearXNG, search falls back to the other configured providers. When run without a terminal (for example from a desktop menu entry with `Exec=~/.local/bin/qwenchik start`), the launcher reports results through desktop notifications.
+
 ## Persistent login-user runtime
 
 Build the app with `make build`, then install persistent model and app services from the repository root:
