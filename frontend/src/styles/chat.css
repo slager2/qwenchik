@@ -122,7 +122,7 @@
 .chat-empty h2 { font-size: 1.75rem; font-weight: 600; letter-spacing: -.02em; }
 .chat-empty > p { max-width: 30rem; color: var(--text-secondary); font-size: var(--text-md); }
 .chat-empty__suggestions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); width: 100%; max-width: 34rem; margin-top: var(--space-4); }
-.chat-empty__suggestions button { display: flex; white-space: normal; align-items: flex-start; gap: var(--space-3); min-height: var(--control); padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); color: var(--text-secondary); text-align: left; transition: background-color var(--dur-fast) var(--ease-out); }
+.chat-empty__suggestions button { display: flex; justify-content: flex-start; white-space: normal; align-items: flex-start; gap: var(--space-3); min-height: var(--control); padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); color: var(--text-secondary); text-align: left; transition: background-color var(--dur-fast) var(--ease-out); }
 .chat-empty__suggestions button:hover { background: var(--bg-subtle); }
 .chat-empty__suggestions button > svg { margin-top: 2px; flex: none; }
 .chat-empty__suggestions span { display: grid; gap: 2px; min-width: 0; }
@@ -147,7 +147,7 @@
 .chat-center > .chat-to-bottom { position: sticky; bottom: var(--space-2); z-index: 3; align-self: center; margin-top: calc(-1 * var(--control) - var(--space-2)); border-radius: var(--radius-full); background: var(--bg-elevated); box-shadow: var(--shadow-sm); }
 
 /* Research progress line */
-.research-overview { display: grid; gap: var(--space-2); margin-top: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); }
+.research-overview { display: grid; gap: var(--space-2); margin-block: var(--space-3) var(--space-1); padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); }
 .q-research-overview__heading-row { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; }
 .q-research-overview__indicator { display: grid; place-items: center; width: 2rem; height: 2rem; flex: none; border-radius: 50%; background: var(--bg-muted); color: var(--text-secondary); }
 .q-research-overview__text { flex: 1 1 auto; min-width: 0; }
@@ -237,6 +237,9 @@ details.research-overview__note ul { margin: var(--space-1) 0 var(--space-2); pa
   .chat-header .chat-header__inline { display: none; }
   .chat-header .chat-more { display: block; }
   .chat-privacy { text-align: left; }
+  .research-overview { padding: var(--space-3); }
+  .research-overview__actions, details.research-overview__note { margin-left: calc(-1 * var(--space-2)); }
+  p.research-overview__note { padding-left: 0; }
 }
 @media (max-height: 42rem) {
   .chat-composer .ui-textarea { max-height: 25dvh; }
