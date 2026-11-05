@@ -92,8 +92,15 @@ func modelInvocationHash(request llm.ChatRequest) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if request.RuntimeFingerprint != "" || request.EnableThinking != nil || request.CachePrompt != nil {
-		return invocationHash([]any{base, request.ContextWindow, request.ContextOutputReserve, request.RuntimeFingerprint, request.EnableThinking, request.CachePrompt})
+	// The identity, not whether this particular request revalidates it, is
+	// part of the durable input: a resumed run re-pins the fingerprint on its
+	// first request only, and must still match the attempt recorded before.
+	identity := request.RuntimeFingerprint
+	if request.RuntimeIdentity != "" {
+		identity = request.RuntimeIdentity
+	}
+	if identity != "" || request.EnableThinking != nil || request.CachePrompt != nil {
+		return invocationHash([]any{base, request.ContextWindow, request.ContextOutputReserve, identity, request.EnableThinking, request.CachePrompt})
 	}
 	return base, nil
 }

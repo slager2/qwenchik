@@ -55,6 +55,9 @@ func (c *sessionModelClient) prepare(ctx context.Context, request llm.ChatReques
 	if request.RuntimeFingerprint == "" && c.model.RuntimeFingerprint != "" {
 		c.fingerprintOnce.Do(func() { request.RuntimeFingerprint = c.model.RuntimeFingerprint })
 	}
+	if request.RuntimeIdentity == "" {
+		request.RuntimeIdentity = c.model.RuntimeFingerprint
+	}
 	// llama.cpp's prompt cache is safe for the stable, local research runtime.
 	// Only provide the default when the caller did not make an explicit choice:
 	// special probes and future A/B tests can still opt out per request.

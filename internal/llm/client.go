@@ -25,15 +25,19 @@ type ChatMessage struct {
 }
 
 type ChatRequest struct {
-	Messages              []ChatMessage
-	Model                 string   `json:"-"`
-	BaseURL               string   `json:"-"`
-	Stop                  []string `json:"-"`
-	ContextWindow         int      `json:"-"`
-	ContextOutputReserve  int      `json:"-"`
-	RuntimeFingerprint    string   `json:"-"`
-	EnableThinking        *bool    `json:"-"`
-	CachePrompt           *bool    `json:"-"`
+	Messages             []ChatMessage
+	Model                string   `json:"-"`
+	BaseURL              string   `json:"-"`
+	Stop                 []string `json:"-"`
+	ContextWindow        int      `json:"-"`
+	ContextOutputReserve int      `json:"-"`
+	RuntimeFingerprint   string   `json:"-"`
+	// RuntimeIdentity is the pinned session runtime identity used for durable
+	// invocation identity. Unlike RuntimeFingerprint it never forces a live
+	// metadata refresh, so it can be attached to every request of a run.
+	RuntimeIdentity       string `json:"-"`
+	EnableThinking        *bool  `json:"-"`
+	CachePrompt           *bool  `json:"-"`
 	MaxTokens             int
 	Temperature           float64
 	TemperatureSet        bool
