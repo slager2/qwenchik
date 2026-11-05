@@ -267,6 +267,10 @@ func validateCitationReview(units []citationClaim, review citationReview, catalo
 	return nil
 }
 
+// finalizerCorrectedKey marks a finalization whose answer already needed the
+// finalizer correction call, so later roles cap their own retries.
+type finalizerCorrectedKey struct{}
+
 func (w *Worker) reviewCitationClaims(ctx context.Context, taskID, answer string, catalogue []citationEvidence) (citationReview, error) {
 	_, maxClaims := citationLimits(ctx)
 	units, err := citationUnits(answer, catalogue, maxClaims)
@@ -277,7 +281,14 @@ func (w *Worker) reviewCitationClaims(ctx context.Context, taskID, answer string
 	schema := citationReviewSchema(maxClaims)
 	criticCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	for attempt := 0; attempt < 2; attempt++ {
+	attempts := 2
+	if corrected, _ := ctx.Value(finalizerCorrectedKey{}).(bool); corrected {
+		// The finalizer already spent its correction call on this answer; do
+		// not stack a second critic attempt on top (retry budget per role
+		// group: finalizer x2 + critic x1, instead of x2 + x2).
+		attempts = 1
+	}
+	for attempt := 0; attempt < attempts; attempt++ {
 		roleCtx, snapshot, pinned, err := w.roleContext(criticCtx, taskID, fmt.Sprintf("critic_%d", attempt), "")
 		if err != nil {
 			return citationReview{}, err
@@ -526,6 +537,7 @@ func (w *Worker) synthesizeResearchCitationsWithPartial(ctx context.Context, tas
 			if mappingInvalid {
 				correction := "The previous answer failed deterministic citation formatting. Return schema-bound JSON with an answer string. Write one short claim per paragraph. Each paragraph MUST end with exactly one [evidence_id] copied verbatim from available_evidence_ids. No numeric citations, headings, uncited text or extra claims. Use only exact supporting excerpts; omit unsupported assertions."
 				answer, err = w.synthesize(ctx, task, goal, "", scoped, verificationSummary, ids, correction, messageID)
+				ctx = context.WithValue(ctx, finalizerCorrectedKey{}, true)
 			}
 		}
 		if modelResourceReason(err) != "" || errors.Is(err, errResourcePause) {
