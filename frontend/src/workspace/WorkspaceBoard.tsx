@@ -1,4 +1,4 @@
-import type { Task, TaskStatus } from './types'
+import type { Task, TaskStatus } from '../types'
 
 export default function WorkspaceBoard({ columns, tasks, selectedID, statusLabels, stageLabels, onSelect, formatTime }: {
   columns: { id: string; title: string; statuses: TaskStatus[] }[]
