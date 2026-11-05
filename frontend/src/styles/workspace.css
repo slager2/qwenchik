@@ -5,9 +5,6 @@
 .workspace-layout.has-selection { grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr); align-items: start; }
 .workspace-list { display: grid; gap: var(--space-5); min-width: 0; }
 .workspace-detail { min-width: 0; }
-.workspace-notice { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) var(--space-1) var(--space-1) var(--space-4); border-radius: var(--radius-md); background: var(--danger-soft); font-size: var(--text-sm); }
-.workspace-notice > svg { flex: none; color: var(--danger); }
-.workspace-notice > span { flex: 1 1 auto; min-width: 0; }
 
 /* Create form */
 .workspace-create { display: grid; gap: var(--space-2); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-subtle); }

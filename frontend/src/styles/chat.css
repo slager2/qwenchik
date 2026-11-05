@@ -6,23 +6,6 @@
 .chat-center { position: relative; display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .chat-center > :not(.chat-transcript, .chat-to-bottom) { flex-shrink: 0; width: min(100% - 2 * var(--space-4), var(--measure-chat)); margin-inline: auto; }
 
-/* Shared fallbacks for plain controls rendered by detail components */
-:where(.conversation-shell, .chat-drawer, .workspace-page, .spaces-page) button:not([class]) {
-  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
-  min-height: var(--control); padding: 0 var(--space-4); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-  background: var(--bg); color: var(--text); font-size: var(--text-sm); font-weight: 500; white-space: nowrap;
-}
-:where(.conversation-shell, .chat-drawer, .workspace-page, .spaces-page) button:not([class]):hover:not(:disabled) { background: var(--bg-hover); }
-:where(.conversation-shell, .chat-drawer, .workspace-page, .spaces-page) button:not([class]):disabled { opacity: .45; }
-:where(.conversation-shell, .chat-drawer, .workspace-page, .spaces-page) :where(input:not([type='search'], [type='checkbox'], [type='radio']), select, textarea):where(:not([class])) {
-  min-width: 0; min-height: var(--control); padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-size: var(--text-md);
-}
-:where(.conversation-shell, .chat-drawer, .workspace-page, .spaces-page) summary { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control); list-style: none; }
-:where(.conversation-shell, .chat-drawer, .workspace-page, .spaces-page) summary::-webkit-details-marker { display: none; }
-:where(.conversation-shell, .chat-drawer, .workspace-page, .spaces-page) summary::after { content: ''; width: .45em; height: .45em; margin-left: .15em; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; rotate: 45deg; translate: 0 -.15em; opacity: .6; transition: rotate var(--dur-fast) var(--ease-out); }
-:where(.conversation-shell, .chat-drawer, .workspace-page, .spaces-page) details[open] > summary::after { rotate: 225deg; translate: 0 .1em; }
-
 /* Conversation list (shell sidebar) */
 .chat-sidebar { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; }
 .chat-search { position: relative; display: flex; align-items: center; margin: 0 var(--space-1); color: var(--text-tertiary); }

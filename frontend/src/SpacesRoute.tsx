@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
 import type { Conversation, Space, SpaceContextItem, SpaceResearchRun } from './types'
-import AppShell from './AppShell'
-import './spaces.css'
+import AppShell, { TopBar } from './AppShell'
+import { Icon } from './icons'
+import { Badge, Button, EmptyState, IconButton, Input, plural, Spinner, Textarea } from './ui'
+import './styles/spaces.css'
 
 function spaceID() {
   const match = window.location.hash.match(/^#\/spaces\/([^/?]+)/)
@@ -69,27 +71,43 @@ export default function SpacesRoute() {
     finally { setBusy(false) }
   }
 
-  const projectSidebar = <aside className="spaces-nav" aria-label="Проекты"><div className="spaces-nav-head"><div><span className="spaces-kicker">Контекст</span><h1>Проекты</h1></div><button className="spaces-icon-button" type="button" aria-label="Создать проект" onClick={() => setCreating(true)}>+</button></div>
-        <p className="spaces-nav-copy">Здесь собраны чаты, источники и решения проекта.</p>
-        <nav>{spaces.map((item) => <a key={item.id} href={`#/spaces/${encodeURIComponent(item.id)}`} className={item.id === selected ? 'is-active' : ''} onClick={(event) => { event.preventDefault(); select(item.id) }}><span className="spaces-nav-dot" aria-hidden="true" /><span><strong>{item.name || item.title}</strong><small>{item.description || 'Без описания'}</small></span></a>)}</nav>
-        {!loading && !spaces.length && <p className="spaces-empty">Создайте первый проект для долгой работы.</p>}
-      </aside>
+  const projectSidebar = <div className="spaces-nav" aria-label="Проекты">
+    <div className="spaces-nav-head"><h2>Проекты</h2><IconButton label="Создать проект" icon={<Icon name="plus" size={18} />} onClick={() => setCreating(true)} /></div>
+    <nav>{spaces.map((item) => <a key={item.id} href={`#/spaces/${encodeURIComponent(item.id)}`} aria-current={item.id === selected ? 'page' : undefined} onClick={(event) => { event.preventDefault(); select(item.id) }}><Icon name="projects" size={16} /><span>{item.name || item.title}</span></a>)}</nav>
+    {!loading && !spaces.length && <p className="spaces-empty">Проектов пока нет.</p>}
+  </div>
 
   return <AppShell activeSection="projects" sidebar={projectSidebar} mobileSidebar={projectSidebar}>
-    <main className="spaces-shell">
+    <main className="spaces-page">
+      <TopBar title={active ? active.name || active.title : 'Проекты'} subtitle={active ? `${conversations.length} ${plural(conversations.length, 'чат', 'чата', 'чатов')} · ${context.length} ${plural(context.length, 'материал', 'материала', 'материалов')} · ${research.length} ${plural(research.length, 'исследование', 'исследования', 'исследований')}` : undefined} actions={active && <Button variant="primary" size="sm" icon={<Icon name="plus" />} onClick={() => void newChat()} disabled={busy}>Новый чат в проекте</Button>} />
       <section className="spaces-main" aria-live="polite">
-        {error && <div className="spaces-error" role="alert">{error}<button type="button" onClick={() => void load()}>Повторить</button></div>}
-        {loading ? <div className="spaces-loading">Загружаю контекст…</div> : active ? <>
-          <header className="spaces-heading"><div><span className="spaces-kicker">Проект</span><h2>{active.name || active.title}</h2><p>{active.description || 'Добавьте описание, чтобы держать цель проекта в поле зрения.'}</p></div><button className="spaces-primary" type="button" onClick={() => void newChat()} disabled={busy}>Новый чат в проекте</button></header>
-          <div className="spaces-stats"><div><strong>{conversations.length}</strong><span>чатов</span></div><div><strong>{context.length}</strong><span>проверенных материалов</span></div><div><strong>{research.length}</strong><span>исследований</span></div><div className="spaces-stats-note">Контекст ограничен 16 KB и собирается из завершённых ответов с подтверждёнными источниками.</div></div>
-          <div className="spaces-grid">
-            <section className="spaces-panel spaces-conversations"><header><div><span className="spaces-kicker">РАЗГОВОРЫ</span><h3>Последние чаты</h3></div><span className="spaces-count">{conversations.length}</span></header>{conversations.length ? <ul>{conversations.slice(0, 8).map((item) => <li key={item.id}><a href={`#/chat/${encodeURIComponent(item.id)}`}><strong>{item.title || 'Новый чат'}</strong><small>{item.mode === 'research' ? 'Deep Research' : 'Чат'} · {formatDate(item.updated_at || item.created_at)}</small></a></li>)}</ul> : <p className="spaces-muted">В этом пространстве пока нет чатов.</p>}</section>
-            <section className="spaces-panel spaces-context"><header><div><span className="spaces-kicker">КОНТЕКСТ ПРОЕКТА</span><h3>Проверенные материалы</h3></div><span className="spaces-count">{context.length}</span></header>{context.length ? <div className="spaces-context-list">{context.map((item) => <article key={item.run_id}><div className="spaces-context-meta"><span>✓ Проверено</span><time>{formatDate(item.updated_at)}</time></div><h4>{item.conversation_title}</h4><p>{item.summary}</p><details><summary>{item.sources.length} источников</summary><ul>{item.sources.map((source) => <li key={source.evidence_id}><a href={source.canonical_url} target="_blank" rel="noreferrer">{source.title || source.canonical_url}</a></li>)}</ul></details></article>)}</div> : <p className="spaces-muted">После завершённого исследования с проверенными ссылками материалы появятся здесь.</p>}</section>
-            <section className="spaces-panel spaces-research"><header><div><span className="spaces-kicker">ИСТОРИЯ</span><h3>Исследования</h3></div><span className="spaces-count">{research.length}</span></header>{research.length ? <ul>{research.slice(0, 6).map((item) => <li key={item.run.id}><span className="spaces-status" aria-hidden="true" /><div><strong>{item.goal || item.conversation_title}</strong><small>{item.verification_status === 'supported' ? 'Проверено' : item.verification_status || 'Статус не указан'} · {formatDate(item.completed_at)}</small></div></li>)}</ul> : <p className="spaces-muted">Здесь будет история исследовательских запусков.</p>}</section>
-          </div>
-        </> : <div className="spaces-empty-state"><span className="spaces-kicker">Начните с проекта</span><h2>Один проект — один долговечный контекст.</h2><p>Создайте проект, чтобы исследования, источники и решения не терялись между чатами.</p><button className="spaces-primary" type="button" onClick={() => setCreating(true)}>Создать проект</button></div>}
+        {error && <div className="workspace-notice" role="alert"><Icon name="alert" size={18} /><span>{error}</span><Button size="sm" variant="ghost" onClick={() => void load()}>Повторить</Button></div>}
+        {loading ? <div className="spaces-loading"><Spinner /></div> : active ? <>
+          <header className="spaces-heading"><p>{active.description || 'Добавьте описание, чтобы держать цель проекта в поле зрения.'}</p><p className="ui-muted">Контекст проекта ограничен 16 KB и собирается из завершённых ответов с подтверждёнными источниками.</p></header>
+          <section className="spaces-section" aria-labelledby="spaces-conversations"><h3 id="spaces-conversations">Чаты <span>{conversations.length}</span></h3>{conversations.length ? <ul className="spaces-list">{conversations.slice(0, 8).map((item) => <li key={item.id}><a href={`#/chat/${encodeURIComponent(item.id)}`}><Icon name={item.mode === 'research' ? 'sources' : 'chat'} size={16} /><span>{item.title || 'Новый чат'}</span><small>{item.mode === 'research' ? 'Deep Research' : 'Чат'} · {formatDate(item.updated_at || item.created_at)}</small></a></li>)}</ul> : <p className="spaces-muted">В этом проекте пока нет чатов.</p>}</section>
+          <section className="spaces-section" aria-labelledby="spaces-context"><h3 id="spaces-context">Проверенные материалы <span>{context.length}</span></h3>{context.length ? <div className="spaces-context-list">{context.map((item) => <article key={item.run_id}><div className="spaces-context-meta"><Badge tone="success">Проверено</Badge><time>{formatDate(item.updated_at)}</time></div><h4>{item.conversation_title}</h4><p>{item.summary}</p><details><summary>{item.sources.length} источников</summary><ul>{item.sources.map((source) => <li key={source.evidence_id}><a href={source.canonical_url} target="_blank" rel="noreferrer">{source.title || source.canonical_url}</a></li>)}</ul></details></article>)}</div> : <p className="spaces-muted">После завершённого исследования с проверенными ссылками материалы появятся здесь.</p>}</section>
+          <section className="spaces-section" aria-labelledby="spaces-research"><h3 id="spaces-research">Исследования <span>{research.length}</span></h3>{research.length ? <ul className="spaces-list">{research.slice(0, 6).map((item) => <li key={item.run.id}><div><Icon name="sources" size={16} /><span>{item.goal || item.conversation_title}</span><small>{item.verification_status === 'supported' ? 'Проверено' : item.verification_status || 'Статус не указан'} · {formatDate(item.completed_at)}</small></div></li>)}</ul> : <p className="spaces-muted">Здесь будет история исследовательских запусков.</p>}</section>
+        </> : <EmptyState icon={<Icon name="projects" />} title="Один проект — один долговечный контекст" description="Создайте проект, чтобы исследования, источники и решения не терялись между чатами." action={<Button variant="primary" icon={<Icon name="plus" />} onClick={() => setCreating(true)}>Создать проект</Button>} />}
       </section>
-    {creating && <div className="spaces-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreating(false) }}><form className="spaces-modal" role="dialog" aria-modal="true" aria-labelledby="space-dialog-title" onSubmit={(event) => { event.preventDefault(); void create() }}><span className="spaces-kicker">Новый проект</span><h2 id="space-dialog-title">Дайте проекту имя</h2><label>Название<input autoFocus value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="Например, запуск продукта" /></label><label>Описание <span>необязательно</span><textarea value={description} maxLength={280} onChange={(event) => setDescription(event.target.value)} placeholder="Цель, ограничения и важные решения" rows={3} /></label><div className="spaces-modal-actions"><button className="spaces-quiet-button" type="button" onClick={() => setCreating(false)}>Отмена</button><button className="spaces-primary" type="submit" disabled={!name.trim() || busy}>{busy ? 'Создаём…' : 'Создать'}</button></div></form></div>}
+      {creating && <ProjectDialog name={name} description={description} busy={busy} onName={setName} onDescription={setDescription} onCancel={() => setCreating(false)} onSubmit={() => void create()} />}
     </main>
   </AppShell>
+}
+
+function ProjectDialog({ name, description, busy, onName, onDescription, onCancel, onSubmit }: { name: string; description: string; busy: boolean; onName: (value: string) => void; onDescription: (value: string) => void; onCancel: () => void; onSubmit: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useLayoutEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
+    const dialog = ref.current
+    dialog?.showModal()
+    return () => { dialog?.close(); previous?.focus({ preventScroll: true }) }
+  }, [])
+  return <dialog ref={ref} className="spaces-modal" aria-labelledby="space-dialog-title" onCancel={onCancel} onClick={(event) => { if (event.target === event.currentTarget) onCancel() }}>
+    <form onSubmit={(event) => { event.preventDefault(); onSubmit() }}>
+      <h2 id="space-dialog-title">Новый проект</h2>
+      <label className="ui-field">Название<Input autoFocus value={name} maxLength={80} onChange={(event) => onName(event.target.value)} placeholder="Например, запуск продукта" /></label>
+      <label className="ui-field">Описание <small>необязательно</small><Textarea value={description} maxLength={280} onChange={(event) => onDescription(event.target.value)} placeholder="Цель, ограничения и важные решения" rows={3} /></label>
+      <div className="spaces-modal-actions"><Button variant="ghost" onClick={onCancel}>Отмена</Button><Button variant="primary" type="submit" disabled={!name.trim() || busy} loading={busy}>{busy ? 'Создаём…' : 'Создать'}</Button></div>
+    </form>
+  </dialog>
 }

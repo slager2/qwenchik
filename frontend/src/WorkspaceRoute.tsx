@@ -11,7 +11,7 @@ import type { AgentEvent, Approval, Artifact, Checkpoint, DraftMessage, Evidence
 import { mergeRuntimeSnapshot } from './telemetry-state.mjs'
 import AppShell, { TopBar } from './AppShell'
 import { Icon } from './icons'
-import { Badge, Button, EmptyState, IconButton, Input, Textarea } from './ui'
+import { Badge, Button, EmptyState, IconButton, Input, plural, Textarea } from './ui'
 import './styles/workspace.css'
 import { columns, eventLabels, stageLabels, statusLabels, timeLabel } from './workspace/labels'
 import TaskInspector from './workspace/TaskInspector'
@@ -494,7 +494,7 @@ export default function WorkspaceRoute() {
   const modelCheck = doctor?.checks.llm
   const apiReady = health?.status === 'ok' && health.database === 'ok' && health.worker === 'attached'
 
-  const summary = [`${counts.total} ${counts.total === 1 ? 'задача' : counts.total >= 2 && counts.total <= 4 ? 'задачи' : 'задач'}`, counts.active ? `${counts.active} в работе` : '', counts.approvals ? `${counts.approvals} ждут решения` : ''].filter(Boolean).join(' · ')
+  const summary = [`${counts.total} ${plural(counts.total, 'задача', 'задачи', 'задач')}`, counts.active ? `${counts.active} в работе` : '', counts.approvals ? `${counts.approvals} ${counts.approvals === 1 ? 'ждёт' : 'ждут'} решения` : ''].filter(Boolean).join(' · ')
 
   return (
     <AppShell activeSection="tasks" commandPalette={false} onMemory={() => setMemoryOpen(true)}>

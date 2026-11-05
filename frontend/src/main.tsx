@@ -9,7 +9,6 @@ import './styles/tokens.css'
 import './styles/base.css'
 import './styles/components.css'
 import './styles/telemetry.css'
-import './styles/tasks-projects-redesign.css'
 import App from './App'
 
 createRoot(document.getElementById('root')!).render(
