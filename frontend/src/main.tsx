@@ -9,7 +9,7 @@ import './styles/tokens.css'
 import './styles/base.css'
 import './styles/components.css'
 import './style.css'
-import './TelemetryPanel.css'
+import './styles/telemetry.css'
 import './styles/tasks-projects-redesign.css'
 import App from './App'
 
