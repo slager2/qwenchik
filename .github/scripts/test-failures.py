@@ -48,5 +48,14 @@ if build_errors:
     annotations.insert(0, ("build", "\n".join(build_errors[:40])[:3500]))
 for title, body in annotations[:10]:
     print(f"::error title={escape(title)}::{escape(body)}")
+
+# Full report in the job summary: rendered on the public run page, no API needed.
+import os
+summary = os.environ.get("GITHUB_STEP_SUMMARY")
+if summary and annotations:
+    with open(summary, "a", encoding="utf-8") as out:
+        out.write("## Failing packages\n\n")
+        for title, body in annotations:
+            out.write(f"### {title}\n\n```\n{body}\n```\n\n")
 print(f"failed packages: {len(failed)}", file=sys.stderr)
 sys.exit(1 if failed or build_errors else 0)
