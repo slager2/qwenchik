@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -227,7 +228,7 @@ func TestDoctorResearchPolicySnapshotIsSafeAndRuntimeOnly(t *testing.T) {
 		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 			t.Fatal(err)
 		}
-		if body.Limits["pdf_bytes"] != float64(67108864) || body.Limits["pdf_allow_unsandboxed_fallback"] != false || body.Runtime["isolated_available"] != available || body.Runtime["fallback_allowed"] != false {
+		if body.Limits["pdf_bytes"] != float64(67108864) || body.Limits["pdf_allow_unsandboxed_fallback"] != false || body.Runtime["isolated_available"] != (available && runtime.GOOS != "windows") || body.Runtime["fallback_allowed"] != false {
 			t.Fatal(response.Body.String())
 		}
 	}
