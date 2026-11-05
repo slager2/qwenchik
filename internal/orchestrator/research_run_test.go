@@ -449,7 +449,8 @@ func TestResearchRunAllModelPathsAndToolReservations(t *testing.T) {
 	}{
 		{"zero snapshot", 0, 24, false, domain.StatusCompleted, ""},
 		{"critic explicit zero", 0.65, 24, false, domain.StatusCompleted, ""},
-		{"critic repair budget exhausted", 0, 8, true, domain.StatusFailed, "research_budget_exceeded"},
+		// Planner + verifier + finalizer + critic leaves no reservation for a critic repair.
+		{"critic repair budget exhausted", 0, 4, true, domain.StatusFailed, "research_budget_exceeded"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -474,13 +475,14 @@ func TestResearchRunAllModelPathsAndToolReservations(t *testing.T) {
 				if counters := researchRunSession(t, f.store, saved.TaskID).Counters; counters.LLMCalls != index+1 || counters.HTTPAttempts != index+1 {
 					t.Error("worker model path bypassed or duplicated its durable reservation")
 				}
-				if index < 6 {
+				critic := strings.Contains(request.Messages[0].Content, "citation support critic")
+				if isPlannerRequest(request) || isVerifierRequest(request) {
 					if streaming {
-						return "", errors.New("structured planner, actor, or verifier unexpectedly streamed")
+						return "", errors.New("structured planner or verifier unexpectedly streamed")
 					}
 					return base.respond(request, index)
 				}
-				if index == 6 {
+				if !critic {
 					if !streaming {
 						return "", errors.New("finalizer did not stream")
 					}
@@ -501,7 +503,7 @@ func TestResearchRunAllModelPathsAndToolReservations(t *testing.T) {
 					encoded, err := json.Marshal(map[string]string{"answer": strings.Join(paragraphs, "\n\n")})
 					return string(encoded), err
 				}
-				if index == 7 {
+				if critic {
 					if test.criticInvalid {
 						return "{", nil
 					}
@@ -522,24 +524,25 @@ func TestResearchRunAllModelPathsAndToolReservations(t *testing.T) {
 			worker := New(f.store, llm.NewGuardedClient(model), researchRunRegistry(t, f.store, search, fetcher), Options{MaxSteps: 1, MaxSearchQueries: 1, MaxFetchBytes: 1, MaxOutputTokens: 64, Temperature: 1.7, TopP: 0.99, TaskTimeout: time.Minute})
 			worker.runTask(ctx, f.task)
 			calls := model.calls()
-			if len(calls) != 8 {
-				t.Fatalf("model paths=%d, want planner + four actors + verifier + finalizer + critic", len(calls))
+			// Canonical search/fetch steps are deterministic and issue no actor inference.
+			if len(calls) != 4 {
+				t.Fatalf("model paths=%d, want planner + verifier + finalizer + critic", len(calls))
 			}
 			for index, call := range calls {
 				temperature, tokens := saved.ModelSnapshot.Temperature, 4096
-				if index == 7 {
+				if index == 3 {
 					if !strings.Contains(call.request.Messages[0].Content, "citation support critic") {
 						t.Error("expected citation critic call was not reached")
 					}
 					temperature, tokens = 0, 2048
 				}
 				assertResearchRunRequest(t, call.request, saved.ModelSnapshot, temperature, tokens)
-				if call.streaming != (index == 6) || len(call.request.JSONSchema) == 0 {
+				if call.streaming != (index == 2) || len(call.request.JSONSchema) == 0 {
 					t.Errorf("model path %d streaming=%t schema=%t", index, call.streaming, len(call.request.JSONSchema) > 0)
 				}
 			}
 			after := researchRunSession(t, f.store, saved.TaskID)
-			if search.calls.Load() != 2 || fetcher.calls.Load() != 2 || after.Counters.SearchQueries != 2 || after.Counters.Fetches != 2 || after.Counters.Evidence != 2 || after.Counters.FetchedBytes != fetcher.bytes.Load() || after.Counters.LLMCalls != 8 || after.Counters.HTTPAttempts != 8 {
+			if search.calls.Load() != 2 || fetcher.calls.Load() != 2 || after.Counters.SearchQueries != 2 || after.Counters.Fetches != 2 || after.Counters.Evidence != 2 || after.Counters.FetchedBytes != fetcher.bytes.Load() || after.Counters.LLMCalls != 4 || after.Counters.HTTPAttempts != 4 {
 				t.Fatalf("provider calls=%d/%d counters=%+v actual bytes=%d", search.calls.Load(), fetcher.calls.Load(), after.Counters, fetcher.bytes.Load())
 			}
 			assertResearchRunTerminal(t, f, test.wantStatus, test.wantCode)
