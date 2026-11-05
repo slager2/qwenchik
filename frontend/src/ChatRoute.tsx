@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from 'react'
 import { api } from './api'
-import { createCoalescedScheduler, nextFallbackDelay, runEventInvalidations, runResyncResources } from './chat-sync.mjs'
+import { createCoalescedScheduler, nextFallbackDelay, runResyncResources } from './chat-sync.mjs'
 import { createRunEvidenceCache } from './evidence-cache.mjs'
 import { mergeRuntimeSnapshot } from './telemetry-state.mjs'
 import ChatComposer from './ChatComposer'
 import ChatTranscript from './ChatTranscript'
-import { applyRunEvent, canUseResearchContext, citationReferences, explicitResearchContextReferences, createStreamState, mergeMessages, mergeRunEventHistory, normalizeSources, terminal, type StreamState } from './conversation-state.mjs'
+import { canUseResearchContext, citationReferences, explicitResearchContextReferences, createStreamState, terminal } from './conversation-state.mjs'
 import ResearchInspector from './ResearchInspector'
 import ResearchOverview from './ResearchOverview'
 import AppShell from './AppShell'
@@ -13,89 +13,17 @@ import { conversationSetup, defaultSetup, settingsPatch, setupProblem } from './
 import FailureDetails from './FailureDetails'
 import { publicResearchEvents } from './research-state.mjs'
 import ChatSidebar from './ChatSidebar'
-import { recordReload, recordSSE, type ReloadReason } from './network-debug'
-import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, ConversationSetup, DoctorResponse, Evidence, InferenceTelemetry, ResearchPlan, Run, RunRuntime, RuntimeTelemetry, Submission } from './types'
+import { recordReload, type ReloadReason } from './network-debug'
+import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, ConversationSetup, DoctorResponse, Run, RunRuntime, Submission } from './types'
+import { failure, ResourceStatus, useRemote } from './hooks/useRemote'
+import { useResearch } from './hooks/useResearch'
+import { useRunEventStream } from './hooks/useRunEventStream'
+import { transcriptReducer } from './hooks/transcript'
+import { Drawer } from './ui'
 import './chat.css'
 
-const failure = (error: unknown) => error instanceof Error ? error.message : 'Не удалось выполнить запрос. Попробуйте ещё раз.'
 const terminalLabels: Record<string, string> = { partial: 'Частичный результат', blocked: 'Заблокировано проверкой', budget_exhausted: 'Бюджет исчерпан' }
 const labels: Record<string, string> = { queued: 'В очереди', planning: 'Планирование', running: 'В работе', verifying: 'Проверка', completed: 'Готово', failed: 'Не удалось завершить', cancelled: 'Остановлено', paused: 'На паузе', waiting_approval: 'Нужно решение', search: 'Поиск источников', searching: 'Поиск источников', fetch: 'Чтение источников', fetching: 'Чтение источников', extract: 'Извлечение текста', synthesis: 'Подготовка ответа', synthesizing: 'Подготовка ответа', verification: 'Сверка источников', finalization: 'Завершение', discovered: 'Найден', validated: 'Проверен', rejected: 'Отклонён', extracted: 'Текст извлечён', cited: 'Использован в ответе' }
-const eventTypes = ['context.compacted', 'continuation.requested', 'verification.completed', 'run.paused', 'run.resumed', 'run.resource_probe', 'run.blocked', 'run.failed', 'task.created', 'task.status_changed', 'task.recovered', 'message.created', 'message.delta', 'plan.created', 'step.started', 'step.completed', 'step.skipped', 'tool.started', 'tool.completed', 'tool.failed', 'source.updated', 'source.fetch.started', 'source.fetch.failed', 'source.failed', 'source.extracted', 'research.warning', 'search.provider', 'search.hit', 'query.updated', 'verification.updated', 'evidence.created', 'artifact.created', 'approval.requested', 'approval.approved', 'approval.rejected', 'approval.expired', 'task.completed', 'task.failed', 'task.cancelled']
-
-function useRemote<T>(load: (signal: AbortSignal) => Promise<T>, interval = 0, resource = 'chat.resource', merge?: (previous: T | undefined, next: T) => T) {
-  const [data, setData] = useState<T>()
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
-  const controller = useRef<AbortController | null>(null)
-  const sequence = useRef(0)
-  const reload = useCallback(async (reason: 'initial' | 'sse_open' | 'sse_event' | 'sse_resync' | 'terminal' | 'fallback_poll' | 'manual_retry' | 'user_action' = 'manual_retry') => {
-    recordReload(resource, reason)
-    const request = ++sequence.current
-    controller.current?.abort()
-    const next = new AbortController()
-    controller.current = next
-    setLoading(true)
-    try {
-      const result = await load(next.signal)
-      if (next.signal.aborted || request !== sequence.current) return
-      setData(merge ? (previous) => merge(previous, result) : result)
-      setError('')
-    } catch (caught) {
-      if (!next.signal.aborted && request === sequence.current) setError(failure(caught))
-    } finally {
-      if (!next.signal.aborted && request === sequence.current) setLoading(false)
-    }
-  }, [load, merge, resource])
-  const updateData = useCallback<typeof setData>((value) => {
-    controller.current?.abort()
-    sequence.current++
-    setData(value)
-    setLoading(false)
-    setError('')
-  }, [])
-  useEffect(() => {
-    setData(undefined)
-    setError('')
-    void reload('initial')
-    const timer = interval ? window.setInterval(() => void reload('fallback_poll'), interval) : undefined
-    return () => { window.clearInterval(timer); controller.current?.abort(); sequence.current++ }
-  }, [reload, interval])
-  return { data, setData: updateData, error, loading, reload }
-}
-
-function ResourceStatus({ resource, empty }: { resource: { data: unknown; error: string; loading: boolean; reload: () => Promise<void> }; empty?: boolean }) {
-  if (resource.error) return <div className="chat-resource-error" role="status"><p>{resource.error}{resource.data !== undefined ? ' Показаны последние загруженные данные.' : ''}</p><button type="button" onClick={() => void resource.reload()}>Повторить загрузку</button></div>
-  if (resource.loading && resource.data === undefined) return <p className="chat-muted" role="status">Загрузка…</p>
-  if (empty) return <p className="chat-muted">Пока нет данных.</p>
-  return null
-}
-
-function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  const ref = useRef<HTMLDialogElement>(null)
-  useLayoutEffect(() => {
-    const previous = document.activeElement as HTMLElement | null
-    ref.current?.showModal()
-    return () => { ref.current?.close(); previous?.focus({ preventScroll: true }) }
-  }, [])
-  return <dialog ref={ref} className="chat-drawer" aria-label={title} onCancel={onClose} onKeyDown={(event) => {
-    if (event.key !== 'Tab') return
-    const focusable = [...event.currentTarget.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]')].filter((element) => {
-      if (element.tabIndex < 0 || element.closest('[inert], [hidden], [aria-hidden="true"]') || !element.getClientRects().length) return false
-      if (typeof element.checkVisibility === 'function' && !element.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true })) return false
-      // Closed disclosures can retain layout boxes. Only their own first summary
-      // participates in keyboard order; hidden descendants must not trap focus.
-      for (let ancestor = element.parentElement; ancestor && ancestor !== event.currentTarget; ancestor = ancestor.parentElement) {
-        if (ancestor instanceof HTMLDetailsElement && !ancestor.open && !ancestor.querySelector(':scope > summary')?.contains(element)) return false
-      }
-      return true
-    })
-    const first = focusable[0]
-    const last = focusable.at(-1)
-    if (!first || !last) { event.preventDefault(); return }
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
-    if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
-  }} onClick={(event) => { if (event.target === event.currentTarget) onClose() }}><div className="chat-drawer-body"><header><h2>{title}</h2><button type="button" onClick={onClose} aria-label={`Закрыть: ${title}`}>×</button></header>{children}</div></dialog>
-}
 
 function chatID() {
   const match = window.location.hash.match(/^#\/chat\/([^/?]+)/)
@@ -120,18 +48,7 @@ export default function ChatRoute() {
   }
   const navigation = <ChatSidebar conversations={conversations.data ?? []} error={conversations.error} loading={conversations.loading} selected={selected} onSelect={select} onNew={() => select('')} onRetry={() => void conversations.reload('manual_retry')} />
   const focusComposer = useCallback(() => document.getElementById('conversation-input')?.focus(), [])
-  return <AppShell activeSection="chat" sidebar={navigation} onNewChat={() => select('')} composerFocus={focusComposer}><div className="conversation-shell"><ConversationView key={selected || `new-${newVersion}`} id={selected} onSelect={select} onChanged={conversations.reload} onSidebar={() => setSidebar(true)} />{sidebar && <Drawer title="Разговоры" onClose={() => setSidebar(false)}>{navigation}</Drawer>}</div></AppShell>
-}
-
-interface Transcript { messages: ConversationMessage[]; stream: StreamState }
-type TranscriptAction = { type: 'snapshot'; messages: ConversationMessage[] } | { type: 'run'; id: string } | { type: 'event'; event: AgentEvent } | { type: 'history'; id: string; events: AgentEvent[] } | { type: 'resync'; id: string; cursor: number }
-function transcriptReducer(state: Transcript, action: TranscriptAction): Transcript {
-  if (action.type === 'snapshot') return { ...state, stream: { ...state.stream, needsSync: false }, messages: mergeMessages(state.messages, action.messages) }
-  if (action.type === 'run') return state.stream.runID === action.id ? state : { ...state, stream: createStreamState(action.id) }
-  if (action.type === 'history') return state.stream.runID === action.id ? { ...state, stream: mergeRunEventHistory(state.stream, action.events) } : state
-  if (action.type === 'resync') return { ...state, stream: { ...createStreamState(action.id), events: state.stream.runID === action.id ? state.stream.events : [], cursor: action.cursor } }
-  const result = applyRunEvent(state.stream, state.messages, action.event)
-  return { stream: result.state, messages: result.messages }
+  return <AppShell activeSection="chat" sidebar={navigation} onNewChat={() => select('')} composerFocus={focusComposer}><div className="conversation-shell"><ConversationView key={selected || `new-${newVersion}`} id={selected} onSelect={select} onChanged={conversations.reload} onSidebar={() => setSidebar(true)} />{sidebar && <Drawer title="Разговоры" side="left" className="chat-drawer" bodyClassName="chat-drawer-body" onClose={() => setSidebar(false)}>{navigation}</Drawer>}</div></AppShell>
 }
 
 function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; onSelect: (id: string) => void; onChanged: () => Promise<void>; onSidebar: () => void }) {
@@ -448,112 +365,7 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [details, mode, runID])
-  useEffect(() => {
-    if (!runID) { setConnection('idle'); return }
-    let disposed = false
-    let opened = false
-    let reconnecting = false
-    let closed = false
-    let terminalSeen = false
-    let stableTimer: number | undefined
-    const endpoint = `/api/runs/${encodeURIComponent(runID)}/events/stream`
-    const closeStream = () => { if (opened && !closed) { closed = true; recordSSE('close', endpoint) } }
-    const clearFallback = () => { window.clearTimeout(fallbackTimerRef.current); fallbackTimerRef.current = undefined }
-    const cursor = streamRef.current.runID === runID ? streamRef.current.cursor : 0
-    setConnection('connecting')
-    const source = new EventSource(`${endpoint}?after=${cursor}`)
-    const closeSource = () => { terminalSeen = true; source.close(); closeStream() }
-    closeEventStreamRef.current = closeSource
-    const receive = (raw: Event) => {
-      if (disposed) return
-      try {
-        const event = JSON.parse((raw as MessageEvent<string>).data) as AgentEvent
-        if (event.task_id !== runID || event.visibility !== 'user') return
-        if (event.type !== 'message.delta') recordReload('chat.transcript', ['task.completed', 'task.failed', 'task.cancelled'].includes(event.type) ? 'terminal' : 'sse_event')
-        dispatch({ type: 'event', event })
-        const invalidation = runEventInvalidations(event, modeRef.current)
-        const isTerminal = invalidation.reason === 'terminal'
-        if (isTerminal) {
-          terminalSeen = true
-          clearFallback()
-          closeSource(); setConnection('terminal')
-        }
-        if (invalidation.resources.length) syncSchedulerRef.current(invalidation.resources, invalidation.reason)
-      } catch { setConnection('invalid'); setError('Не удалось прочитать событие. Сохранённые сообщения продолжают обновляться.') }
-    }
-    for (const type of [...eventTypes, 'research.round.assessed', 'research.round.stopped', 'report.section.updated']) source.addEventListener(type, receive)
-    source.addEventListener('snapshot', (raw) => {
-      if (disposed) return
-      try {
-        const next = JSON.parse((raw as MessageEvent<string>).data) as RunRuntime
-        if (next.task_id !== runID || !Number.isSafeInteger(next.cursor)) return
-        recordReload('chat.runtime', 'sse_open')
-        runtimeSetterRef.current((previous) => mergeRuntimeSnapshot(previous, next, { replaceWarnings: true }))
-        if (currentRunRef.current?.id === runID) {
-          runSetterRef.current((previous) => previous?.id === runID ? { ...previous, status: next.status, stage: next.stage, phase: next.stage, terminal_outcome: next.terminal_outcome, pause_reason: next.pause_reason, resource_reason: next.resource_reason } : previous)
-        }
-      } catch { setConnection('invalid') }
-    })
-    source.addEventListener('runtime_snapshot', (raw) => {
-      if (disposed) return
-      try {
-        const update = JSON.parse((raw as MessageEvent<string>).data) as { telemetry?: RuntimeTelemetry; telemetry_revision?: number }
-        if (!update.telemetry || !Number.isSafeInteger(update.telemetry_revision) || update.telemetry_revision! < 0) return
-        runtimeSetterRef.current((previous) => {
-          if (previous?.task_id !== runID || (previous.telemetry_revision ?? -1) > update.telemetry_revision!) return previous
-          return { ...previous, telemetry: update.telemetry, telemetry_revision: update.telemetry_revision }
-        })
-      } catch { setConnection('invalid') }
-    })
-    source.addEventListener('inference_progress', (raw) => {
-      if (disposed) return
-      try {
-        const update = JSON.parse((raw as MessageEvent<string>).data) as { inference?: InferenceTelemetry; telemetry_revision?: number }
-        if (!update.inference || !Number.isSafeInteger(update.telemetry_revision) || update.telemetry_revision! < 0) return
-        runtimeSetterRef.current((previous) => {
-          if (previous?.task_id !== runID || !previous.telemetry || (previous.telemetry_revision ?? -1) > update.telemetry_revision!) return previous
-          return { ...previous, telemetry_revision: update.telemetry_revision, telemetry: { ...previous.telemetry, inference: update.inference! } }
-        })
-      } catch { setConnection('invalid') }
-    })
-    source.addEventListener('resource_warning', (raw) => {
-      if (disposed) return
-      try {
-        const update = JSON.parse((raw as MessageEvent<string>).data) as { warnings?: unknown }
-        const warnings = Array.isArray(update.warnings) ? update.warnings.filter((item): item is string => typeof item === 'string').slice(0, 16) : []
-        runtimeSetterRef.current((previous) => previous?.task_id === runID ? { ...previous, runtime_warnings: warnings } : previous)
-      } catch { setConnection('invalid') }
-    })
-    source.addEventListener('resync', (raw) => {
-      if (disposed) return
-      try {
-        const next = JSON.parse((raw as MessageEvent<string>).data) as { cursor: number }
-        if (!Number.isSafeInteger(next.cursor) || next.cursor < 0) throw new Error('invalid cursor')
-        dispatch({ type: 'resync', id: runID, cursor: next.cursor })
-        syncSchedulerRef.current(runResyncResources(modeRef.current), 'sse_resync')
-      } catch { setConnection('invalid') }
-    })
-    source.onopen = () => {
-      if (disposed) return
-      if (!opened) { opened = true; recordSSE('open', endpoint) }
-      reconnecting = false
-      if (!terminalSeen) setConnection('live')
-      window.clearTimeout(stableTimer)
-      stableTimer = window.setTimeout(() => {
-        if (connectionRef.current === 'live') { clearFallback(); fallbackDelayRef.current = 15000 }
-      }, 5000)
-    }
-    source.onerror = () => {
-      if (disposed || terminalSeen) return
-      window.clearTimeout(stableTimer)
-      const latestRun = currentRunRef.current
-      if (latestRun && terminal(latestRun.status)) { clearFallback(); closeSource(); setConnection('terminal'); return }
-      setConnection('reconnecting')
-      if (!reconnecting) { reconnecting = true; recordSSE('reconnect', endpoint) }
-      fallbackSchedulerRef.current()
-    }
-    return () => { disposed = true; source.close(); clearFallback(); window.clearTimeout(stableTimer); closeStream(); if (closeEventStreamRef.current === closeSource) closeEventStreamRef.current = () => {} }
-  }, [runID, reconnect])
+  useRunEventStream(runID, reconnect, { dispatch, setConnection, setError, streamRef, modeRef, currentRunRef, connectionRef, runSetterRef, runtimeSetterRef, syncSchedulerRef, fallbackTimerRef, fallbackDelayRef, fallbackSchedulerRef, closeEventStreamRef })
   const bridgeMessage = transcript.messages.find((message) => message.id === currentRun?.user_message_id) ?? null
   const bridgeReferences = explicitResearchContextReferences(bridgeMessage, id)
   const references = useMemo(() => currentRun?.mode === 'chat' && bridgeReferences.length ? bridgeReferences : citationReferences(research.evidence.data ?? []), [currentRun?.mode, bridgeReferences.length, bridgeMessage, research.evidence.data])
@@ -614,18 +426,6 @@ function ConversationView({ id, onSelect, onChanged, onSidebar }: { id: string; 
       {currentRun && !active && <div className="chat-answer-actions"><button type="button" disabled={busy} onClick={() => operate('retry')}>Повторить ответ</button><button type="button" disabled={busy || !hasPartial} title={!hasPartial ? 'Нет текста для продолжения' : 'Продолжить ответ новым запуском'} onClick={() => operate('continue')}>Продолжить ответ</button></div>}
         <ChatComposer mode={mode} privacyMode={currentRuntime?.privacy_mode || configuration.data?.research_limits?.privacy_mode} contextBudget={currentRuntime?.context_budget || doctor.data?.context_budget} onModeChange={changeMode} text={text} onTextChange={setText} onSend={send} busy={busy} active={active} run={currentRun} onStop={stopRun} researchContextRunID={researchContextRunID} researchContextReady={researchContextReady} onEnableResearchContext={enableResearchContext} onClearResearchContext={() => { setResearchContextRunID(''); submissionKey.current = null }} settings={setup} onSettingsChange={optimistic.length ? undefined : changeSettings} settingsError={setupProblem(setup)} settingsDirty={settingsDirty} settingsSaving={busy && settingsDirty} onSaveSettings={id && !active ? saveSettings : undefined} />
       <div className="chat-composer-note">{active && <span>Новый запрос доступен после завершения или остановки.</span>}{runID && <span role="status">{connection === 'live' ? 'Поток подключён' : connection === 'connecting' ? 'Подключение…' : connection === 'reconnecting' ? 'Переподключение…' : connection === 'degraded' ? 'Резервная синхронизация' : connection === 'invalid' ? 'Ошибка потока' : connection === 'terminal' ? 'Поток завершён' : 'Нет активного потока'}</span>}{active && <button type="button" onClick={() => { recordReload('chat.stream', 'manual_retry'); setReconnect((value) => value + 1) }}>Переподключить</button>}</div>
-    </section>{details && !mobile && <aside className="chat-research-desktop" aria-label="Детали исследования">{detailsContent}</aside>}</div>{details && mobile && <Drawer title="Детали исследования" onClose={() => setDetails(false)}>{detailsContent}</Drawer>}
+    </section>{details && !mobile && <aside className="chat-research-desktop" aria-label="Детали исследования">{detailsContent}</aside>}</div>{details && mobile && <Drawer title="Детали исследования" className="chat-drawer" bodyClassName="chat-drawer-body" onClose={() => setDetails(false)}>{detailsContent}</Drawer>}
   </main>
-}
-
-function useResearch(runID: string, enabled: boolean, evidenceEnabled = enabled) {
-  const plan = useRemote(useCallback((signal) => enabled && runID ? api.runPlan(runID, signal) : Promise.resolve<ResearchPlan | null>(null), [enabled, runID]), 0, 'research.plan')
-  const sources = useRemote(useCallback(async (signal) => enabled && runID ? normalizeSources(await api.runSources(runID, signal)) : [], [enabled, runID]), 0, 'research.sources')
-  const evidence = useRemote(useCallback(async (signal) => {
-    if (!evidenceEnabled || !runID) return []
-    const result = await api.runEvidence(runID, signal)
-    return (Array.isArray(result) ? result : []) as Evidence[]
-  }, [evidenceEnabled, runID]), 0, 'research.evidence')
-  const providers = useRemote(useCallback((signal) => enabled ? api.providers(signal) : Promise.resolve(null), [enabled]), 0, 'research.providers')
-  return { plan, sources, evidence, providers }
 }
