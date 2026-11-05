@@ -26,6 +26,37 @@ jobs:
       - name: Test (race)
         run: go test -race -tags sqlite_fts5 ./...
 
+  windows:
+    runs-on: windows-latest
+    steps:
+      # Keep LF line endings so fixture and golden-text comparisons match Linux.
+      - name: Disable CRLF conversion
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Vet
+        run: go vet -tags sqlite_fts5 ./...
+      - name: Test
+        run: go test -tags sqlite_fts5 ./...
+      - name: Build qagent.exe
+        run: go build -tags sqlite_fts5 -o qagent.exe ./cmd/qagent
+      - name: Launcher parses (PowerShell 7)
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\scripts\qwenchik.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors | Format-List; exit 1 }
+          ./scripts/qwenchik.ps1 help | Out-Null
+          ./scripts/qwenchik.ps1 status
+      - name: Launcher runs (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          ./scripts/qwenchik.ps1 status
+          try { ./scripts/qwenchik.ps1 start -NoOpen; exit 1 } catch { if ("$_" -notmatch 'setup') { throw } }
+
   frontend:
     runs-on: ubuntu-latest
     steps:
