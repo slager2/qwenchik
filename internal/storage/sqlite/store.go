@@ -112,6 +112,9 @@ func (s *Store) migrate(ctx context.Context) error {
 		}
 		if _, err := tx.ExecContext(ctx, string(migration)); err != nil {
 			_ = tx.Rollback()
+			if strings.Contains(err.Error(), "no such module: fts5") {
+				return fmt.Errorf("apply migration %s: %w (SQLite FTS5 is missing: build with -tags sqlite_fts5, see Makefile)", entry.Name(), err)
+			}
 			return fmt.Errorf("apply migration %s: %w", entry.Name(), err)
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(name,applied_at) VALUES(?,?)`, entry.Name(), stamp(time.Now().UTC())); err != nil {

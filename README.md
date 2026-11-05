@@ -368,6 +368,8 @@ npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
+The `sqlite_fts5` tag is required for every Go command that touches storage: without it the SQLite driver lacks FTS5, `internal/storage/sqlite` tests stop immediately with "build with -tags sqlite_fts5 (see Makefile)", and other packages fail opening the store with `no such module: fts5` plus the same hint.
+
 `make test` runs tagged Go tests, frontend dependency installation, type-checking, and deterministic state/render tests. `make test-race` runs tagged Go race tests. `npm --prefix frontend run test:browser` uses system Chrome with mocked API/SSE; it is not a live-model test. `make build` rebuilds embedded assets and compiles the executable. The Phase 1 full Go tests/vet/race, frontend tests 33/33, typecheck/build and mocked Chrome checks passed. The [Phase 1 report](docs/research-phase1.md#verification-results) records a separate deployed local-model snapshot smoke. The [chat report](docs/chat-research-implementation.md) records earlier real-model and restart evidence; the [PDF repair report](docs/pdf-limits-repair.md) records the live download-only result and unavailable extractor.
 
 The following opt-in real-browser smoke passed on the earlier deployed Chat implementation:
