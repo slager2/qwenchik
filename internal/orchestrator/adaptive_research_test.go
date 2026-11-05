@@ -66,8 +66,8 @@ func TestAdaptiveResearchResumesSecondRoundWithNewQueriesAndSources(t *testing.T
 	base := integrationResearchModel()
 	reviews, roundQueries := 0, 0
 	model := &researchRunModel{respond: func(_ context.Context, req llm.ChatRequest, index int, streaming bool) (string, error) {
-		if index < 5 {
-			return base.respond(req, index)
+		if isPlannerRequest(req) {
+			return base.respond(req, 0)
 		}
 		var input struct {
 			Catalog []verificationCriterion    `json:"criterion_catalog"`
@@ -199,18 +199,20 @@ func TestAdaptiveBudgetStopDoesNotPerformUnreservedPartialInference(t *testing.T
 		s.Policy.AdaptiveEnabled = true
 		s.Policy.MaxContinuations = 2
 		s.Budget.MaxSteps = 12
-		s.Budget.MaxLLMCalls = 6
+		// Planner + verifier: canonical search/fetch steps are deterministic,
+		// so the first round consumes exactly this budget.
+		s.Budget.MaxLLMCalls = 2
 		s.Budget.MaxSearchQueries = 8
 	})
 	base := integrationResearchModel()
 	calls := 0
 	model := &researchRunModel{respond: func(_ context.Context, request llm.ChatRequest, index int, _ bool) (string, error) {
 		calls++
-		if index < 5 {
-			return base.respond(request, index)
+		if isPlannerRequest(request) {
+			return base.respond(request, 0)
 		}
-		if index > 5 {
-			t.Fatal("exhausted session performed unreserved finalizer/critic inference")
+		if !isVerifierRequest(request) {
+			t.Fatalf("exhausted session performed unreserved inference: call %d schema=%.200s", index, request.JSONSchema)
 		}
 		var input struct {
 			Catalog []verificationCriterion `json:"criterion_catalog"`
@@ -233,7 +235,7 @@ func TestAdaptiveBudgetStopDoesNotPerformUnreservedPartialInference(t *testing.T
 	w.runTask(ctx, f.task)
 	assertResearchRunTerminal(t, f, domain.StatusCompleted, "")
 	session := researchRunSession(t, f.store, f.task.ID)
-	if session.Counters.LLMCalls != 6 || calls != 6 {
+	if session.Counters.LLMCalls != 2 || calls != 2 {
 		t.Fatalf("budget counter/provider calls diverged: counters=%+v calls=%d", session.Counters, calls)
 	}
 	state, err := w.currentCheckpoint(ctx, f.task.ID)
