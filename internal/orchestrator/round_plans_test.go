@@ -18,8 +18,8 @@ func roundModelFixture(t *testing.T, rounds int, reviews *int) *researchRunModel
 	base := integrationResearchModel()
 	queries := 0
 	return &researchRunModel{respond: func(_ context.Context, req llm.ChatRequest, index int, stream bool) (string, error) {
-		if index == 0 {
-			raw, err := base.respond(req, index)
+		if isPlannerRequest(req) {
+			raw, err := base.respond(req, 0)
 			if err != nil {
 				return "", err
 			}
@@ -28,9 +28,6 @@ func roundModelFixture(t *testing.T, rounds int, reviews *int) *researchRunModel
 			p.DeliverableCriteria = []string{"Explain protocol architecture and deployment limitations from relevant evidence"}
 			b, err := json.Marshal(p)
 			return string(b), err
-		}
-		if index < 5 {
-			return base.respond(req, index)
 		}
 		var input struct {
 			Catalog  []verificationCriterion `json:"criterion_catalog"`
