@@ -300,8 +300,12 @@ func TestStructuredOutputRepairKeepsSchemaAndRetriesOnce(t *testing.T) {
 					t.Fatalf("request %d schema mode = JSONSchema %s, JSONMode %t", i, request.JSONSchema, request.JSONMode)
 				}
 			}
-			if !strings.Contains(model.seen[1].Messages[1].Content, "validation_error") {
-				t.Fatalf("repair request omitted the bounded validation reason: %s", model.seen[1].Messages[1].Content)
+			repair := model.seen[1].Messages
+			if len(repair) != 4 || !strings.Contains(repair[3].Content, "validation_error") {
+				t.Fatalf("repair request omitted the bounded validation reason: %#v", repair)
+			}
+			if repair[0] != model.seen[0].Messages[0] || repair[1] != model.seen[0].Messages[1] || repair[2].Role != "assistant" || repair[2].Content != test.responses[0] {
+				t.Fatalf("repair did not continue the original conversation: %#v", repair)
 			}
 		})
 	}

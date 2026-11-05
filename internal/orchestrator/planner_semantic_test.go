@@ -687,8 +687,12 @@ func TestPlannerSemanticSingleCorrectionAllowsOneFormatRepairPerRole(t *testing.
 		t.Fatalf("format repairs changed semantic correction bound: %v calls=%d", err, model.requests)
 	}
 	for _, index := range []int{1, 3} {
-		if !strings.Contains(model.seen[index].Messages[0].Content, "previous response failed the required JSON schema") {
+		repair, original := model.seen[index].Messages, model.seen[index-1].Messages
+		if len(repair) != 4 || repair[2].Role != "assistant" || !strings.Contains(repair[3].Content, "failed the required JSON schema") {
 			t.Fatalf("request %d was not the bounded per-role format repair", index)
+		}
+		if repair[0] != original[0] || repair[1] != original[1] || repair[2].Content != "not json" {
+			t.Fatalf("format repair %d did not continue the original conversation prefix", index)
 		}
 	}
 	if failure.ValidationError != "research plan is incomplete: search questions must be distinct" {
