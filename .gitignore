@@ -8,3 +8,7 @@
 *.db-shm
 *.db-wal
 .env
+.idea/
+.hallmark/
+repomix-*.xml
+internal/**/data/
