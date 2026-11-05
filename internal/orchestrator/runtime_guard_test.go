@@ -651,10 +651,11 @@ func TestRuntimeGuardCriticResourceFailureCannotCompleteViaFallback(t *testing.T
 			search, fetcher := &researchRunSearch{}, &researchRunFetcher{}
 			base := integrationResearchModel()
 			model := &researchRunModel{respond: func(_ context.Context, request llm.ChatRequest, index int, streaming bool) (string, error) {
-				if index < 6 {
+				critic := strings.Contains(request.Messages[0].Content, "citation support critic")
+				if isPlannerRequest(request) || isVerifierRequest(request) {
 					return base.respond(request, index)
 				}
-				if index == 6 {
+				if index == 2 && !critic {
 					if !streaming {
 						t.Error("finalizer did not stream")
 					}
@@ -675,7 +676,7 @@ func TestRuntimeGuardCriticResourceFailureCannotCompleteViaFallback(t *testing.T
 					encoded, err := json.Marshal(map[string]string{"answer": strings.Join(paragraphs, "\n\n")})
 					return string(encoded), err
 				}
-				if index == 7 && !streaming && strings.Contains(request.Messages[0].Content, "citation support critic") {
+				if index == 3 && !streaming && critic {
 					return "", tc.err
 				}
 				return "", errors.New("unexpected model call after critic resource error")
@@ -684,7 +685,8 @@ func TestRuntimeGuardCriticResourceFailureCannotCompleteViaFallback(t *testing.T
 			w := New(f.store, model, researchRunRegistry(t, f.store, search, fetcher), opts)
 			w.runTask(context.Background(), f.task)
 			runtimeGuardAssertPaused(t, f, tc.reason)
-			if len(model.calls()) != 8 {
+			// planner + verifier + finalizer + critic; canonical steps skip the actor.
+			if len(model.calls()) != 4 {
 				t.Fatalf("critic retried or bypassed: %d calls", len(model.calls()))
 			}
 			for _, event := range runtimeGuardEvents(t, f) {
@@ -692,7 +694,7 @@ func TestRuntimeGuardCriticResourceFailureCannotCompleteViaFallback(t *testing.T
 					t.Fatalf("resource error became fallback completion: %s %s", event.Type, event.Payload)
 				}
 			}
-			if session := researchRunSession(t, f.store, f.task.ID); session.Counters.LLMCalls != 8 || session.Counters.Fetches != 2 || session.Counters.Evidence != 2 {
+			if session := researchRunSession(t, f.store, f.task.ID); session.Counters.LLMCalls != 4 || session.Counters.Fetches != 2 || session.Counters.Evidence != 2 {
 				t.Fatalf("critic pause lost collected work: %+v", session.Counters)
 			}
 		})
