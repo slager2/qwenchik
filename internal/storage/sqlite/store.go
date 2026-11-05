@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -94,7 +95,7 @@ func (s *Store) migrate(ctx context.Context) error {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".sql" {
 			continue
 		}
-		migration, err := migrationFiles.ReadFile(filepath.Join("migrations", entry.Name()))
+		migration, err := migrationFiles.ReadFile(path.Join("migrations", entry.Name())) // embed.FS paths always use "/"
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
 		}
