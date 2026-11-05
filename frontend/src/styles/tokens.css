@@ -84,17 +84,3 @@
 :root[data-theme='light'] { color-scheme: light; }
 :root[data-theme='dark'] { color-scheme: dark; }
 :root[data-text-scale='large'] { font-size: 112.5%; }
-
-/* Legacy aliases — consumed by stylesheets still being migrated; removed once unused. */
-:root {
-  --color-paper: var(--bg); --color-paper-raised: var(--bg); --color-paper-muted: var(--bg-subtle); --color-paper-pressed: var(--bg-active);
-  --color-ink: var(--text); --color-ink-2: var(--text); --color-muted: var(--text-secondary); --color-faint: var(--text-tertiary); --color-readable: var(--text-secondary); --color-control-rule: var(--border-strong);
-  --color-rule: var(--border); --color-rule-strong: var(--border-strong); --color-accent-dark: var(--accent); --color-accent-ink: var(--accent-text); --color-accent-rule: var(--border-strong);
-  --color-success: var(--success); --color-success-ink: var(--success); --color-success-soft: var(--bg-subtle); --color-success-rule: var(--border); --color-warning: var(--warning); --color-warning-ink: var(--warning); --color-warning-soft: var(--warning-soft); --color-warning-rule: var(--border); --color-danger: var(--danger); --color-danger-soft: var(--danger-soft); --color-danger-rule: var(--border);
-  --color-overlay: var(--overlay); --color-shadow: rgb(0 0 0 / .12); --color-focus: var(--focus); --color-code: var(--bg-inverse); --color-accent: var(--accent); --color-accent-soft: var(--accent-soft);
-  --font-display: var(--font-sans); --font-body: var(--font-sans);
-  --text-heading-sm: var(--text-xl); --text-heading: var(--text-2xl); --text-heading-lg: 2rem; --text-reading: var(--text-base); --text-caption: var(--text-xs); --text-ui: var(--text-md); --reading-leading: var(--leading-reading); --reading-measure: var(--measure-chat);
-  --space-xs: var(--space-1); --space-sm: var(--space-2); --space-md: var(--space-4); --space-lg: var(--space-6); --space-xl: var(--space-8); --space-section: var(--space-10);
-  --size-control: var(--control); --size-sidebar: var(--sidebar); --size-inspector: var(--panel); --radius-control: var(--radius-sm); --radius-card: var(--radius-md); --rule-hairline: 1px;
-  --ease-in: cubic-bezier(.7, 0, .84, 1); --dur-micro: var(--dur-fast); --dur-short: var(--dur); --dur-reduced: 100ms; --duration-fast: var(--dur-fast); --duration-base: var(--dur);
-}

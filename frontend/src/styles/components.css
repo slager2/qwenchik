@@ -150,3 +150,6 @@
 .provider-card small { color: var(--text-tertiary); font-family: var(--font-mono); overflow-wrap: anywhere; }
 .provider-card.health-healthy h3::before, .provider-card.health-ok h3::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: var(--space-2); border-radius: 50%; background: var(--success); vertical-align: .15em; }
 .provider-card.health-degraded h3::before, .provider-card.health-unhealthy h3::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: var(--space-2); border-radius: 50%; background: var(--warning); vertical-align: .15em; }
+
+/* Route loading / failure placeholder */
+.route-loading { display: grid; place-items: center; align-content: center; gap: var(--space-3); min-height: 100dvh; color: var(--text-secondary); font-size: var(--text-sm); }
