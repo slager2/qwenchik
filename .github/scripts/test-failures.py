@@ -9,6 +9,7 @@ from collections import OrderedDict
 
 output = {}  # (package, test) -> lines
 failed = OrderedDict()  # package -> [tests]
+running = {}  # (package, test) started without a terminal action (e.g. panic)
 build_errors = []
 for raw in sys.stdin:
     raw = raw.rstrip("\n")
@@ -18,6 +19,10 @@ for raw in sys.stdin:
         build_errors.append(raw)  # compiler output is not JSON
         continue
     pkg, test, action = event.get("Package", ""), event.get("Test", ""), event.get("Action")
+    if action == "run":
+        running[(pkg, test)] = True
+    elif action in ("pass", "fail", "skip"):
+        running.pop((pkg, test), None)
     if action == "output":
         output.setdefault((pkg, test), []).append(event.get("Output", "").rstrip())
     elif action == "fail":
@@ -31,11 +36,13 @@ def escape(text):
 annotations = []
 for pkg, tests in failed.items():
     lines = []
-    top = [t for t in tests if "/" not in t] or [""]
+    unfinished = [t for (p, t) in running if p == pkg]
+    top = [t for t in tests if "/" not in t] + unfinished or [""]
     for test in top:
         body = [l for l in output.get((pkg, test), []) if l.strip() and not l.startswith("=== ")]
         lines.append(f"{test or '(package)'}:")
-        lines.extend("  " + l.strip()[:300] for l in body[:6])
+        # Unfinished tests usually panicked: show the start of the trace.
+        lines.extend("  " + l.strip()[:300] for l in body[: 20 if test in unfinished else 6])
     annotations.append((pkg, "\n".join(lines)[:3500]))
 if build_errors:
     annotations.insert(0, ("build", "\n".join(build_errors[:40])[:3500]))
