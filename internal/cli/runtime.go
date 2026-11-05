@@ -42,6 +42,21 @@ func runtimeModelSchedulingArgs() []string {
 	return []string{"--threads", runtimeThreads, "--threads-batch", runtimeThreadsBatch, "--poll", "0", "--poll-batch", "0"}
 }
 
+// runtimeModelPolicyArgs is the single source of truth for the llama-server
+// tuning flags shared by the generated systemd unit and compose.yaml (a test
+// keeps compose.yaml in sync). Host, port, device, model path and context are
+// deployment-specific and stay with each launcher.
+//
+// --cache-reuse is intentionally absent: it relies on KV shifting, which the
+// server disables for hybrid/recurrent memory such as Qwen3.5's DeltaNet
+// layers ("cache_reuse is not supported by this context"). Reuse for this
+// model comes from --ctx-checkpoints plus the --cache-ram prompt cache.
+func runtimeModelPolicyArgs() []string {
+	args := append([]string{}, runtimeModelCacheArgs()...)
+	args = append(args, runtimeModelSchedulingArgs()...)
+	return append(args, "--reasoning", "off", "--no-webui")
+}
+
 type runtimeOptions struct {
 	ModelBin  string
 	ModelPath string
@@ -188,9 +203,7 @@ func renderRuntimeUnits(options runtimeOptions) (map[string][]byte, error) {
 		"--host", "127.0.0.1", "--port", "8000", "--alias", options.Model,
 		"--jinja", "--parallel", "1", "-c", context, "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0",
 	}
-	modelArgs = append(modelArgs, runtimeModelCacheArgs()...)
-	modelArgs = append(modelArgs, runtimeModelSchedulingArgs()...)
-	modelArgs = append(modelArgs, "--reasoning", "off", "--no-webui")
+	modelArgs = append(modelArgs, runtimeModelPolicyArgs()...)
 	model := "[Unit]\nDescription=Qwenchik local Vulkan model\nStartLimitIntervalSec=0\n\n[Service]\nType=exec\nExecStart=" + execLine(modelArgs...) + "\nRestart=on-failure\nRestartSec=5s\nTimeoutStopSec=30s\n\n[Install]\nWantedBy=default.target\n"
 	app := "[Unit]\nDescription=Qwenchik API and worker\nWants=qwenchik-model.service\nAfter=qwenchik-model.service\nStartLimitIntervalSec=0\n\n[Service]\nType=exec\nWorkingDirectory=" + workingDirectory + "\nEnvironment=\"PATH=/usr/local/bin:/usr/bin:/bin\"\nEnvironment=\"LLM_CONTEXT_LENGTH=" + context + "\"\nEnvironment=\"SEARCH_ENABLE_DDG=false\"\nExecStartPre=" + execLine(
 		"/usr/bin/curl", "--noproxy", "*", "--fail", "--silent", "--output", "/dev/null",

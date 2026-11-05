@@ -42,6 +42,15 @@ services:
       - "0"
       - --poll-batch
       - "0"
+      # Keep in sync with runtimeModelPolicyArgs (internal/cli/runtime.go);
+      # TestComposeModelCommandMatchesRuntimePolicy enforces it.
+      - --cache-ram
+      - "512"
+      - --ctx-checkpoints
+      - "4"
+      - --reasoning
+      - "off"
+      - --no-webui
       - -ngl
       - "${LLAMA_GPU_LAYERS:-99}"
       - --device

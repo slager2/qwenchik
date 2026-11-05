@@ -337,3 +337,65 @@ func TestRuntimeInstallCommandUsesUserConfigDirWithoutSystemctl(t *testing.T) {
 		t.Fatal("credential exposed in command output")
 	}
 }
+
+func TestComposeModelCommandMatchesRuntimePolicy(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "compose.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Extract the model service command list without a YAML dependency: the
+	// items between "command:" and the next non-list key of the model service.
+	var command []string
+	inModel, inCommand := false, false
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "  model:"):
+			inModel = true
+		case inModel && strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "   ") && trimmed != "":
+			inModel = false
+		}
+		if !inModel {
+			continue
+		}
+		if trimmed == "command:" {
+			inCommand = true
+			continue
+		}
+		if inCommand {
+			if strings.HasPrefix(trimmed, "#") || trimmed == "" {
+				continue
+			}
+			if !strings.HasPrefix(trimmed, "- ") {
+				break
+			}
+			item := strings.Trim(strings.TrimPrefix(trimmed, "- "), `"`)
+			// Resolve ${VAR:-default} to its default for comparison.
+			if strings.HasPrefix(item, "${") && strings.Contains(item, ":-") && strings.HasSuffix(item, "}") {
+				item = item[strings.Index(item, ":-")+2 : len(item)-1]
+			}
+			command = append(command, item)
+		}
+	}
+	if len(command) == 0 {
+		t.Fatal("compose.yaml model command not found")
+	}
+	joined := "\x00" + strings.Join(command, "\x00") + "\x00"
+	policy := runtimeModelPolicyArgs()
+	for i := 0; i < len(policy); i++ {
+		want := "\x00" + policy[i] + "\x00"
+		if i+1 < len(policy) && !strings.HasPrefix(policy[i+1], "-") {
+			want = "\x00" + policy[i] + "\x00" + policy[i+1] + "\x00"
+			i++
+		}
+		if !strings.Contains(joined, want) {
+			t.Errorf("compose.yaml model command lacks %q from runtimeModelPolicyArgs: %q", strings.Trim(strings.ReplaceAll(want, "\x00", " "), " "), command)
+		}
+	}
+	model := string(mustRenderRuntimeUnits(t, runtimeFixture(t))[runtimeUnitNames[0]])
+	for _, arg := range policy {
+		if !strings.Contains(model, `"`+arg+`"`) {
+			t.Errorf("generated unit lacks %q", arg)
+		}
+	}
+}
