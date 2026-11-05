@@ -108,7 +108,7 @@ func (w *Worker) reportJSON(ctx context.Context, task domain.Task, goal, role, i
 	if err := w.ensureActive(ctx, task.ID); err != nil {
 		return err
 	}
-	response, err := w.client.Complete(roleCtx, llm.ChatRequest{Messages: []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}, JSONSchema: schema, ContextWindow: w.options.RuntimeModelContext, MaxTokens: min(w.options.MaxOutputTokens, 4096), Temperature: 0, TemperatureSet: true, TopP: w.options.TopP, TopPSet: true})
+	response, err := w.client.Complete(roleCtx, withStructuredSampling(llm.ChatRequest{Messages: []llm.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}, JSONSchema: schema, ContextWindow: w.options.RuntimeModelContext, MaxTokens: min(w.options.MaxOutputTokens, 4096), Temperature: 0, TemperatureSet: true, TopP: w.options.TopP, TopPSet: true}))
 	if err != nil {
 		var network net.Error
 		var httpStatus interface{ HTTPStatusCode() int }
