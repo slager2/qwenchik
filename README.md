@@ -226,7 +226,7 @@ The planner uses bounded structural/semantic validation and lossless facet norma
 
 ## Research profiles and saved sessions
 
-`RESEARCH_DEFAULT_PROFILE=standard` selects the default budget for a new research send. `research_settings.profile` can select `quick`, `standard`, `deep_laptop`, `long_laptop`, or `overnight_laptop`. `RESEARCH_ADAPTIVE_ENABLED=false` is the compatibility default; `true` enables bounded durable evidence-driven continuation rounds. `RESEARCH_SECTION_REPORT_ENABLED=true` independently enables section reports. Both flags are saved at submission. Larger wall ceilings do not promise hours of execution or a particular report length.
+`RESEARCH_DEFAULT_PROFILE=standard` selects the default budget for a new research send. `research_settings.profile` can select `quick`, `standard`, `deep_laptop`, `long_laptop`, or `overnight_laptop`. `RESEARCH_ADAPTIVE_ENABLED=false` is the compatibility default; `true` enables bounded durable evidence-driven continuation rounds. `RESEARCH_SECTION_REPORT_ENABLED=true` independently enables section reports. Both flags are saved at submission. Larger wall ceilings do not promise hours of execution or a particular report length. Each profile also saves an initial fetch breadth (`fetch_target`: quick 2, standard 6, deep_laptop 8, long/overnight 9, capped by its fetch and evidence budgets): the backend adds deterministic fetch steps up to it and stops fetching once that many distinct sources are stored. The request's minimum of 2 sources still decides failure; extra fetch steps are skipped when no unused validated URL remains.
 
 New session budgets are defined in `internal/domain/round_plans.go`; historical
 version-one defaults remain in `research_defaults.go` for recovery compatibility.
@@ -289,10 +289,20 @@ ln -sfn "$PWD/scripts/qwenchik" ~/.local/bin/qwenchik
 qwenchik start            # model + app natively (GPU/Vulkan), opens the browser
 qwenchik start --search   # also SearXNG in Docker; starts Docker Desktop only if it was not running
 qwenchik stop             # stops everything start brought up and frees RAM/VRAM
-qwenchik status | open | logs [model|app]
+qwenchik status | open | logs [model|app|search]
+qwenchik install-search   # one-time: install agentSearcher (local search service)
 ```
 
 The model and app run natively because GPU offload is unavailable inside the Docker Desktop VM. Only SearXNG runs in a container (`compose.searxng.yml`). Its secret is generated once into `~/.config/qwenchik/searxng.env`. Without SearXNG, search falls back to the other configured providers. When run without a terminal (for example from a desktop menu entry with `Exec=~/.local/bin/qwenchik start`), the launcher reports results through desktop notifications.
+
+### Local search with agentSearcher (optional)
+
+[agentSearcher](https://github.com/peakQuick/agentSearcher) (AGPL-3.0) is a separate local service: for each query it searches public engines, fetches and renders the result pages and returns ranked passages (up to three ~600-character chunks per page) instead of short snippets. qagent never bundles its code; it only calls its Tavily-compatible HTTP API on loopback.
+
+- `qwenchik install-search` installs it idempotently into `~/.local/share/qwenchik/agentsearcher/venv` from a pinned commit and runs `agentsearcher setup` (headless Chromium in `~/.cache/ms-playwright`, ~120 MB reranker in `~/.cache/huggingface`). It needs `python3-venv`; the script never uses sudo.
+- If installed, `qwenchik start` also starts it in the background on `127.0.0.1:8484` (PID in `~/.local/state/qwenchik/agentsearcher.pid`, log in `agentsearcher.log` there), waits for `GET /health`, and `qwenchik stop` stops it. `qwenchik status` shows it. It idles at ~75 MB and unloads Chromium and the model after two idle minutes.
+- Enable it for the app with `AGENTSEARCHER_URL=http://127.0.0.1:8484` in `.env` (loopback only, like `SEARXNG_URL`). It then becomes the primary provider under `SEARCH_PROVIDER_POLICY=local_primary`; SearXNG/Tavily/DuckDuckGo stay fallbacks for errors, empty answers or single-site answers. `AGENTSEARCHER_SEARCH_DEPTH` (`advanced` default, or `basic`/`fast`/`ultra-fast`) and `AGENTSEARCHER_TIMEOUT_SECONDS` (45 default, 5..120) tune it; the search tool timeout follows that budget. A measured `advanced` search takes ~10-21 s, `basic` ~4 s.
+- agentSearcher still forwards queries to public search engines, so it is an external-search provider (`RESEARCH_PRIVACY_MODE=local_searxng` and `offline` do not use it). It blocks private/loopback page URLs itself; qagent still validates every result URL with its own SSRF policy, and passages remain untrusted leads that must be fetched before citation. `qagent doctor` checks only its `/health`.
 
 ### Windows
 

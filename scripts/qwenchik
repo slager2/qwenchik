@@ -5,11 +5,18 @@
 #   qwenchik stop                            остановить всё, что поднимал start
 #   qwenchik status                          что сейчас запущено
 #   qwenchik open                            открыть UI в браузере
-#   qwenchik logs [model|app]                хвост журналов
+#   qwenchik logs [model|app|search]         хвост журналов
+#   qwenchik install-search                  установить agentSearcher (локальный поиск)
 #
 # Модель и приложение работают нативно через systemd user units (GPU/Vulkan
 # доступен только так). В Docker живёт только SearXNG — он не нужен для GPU и
 # поднимается лишь с флагом --search.
+#
+# agentSearcher (https://github.com/peakQuick/agentSearcher, AGPL-3.0) — отдельный
+# локальный сервис поиска: ищет, скачивает страницы и возвращает ранжированные
+# фрагменты. Если он установлен (qwenchik install-search), start поднимает его
+# фоновым процессом на 127.0.0.1:8484; приложение использует его, когда в .env
+# задан AGENTSEARCHER_URL=http://127.0.0.1:8484.
 set -euo pipefail
 
 APP_URL="http://127.0.0.1:8080"
@@ -19,6 +26,14 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/qwenchik"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/qwenchik"
 SEARXNG_ENV="$CONFIG_DIR/searxng.env"
 DOCKER_MARK="$STATE_DIR/started-docker-desktop"
+AGENTSEARCHER_COMMIT="3e32912752b58558cd9753ffbd1f73eea74738ed"
+AGENTSEARCHER_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/qwenchik/agentsearcher"
+AGENTSEARCHER_BIN="$AGENTSEARCHER_HOME/venv/bin/agentsearcher"
+AGENTSEARCHER_HOST="127.0.0.1"
+AGENTSEARCHER_PORT="8484"
+AGENTSEARCHER_HEALTH="http://$AGENTSEARCHER_HOST:$AGENTSEARCHER_PORT/health"
+AGENTSEARCHER_PID="$STATE_DIR/agentsearcher.pid"
+AGENTSEARCHER_LOG="$STATE_DIR/agentsearcher.log"
 
 # Каталог проекта: рядом со скриптом (scripts/..), даже если вызван через симлинк.
 PROJECT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
@@ -75,6 +90,71 @@ stop_search() {
   fi
 }
 
+agentsearcher_running() {
+  local pid
+  [[ -f "$AGENTSEARCHER_PID" ]] || return 1
+  pid=$(<"$AGENTSEARCHER_PID")
+  [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null &&
+    tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q agentsearcher
+}
+
+start_agentsearcher() {
+  [[ -x "$AGENTSEARCHER_BIN" ]] || return 0
+  mkdir -p "$STATE_DIR"
+  if agentsearcher_running; then
+    return 0
+  fi
+  if curl --noproxy '*' -fs -m 2 -o /dev/null "$AGENTSEARCHER_HEALTH"; then
+    say "agentSearcher уже отвечает на $AGENTSEARCHER_HOST:$AGENTSEARCHER_PORT (запущен не этим скриптом)"
+    return 0
+  fi
+  say "Запускаю agentSearcher (локальный поиск)…"
+  # Только loopback: HOST/PORT задают адрес API, --host/--port дублируют их.
+  AGENTSEARCHER_HOST="$AGENTSEARCHER_HOST" AGENTSEARCHER_PORT="$AGENTSEARCHER_PORT" \
+    setsid "$AGENTSEARCHER_BIN" serve --host "$AGENTSEARCHER_HOST" --port "$AGENTSEARCHER_PORT" \
+    >>"$AGENTSEARCHER_LOG" 2>&1 </dev/null &
+  echo $! >"$AGENTSEARCHER_PID"
+  if ! wait_url "$AGENTSEARCHER_HEALTH" 60; then
+    say "agentSearcher не ответил за минуту — поиск пойдёт через другие провайдеры ($AGENTSEARCHER_LOG)"
+  fi
+}
+
+stop_agentsearcher() {
+  agentsearcher_running || { rm -f "$AGENTSEARCHER_PID"; return 0; }
+  local pid deadline
+  pid=$(<"$AGENTSEARCHER_PID")
+  say "Останавливаю agentSearcher…"
+  kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+  deadline=$((SECONDS + 15))
+  while kill -0 "$pid" 2>/dev/null && ((SECONDS < deadline)); do sleep 1; done
+  kill -0 "$pid" 2>/dev/null && { kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true; }
+  rm -f "$AGENTSEARCHER_PID"
+}
+
+cmd_install_search() {
+  command -v python3 >/dev/null || die "python3 не установлен"
+  python3 -c 'import venv, ensurepip' 2>/dev/null ||
+    die "нет модуля venv/ensurepip: установите пакет python3-venv (sudo apt install python3-venv) и повторите"
+  mkdir -p "$AGENTSEARCHER_HOME"
+  if [[ ! -x "$AGENTSEARCHER_HOME/venv/bin/python" ]]; then
+    say "Создаю окружение $AGENTSEARCHER_HOME/venv…"
+    python3 -m venv "$AGENTSEARCHER_HOME/venv"
+  fi
+  local installed=""
+  installed=$("$AGENTSEARCHER_HOME/venv/bin/python" -m pip show agentsearcher 2>/dev/null | sed -n 's/^Version: //p' || true)
+  if [[ -z "$installed" || ! -f "$AGENTSEARCHER_HOME/commit" || "$(<"$AGENTSEARCHER_HOME/commit")" != "$AGENTSEARCHER_COMMIT" ]]; then
+    say "Устанавливаю agentSearcher @ ${AGENTSEARCHER_COMMIT:0:7}…"
+    "$AGENTSEARCHER_HOME/venv/bin/python" -m pip install -q --upgrade pip
+    "$AGENTSEARCHER_HOME/venv/bin/python" -m pip install -q "git+https://github.com/peakQuick/agentSearcher@$AGENTSEARCHER_COMMIT"
+    echo "$AGENTSEARCHER_COMMIT" >"$AGENTSEARCHER_HOME/commit"
+  else
+    say "agentSearcher $installed уже установлен (${AGENTSEARCHER_COMMIT:0:7})"
+  fi
+  say "Загружаю Chromium и модель ранжирования (agentsearcher setup)…"
+  "$AGENTSEARCHER_BIN" setup
+  say "Готово. Добавьте в .env приложения: AGENTSEARCHER_URL=http://$AGENTSEARCHER_HOST:$AGENTSEARCHER_PORT"
+}
+
 cmd_start() {
   local search=0 open=1
   for arg in "$@"; do
@@ -85,6 +165,7 @@ cmd_start() {
     esac
   done
   ((search)) && start_search
+  start_agentsearcher
   say "Запускаю модель…"
   systemctl --user start qwenchik-model.service
   wait_url "$MODEL_HEALTH" 180 || die "модель не ответила за 3 минуты: qwenchik logs model"
@@ -100,6 +181,7 @@ cmd_start() {
 cmd_stop() {
   say "Останавливаю приложение и модель…"
   systemctl --user stop qwenchik-app.service qwenchik-model.service || true
+  stop_agentsearcher
   stop_search
   say "Всё остановлено, ресурсы освобождены."
   notify "Остановлен, память освобождена"
@@ -115,6 +197,17 @@ cmd_status() {
   else
     printf '  %-16s остановлен\n' searxng
   fi
+  if [[ ! -x "$AGENTSEARCHER_BIN" ]]; then
+    printf '  %-16s не установлен (qwenchik install-search)\n' agentsearcher
+  elif agentsearcher_running; then
+    if curl --noproxy '*' -fs -m 2 -o /dev/null "$AGENTSEARCHER_HEALTH"; then
+      printf '  %-16s запущен (%s:%s)\n' agentsearcher "$AGENTSEARCHER_HOST" "$AGENTSEARCHER_PORT"
+    else
+      printf '  %-16s запущен, но не отвечает\n' agentsearcher
+    fi
+  else
+    printf '  %-16s остановлен\n' agentsearcher
+  fi
 }
 
 cmd_open() { xdg-open "$APP_URL" >/dev/null 2>&1 & disown || true; }
@@ -123,7 +216,8 @@ cmd_logs() {
   case ${1:-app} in
     model) journalctl --user -u qwenchik-model -n 80 -f ;;
     app) journalctl --user -u qwenchik-app -n 80 -f ;;
-    *) die "logs model|app" ;;
+    search) tail -n 80 -f "$AGENTSEARCHER_LOG" ;;
+    *) die "logs model|app|search" ;;
   esac
 }
 
@@ -133,5 +227,6 @@ case ${1:-} in
   status) cmd_status ;;
   open) cmd_open ;;
   logs) shift; cmd_logs "$@" ;;
-  *) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  install-search) cmd_install_search ;;
+  *) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
