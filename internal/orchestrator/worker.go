@@ -1042,6 +1042,12 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 				return err
 			}
 			result, err = w.executeObservedTool(ctx, task.ID, &stage, role, decision.ToolCall.Name, decision.ToolCall.Arguments, approvalGrant, step.ID)
+			if err != nil && decision.ToolCall.Name == "search" && recoverableSearchValidationMiss(err, state) {
+				if eventErr := w.recordSearchValidationMiss(ctx, task.ID, &stage, step.ID, err); eventErr != nil {
+					return eventErr
+				}
+				result, err = []research.SearchHit{}, nil
+			}
 			if err != nil {
 				if errors.Is(err, tools.ErrInvalidArguments) {
 					_, _ = w.repo.RecordEvent(ctx, task.ID, "policy.decision", &stage, "audit", map[string]any{

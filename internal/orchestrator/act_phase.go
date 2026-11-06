@@ -801,6 +801,12 @@ func (w *Worker) retryInitialSearchIfEmpty(ctx context.Context, taskID string, s
 		return err
 	}
 	result, err := w.executeObservedTool(ctx, taskID, stage, "researcher", "search", arguments, "", retryResultKey)
+	if err != nil && recoverableSearchValidationMiss(err, *state) {
+		if eventErr := w.recordSearchValidationMiss(ctx, taskID, stage, retryResultKey, err); eventErr != nil {
+			return eventErr
+		}
+		result, err = []research.SearchHit{}, nil
+	}
 	if err != nil {
 		if _, eventErr := w.repo.RecordEvent(ctx, taskID, "tool.failed", stage, "audit", map[string]any{
 			"step_id": retryResultKey, "tool": "search", "failure": "provider_error",
@@ -997,5 +1003,34 @@ func (w *Worker) skipPlanStep(ctx context.Context, taskID string, stage *domain.
 	}
 	state.SkippedSteps = append(state.SkippedSteps, step.ID)
 	_, err := w.repo.SaveCheckpoint(ctx, taskID, 1, *state)
+	return err
+}
+
+// recoverableSearchValidationMiss reports whether a failed search can be
+// treated as an empty discovery instead of failing the run: the provider
+// answered, but none of its hits passed URL validation in time (slow DNS) or
+// at all, while the task already holds fetched evidence or other validated
+// candidate URLs to continue with.
+func recoverableSearchValidationMiss(err error, state checkpointState) bool {
+	var failure *research.SearchFailure
+	if !errors.As(err, &failure) {
+		return false
+	}
+	if failure.Code != "search_validation_timeout" && failure.Code != "search_no_usable_hits" {
+		return false
+	}
+	return distinctResearchSourceCount(state.ToolResults) > 0 || len(searchResultURLs(state.ToolResults)) > 0
+}
+
+func (w *Worker) recordSearchValidationMiss(ctx context.Context, taskID string, stage *domain.Stage, stepID string, cause error) error {
+	code := "search_no_usable_hits"
+	var failure *research.SearchFailure
+	if errors.As(cause, &failure) {
+		code = failure.Code
+	}
+	_, err := w.repo.RecordEvent(ctx, taskID, "tool.failed", stage, "audit", map[string]any{
+		"step_id": stepID, "tool": "search", "failure": "url_validation_degraded", "code": code,
+		"recovered": true,
+	})
 	return err
 }

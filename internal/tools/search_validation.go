@@ -140,6 +140,8 @@ func searchCollectionTimeout(provider research.SearchProvider) int {
 	return int((research.SearchTimeBudget(provider) + 8*time.Second) / time.Second)
 }
 
+const searchValidationWorkers = 4
+
 func searchCollectionContext(ctx context.Context, budget time.Duration) (context.Context, context.CancelFunc) {
 	if budget <= 0 {
 		budget = 12 * time.Second
@@ -227,6 +229,11 @@ func validateSearchHits(ctx context.Context, fetcher research.Fetcher, hits []re
 	}
 	validationCtx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
+	// Each URL gets an equal share of the validation budget per validator
+	// wave instead of a fixed 1s: a cold DNS lookup can take longer than a
+	// second, and a fixed slot made every hit of one search time out together.
+	waves := (len(unique) + searchValidationWorkers - 1) / searchValidationWorkers
+	hitTimeout := max(time.Second, budget/time.Duration(max(1, waves)))
 	type validationResult struct {
 		index int
 		err   error
@@ -237,10 +244,10 @@ func validateSearchHits(ctx context.Context, fetcher research.Fetcher, hits []re
 		jobs <- i
 	}
 	close(jobs)
-	for worker := 0; worker < min(4, len(unique)); worker++ {
+	for worker := 0; worker < min(searchValidationWorkers, len(unique)); worker++ {
 		go func() {
 			for i := range jobs {
-				hitCtx, hitCancel := context.WithTimeout(validationCtx, time.Second)
+				hitCtx, hitCancel := context.WithTimeout(validationCtx, hitTimeout)
 				var err error
 				if hitCtx.Err() != nil {
 					err = hitCtx.Err()

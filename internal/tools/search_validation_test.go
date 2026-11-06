@@ -419,3 +419,24 @@ func TestSearchCollectionBudgetFollowsProvider(t *testing.T) {
 		t.Fatalf("default collection budget grew to %v", time.Until(deadline))
 	}
 }
+
+func TestSlowDNSValidationUsesSharedBudgetInsteadOfOneSecondSlot(t *testing.T) {
+	fetcher := &validationFetchStub{validate: func(ctx context.Context, _ string) error {
+		select {
+		case <-time.After(1300 * time.Millisecond): // a cold DNS lookup
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}}
+	hits := make([]research.SearchHit, 4)
+	for i := range hits {
+		hits[i] = research.SearchHit{Provider: "tavily", URL: fmt.Sprintf("https://site-%d.example.org/a", i)}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	validated, err := validateSearchHits(ctx, fetcher, hits, nil, "query")
+	if err != nil || len(validated) != 4 {
+		t.Fatalf("slow but successful validations were dropped: hits=%d err=%v", len(validated), err)
+	}
+}
