@@ -151,6 +151,20 @@ func (s *Store) RequestResearchContinuation(ctx context.Context, taskID string, 
 }
 
 func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary string, missing, supplementaryMissing []string, criteria []domain.VerificationCriterionResult) error {
+	return s.CommitVerificationWithFollowUps(ctx, taskID, verdict, summary, missing, supplementaryMissing, criteria, nil)
+}
+
+// CommitVerificationWithFollowUps also records verifier follow-up search
+// questions; an adaptive session turns them into the next round's searches.
+func (s *Store) CommitVerificationWithFollowUps(ctx context.Context, taskID, verdict, summary string, missing, supplementaryMissing []string, criteria []domain.VerificationCriterionResult, followUps []string) error {
+	if len(followUps) > 20 {
+		return ErrCheckpointInvalid
+	}
+	for _, value := range followUps {
+		if !utf8.ValidString(value) || utf8.RuneCountInString(value) > 500 || strings.ContainsAny(value, "\x00\r\n") {
+			return ErrCheckpointInvalid
+		}
+	}
 	if verdict != "PASS" && verdict != "PARTIAL" && verdict != "REPAIR" && verdict != "RESEARCH" && verdict != "UNCERTAIN" && verdict != "BLOCK" {
 		return ErrCheckpointInvalid
 	}
@@ -206,7 +220,7 @@ func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary
 			return stateErr
 		}
 		if len(adaptive.Rounds) > 0 && adaptive.Rounds[len(adaptive.Rounds)-1].Number == session.CurrentRound+1 {
-			if adaptive.Rounds[len(adaptive.Rounds)-1].AssessmentHash != adaptiveAssessmentHash(verdict, summary, missing, supplementaryMissing, criteria) {
+			if adaptive.Rounds[len(adaptive.Rounds)-1].AssessmentHash != adaptiveAssessmentHash(verdict, summary, missing, supplementaryMissing, criteria, followUps...) {
 				return ErrConflict
 			}
 			return s.commitCheckpointTx(ctx, tx)
@@ -219,7 +233,7 @@ func (s *Store) CommitVerification(ctx context.Context, taskID, verdict, summary
 	}
 	completion.Verdict = verdict
 	state["completion"] = completion
-	if err := assessAdaptiveRound(ctx, tx, taskID, state, verdict, summary, missing, supplementaryMissing, criteria); err != nil {
+	if err := assessAdaptiveRound(ctx, tx, taskID, state, verdict, summary, missing, supplementaryMissing, criteria, followUps); err != nil {
 		return err
 	}
 	payload := map[string]any{

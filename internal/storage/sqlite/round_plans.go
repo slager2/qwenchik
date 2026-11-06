@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/slager2/qwenchik/internal/domain"
+	"strings"
 	"time"
 )
 
@@ -30,6 +31,7 @@ func requestBoundedRoundTx(ctx context.Context, store *Store, tx *sql.Tx, s doma
 	if pending, _ := state["pending_invocation_id"].(string); pending != "" {
 		return ErrConflict
 	}
+	followUps := []string{}
 	if s.Policy.AdaptiveEnabled {
 		a, err := adaptiveState(state)
 		if err != nil {
@@ -41,6 +43,13 @@ func requestBoundedRoundTx(ctx context.Context, store *Store, tx *sql.Tx, s doma
 		if len(a.Rounds) != plans.CurrentRound {
 			return ErrConflict
 		}
+		for _, id := range a.Frontier {
+			for _, question := range a.Questions {
+				if question.ID == id && question.Status == "open" && strings.HasPrefix(id, domain.FollowUpQuestionPrefix) {
+					followUps = append(followUps, question.Text)
+				}
+			}
+		}
 	}
 	_, searches, fetches, reserve := domain.NextResearchRoundShape(s)
 	steps := []domain.PlanStep{}
@@ -51,7 +60,15 @@ func requestBoundedRoundTx(ctx context.Context, store *Store, tx *sql.Tx, s doma
 			id += fmt.Sprintf("_%d", i+1)
 		}
 		dependencies = append(dependencies, id)
-		steps = append(steps, domain.PlanStep{ID: id, Kind: "search", Description: fmt.Sprintf("Address the critical open questions with a new independent targeted query focused on missing direct evidence, distinct discovery angle %d", i+1), SuccessCriteria: []string{"A new targeted discovery query is recorded"}})
+		step := domain.PlanStep{ID: id, Kind: "search", Description: fmt.Sprintf("Address the critical open questions with a new independent targeted query focused on missing direct evidence, distinct discovery angle %d", i+1), SuccessCriteria: []string{"A new targeted discovery query is recorded"}}
+		if i < len(followUps) {
+			// A follow-up question is a ready keyword query: the round digs into
+			// one entity or missing fact per search without an actor call.
+			step.Description = truncateResearchQuestion(domain.ResearchFacetPrefix + followUps[i])
+			step.Query = followUps[i]
+			step.SuccessCriteria = []string{"A follow-up discovery query is recorded"}
+		}
+		steps = append(steps, step)
 	}
 	for i := 0; i < fetches; i++ {
 		id := fmt.Sprintf("continue_%d_fetch", count+1)

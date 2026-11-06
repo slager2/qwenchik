@@ -1275,14 +1275,17 @@ func safePublicEvent(event domain.Event) domain.Event {
 		var input map[string]any
 		_ = json.Unmarshal(event.Payload, &input)
 		safe := map[string]any{}
-		for _, key := range []string{"number", "frontier_count", "evidence_count", "critical_missing_count", "stagnant_rounds"} {
+		for _, key := range []string{"number", "frontier_count", "evidence_count", "critical_missing_count", "stagnant_rounds", "questions_created"} {
 			if value, ok := boundedNumber(input[key], 1000, true); ok {
 				safe[key] = value
 			}
 		}
-		for _, key := range []string{"outcome", "stop_reason", "reason"} {
+		if exploring, ok := input["exploring"].(bool); ok {
+			safe["exploring"] = exploring
+		}
+		for _, key := range []string{"outcome", "stop_reason", "reason", "exploration_stop"} {
 			if value, ok := input[key].(string); ok {
-				for _, allowed := range []string{"PASS", "PARTIAL", "RESEARCH", "UNCERTAIN", "BLOCK", "criteria_covered", "stagnation", "max_rounds", "question_budget_exhausted", "step_budget", "research_budget", "empty_frontier"} {
+				for _, allowed := range []string{"PASS", "PARTIAL", "RESEARCH", "UNCERTAIN", "BLOCK", "criteria_covered", "stagnation", "max_rounds", "question_budget_exhausted", "step_budget", "research_budget", "empty_frontier", "deadline", "total_steps", "search_budget", "fetch_budget", "evidence_budget", "llm_budget", "fetch_bytes"} {
 					if value == allowed {
 						safe[key] = value
 					}

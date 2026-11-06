@@ -9,14 +9,19 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/slager2/qwenchik/internal/domain"
 )
 
 type adaptiveMutationKey struct{}
 
-func adaptiveAssessmentHash(verdict, summary string, missing, supplementaryMissing []string, criteria []domain.VerificationCriterionResult) string {
-	raw, _ := json.Marshal([]any{verdict, summary, missing, supplementaryMissing, criteria})
+func adaptiveAssessmentHash(verdict, summary string, missing, supplementaryMissing []string, criteria []domain.VerificationCriterionResult, followUps ...string) string {
+	value := []any{verdict, summary, missing, supplementaryMissing, criteria}
+	if len(followUps) > 0 { // assessments without follow-ups keep their stored hash
+		value = append(value, followUps)
+	}
+	raw, _ := json.Marshal(value)
 	hash := sha256.Sum256(raw)
 	return hex.EncodeToString(hash[:])
 }
@@ -102,7 +107,7 @@ func (s *Store) StopAdaptiveResearch(ctx context.Context, taskID, reason string)
 	return s.commitCheckpointTx(ctx, tx)
 }
 
-func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state map[string]any, verdict, summary string, missing, supplementaryMissing []string, criteria []domain.VerificationCriterionResult) error {
+func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state map[string]any, verdict, summary string, missing, supplementaryMissing []string, criteria []domain.VerificationCriterionResult, followUps []string) error {
 	session, err := researchSession(ctx, tx, taskID)
 	if err == ErrNotFound {
 		return nil
@@ -225,6 +230,46 @@ func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state m
 			session.Counters.QuestionsAccepted++
 		}
 	}
+	covered := verdict == "PASS" || verdict == "PARTIAL"
+	explored := false // an earlier round already covered the criteria
+	for _, prior := range adaptive.Rounds {
+		explored = explored || prior.Outcome == "PASS" || prior.Outcome == "PARTIAL"
+	}
+	explorationStop := ""
+	if covered {
+		explorationStop = domain.ExplorationStopReason(session, time.Now())
+		if explorationStop == "" && explored && adaptive.StagnantRounds >= session.Budget.MaxStagnantRounds {
+			explorationStop = "stagnation"
+		}
+	}
+	// Follow-up questions asked by this round's searches are answered by its
+	// evidence; new ones come from the verifier for the next round.
+	for index := range adaptive.Questions {
+		if strings.HasPrefix(adaptive.Questions[index].ID, domain.FollowUpQuestionPrefix) && adaptive.Questions[index].Status == "open" {
+			adaptive.Questions[index].Status = "resolved"
+		}
+	}
+	if !covered || explorationStop == "" {
+		added := 0
+		for _, text := range followUps {
+			text = truncateResearchQuestion(strings.Join(strings.Fields(text), " "))
+			if text == "" || added >= maxFollowUpsPerRound {
+				continue
+			}
+			digest := sha256.Sum256([]byte(strings.ToLower(text)))
+			id := domain.FollowUpQuestionPrefix + hex.EncodeToString(digest[:8])
+			known := false
+			for _, question := range adaptive.Questions {
+				known = known || question.ID == id
+			}
+			if known || len(adaptive.Questions) >= min(80, session.Budget.MaxQuestionsCreated) || session.Counters.QuestionsAccepted >= session.Budget.MaxQuestionsAccepted {
+				continue // an exhausted follow-up budget ends exploration, not the run
+			}
+			adaptive.Questions = append(adaptive.Questions, domain.ResearchQuestion{ID: id, Text: text, Status: "open", AcceptedOnce: true})
+			session.Counters.QuestionsAccepted++
+			added++
+		}
+	}
 	adaptive.Frontier = []string{}
 	for index := range adaptive.Questions {
 		question := &adaptive.Questions[index]
@@ -237,11 +282,20 @@ func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state m
 	session.Counters.QuestionsCreated = max(session.Counters.QuestionsCreated, len(adaptive.Questions))
 	session.Counters.Rounds = max(session.Counters.Rounds, number)
 	session.Counters.StagnantRounds = adaptive.StagnantRounds
-	if verdict == "PASS" || verdict == "PARTIAL" {
-		if len(adaptive.Frontier) > 0 {
-			return ErrConflict
+	if covered {
+		for _, id := range adaptive.Frontier {
+			if !strings.HasPrefix(id, domain.FollowUpQuestionPrefix) {
+				return ErrConflict
+			}
 		}
-		adaptive.StopReason = "criteria_covered"
+		if explorationStop == "" && len(adaptive.Frontier) == 0 {
+			explorationStop = "empty_frontier"
+		}
+		if explorationStop == "stagnation" {
+			adaptive.StopReason = "stagnation"
+		} else if explorationStop != "" {
+			adaptive.StopReason = "criteria_covered"
+		}
 	}
 	if verdict != "PASS" && verdict != "PARTIAL" && adaptive.StagnantRounds >= session.Budget.MaxStagnantRounds {
 		adaptive.StopReason = "stagnation"
@@ -251,7 +305,7 @@ func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state m
 	}
 	adaptive.CurrentRound = number
 	round := domain.ResearchRound{Number: number, Goal: session.Goal, AcceptedEvidence: evidence, CriticalMissing: append([]string{}, missing...), OpenQuestions: append([]string{}, missing...), Frontier: append([]string{}, adaptive.Frontier...), Outcome: verdict}
-	round.AssessmentHash = adaptiveAssessmentHash(verdict, summary, missing, supplementaryMissing, criteria)
+	round.AssessmentHash = adaptiveAssessmentHash(verdict, summary, missing, supplementaryMissing, criteria, followUps...)
 	round.Coverage = append([]domain.VerificationCriterionResult{}, criteria...)
 	encoded, _ := json.Marshal(state["completed_steps"])
 	_ = json.Unmarshal(encoded, &round.CompletedSteps)
@@ -265,14 +319,14 @@ func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state m
 			round.FailedSources = append(round.FailedSources, identity)
 		}
 	}
-	covered := []string{}
+	coveredCriteria := []string{}
 	for _, criterion := range criteria {
 		if criterion.Met && len(criterion.EvidenceIDs) > 0 {
-			covered = append(covered, fmt.Sprintf("%s:%d", criterion.StepID, criterion.Criterion))
+			coveredCriteria = append(coveredCriteria, fmt.Sprintf("%s:%d", criterion.StepID, criterion.Criterion))
 		}
 	}
-	sort.Strings(covered)
-	fingerprint, _ := json.Marshal([]any{evidence, covered})
+	sort.Strings(coveredCriteria)
+	fingerprint, _ := json.Marshal([]any{evidence, coveredCriteria})
 	digest := sha256.Sum256(fingerprint)
 	round.ProgressFingerprint = hex.EncodeToString(digest[:])
 	round.RemainingBudgets, err = snapshotBudget(ctx, tx, session)
@@ -284,9 +338,13 @@ func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state m
 	if err := writeResearchCounters(ctx, tx, taskID, session.Counters); err != nil {
 		return err
 	}
-	_, err = appendEvent(ctx, tx, taskID, "research.round.assessed", stagePointer(domain.StageVerification), "user", map[string]any{"number": number, "outcome": verdict, "stop_reason": adaptive.StopReason, "frontier_count": len(adaptive.Frontier), "evidence_count": len(evidence), "critical_missing_count": len(missing), "stagnant_rounds": adaptive.StagnantRounds})
+	_, err = appendEvent(ctx, tx, taskID, "research.round.assessed", stagePointer(domain.StageVerification), "user", map[string]any{"number": number, "outcome": verdict, "stop_reason": adaptive.StopReason, "frontier_count": len(adaptive.Frontier), "evidence_count": len(evidence), "critical_missing_count": len(missing), "stagnant_rounds": adaptive.StagnantRounds, "questions_created": len(adaptive.Questions), "exploring": covered && adaptive.StopReason == "", "exploration_stop": explorationStop})
 	return err
 }
+
+// maxFollowUpsPerRound bounds verifier follow-up questions accepted per round:
+// about one per search step of the widest round shape.
+const maxFollowUpsPerRound = 6
 
 func truncateResearchQuestion(text string) string {
 	runes := []rune(text)
