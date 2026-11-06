@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ func sourceFixture(taskID, suffix string) (domain.Artifact, domain.Artifact, dom
 }
 
 func saveSource(ctx context.Context, s *Store, raw, text domain.Artifact, e domain.Evidence) (domain.Evidence, error) {
-	return s.SaveResearchSource(ctx, raw, raw.TaskID+"/"+raw.ID, text, text.TaskID+"/"+text.ID, e)
+	return s.SaveResearchSource(ctx, raw, filepath.Join(raw.TaskID, raw.ID), text, filepath.Join(text.TaskID, text.ID), e)
 }
 
 func assertSourceCounts(t *testing.T, s *Store, taskID string, artifacts, evidence, events int) {
@@ -102,7 +103,7 @@ func TestSaveResearchSourceRejectsInconsistentOwnership(t *testing.T) {
 			s, turn, _ := researchConversationFixture(t, nil)
 			claimResearchFixture(t, s)
 			raw, text, e := sourceFixture(turn.Run.ID, "a")
-			rawRef, textRef := raw.TaskID+"/"+raw.ID, text.TaskID+"/"+text.ID
+			rawRef, textRef := filepath.Join(raw.TaskID, raw.ID), filepath.Join(text.TaskID, text.ID)
 			wantArtifacts, wantEvidence, wantEvents := 0, 0, 0
 			switch kind {
 			case "raw task":

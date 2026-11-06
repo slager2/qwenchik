@@ -347,6 +347,7 @@ func TestInvocationInferenceSummaryPersistsSeparatelyAndOnlyOncePerAttempt(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { s.Close() }) // the fixture cleanup only closes the first handle
 	runtime, err := s.RunRuntime(ctx, turn.Run.ID)
 	if err != nil {
 		t.Fatal(err)

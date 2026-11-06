@@ -30,7 +30,7 @@ func TestSkippedStepStatusMigrationPreservesExistingSteps(t *testing.T) {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".sql" || entry.Name() == "007_step_skipped_status.sql" {
 			continue
 		}
-		migration, err := migrationFiles.ReadFile(filepath.Join("migrations", entry.Name()))
+		migration, err := migrationFiles.ReadFile("migrations/" + entry.Name()) // embed.FS paths always use "/"
 		if err != nil {
 			t.Fatal(err)
 		}
