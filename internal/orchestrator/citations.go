@@ -133,7 +133,7 @@ func (w *Worker) citationCatalogue(ctx context.Context, taskID string, results m
 			if !strings.Contains(item.Excerpt, excerpt) {
 				continue
 			}
-			excerpt = utf8Prefix(excerpt, 3000)
+			excerpt = utf8Prefix(excerpt, 8000) // whole stored excerpt (<= 4000 runes); 3000 bytes cut Cyrillic text to ~1500 characters
 			if len(strings.TrimSpace(excerpt)) < 8 {
 				continue
 			}
