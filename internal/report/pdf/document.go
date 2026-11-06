@@ -14,12 +14,15 @@ import (
 
 // TemplateVersion changes whenever the generated HTML or stylesheet changes,
 // so cached PDFs rendered from an older layout are not served again.
-const TemplateVersion = "report-pdf-v1"
+const TemplateVersion = "report-pdf-v2"
 
 // Source is one entry of the report source list.
 type Source struct {
 	Title string
 	URL   string
+	// EvidenceIDs are the evidence records citing this source; body
+	// markers [<evidence-id>] become numbered links to the entry.
+	EvidenceIDs []string
 }
 
 // Document is everything printed into a report PDF.
@@ -56,8 +59,9 @@ func ParseReportJSON(raw []byte) (Report, error) {
 			FinalOutcome     string `json:"final_outcome"`
 		} `json:"metadata"`
 		Coverage []struct {
-			Title string `json:"title"`
-			URL   string `json:"url"`
+			EvidenceID string `json:"evidence_id"`
+			Title      string `json:"title"`
+			URL        string `json:"url"`
 		} `json:"evidence_coverage"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
@@ -67,19 +71,73 @@ func ParseReportJSON(raw []byte) (Report, error) {
 	if parsed, err := time.Parse(time.RFC3339Nano, payload.Metadata.GeneratedAt); err == nil {
 		report.GeneratedAt = parsed
 	}
-	seen := map[string]bool{}
+	index := map[string]int{}
 	for _, item := range payload.Coverage {
 		key := strings.TrimSpace(item.URL)
-		if key == "" || seen[key] {
+		if key == "" {
 			continue
 		}
-		seen[key] = true
-		report.Sources = append(report.Sources, Source{Title: strings.TrimSpace(item.Title), URL: key})
+		position, seen := index[key]
+		if !seen {
+			position = len(report.Sources)
+			index[key] = position
+			report.Sources = append(report.Sources, Source{Title: strings.TrimSpace(item.Title), URL: key})
+		}
+		if id := strings.TrimSpace(item.EvidenceID); id != "" {
+			report.Sources[position].EvidenceIDs = append(report.Sources[position].EvidenceIDs, id)
+		}
 	}
 	return report, nil
 }
 
 var leadingH1 = regexp.MustCompile(`\A\s*#[ \t]+([^\n]*)\n`)
+
+var titleLabels = []string{"research report outline", "report outline", "outline", "план отчёта", "план отчета"}
+
+// CleanTitle drops the "Research Report Outline:" label small models copy
+// into report titles (mirrors the orchestrator's reportTitle).
+func CleanTitle(title string) string {
+	title = strings.TrimSpace(title)
+	lower := strings.ToLower(title)
+	for _, prefix := range titleLabels {
+		if strings.HasPrefix(lower, prefix) {
+			return strings.TrimSpace(strings.TrimLeft(title[len(prefix):], ":-—– "))
+		}
+	}
+	return title
+}
+
+var (
+	uuidPattern     = `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`
+	citationMarker  = regexp.MustCompile(`\[(` + uuidPattern + `(?:\s*[,;]\s*` + uuidPattern + `)*)\]`)
+	citationUUIDSep = regexp.MustCompile(`\s*[,;]\s*`)
+)
+
+// numberCitations rewrites [<evidence-id>] markers (also comma-separated
+// lists) as numbered links to the title-page source entries. Unknown IDs
+// stay as plain text.
+func numberCitations(markdown string, numbers map[string]int) string {
+	if len(numbers) == 0 {
+		return markdown
+	}
+	return citationMarker.ReplaceAllStringFunc(markdown, func(marker string) string {
+		ids := citationUUIDSep.Split(marker[1:len(marker)-1], -1)
+		parts := make([]string, 0, len(ids))
+		known := false
+		for _, id := range ids {
+			if n, ok := numbers[strings.ToLower(id)]; ok {
+				known = true
+				parts = append(parts, fmt.Sprintf("[\\[%d\\]](#source-%d)", n, n))
+			} else {
+				parts = append(parts, "\\["+id+"\\]")
+			}
+		}
+		if !known {
+			return marker
+		}
+		return strings.Join(parts, "")
+	})
+}
 
 // MarkdownTitle returns the first-line level-one heading of a report, if any.
 func MarkdownTitle(markdown string) string {
@@ -110,12 +168,12 @@ var outcomeLabels = map[string]string{
 // BuildHTML returns the complete printable HTML document.
 func BuildHTML(doc Document) ([]byte, error) {
 	body := doc.Markdown
-	title := strings.TrimSpace(doc.Title)
+	title := CleanTitle(doc.Title)
 	if heading := MarkdownTitle(body); heading != "" {
 		if title == "" {
-			title = heading
+			title = CleanTitle(heading)
 		}
-		if heading == title {
+		if heading == title || CleanTitle(heading) == title {
 			// The title page already shows it.
 			body = leadingH1.ReplaceAllString(body, "")
 		}
@@ -123,11 +181,8 @@ func BuildHTML(doc Document) ([]byte, error) {
 	if title == "" {
 		title = "Отчёт исследования"
 	}
-	content, err := MarkdownToHTML(body)
-	if err != nil {
-		return nil, err
-	}
 	sources := make([]Source, 0, len(doc.Sources))
+	numbers := map[string]int{}
 	for _, source := range doc.Sources {
 		if source.URL == "" {
 			continue
@@ -136,6 +191,15 @@ func BuildHTML(doc Document) ([]byte, error) {
 			source.Title = source.URL
 		}
 		sources = append(sources, source)
+		for _, id := range source.EvidenceIDs {
+			if _, taken := numbers[strings.ToLower(id)]; !taken {
+				numbers[strings.ToLower(id)] = len(sources)
+			}
+		}
+	}
+	content, err := MarkdownToHTML(numberCitations(body, numbers))
+	if err != nil {
+		return nil, err
 	}
 	var out bytes.Buffer
 	err = documentTemplate.Execute(&out, map[string]any{
@@ -206,7 +270,7 @@ func Filename(title string) string {
 	return name + ".pdf"
 }
 
-var documentTemplate = template.Must(template.New("report").Parse(`<!DOCTYPE html>
+var documentTemplate = template.Must(template.New("report").Funcs(template.FuncMap{"inc": func(i int) int { return i + 1 }}).Parse(`<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
@@ -228,7 +292,7 @@ var documentTemplate = template.Must(template.New("report").Parse(`<!DOCTYPE htm
     <dt>Источников</dt><dd>{{len .Sources}}</dd>
     {{if .RunID}}<dt>Запуск</dt><dd class="mono">{{.RunID}}</dd>{{end}}
   </dl>
-  {{if .Sources}}<div class="sources"><p class="label">Источники</p><ol>{{range .Sources}}<li><span class="source-title">{{.Title}}</span><br><span class="source-url">{{.URL}}</span></li>{{end}}</ol></div>{{end}}
+  {{if .Sources}}<div class="sources"><p class="label">Источники</p><ol>{{range $i, $s := .Sources}}<li id="source-{{inc $i}}"><span class="source-title">{{.Title}}</span><br><span class="source-url">{{$s.URL}}</span></li>{{end}}</ol></div>{{end}}
 </section>
 <main class="report">
 {{.Content}}

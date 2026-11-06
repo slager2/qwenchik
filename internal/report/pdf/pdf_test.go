@@ -103,7 +103,7 @@ func TestBuildHTMLTitlePageAndEscaping(t *testing.T) {
 			t.Fatalf("missing %q", want)
 		}
 	}
-	if strings.Count(text, "<li>") != 1 {
+	if strings.Count(text, `<li id="source-`) != 1 {
 		t.Fatalf("empty source URL must be dropped")
 	}
 	// A leading heading equal to the title is not printed twice.
@@ -222,5 +222,36 @@ func TestChromeRenderRejectsNonPDFOutput(t *testing.T) {
 	renderer := &Chrome{Binary: script, TempDir: t.TempDir()}
 	if _, err := renderer.Render(context.Background(), []byte("<html></html>")); err == nil || !strings.Contains(err.Error(), "invalid") {
 		t.Fatalf("expected invalid output error, got %v", err)
+	}
+}
+
+func TestCitationMarkersBecomeNumberedSourceLinks(t *testing.T) {
+	a, b, unknown := "8361383a-1487-4d37-9e8d-bbd5eb59be05", "c310b9bd-f3fc-4806-9a3e-3b1fc4c911eb", "00000000-0000-4000-8000-000000000000"
+	out, err := BuildHTML(Document{
+		Title:    "Research Report Outline: Bioinformatics Roadmap",
+		Sources:  []Source{{Title: "Dropped", URL: ""}, {Title: "A", URL: "https://a.example", EvidenceIDs: []string{a}}, {Title: "B", URL: "https://b.example", EvidenceIDs: []string{b}}},
+		Markdown: "# Research Report Outline: Bioinformatics Roadmap\n\nClaim [" + a + "]. Both [" + a + ", " + b + "]. Unknown [" + unknown + "]. Mixed [" + b + "; " + unknown + "]. `[" + a + "]`\n",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(out)
+	for _, want := range []string{
+		`<h1 class="report-title">Bioinformatics Roadmap</h1>`,
+		`<li id="source-1">`, `<li id="source-2">`,
+		`Claim <a href="#source-1">[1]</a>.`,
+		`Both <a href="#source-1">[1]</a><a href="#source-2">[2]</a>.`,
+		"Unknown [" + unknown + "].",
+		`Mixed <a href="#source-2">[2]</a>[` + unknown + `].`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q in %s", want, text)
+		}
+	}
+	if strings.Contains(text, "Research Report Outline") || strings.Contains(text, "<h1>Bioinformatics") {
+		t.Fatalf("outline label or duplicate title kept: %s", text)
+	}
+	if got := CleanTitle("План отчёта — Тема"); got != "Тема" {
+		t.Fatalf("CleanTitle=%q", got)
 	}
 }

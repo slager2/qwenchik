@@ -155,6 +155,7 @@ func (e *Exporter) Export(ctx context.Context, run Run) (Result, error) {
 	if reportTitle == "" {
 		reportTitle = MarkdownTitle(markdown)
 	}
+	reportTitle = CleanTitle(reportTitle)
 	fileTitle := strings.TrimSpace(run.Title)
 	if fileTitle == "" {
 		fileTitle = reportTitle
