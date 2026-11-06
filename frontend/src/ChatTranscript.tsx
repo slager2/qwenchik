@@ -6,8 +6,10 @@ import type { ConversationMessage, Run } from './types'
 import type { RunEvidenceCache } from './evidence-cache.mjs'
 import { Icon } from './icons'
 import { IconButton } from './ui'
+import ReportPDFButton from './ReportPDFButton'
+import { reportPDFEligible } from './report-pdf.mjs'
 
-export default function ChatTranscript({ messages, loading, active, runID, run, references, evidenceCache, onExample, submissionState }: {
+export default function ChatTranscript({ messages, loading, active, runID, run, references, evidenceCache, onExample, submissionState, reportPDF }: {
   messages: ConversationMessage[]
   loading: boolean
   active: boolean
@@ -17,6 +19,8 @@ export default function ChatTranscript({ messages, loading, active, runID, run, 
   evidenceCache: RunEvidenceCache
   onExample: (mode: 'chat' | 'research', prompt: string) => void
   submissionState?: 'sending' | 'failed'
+  /** Renderer availability for the research report PDF download. */
+  reportPDF?: { disabled: boolean; reason: string }
 }) {
   return <>
     {!messages.length && !loading && <div className="chat-empty"><h2>С чего начнём?</h2><p>Спросите что-нибудь или поручите исследование с проверяемыми источниками.</p><div className="chat-empty__suggestions"><button type="button" onClick={() => onExample('chat', 'Помоги разобраться в сложной теме')}><Icon name="chat" size={18} /><span><strong>Объяснить тему</strong><small>Помоги разобраться в сложной теме</small></span></button><button type="button" onClick={() => onExample('research', 'Сравни варианты и приведи проверяемые источники')}><Icon name="sources" size={18} /><span><strong>Исследовать вопрос</strong><small>Сравни варианты и приведи источники</small></span></button></div></div>}
@@ -34,12 +38,12 @@ export default function ChatTranscript({ messages, loading, active, runID, run, 
                   : message.status === 'failed' ? 'Ответ не завершён' : ''
       const preparing = current && active && !['paused', 'failed', 'cancelled', 'completed'].includes(run?.status || '') && !['failed', 'interrupted', 'cancelled', 'stopped', 'partial'].includes(message.status) && run?.terminal_outcome !== 'blocked'
       const submission = message.role === 'user' && message.status === 'pending' ? submissionState === 'sending' ? 'Отправляем сообщение…' : submissionState === 'failed' ? 'Сообщение не отправлено' : '' : ''
-      return <article className={`chat-message chat-role-${message.role}`} key={message.id} data-message-id={message.id} tabIndex={message.role === 'assistant' ? -1 : undefined} aria-label={message.role === 'user' ? 'Ваше сообщение' : 'Ответ Qwen'}><header className="sr-only"><strong>{message.role === 'user' ? 'Вы' : 'Qwen'}</strong><time dateTime={message.created_at}>{new Date(message.created_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</time></header>{hasContent ? <MessageContent message={message} runID={runID} references={references} evidenceCache={evidenceCache} /> : <p className="chat-muted chat-message-empty">{current && run?.status === 'paused' ? 'Ответ ещё не сформирован. Запуск на паузе.' : preparing ? 'Готовлю ответ…' : 'Текст ответа отсутствует.'}</p>}{submission && <p className="chat-muted chat-submission-state" role="status">{submission}</p>}{message.role === 'assistant' && meta && !(current && run?.status === 'paused' && !hasContent) && <footer className="chat-message-meta">{meta}</footer>}</article>
+      return <article className={`chat-message chat-role-${message.role}`} key={message.id} data-message-id={message.id} tabIndex={message.role === 'assistant' ? -1 : undefined} aria-label={message.role === 'user' ? 'Ваше сообщение' : 'Ответ Qwen'}><header className="sr-only"><strong>{message.role === 'user' ? 'Вы' : 'Qwen'}</strong><time dateTime={message.created_at}>{new Date(message.created_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</time></header>{hasContent ? <MessageContent message={message} runID={runID} references={references} evidenceCache={evidenceCache} pdf={reportPDF && reportPDFEligible(message, run) ? reportPDF : undefined} /> : <p className="chat-muted chat-message-empty">{current && run?.status === 'paused' ? 'Ответ ещё не сформирован. Запуск на паузе.' : preparing ? 'Готовлю ответ…' : 'Текст ответа отсутствует.'}</p>}{submission && <p className="chat-muted chat-submission-state" role="status">{submission}</p>}{message.role === 'assistant' && meta && !(current && run?.status === 'paused' && !hasContent) && <footer className="chat-message-meta">{meta}</footer>}</article>
     })}
   </>
 }
 
-const MessageContent = memo(function MessageContent({ message, runID, references, evidenceCache }: { message: ConversationMessage; runID: string; references: CitationReference[]; evidenceCache: RunEvidenceCache }) {
+const MessageContent = memo(function MessageContent({ message, runID, references, evidenceCache, pdf }: { message: ConversationMessage; runID: string; references: CitationReference[]; evidenceCache: RunEvidenceCache; pdf?: { disabled: boolean; reason: string } }) {
   const prefix = useId()
   const container = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
@@ -57,7 +61,7 @@ const MessageContent = memo(function MessageContent({ message, runID, references
       setCopied(false)
     }
   }
-  return <div ref={container}>{headings.length >= 2 && <nav className="report-outline" aria-label="Разделы ответа"><details><summary><Icon name="menu" size={16} />Разделы ответа · {headings.length}</summary><div className="report-outline-links">{headings.map((heading) => <button key={heading.id} type="button" title={heading.text} onClick={() => focusReportHeading(container.current, heading.id)}>{heading.text}</button>)}</div></details></nav>}<MarkdownMessage content={message.content} idPrefix={prefix} references={message.role === 'assistant' ? refs : []} />{message.role === 'assistant' && <div className="chat-message-actions"><IconButton label="Скопировать ответ" title={copied ? 'Скопировано' : 'Копировать'} onClick={() => void copyMessage()} disabled={!message.content.trim()} icon={<Icon name={copied ? 'check' : 'copy'} size={18} />} />{copied && <span className="chat-muted" role="status">Ответ скопирован</span>}</div>}{historicalRunID && historical.error && <p className="chat-muted">{historical.error} <button type="button" onClick={() => void historical.retry()}>Загрузить источники</button></p>}</div>
+  return <div ref={container}>{headings.length >= 2 && <nav className="report-outline" aria-label="Разделы ответа"><details><summary><Icon name="menu" size={16} />Разделы ответа · {headings.length}</summary><div className="report-outline-links">{headings.map((heading) => <button key={heading.id} type="button" title={heading.text} onClick={() => focusReportHeading(container.current, heading.id)}>{heading.text}</button>)}</div></details></nav>}<MarkdownMessage content={message.content} idPrefix={prefix} references={message.role === 'assistant' ? refs : []} />{message.role === 'assistant' && <div className="chat-message-actions"><IconButton label="Скопировать ответ" title={copied ? 'Скопировано' : 'Копировать'} onClick={() => void copyMessage()} disabled={!message.content.trim()} icon={<Icon name={copied ? 'check' : 'copy'} size={18} />} />{copied && <span className="chat-muted" role="status">Ответ скопирован</span>}{pdf && <ReportPDFButton runID={message.run_id} disabled={pdf.disabled} reason={pdf.reason} />}</div>}{historicalRunID && historical.error && <p className="chat-muted">{historical.error} <button type="button" onClick={() => void historical.retry()}>Загрузить источники</button></p>}</div>
 })
 
 function useRunEvidence(cache: RunEvidenceCache, runID: string) {

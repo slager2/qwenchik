@@ -302,6 +302,8 @@ export interface ConversationMessage {
   last_event_seq: number
   metadata?: Record<string, unknown>
   citations?: Citation[]
+  /** Mode of the run that produced the message. */
+  run_mode?: 'chat' | 'research' | string
 }
 
 export interface Run {
@@ -590,6 +592,7 @@ export interface HealthResponse {
   model?: { id: string; status: string }
   worker?: string
   worker_details?: { status: string; busy?: boolean; heartbeat_age_seconds?: number }
+  report_pdf?: { available: boolean }
   runtime?: RunRuntime['runtime']
 }
 

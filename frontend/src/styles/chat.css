@@ -60,6 +60,10 @@
 .chat-message-actions .ui-icon-button { color: var(--text-tertiary); }
 .chat-message-actions .ui-icon-button:hover:not(:disabled) { color: var(--text); }
 .chat-message-actions .chat-muted { font-size: var(--text-xs); }
+.report-pdf-action { display: inline-flex; align-items: center; gap: var(--space-2); }
+.chat-message-actions .report-pdf-action .ui-button--ghost { color: var(--text-tertiary); }
+.chat-message-actions .report-pdf-action .ui-button--ghost:hover:not(:disabled) { color: var(--text); }
+.report-pdf-error { font-size: var(--text-xs); }
 
 /* Report outline */
 .report-outline { margin-bottom: var(--space-3); }

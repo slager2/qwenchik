@@ -3,7 +3,7 @@ import type { ReactElement, SVGProps } from 'react'
 export type IconName =
   | 'brand' | 'chat' | 'projects' | 'tasks' | 'memory' | 'settings' | 'status' | 'menu' | 'panel-left' | 'panel-right'
   | 'search' | 'plus' | 'close' | 'send' | 'stop' | 'copy' | 'check' | 'chevron-down' | 'chevron-right' | 'sun' | 'moon'
-  | 'edit' | 'trash' | 'sources' | 'external' | 'refresh' | 'arrow-down' | 'more' | 'pause' | 'play' | 'sliders' | 'alert'
+  | 'edit' | 'trash' | 'sources' | 'external' | 'refresh' | 'arrow-down' | 'more' | 'pause' | 'play' | 'sliders' | 'alert' | 'download'
 
 type IconProps = Omit<SVGProps<SVGSVGElement>, 'children'> & { name: IconName; title?: string; size?: number }
 
@@ -35,6 +35,7 @@ const paths: Record<IconName, ReactElement> = {
   external: <><path d="M14 5h5v5M19 5l-8 8" /><path d="M17 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4" /></>,
   refresh: <><path d="M19 8a7.5 7.5 0 1 0 .5 6" /><path d="M19.5 4v4.5H15" /></>,
   'arrow-down': <path d="M12 5v14M6 13l6 6 6-6" />,
+  download: <><path d="M12 4.5v10M7.5 10.5 12 15l4.5-4.5" /><path d="M5 16.5v1.5A1.5 1.5 0 0 0 6.5 19.5h11a1.5 1.5 0 0 0 1.5-1.5v-1.5" /></>,
   more: <><circle cx="6" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="18" cy="12" r="1" fill="currentColor" /></>,
   pause: <path d="M9 6v12M15 6v12" />,
   play: <path d="M8 5.5v13l10-6.5z" />,

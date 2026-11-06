@@ -12,6 +12,7 @@ import AppShell, { TopBar } from './AppShell'
 import { conversationSetup, defaultSetup, settingsPatch, setupProblem } from './research-settings.mjs'
 import FailureDetails from './FailureDetails'
 import { publicResearchEvents } from './research-state.mjs'
+import { reportPDFAvailability } from './report-pdf.mjs'
 import ChatSidebar from './ChatSidebar'
 import { recordReload, type ReloadReason } from './network-debug'
 import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, ConversationSetup, DoctorResponse, Run, RunRuntime, Submission } from './types'
@@ -84,6 +85,8 @@ function ConversationView({ id, onSelect, onChanged }: { id: string; onSelect: (
   const doctor = useRemote(useCallback((signal) => diagnosticsRequested ? api.doctor(signal) : Promise.resolve<DoctorResponse | null>(null), [diagnosticsRequested]), 0, 'chat.doctor')
   const configuration = useRemote(useCallback((signal) => api.labPolicy(signal), []), 60000, 'chat.configuration')
   const health = useRemote(useCallback((signal) => api.health(signal), []), 60000, 'chat.health')
+  const reportPDFAvailable = health.data?.report_pdf?.available
+  const reportPDF = useMemo(() => reportPDFAvailability({ report_pdf: reportPDFAvailable === undefined ? undefined : { available: reportPDFAvailable } }), [reportPDFAvailable])
   const [setup, setSetup] = useState<ConversationSetup>(() => ({ ...defaultSetup }))
   const [settingsDirty, setSettingsDirty] = useState(false)
   const [mode, setMode] = useState<ConversationMode>('chat')
@@ -408,7 +411,7 @@ function ConversationView({ id, onSelect, onChanged }: { id: string; onSelect: (
   const currentRuntime = runtime.data?.task_id === currentRun?.id ? runtime.data ?? null : null
   const pauseRun = () => void action(async () => { await api.pause(runID); await run.reload('user_action'); await runtime.reload('user_action') })
   const resumeRun = () => void action(async () => { await api.resume(runID); await run.reload('user_action'); await runtime.reload('user_action') })
-  const detailsContent = <ResearchInspector resources={{ ...research, runtime, pdfCapability: doctor.data?.pdf_extractor }} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onRetry={() => operate('retry')} onPause={pauseRun} onResume={resumeRun} onDiagnostics={requestDiagnostics} diagnosticsLoading={diagnosticsRequested && doctor.loading} diagnosticsError={doctor.error} />
+  const detailsContent = <ResearchInspector resources={{ ...research, runtime, pdfCapability: doctor.data?.pdf_extractor }} reportPDF={reportPDF} events={transcript.stream.events} run={currentRun} showHeading={!mobile} busy={busy} onRetry={() => operate('retry')} onPause={pauseRun} onResume={resumeRun} onDiagnostics={requestDiagnostics} diagnosticsLoading={diagnosticsRequested && doctor.loading} diagnosticsError={doctor.error} />
 
   const connectionLabel = connection === 'live' ? 'Поток подключён' : connection === 'connecting' ? 'Подключение…' : connection === 'reconnecting' ? 'Переподключение…' : connection === 'degraded' ? 'Резервная синхронизация' : connection === 'invalid' ? 'Ошибка потока' : connection === 'terminal' ? 'Поток завершён' : 'Нет активного потока'
   const renameConversation = (event: FormEvent) => { event.preventDefault(); if (title.trim()) void action(async () => { const next = await api.updateConversation(id, { title: title.trim() }); if (alive.current) { conversation.setData(next); setEditing(false); void onChanged() } }) }
@@ -441,7 +444,7 @@ function ConversationView({ id, onSelect, onChanged }: { id: string; onSelect: (
       <ResourceStatus resource={conversation} /><ResourceStatus resource={snapshots} />{runID && <ResourceStatus resource={run} />}{history.error && <ResourceStatus resource={history} />}
       <ResearchOverview run={currentRun} runtime={currentRuntime} events={transcript.stream.events} answer={latestAssistant ?? null} evidence={research.evidence} busy={busy} onDetails={() => setDetails(true)} onReadAnswer={() => readAnswer()} onPause={pauseRun} onResume={resumeRun} onStop={stopRun} />
       <div className="chat-transcript" ref={listRef} onScroll={(event) => { if (!window.matchMedia('(max-width: 48rem)').matches) observeScroll(event.currentTarget) }}>
-        <ChatTranscript messages={content} loading={snapshots.loading} active={active} runID={runID} run={currentRun} references={references} evidenceCache={evidenceCache} submissionState={optimistic.length ? busy ? 'sending' : error ? 'failed' : 'sending' : undefined} onExample={(nextMode, prompt) => { setMode(nextMode); setText(prompt) }} />
+        <ChatTranscript messages={content} loading={snapshots.loading} active={active} runID={runID} run={currentRun} references={references} evidenceCache={evidenceCache} submissionState={optimistic.length ? busy ? 'sending' : error ? 'failed' : 'sending' : undefined} reportPDF={reportPDF} onExample={(nextMode, prompt) => { setMode(nextMode); setText(prompt) }} />
         {currentRun?.status === 'failed' && <div className="chat-action-error" role="alert"><Icon name="alert" size={18} /><div><strong>{currentRun.terminal_outcome === 'blocked' ? 'Ответ заблокирован проверкой' : 'Не удалось завершить ответ'}</strong><p>{failureMessage || currentRun.error_message || 'Можно повторить запрос.'}{currentRun.error_code ? ` Код: ${currentRun.error_code}` : typeof failurePayload?.error_code === 'string' ? ` Код: ${failurePayload.error_code}` : ''}</p><FailureDetails payload={failurePayload} />{verificationSummary && <p>{verificationSummary}</p>}{missingCriteria.length > 0 && <div className="chat-failure-missing"><strong>Не хватает критических критериев</strong><ul>{missingCriteria.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></div>}</div></div>}
         {currentRun?.status === 'cancelled' && <p className="chat-notice" role="status">Генерация остановлена. {hasPartial ? 'Полученный текст сохранён.' : 'Текст ответа не сформирован.'}</p>}
         {currentRun?.status === 'waiting_approval' && <p className="chat-notice" role="status">Нужно ваше решение. <a href="#/workspace">Открыть подтверждения в рабочем пространстве</a></p>}
