@@ -268,6 +268,27 @@ See the historical [Research Phase 1](docs/research-phase1.md) for snapshot and 
 
 `GET/POST /api/conversations`, `GET/PATCH/DELETE /api/conversations/:id`, and `GET/POST /api/conversations/:id/messages` persist chat history. Sending a turn returns the user message, assistant placeholder, and a durable run; one conversation accepts one active run. Use a stable `Idempotency-Key` when retrying the same accepted operation. Deletion archives the conversation rather than erasing its history.
 
+### Clarifying a research question
+
+Before a research send the UI calls `POST /api/conversations/:id/clarify` with `{"content": "<question>"}`. It makes one schema-bound, temperature-0 local-model call (bounded to 45 s, through the same single-slot model guard) and always answers `200`:
+
+```json
+{"status": "ready",
+ "interpretations": [{"id": "i1", "title": "С нуля, самостоятельно", "goal": "План самообучения биоинформатике с нуля с этапами и сроками."}],
+ "questions": [{"id": "q1", "question": "Сколько часов в неделю?", "options": ["5", "10", "20+"]}]}
+```
+
+`status` is `unavailable` (with `reason`: `timeout`, `model_unavailable`, `invalid_output`, `resource_pause`, …) when the model cannot help; clients then send the original question. The endpoint stores nothing, so it needs no `Idempotency-Key`. The user's choice travels with the normal send:
+
+```json
+POST /api/conversations/:id/messages   (Idempotency-Key: …)
+{"content": "<original question>", "mode": "research",
+ "clarification": {"interpretation_title": "…", "interpretation_goal": "…",
+                   "answers": [{"question": "Сколько часов в неделю?", "answer": "10"}], "extra": "…"}}
+```
+
+The server merges it into a refined goal ("Уточнённая цель …", "Исходный вопрос …", "Условия пользователя …", "Дополнительно …") that becomes the run's task description and research-session goal, so the planner, criteria and the report's "Вопрос исследования" use it. The user message keeps the original text; the choice and refined goal are stored in its `metadata`. Retry/Continue keep the refined goal, the clarification is part of the idempotency fingerprint, and an empty choice is identical to an unclarified send. Clarification happens at submit time only; the run itself (including overnight profiles) proceeds unattended. The composer's "Уточнять" toggle (stored in the browser) skips the step.
+
 `GET /api/runs/:id` reads canonical state; `POST` to `/cancel`, `/retry`, or `/continue` controls it. Stop cancels the run and preserves persisted partial text. Retry creates a new run/assistant message for the latest terminal turn. Continue also creates a new run, requires nonempty prior assistant text, and links to that answer; it is not task `/resume`. Earlier messages remain. `/events`, `/events/stream?after=N`, `/plan`, `/sources`, and `/evidence` are independent run-detail endpoints. Browser disconnects do not cancel the worker; polling and replay reconcile persisted state after reconnect.
 
 After process restart, research/tasks requeue and reconcile checkpoints; uncertain non-idempotent outcomes require review rather than blind replay. A chat interrupted after text was persisted is marked failed with `generation_interrupted` and the message `interrupted`; use Continue or Retry explicitly. Empty interrupted chat runs may requeue. This does not promise exact token-level continuation after a model restart.
