@@ -220,7 +220,7 @@ func (s *Store) CommitVerificationWithFollowUps(ctx context.Context, taskID, ver
 			return stateErr
 		}
 		if len(adaptive.Rounds) > 0 && adaptive.Rounds[len(adaptive.Rounds)-1].Number == session.CurrentRound+1 {
-			if adaptive.Rounds[len(adaptive.Rounds)-1].AssessmentHash != adaptiveAssessmentHash(verdict, summary, missing, supplementaryMissing, criteria, followUps...) {
+			if adaptive.Rounds[len(adaptive.Rounds)-1].AssessmentHash != adaptiveAssessmentHash(verdict, summary, missing, supplementaryMissing, criteria) {
 				return ErrConflict
 			}
 			return s.commitCheckpointTx(ctx, tx)

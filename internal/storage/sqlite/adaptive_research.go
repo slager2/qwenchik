@@ -16,12 +16,11 @@ import (
 
 type adaptiveMutationKey struct{}
 
-func adaptiveAssessmentHash(verdict, summary string, missing, supplementaryMissing []string, criteria []domain.VerificationCriterionResult, followUps ...string) string {
-	value := []any{verdict, summary, missing, supplementaryMissing, criteria}
-	if len(followUps) > 0 { // assessments without follow-ups keep their stored hash
-		value = append(value, followUps)
-	}
-	raw, _ := json.Marshal(value)
+// Follow-up questions are search suggestions, not part of the assessment: a
+// replayed verification may derive them against the already advanced
+// frontier, so they never make an identical assessment conflict.
+func adaptiveAssessmentHash(verdict, summary string, missing, supplementaryMissing []string, criteria []domain.VerificationCriterionResult) string {
+	raw, _ := json.Marshal([]any{verdict, summary, missing, supplementaryMissing, criteria})
 	hash := sha256.Sum256(raw)
 	return hex.EncodeToString(hash[:])
 }
@@ -305,7 +304,7 @@ func assessAdaptiveRound(ctx context.Context, tx *sql.Tx, taskID string, state m
 	}
 	adaptive.CurrentRound = number
 	round := domain.ResearchRound{Number: number, Goal: session.Goal, AcceptedEvidence: evidence, CriticalMissing: append([]string{}, missing...), OpenQuestions: append([]string{}, missing...), Frontier: append([]string{}, adaptive.Frontier...), Outcome: verdict}
-	round.AssessmentHash = adaptiveAssessmentHash(verdict, summary, missing, supplementaryMissing, criteria, followUps...)
+	round.AssessmentHash = adaptiveAssessmentHash(verdict, summary, missing, supplementaryMissing, criteria)
 	round.Coverage = append([]domain.VerificationCriterionResult{}, criteria...)
 	encoded, _ := json.Marshal(state["completed_steps"])
 	_ = json.Unmarshal(encoded, &round.CompletedSteps)

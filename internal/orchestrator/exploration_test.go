@@ -10,6 +10,7 @@ import (
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/llm"
 	"github.com/slager2/qwenchik/internal/storage/artifacts"
+	"github.com/slager2/qwenchik/internal/storage/sqlite"
 	"github.com/slager2/qwenchik/internal/tools"
 )
 
@@ -50,7 +51,25 @@ func explorationModelFixture(t *testing.T, reviews *int, followUps bool) *resear
 	}}
 }
 
-func runExplorationFixture(t *testing.T, profile string, followUps bool, edit func(*domain.ResearchSession)) (*researchRunFixture, *Worker, *adaptiveSearchFixture, int) {
+// interruptExplorationStore crashes once right after the first covered
+// assessment with follow-ups, before the exploration round is requested.
+type interruptExplorationStore struct {
+	*sqlite.Store
+	interrupted *bool
+}
+
+func (s interruptExplorationStore) CommitVerificationWithFollowUps(ctx context.Context, id, verdict, summary string, missing, supplementary []string, criteria []domain.VerificationCriterionResult, followUps []string) error {
+	if err := s.Store.CommitVerificationWithFollowUps(ctx, id, verdict, summary, missing, supplementary, criteria, followUps); err != nil {
+		return err
+	}
+	if verdict == "PASS" && !*s.interrupted {
+		*s.interrupted = true
+		return ErrInterrupted
+	}
+	return nil
+}
+
+func runExplorationFixture(t *testing.T, profile string, followUps bool, edit func(*domain.ResearchSession), interrupt ...bool) (*researchRunFixture, *Worker, *adaptiveSearchFixture, int) {
 	t.Helper()
 	ctx := context.Background()
 	f := newResearchRunStore(t)
@@ -78,7 +97,24 @@ func runExplorationFixture(t *testing.T, profile string, followUps bool, edit fu
 		t.Fatal(err)
 	}
 	reviews := 0
-	w := New(f.store, llm.NewGuardedClient(explorationModelFixture(t, &reviews, followUps)), r, Options{ReportArtifacts: files})
+	model := llm.NewGuardedClient(explorationModelFixture(t, &reviews, followUps))
+	if len(interrupt) > 0 && interrupt[0] {
+		interrupted := false
+		New(interruptExplorationStore{f.store, &interrupted}, model, r, Options{ReportArtifacts: files}).runTask(ctx, f.task)
+		if !interrupted {
+			t.Fatal("covered assessment was not interrupted")
+		}
+		f.reopen(t)
+		if _, err := f.store.RecoverInterrupted(ctx); err != nil {
+			t.Fatal(err)
+		}
+		f.claim(t)
+		r = tools.NewRegistry()
+		if err := tools.RegisterResearchTools(r, tools.ResearchTools{SearchProvider: search, Fetcher: fetch, Extractor: researchExtractorStub{}, Artifacts: files, Repository: f.store}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := New(f.store, model, r, Options{ReportArtifacts: files})
 	w.runTask(ctx, f.task)
 	return f, w, search, reviews
 }
@@ -137,5 +173,14 @@ func TestStandardRunStillCompletesAfterCoveredRound(t *testing.T) {
 	s := researchRunSession(t, f.store, f.task.ID)
 	if reviews != 1 || s.Counters.Rounds != 1 || s.Counters.QuestionsCreated != 0 {
 		t.Fatalf("standard profile explored: reviews=%d %+v", reviews, s.Counters)
+	}
+}
+
+func TestExplorationResumesAfterCrashBetweenAssessmentAndNextRound(t *testing.T) {
+	f, _, _, _ := runExplorationFixture(t, domain.ResearchProfileOvernight, true, func(s *domain.ResearchSession) { s.Budget.MaxRounds, s.Budget.MinRounds = 3, 3 }, true)
+	assertResearchRunTerminal(t, f, domain.StatusCompleted, "")
+	s := researchRunSession(t, f.store, f.task.ID)
+	if s.Counters.Rounds != 3 || s.Counters.QuestionsCreated == 0 {
+		t.Fatalf("exploration lost across restart: %+v", s.Counters)
 	}
 }

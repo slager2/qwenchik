@@ -63,8 +63,12 @@ func TestCoveredOvernightRoundExploresVerifierFollowUps(t *testing.T) {
 	if session.Counters.QuestionsCreated != 2 || session.Counters.QuestionsAccepted != 2 {
 		t.Fatalf("questions not counted: %+v", session.Counters)
 	}
-	if err := s.CommitVerificationWithFollowUps(ctx, id, "PASS", "Criteria covered", nil, nil, nil, followUps); err != nil {
+	// A replay derives follow-ups against the advanced frontier: still idempotent.
+	if err := s.CommitVerificationWithFollowUps(ctx, id, "PASS", "Criteria covered", nil, nil, nil, followUps[:1]); err != nil {
 		t.Fatal("idempotent replay failed:", err)
+	}
+	if replayed, _ := adaptiveCheckpoint(t, s, id); len(replayed.Questions) != 2 {
+		t.Fatalf("replay changed the frontier: %+v", replayed.Questions)
 	}
 	if err := s.RequestResearchContinuation(ctx, id, 0, strings.Repeat("a", 64), strings.Repeat("b", 64), followUps[:2]); err != nil {
 		t.Fatal(err)
