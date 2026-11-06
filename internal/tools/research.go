@@ -44,6 +44,16 @@ type ResearchTools struct {
 	AllowedDomains []string
 	PDFPolicy      pdfextract.Policy
 	FetchPolicy    research.FetchPolicy
+	// PageExtractor, when set, reads pages and PDFs through agentSearcher's
+	// /extract endpoint before the direct fetch is tried.
+	PageExtractor PageExtractor
+}
+
+// PageExtractor reads a page through an external local extraction service
+// (agentSearcher /extract). The caller validates the URL first.
+type PageExtractor interface {
+	Extract(ctx context.Context, rawURL, query string) (research.AgentSearcherPage, error)
+	Budget() time.Duration
 }
 
 const (
@@ -187,11 +197,15 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 		if runtime.MaxFetchBytes <= 0 {
 			runtime.MaxFetchBytes = fetchPolicy.TaskFetchBudgetBytes
 		}
-		fetchTimeout := int((max(fetchPolicy.PDFDownloadTimeout, fetchPolicy.SourceDownloadTimeout) + pdfPolicy.ExtractionTimeout + 10*time.Second + time.Second - 1) / time.Second)
+		var extractBudget time.Duration
+		if runtime.PageExtractor != nil {
+			extractBudget = runtime.PageExtractor.Budget()
+		}
+		fetchTimeout := int((max(fetchPolicy.PDFDownloadTimeout, fetchPolicy.SourceDownloadTimeout) + pdfPolicy.ExtractionTimeout + extractBudget + 10*time.Second + time.Second - 1) / time.Second)
 		if err := registry.RegisterValidated(Descriptor{
-			Name: "fetch_url", Description: "Fetch a public HTTP(S) URL safely, extract local text, and persist source evidence. When the site blocks the direct fetch but agentSearcher already read the page, its search passages are saved as evidence marked source_text=agentsearcher_passages.",
+			Name: "fetch_url", Description: "Fetch a public HTTP(S) URL safely, extract local text, and persist source evidence. When agentSearcher is configured it reads the page or PDF first (extraction_method=agentsearcher_extract or agentsearcher_extract_pdf); the direct fetch is the fallback. When the site blocks the direct fetch but agentSearcher already read the page, its search passages are saved as evidence marked source_text=agentsearcher_passages.",
 			ArgumentsSchema:    json.RawMessage(`{"type":"object","properties":{"url":{"type":"string","maxLength":2048},"original_query":{"type":"string","maxLength":1000}},"required":["url"],"additionalProperties":false}`),
-			OutputSchema:       json.RawMessage(fmt.Sprintf(`{"type":"object","properties":{"evidence_id":{"type":"string"},"url":{"type":"string"},"requested_url":{"type":"string"},"title":{"type":"string"},"excerpt":{"type":"string"},"content_sha256":{"type":"string"},"taint":{"type":"string"},"fetched_bytes":{"type":"integer"},"source_text":{"type":"string","enum":["agentsearcher_passages"]},"direct_fetch_error":{"type":"string","maxLength":64},"page_count":{"type":"integer","minimum":1,"maximum":%d}},"required":["evidence_id","url","requested_url","title","excerpt","content_sha256","taint","fetched_bytes"],"additionalProperties":false}`, pdfPolicy.MaxPages)),
+			OutputSchema:       json.RawMessage(fmt.Sprintf(`{"type":"object","properties":{"evidence_id":{"type":"string"},"url":{"type":"string"},"requested_url":{"type":"string"},"title":{"type":"string"},"excerpt":{"type":"string"},"content_sha256":{"type":"string"},"taint":{"type":"string"},"fetched_bytes":{"type":"integer"},"source_text":{"type":"string","enum":["agentsearcher_passages"]},"extraction_method":{"type":"string","enum":["agentsearcher_extract","agentsearcher_extract_pdf"]},"direct_fetch_error":{"type":"string","maxLength":64},"page_count":{"type":"integer","minimum":1,"maximum":%d}},"required":["evidence_id","url","requested_url","title","excerpt","content_sha256","taint","fetched_bytes"],"additionalProperties":false}`, pdfPolicy.MaxPages)),
 			RequiredCapability: "research.fetch", RiskClass: "read", TimeoutSeconds: fetchTimeout,
 			Idempotent: true, MaxOutputBytes: 32 << 10, AllowedRoles: []string{"researcher"},
 		}, func(ctx context.Context, raw json.RawMessage) error {
@@ -212,7 +226,9 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			if err := runtime.Fetcher.ValidateURL(ctx, args.URL); err != nil {
 				return err
 			}
-			if isPDFURL(args.URL) {
+			// agentSearcher reads PDFs itself, so a missing local PDF
+			// extractor does not block a PDF URL when it is configured.
+			if isPDFURL(args.URL) && !pageExtractorUsable(runtime) {
 				if checker, ok := runtime.Extractor.(interface {
 					PreflightPDF(context.Context) error
 				}); ok {
@@ -248,7 +264,9 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 				fetchLimit = taskLimit
 			}
 			fetchOptions := research.FetchOptions{MaxBytes: fetchLimit, TaskID: taskID}
-			if !isPDFURL(args.URL) {
+			// The validator skipped the PDF preflight for PDF URLs when
+			// agentSearcher is configured; the direct fallback checks it.
+			if !isPDFURL(args.URL) || pageExtractorUsable(runtime) {
 				if checker, ok := runtime.Extractor.(interface {
 					PreflightPDF(context.Context) error
 				}); ok {
@@ -267,6 +285,15 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 					return nil, cause
 				}
 				return output, nil
+			}
+			// agentSearcher reads bot-protected pages (browser TLS
+			// impersonation, headless rendering) and PDFs, so it is asked
+			// first; when it cannot read the page the direct fetch follows.
+			if pageExtractorUsable(runtime) {
+				output, err := saveExtractEvidence(ctx, runtime, registry.urlLedger, taskID, args, fetchLimit)
+				if output != nil || err != nil {
+					return output, err
+				}
 			}
 			fetched, err := runtime.Fetcher.Fetch(ctx, args.URL, fetchOptions)
 			defer fetched.Cleanup()
@@ -442,6 +469,101 @@ func savePassageEvidence(ctx context.Context, runtime ResearchTools, ledger *URL
 		"excerpt": truncateUTF8(evidence.Excerpt, 4000), "content_sha256": evidence.ContentSHA256,
 		"taint": research.TaintExternal, "fetched_bytes": fetchedBytes,
 		"source_text": provenance.PassageEvidenceMethod, "direct_fetch_error": code,
+	}, nil
+}
+
+// pageExtractorUsable reports whether fetch_url asks agentSearcher first.
+// With a configured domain allow-list it does not: agentSearcher follows
+// redirects itself and reports no final URL, so the backend could not
+// check that the text came from an allowed host.
+func pageExtractorUsable(runtime ResearchTools) bool {
+	return runtime.PageExtractor != nil && len(runtime.AllowedDomains) == 0
+}
+
+// extractRecord is the raw artifact of agentSearcher extract evidence: the
+// request parameters and the service's JSON responses, so the content hash
+// covers exactly what agentSearcher returned.
+type extractRecord struct {
+	Provider        string          `json:"provider"`
+	Endpoint        string          `json:"endpoint"`
+	URL             string          `json:"url"`
+	Query           string          `json:"query,omitempty"`
+	ExtractDepth    string          `json:"extract_depth"`
+	Format          string          `json:"format"`
+	ChunksPerSource int             `json:"chunks_per_source"`
+	PDF             bool            `json:"pdf"`
+	TextResponse    json.RawMessage `json:"text_response"`
+	ChunksResponse  json.RawMessage `json:"chunks_response,omitempty"`
+}
+
+// saveExtractEvidence reads args.URL through agentSearcher /extract and
+// stores the page text as evidence. It returns nil output and nil error when
+// agentSearcher could not read the page, so the caller falls back to the
+// direct fetch. URL policy (SSRF, canonical form) is checked before the
+// service is asked. The page text counts against the task fetch budget.
+func saveExtractEvidence(ctx context.Context, runtime ResearchTools, ledger *URLLedger, taskID string, args fetchArgs, fetchLimit int64) (map[string]any, error) {
+	if err := runtime.Fetcher.ValidateURL(ctx, args.URL); err != nil {
+		return nil, err
+	}
+	if _, err := provenance.CanonicalURL(args.URL); err != nil {
+		return nil, err
+	}
+	page, err := runtime.PageExtractor.Extract(ctx, args.URL, args.OriginalQuery)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return nil, contextErr
+	}
+	if err != nil || strings.TrimSpace(page.Text) == "" {
+		return nil, nil
+	}
+	textBytes := int64(len(page.Text))
+	if textBytes > fetchLimit {
+		return nil, &research.FetchFailure{Err: research.ErrResponseTooBig, Code: "task_fetch_budget_exceeded", Phase: "fetch", FetchedBytes: textBytes, EffectiveLimitBytes: fetchLimit, MIMEType: "text/plain", LimitKind: "task_remaining"}
+	}
+	if observer, ok := ctx.Value(extractionObserverKey{}).(func() error); ok && observer != nil {
+		if err := observer(); err != nil {
+			return nil, err
+		}
+	}
+	title, passages := ledger.SearchPassages(taskID, args.URL)
+	text := provenance.ExtractEvidenceText(page.Text, page.Chunks)
+	raw, err := json.Marshal(extractRecord{
+		Provider: provenance.ExtractEvidenceProvider, Endpoint: "/extract", URL: args.URL, Query: strings.TrimSpace(args.OriginalQuery),
+		ExtractDepth: research.AgentSearcherExtractDepth, Format: research.AgentSearcherExtractFormat, ChunksPerSource: research.AgentSearcherExtractChunks,
+		PDF: page.PDF, TextResponse: page.TextResponse, ChunksResponse: page.ChunksResponse,
+	})
+	if err != nil {
+		return nil, err
+	}
+	persistCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	hash := sha256.Sum256(raw)
+	contentHash := hex.EncodeToString(hash[:])
+	rawArtifact, rawRef, err := runtime.Artifacts.Put(persistCtx, taskID, artifactFileName("extract", contentHash, ".json"), "application/json", raw)
+	if err != nil {
+		return nil, err
+	}
+	textArtifact, textRef, err := runtime.Artifacts.Put(persistCtx, taskID, artifactFileName("extract", contentHash, ".txt"), "text/plain; charset=utf-8", []byte(text))
+	if err != nil {
+		return nil, err
+	}
+	evidence, err := provenance.BuildExtractEvidence(provenance.ExtractEvidenceInput{
+		TaskID: taskID, Query: args.OriginalQuery, URL: args.URL, Title: title, Text: text,
+		Chunks: page.Chunks, Passages: passages, PDF: page.PDF, ContentSHA256: rawArtifact.SHA256,
+		RetrievedAt: time.Now().UTC(), RawArtifactID: rawArtifact.ID, TextArtifactID: textArtifact.ID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	evidence, err = saveResearchSource(persistCtx, runtime.Repository, rawArtifact, rawRef, textArtifact, textRef, evidence)
+	if err != nil {
+		return nil, err
+	}
+	ledger.MarkFetched(taskID, args.URL)
+	ledger.MarkFetched(taskID, evidence.CanonicalURL)
+	return map[string]any{
+		"evidence_id": evidence.ID, "url": evidence.CanonicalURL, "requested_url": args.URL, "title": evidence.Title,
+		"excerpt": truncateUTF8(evidence.Excerpt, provenance.ExtractExcerptRunes), "content_sha256": evidence.ContentSHA256,
+		"taint": research.TaintExternal, "fetched_bytes": textBytes, "extraction_method": evidence.ExtractionMethod,
 	}, nil
 }
 
