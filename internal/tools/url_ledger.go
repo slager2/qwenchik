@@ -17,8 +17,14 @@ type URLLedger struct {
 	byTask        map[string]map[string]struct{}
 	fetchedByTask map[string]map[string]struct{}
 	// passagesByTask keeps agentSearcher passages per canonical URL. They
-	// locate the evidence excerpt in the fetched page text.
-	passagesByTask map[string]map[string][]string
+	// locate the evidence excerpt in the fetched page text, and become
+	// fallback evidence when the direct fetch is blocked.
+	passagesByTask map[string]map[string]searchPassages
+}
+
+type searchPassages struct {
+	title string
+	texts []string
 }
 
 // maxLedgerPassagesPerURL bounds the passages kept for one URL when several
@@ -26,7 +32,7 @@ type URLLedger struct {
 const maxLedgerPassagesPerURL = 4
 
 func NewURLLedger() *URLLedger {
-	return &URLLedger{byTask: make(map[string]map[string]struct{}), fetchedByTask: make(map[string]map[string]struct{}), passagesByTask: make(map[string]map[string][]string)}
+	return &URLLedger{byTask: make(map[string]map[string]struct{}), fetchedByTask: make(map[string]map[string]struct{}), passagesByTask: make(map[string]map[string]searchPassages)}
 }
 
 func (l *URLLedger) SeedText(taskID, text string) {
@@ -39,18 +45,19 @@ func (l *URLLedger) Remember(taskID string, value any) {
 	switch item := value.(type) {
 	case research.SearchHit:
 		l.Add(taskID, item.URL)
-		l.addPassage(taskID, item.Provider, item.URL, item.Snippet)
+		l.addPassage(taskID, item.Provider, item.URL, item.Title, item.Snippet)
 	case []research.SearchHit:
 		for _, hit := range item {
 			l.Add(taskID, hit.URL)
-			l.addPassage(taskID, hit.Provider, hit.URL, hit.Snippet)
+			l.addPassage(taskID, hit.Provider, hit.URL, hit.Title, hit.Snippet)
 		}
 	case map[string]any:
 		if raw, ok := item["url"].(string); ok {
 			l.Add(taskID, raw)
 			provider, _ := item["provider"].(string)
 			snippet, _ := item["snippet"].(string)
-			l.addPassage(taskID, provider, raw, snippet)
+			title, _ := item["title"].(string)
+			l.addPassage(taskID, provider, raw, title, snippet)
 		}
 		for _, child := range item {
 			l.Remember(taskID, child)
@@ -80,7 +87,7 @@ func (l *URLLedger) Add(taskID, rawURL string) {
 
 // addPassage remembers the page passages agentSearcher returned for a URL.
 // Other providers return short engine snippets, which are not page text.
-func (l *URLLedger) addPassage(taskID, provider, rawURL, passage string) {
+func (l *URLLedger) addPassage(taskID, provider, rawURL, title, passage string) {
 	passage = strings.TrimSpace(passage)
 	if taskID == "" || provider != "agentsearcher" || passage == "" {
 		return
@@ -92,32 +99,44 @@ func (l *URLLedger) addPassage(taskID, provider, rawURL, passage string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.passagesByTask[taskID] == nil {
-		l.passagesByTask[taskID] = make(map[string][]string)
+		l.passagesByTask[taskID] = make(map[string]searchPassages)
 	}
-	existing := l.passagesByTask[taskID][canonical]
-	for index, known := range existing {
+	entry := l.passagesByTask[taskID][canonical]
+	if entry.title == "" {
+		entry.title = strings.TrimSpace(title)
+	}
+	defer func() { l.passagesByTask[taskID][canonical] = entry }()
+	for index, known := range entry.texts {
 		if strings.Contains(known, passage) {
 			return
 		}
 		if strings.Contains(passage, known) {
-			existing[index] = passage
+			entry.texts[index] = passage
 			return
 		}
 	}
-	if len(existing) < maxLedgerPassagesPerURL {
-		l.passagesByTask[taskID][canonical] = append(existing, passage)
+	if len(entry.texts) < maxLedgerPassagesPerURL {
+		entry.texts = append(entry.texts, passage)
 	}
 }
 
 // Passages returns the agentSearcher passages remembered for a URL.
 func (l *URLLedger) Passages(taskID, rawURL string) []string {
+	_, passages := l.SearchPassages(taskID, rawURL)
+	return passages
+}
+
+// SearchPassages returns the search-result title and the agentSearcher
+// passages remembered for a URL.
+func (l *URLLedger) SearchPassages(taskID, rawURL string) (string, []string) {
 	canonical, err := provenance.CanonicalURL(strings.TrimSpace(rawURL))
 	if err != nil {
-		return nil
+		return "", nil
 	}
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	return append([]string(nil), l.passagesByTask[taskID][canonical]...)
+	entry := l.passagesByTask[taskID][canonical]
+	return entry.title, append([]string(nil), entry.texts...)
 }
 
 func (l *URLLedger) Contains(taskID, rawURL string) bool {

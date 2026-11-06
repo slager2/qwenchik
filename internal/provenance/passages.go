@@ -1,9 +1,70 @@
 package provenance
 
 import (
+	"errors"
 	"strings"
+	"time"
 	"unicode"
+
+	"github.com/slager2/qwenchik/internal/domain"
+	"github.com/slager2/qwenchik/internal/providers/research"
 )
+
+const (
+	// PassageEvidenceProvider and PassageEvidenceMethod mark evidence whose
+	// text is the search provider's (agentSearcher's) passages of a page,
+	// saved because the backend's own direct fetch of that page failed.
+	PassageEvidenceProvider = "agentsearcher"
+	PassageEvidenceMethod   = "agentsearcher_passages"
+)
+
+// IsPassageEvidence reports whether evidence text came from search-provider
+// passages instead of a direct fetch.
+func IsPassageEvidence(evidence domain.Evidence) bool {
+	return evidence.ExtractionMethod == PassageEvidenceMethod
+}
+
+// JoinPassages is the stored text of passage evidence.
+func JoinPassages(passages []string) string {
+	parts := make([]string, 0, len(passages))
+	for _, passage := range passages {
+		if passage = strings.TrimSpace(passage); passage != "" {
+			parts = append(parts, passage)
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+// BuildPassageEvidence builds evidence from agentSearcher passages of a page
+// whose direct fetch failed. text is the stored passage text artifact
+// (JoinPassages) and contentSHA256 the hash of the stored raw passage record.
+// The excerpt is a verbatim span of text, and the provider and extraction
+// method identify the text as search-provider passages, not a direct fetch.
+// HTTPStatus 200 records that agentSearcher retrieved the page.
+func BuildPassageEvidence(taskID, query, rawURL, title, text, contentSHA256 string, retrievedAt time.Time, rawArtifactID, textArtifactID string) (domain.Evidence, error) {
+	canonical, err := CanonicalURL(rawURL)
+	if err != nil {
+		return domain.Evidence{}, err
+	}
+	if taskID == "" || contentSHA256 == "" || strings.TrimSpace(text) == "" {
+		return domain.Evidence{}, errors.New("passage evidence requires a task ID, content hash and text")
+	}
+	if retrievedAt.IsZero() {
+		retrievedAt = time.Now().UTC()
+	}
+	excerpt, start, end := SelectExcerptWithSpan(text, query, 4000)
+	quotes := []domain.QuoteSpan{}
+	if excerpt != "" {
+		quotes = append(quotes, domain.QuoteSpan{Start: start, End: end, Text: excerpt, CoordinateSpace: "extracted_text_runes"})
+	}
+	return domain.Evidence{
+		TaskID: taskID, Provider: PassageEvidenceProvider, OriginalQuery: query,
+		OriginalURL: rawURL, CanonicalURL: canonical, Title: title, RetrievedAt: retrievedAt, HTTPStatus: 200,
+		ContentSHA256: contentSHA256, ExtractionMethod: PassageEvidenceMethod,
+		RawArtifactID: rawArtifactID, TextArtifactID: textArtifactID,
+		Excerpt: excerpt, QuoteSpans: quotes, QualityFlags: []string{}, Taint: research.TaintExternal,
+	}, nil
+}
 
 const (
 	// passageShingleWords is the word n-gram length used to find search

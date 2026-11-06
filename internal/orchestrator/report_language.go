@@ -42,6 +42,8 @@ type reportLabels struct {
 	Unrepresented     string
 	MethodHeading     string
 	MethodText        string
+	PassageMethod     string // added when a source is agentSearcher passages
+	PassageSource     string // source-list note for agentSearcher passages
 	OfflineText       string
 	SourcesHeading    string
 	CoverageHeading   string
@@ -67,6 +69,8 @@ var reportLabelsRU = reportLabels{
 	Unrepresented:     "Секционное покрытие не подтверждено для критериев: %s",
 	MethodHeading:     "Методология",
 	MethodText:        "Источники загружены и извлечены backend. Каждое утверждение проверено по точной выдержке из процитированного источника; неподтверждённые утверждения удалены, а секции без подтверждённых утверждений заменены выдержками. Список источников собран кодом.",
+	PassageMethod:     "Некоторые сайты заблокировали прямую загрузку; для них использованы выдержки страницы, которые прочитал поисковый сервис agentSearcher. Такие источники отмечены в списке.",
+	PassageSource:     "текст из выдержек agentSearcher, прямая загрузка не удалась",
 	OfflineText:       "Использованы только импортированные тексты. Corpus SHA-256: `%s`. Актуальность источников в сети не проверялась.",
 	SourcesHeading:    "Источники",
 	CoverageHeading:   "Покрытие",
@@ -102,6 +106,8 @@ var reportLabelsEN = reportLabels{
 	Unrepresented:     "Section coverage not confirmed for criteria: %s",
 	MethodHeading:     "Methodology",
 	MethodText:        "Sources were fetched and extracted by the backend. Each statement was checked against an exact excerpt of its cited source; unsupported statements were removed and sections without supported statements were replaced with excerpts. The source list is assembled by code.",
+	PassageMethod:     "Some sites blocked the direct fetch; for those, the page passages read by the agentSearcher search service were used. Such sources are marked in the list.",
+	PassageSource:     "text from agentSearcher passages, direct fetch failed",
 	OfflineText:       "Only imported texts were used. Corpus SHA-256: `%s`. Online currency of the sources was not checked.",
 	SourcesHeading:    "Sources",
 	CoverageHeading:   "Coverage",

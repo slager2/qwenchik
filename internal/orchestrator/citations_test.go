@@ -254,3 +254,25 @@ func TestCitationRunGatingPreservesLegacyAndChat(t *testing.T) {
 		t.Fatalf("legacy gating: %t %v", linked, err)
 	}
 }
+
+func TestCitationCatalogueKeepsAgentSearcherPassageEvidenceWithHonestLabel(t *testing.T) {
+	repo, state := citationFixture()
+	repo.evidence[0].Provider, repo.evidence[0].ExtractionMethod = "agentsearcher", "agentsearcher_passages"
+	worker := New(repo, &scriptedLLM{}, nil, Options{})
+	catalogue, err := worker.citationCatalogue(context.Background(), "research", state.ToolResults, []string{fixtureCitationID})
+	if err != nil || len(catalogue) != 1 || catalogue[0].SourceText != "agentsearcher_passages" {
+		t.Fatalf("passage evidence catalogue = %#v err=%v", catalogue, err)
+	}
+	suffix, refs := citationReferences("Fact. ["+fixtureCitationID+"]", catalogue)
+	if len(refs) != 1 || !strings.Contains(suffix, reportLabelsRU.PassageSource) {
+		t.Fatalf("sources do not disclose passage provenance: %q", suffix)
+	}
+	if !strings.Contains(researchSynthesisPrompt(), "source_text=agentsearcher_passages") {
+		t.Fatal("finalizer policy does not explain passage evidence")
+	}
+	repo, state = citationFixture()
+	catalogue, err = New(repo, &scriptedLLM{}, nil, Options{}).citationCatalogue(context.Background(), "research", state.ToolResults, []string{fixtureCitationID})
+	if err != nil || len(catalogue) != 1 || catalogue[0].SourceText != "" {
+		t.Fatalf("direct evidence marked as passages: %#v err=%v", catalogue, err)
+	}
+}

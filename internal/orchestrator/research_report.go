@@ -713,13 +713,23 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 		fmt.Fprintf(&markdown, "- "+labels.Unrepresented+"\n", reportText(strings.Join(report.UnrepresentedCriteria, ", ")))
 	}
 	fmt.Fprintf(&markdown, "\n## %s\n\n%s\n", labels.MethodHeading, labels.MethodText)
+	for _, source := range catalogue {
+		if source.SourceText != "" {
+			fmt.Fprintf(&markdown, "\n%s\n", labels.PassageMethod)
+			break
+		}
+	}
 	fmt.Fprintf(&markdown, "\nPrivacy mode: `%s`.\n", report.PrivacyMode)
 	if report.PrivacyMode == domain.PrivacyOffline {
 		fmt.Fprintf(&markdown, "\n"+labels.OfflineText+"\n", report.OfflineCorpusSHA256)
 	}
 	fmt.Fprintf(&markdown, "\n## %s\n\n", labels.SourcesHeading)
 	for index, source := range catalogue {
-		fmt.Fprintf(&markdown, "%d. %s — <%s> · evidence `%s`\n", index+1, reportText(source.Title), source.URL, source.EvidenceID)
+		note := ""
+		if source.SourceText != "" {
+			note = " · " + labels.PassageSource
+		}
+		fmt.Fprintf(&markdown, "%d. %s — <%s> · evidence `%s`%s\n", index+1, reportText(source.Title), source.URL, source.EvidenceID, note)
 	}
 	fmt.Fprintf(&markdown, "\n## %s\n\n"+labels.CoverageText+"\n\nGenerated at: %s · Run ID: %s\n", labels.CoverageHeading, len(catalogue), len(report.Sections), len(missing), report.Outcome, report.GeneratedAt, task.ID)
 	answer := markdown.String()

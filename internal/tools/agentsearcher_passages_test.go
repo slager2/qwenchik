@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -94,6 +95,62 @@ func TestFetchLocatesExcerptWithAgentSearcherPassages(t *testing.T) {
 	span := evidence[0].QuoteSpans[0]
 	if string([]rune(passagePageText())[span.Start:span.End]) != evidence[0].Excerpt || evidence[0].Provider != "direct_http" {
 		t.Fatalf("span %#v does not slice the stored text", span)
+	}
+}
+
+type blockedFetchStub struct {
+	fetchStub
+	err error
+}
+
+func (f *blockedFetchStub) Fetch(context.Context, string, research.FetchOptions) (research.FetchedDocument, error) {
+	f.calls++
+	return research.FetchedDocument{}, f.err
+}
+
+func TestFetchFallsBackToAgentSearcherPassagesWhenBlocked(t *testing.T) {
+	passages := "Bioinformatics roadmap: learn Python, statistics and sequence alignment first.\n\nThen practise genome assembly and RNA-seq analysis on public datasets."
+	hits := validationSearchHits{
+		{Provider: "agentsearcher", URL: "https://blocked.example.org/roadmap", Title: "Blocked roadmap", Snippet: passages},
+		{Provider: "searxng", URL: "https://engine.example.org/page", Title: "Engine hit", Snippet: "short engine snippet"},
+	}
+	blocked := &research.FetchFailure{Err: fmt.Errorf("%w: HTTP 403", research.ErrFetchSourceUnavailable), Code: "source_unavailable", Phase: "fetch", FetchedBytes: 120}
+	registry, store, ctx := newPassageTestRegistry(t, &blockedFetchStub{err: blocked}, hits)
+	result, err := registry.Execute(ctx, "researcher", "fetch_url", json.RawMessage(`{"url":"https://blocked.example.org/roadmap","original_query":"bioinformatics roadmap"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := result.(map[string]any)
+	if output["source_text"] != "agentsearcher_passages" || output["direct_fetch_error"] != "source_unavailable" || output["fetched_bytes"] != int64(120) || output["title"] != "Blocked roadmap" {
+		t.Fatalf("fallback output = %#v", output)
+	}
+	evidence, err := store.Evidence(context.Background(), "passage-task")
+	if err != nil || len(evidence) != 1 {
+		t.Fatalf("evidence=%#v err=%v", evidence, err)
+	}
+	item := evidence[0]
+	if item.Provider != "agentsearcher" || item.ExtractionMethod != "agentsearcher_passages" || item.HTTPStatus != 200 || len(item.QualityFlags) != 0 || item.RawArtifactID == "" || item.TextArtifactID == "" || item.ContentSHA256 == "" {
+		t.Fatalf("passage evidence provenance = %#v", item)
+	}
+	span := item.QuoteSpans[0]
+	if item.Excerpt != passages || string([]rune(passages)[span.Start:span.End]) != item.Excerpt {
+		t.Fatalf("passage excerpt %q span %#v", item.Excerpt, span)
+	}
+	if !registry.WasTaskURLFetched("passage-task", "https://blocked.example.org/roadmap") {
+		t.Fatal("fallback source was not marked fetched")
+	}
+	// Engine snippets are not page text: no fallback for them.
+	if _, err := registry.Execute(ctx, "researcher", "fetch_url", json.RawMessage(`{"url":"https://engine.example.org/page"}`)); !errors.Is(err, research.ErrFetchSourceUnavailable) {
+		t.Fatalf("engine-snippet URL error = %v, want the direct fetch failure", err)
+	}
+}
+
+func TestFetchDoesNotFallBackForPolicyFailures(t *testing.T) {
+	hits := validationSearchHits{{Provider: "agentsearcher", URL: "https://big.example.org/file", Title: "Big", Snippet: "Long enough agentSearcher passage about the page content."}}
+	tooBig := &research.FetchFailure{Err: research.ErrResponseTooBig, Code: "source_response_too_large", Phase: "fetch"}
+	registry, _, ctx := newPassageTestRegistry(t, &blockedFetchStub{err: tooBig}, hits)
+	if _, err := registry.Execute(ctx, "researcher", "fetch_url", json.RawMessage(`{"url":"https://big.example.org/file"}`)); !errors.Is(err, research.ErrResponseTooBig) {
+		t.Fatalf("policy failure error = %v", err)
 	}
 }
 
