@@ -1127,7 +1127,7 @@ func TestDeterministicResearchActionUsesOnlyValidatedPlanInputs(t *testing.T) {
 	if err := json.Unmarshal(decision.ToolCall.Arguments, &searchArgs); err != nil {
 		t.Fatal(err)
 	}
-	if searchArgs.Query != "protocol data structures" || searchArgs.MaxResults != 8 {
+	if searchArgs.Query != "protocol data structures" || searchArgs.MaxResults != researchSearchResults {
 		t.Fatalf("deterministic search args=%+v", searchArgs)
 	}
 

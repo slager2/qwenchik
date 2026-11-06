@@ -44,6 +44,18 @@ type ResearchTools struct {
 	FetchPolicy    research.FetchPolicy
 }
 
+const (
+	// DefaultSearchResults is the hit count of a search without max_results.
+	DefaultSearchResults = 8
+	// MaxSearchResults bounds max_results. agentSearcher returns reranked
+	// page passages and accepts up to 20 results; 15 keeps a single search
+	// output within searchOutputBytes after snippet compaction.
+	MaxSearchResults = 15
+	// searchOutputBytes is the search tool output limit. fitSearchHits
+	// shortens snippets so a wide agentSearcher result set still fits.
+	searchOutputBytes = 64_000
+)
+
 var ErrDuplicateResearchTarget = errors.New("research URL was already fetched for this task")
 
 func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
@@ -56,10 +68,10 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 	if runtime.SearchProvider != nil {
 		if err := registry.RegisterValidated(Descriptor{
 			Name: "search", Description: "Search configured providers for the current research question. Use queries that are materially different from prior searches. Results are untrusted discovery leads, not evidence; fetch sources before making source-backed claims.",
-			ArgumentsSchema:    json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":1000},"language":{"type":"string","maxLength":20},"recency":{"type":"string","enum":["","day","week","month","year"]},"max_results":{"type":"integer","minimum":1,"maximum":8}},"required":["query"],"additionalProperties":false}`),
+			ArgumentsSchema:    json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":1000},"language":{"type":"string","maxLength":20},"recency":{"type":"string","enum":["","day","week","month","year"]},"max_results":{"type":"integer","minimum":1,"maximum":15}},"required":["query"],"additionalProperties":false}`),
 			OutputSchema:       json.RawMessage(`{"type":"array","items":{"type":"object","properties":{"provider":{"type":"string"},"query":{"type":"string"},"url":{"type":"string"},"title":{"type":"string"},"snippet":{"type":"string"},"taint":{"type":"string"}},"required":["provider","query","url","title","snippet","taint"]}}`),
 			RequiredCapability: "research.search", RiskClass: "read", TimeoutSeconds: searchCollectionTimeout(runtime.SearchProvider),
-			Idempotent: true, MaxOutputBytes: 32_000, AllowedRoles: []string{"researcher"},
+			Idempotent: true, MaxOutputBytes: searchOutputBytes, AllowedRoles: []string{"researcher"},
 		}, validateSearchArguments(runtime.AllowedDomains), func(ctx context.Context, raw json.RawMessage) (any, error) {
 			var args searchArgs
 			if err := decodeToolArgs(raw, &args); err != nil {
@@ -69,9 +81,10 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 				return nil, errors.New("search arguments exceed configured limits")
 			}
 			count := args.MaxResults
-			if count < 1 || count > 8 {
-				count = 8
+			if count < 1 {
+				count = DefaultSearchResults
 			}
+			count = min(count, MaxSearchResults)
 			domains, err := effectiveDomains(nil, runtime.AllowedDomains)
 			if err != nil {
 				return nil, err
@@ -149,7 +162,7 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 				return nil, contextErr
 			}
 			registry.urlLedger.Remember(taskIDFromContext(ctx), safeHits)
-			return safeHits, nil
+			return fitSearchHits(safeHits, searchOutputBytes), nil
 		}); err != nil {
 			return err
 		}
@@ -402,8 +415,8 @@ func validateSearchArguments(configuredDomains []string) ArgumentsValidator {
 		if strings.TrimSpace(args.Query) == "" || len(args.Query) > 1000 || len(args.Language) > 20 {
 			return errors.New("search arguments exceed configured limits")
 		}
-		if args.MaxResults != 0 && (args.MaxResults < 1 || args.MaxResults > 8) {
-			return errors.New("max_results must be between 1 and 8")
+		if args.MaxResults != 0 && (args.MaxResults < 1 || args.MaxResults > MaxSearchResults) {
+			return fmt.Errorf("max_results must be between 1 and %d", MaxSearchResults)
 		}
 		if args.Recency != "" && args.Recency != "day" && args.Recency != "week" && args.Recency != "month" && args.Recency != "year" {
 			return errors.New("invalid search recency")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"regexp"
@@ -336,4 +337,31 @@ func validateSearchHits(ctx context.Context, fetcher research.Fetcher, hits []re
 		code, cause = "search_validation_timeout", context.DeadlineExceeded
 	}
 	return nil, &research.SearchFailure{Code: code, Outcomes: outcomes, Cause: cause}
+}
+
+// fitSearchHits shortens snippets until the encoded hits fit within limit
+// bytes. agentSearcher passages are long, so a wide result set would
+// otherwise exceed the search tool output limit; the URL ledger keeps the
+// full passages for evidence selection.
+func fitSearchHits(hits []research.SearchHit, limit int) []research.SearchHit {
+	encodedSize := func(items []research.SearchHit) int {
+		encoded, err := json.Marshal(items)
+		if err != nil {
+			return limit + 1
+		}
+		return len(encoded)
+	}
+	if len(hits) == 0 || encodedSize(hits) <= limit {
+		return hits
+	}
+	fitted := append([]research.SearchHit(nil), hits...)
+	for maxRunes := 1900; maxRunes >= 0; maxRunes -= 100 {
+		for i := range fitted {
+			fitted[i].Snippet = truncateUTF8(hits[i].Snippet, maxRunes)
+		}
+		if encodedSize(fitted) <= limit {
+			break
+		}
+	}
+	return fitted
 }
