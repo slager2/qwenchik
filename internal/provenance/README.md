@@ -15,6 +15,22 @@ region (plus a little sentence context) as the span; the excerpt is still an
 exact slice of the extracted text. Without a passage match the lexical query
 selector is used.
 
+When agentSearcher's `/extract` endpoint reads the page (tried before the
+direct fetch), `BuildExtractEvidence` builds the evidence: provider
+`agentsearcher`, extraction method `agentsearcher_extract` or
+`agentsearcher_extract_pdf`, HTTP status 200. The text artifact is the
+service's cleaned page text (`raw_content` without a query, cut by the service
+at `MAX_RAW_CHARS`); only when none of its query-ranked chunks occur in that
+text are the chunks appended after a `[...]` line (`ExtractEvidenceText`). The
+raw artifact is a JSON record of the request parameters and both service
+responses, and its SHA-256 is the content hash. The excerpt is one contiguous
+verbatim span of at most `ExtractExcerptRunes` (6000) runes, located by the
+ranked chunks, then by the search passages, then by the lexical selector; the
+quote span uses the same `extracted_text_runes` coordinates. Other evidence
+keeps `DefaultExcerptRunes` (4000). Downstream views are prefixes of the stored
+excerpt: tool results keep 6000 runes, the citation catalogue 8000 bytes and
+working-set facts 2000 runes (with adjusted exact coordinates).
+
 Legacy quote spans without `coordinate_space` retain their original coordinates.
 They are not backfilled or relabeled as full-text positions. Citation validation
 continues to use exact excerpt membership.
