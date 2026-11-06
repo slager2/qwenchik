@@ -80,12 +80,16 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 		if regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`).Match(request.JSONSchema) {
 			t.Fatalf("report schema exposes raw evidence IDs: %s", request.JSONSchema)
 		}
+		russian := strings.Contains(request.Messages[0].Content, "in Russian")
+		if len(input.Claims) == 0 && (mode == "russian") != russian {
+			t.Fatalf("report prompt language does not follow the question: %s", request.Messages[0].Content)
+		}
 		if strings.Contains(request.Messages[0].Content, "Create a small research report outline") {
 			if len(input.Notes) != 2 {
 				t.Fatalf("outline lost compact notes: %+v", input.Notes)
 			}
 			// Duplicate IDs are schema-valid model content, not corrupt durable state.
-			raw, err := json.Marshal(map[string]any{"title": "Проверяемый отчёт", "sections": []map[string]any{{"title": "Основные сведения", "evidence_ids": []string{input.Notes[0].EvidenceID, input.Notes[0].EvidenceID}, "criteria": input.IDs}, {"title": "Независимый источник", "evidence_ids": []string{input.Notes[1].EvidenceID}, "criteria": []string{}}}})
+			raw, err := json.Marshal(map[string]any{"title": "Research Report Outline: Проверяемый отчёт", "sections": []map[string]any{{"title": "Основные сведения", "evidence_ids": []string{input.Notes[0].EvidenceID, input.Notes[0].EvidenceID}, "criteria": input.IDs}, {"title": "Независимый источник", "evidence_ids": []string{input.Notes[1].EvidenceID}, "criteria": []string{}}}})
 			return string(raw), err
 		}
 		if len(input.Claims) > 0 {
@@ -125,11 +129,15 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 }
 
 func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
-	for _, mode := range []string{"valid", "artifact_recovery", "correction", "fallback", "coverage_gap", "infrastructure", "list", "partial", "first_fails"} {
+	for _, mode := range []string{"valid", "artifact_recovery", "correction", "fallback", "coverage_gap", "infrastructure", "list", "partial", "first_fails", "russian"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx := context.Background()
 			f := newResearchRunStore(t)
-			f.submit(t, "Research protocol architecture and limitations.", func(s *domain.ResearchSession) { s.Policy.SectionedReportEnabled = true; s.Budget.MaxLLMCalls = 40 })
+			question := "Research protocol architecture and limitations."
+			if mode == "russian" {
+				question = "Исследуй архитектуру протокола и его ограничения."
+			}
+			f.submit(t, question, func(s *domain.ResearchSession) { s.Policy.SectionedReportEnabled = true; s.Budget.MaxLLMCalls = 40 })
 			files, err := artifacts.New(t.TempDir(), 1<<20)
 			if err != nil {
 				t.Fatal(err)
@@ -203,7 +211,17 @@ func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
 				t.Fatal(err)
 			}
 			answer := messages[1].Content
-			for _, heading := range []string{"## Содержание", "## Ограничения", "## Методология", "## Источники", "## Coverage"} {
+			headings := []string{"## Contents", "## Limitations", "## Methodology", "## Sources", "## Coverage"}
+			if mode != "fallback" {
+				headings = append(headings, "Section status: supported by sources.")
+			}
+			if mode == "russian" {
+				headings = []string{"## Содержание", "## Ограничения", "## Методология", "## Источники", "## Покрытие", "Статус секции: подтверждено источниками.", "Анализ основан на 2 сохранённых источниках"}
+			}
+			if state.Report.Title != "Проверяемый отчёт" {
+				t.Fatalf("outline label leaked into the report title: %q", state.Report.Title)
+			}
+			for _, heading := range headings {
 				if !strings.Contains(answer, heading) {
 					t.Fatalf("missing backend report section %q", heading)
 				}
