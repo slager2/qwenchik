@@ -33,6 +33,33 @@ type compositeSearchResult struct {
 	outcomes []ProviderOutcome
 }
 
+// SearchBudgeter is implemented by providers whose collection needs more
+// (or less) time than the default per-provider limit, such as agentSearcher,
+// which fetches and reranks result pages before it answers.
+type SearchBudgeter interface {
+	SearchBudget() time.Duration
+}
+
+// SearchTimeBudget returns the collection time a provider needs. Providers
+// that do not declare a budget get the default per-provider limit.
+func SearchTimeBudget(provider SearchProvider) time.Duration {
+	if budgeter, ok := provider.(SearchBudgeter); ok {
+		if budget := budgeter.SearchBudget(); budget > 0 {
+			return budget
+		}
+	}
+	return providerSearchLimit
+}
+
+// SearchBudget is the longest budget among the concurrently queried providers.
+func (c *CompositeSearch) SearchBudget() time.Duration {
+	budget := providerSearchLimit
+	for _, provider := range c.providers {
+		budget = max(budget, SearchTimeBudget(provider))
+	}
+	return budget
+}
+
 func NewCompositeSearch(providers ...SearchProvider) *CompositeSearch {
 	configured := make([]SearchProvider, 0, len(providers))
 	for _, provider := range providers {
@@ -72,7 +99,7 @@ func (c *CompositeSearch) SearchWithDiagnostics(ctx context.Context, options Sea
 	if len(c.providers) == 0 {
 		return report, &SearchFailure{Code: "search_unavailable", Outcomes: report.Outcomes}
 	}
-	searchCtx, cancel := context.WithTimeout(ctx, providerSearchLimit)
+	searchCtx, cancel := context.WithTimeout(ctx, c.SearchBudget())
 	defer cancel()
 	started := time.Now()
 	results := make(chan compositeSearchResult, len(c.providers))
@@ -88,7 +115,7 @@ func (c *CompositeSearch) SearchWithDiagnostics(ctx context.Context, options Sea
 					return
 				}
 				provider := c.providers[index]
-				providerCtx, providerCancel := context.WithTimeout(searchCtx, providerSearchLimit)
+				providerCtx, providerCancel := context.WithTimeout(searchCtx, SearchTimeBudget(provider))
 				var providerReport SearchReport
 				var err error
 				if diagnostic, ok := provider.(DiagnosticSearchProvider); ok {

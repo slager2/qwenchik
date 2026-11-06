@@ -100,6 +100,8 @@ func providerName(provider SearchProvider) string {
 		return "tavily"
 	case *DuckDuckGo:
 		return "duckduckgo"
+	case *AgentSearcher:
+		return "agentsearcher"
 	default:
 		return "search"
 	}
@@ -166,6 +168,8 @@ func diagnosticSearch(ctx context.Context, options SearchOptions, provider Searc
 		outcome.ParserVersion = "tavily-json-v1"
 	case *DuckDuckGo:
 		outcome.ParserVersion = "duckduckgo-html-v1"
+	case *AgentSearcher:
+		outcome.ParserVersion = "agentsearcher-tavily-json-v1"
 	}
 	return SearchReport{Hits: hits, Outcomes: []ProviderOutcome{outcome}}, err
 }

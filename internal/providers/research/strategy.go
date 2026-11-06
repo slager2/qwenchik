@@ -18,13 +18,39 @@ type LocalPrimarySearch struct {
 }
 
 func NewLocalPrimarySearch(searxng, tavily, duckduckgo SearchProvider) *LocalPrimarySearch {
+	return NewOrderedPrimarySearch(searxng, tavily, duckduckgo)
+}
+
+// NewOrderedPrimarySearch queries providers in the given order and stops as
+// soon as the merged hits cover two independent sites; later providers are
+// fallbacks for errors, empty answers, or single-site answers.
+func NewOrderedPrimarySearch(providers ...SearchProvider) *LocalPrimarySearch {
 	s := &LocalPrimarySearch{}
-	for _, provider := range []SearchProvider{searxng, tavily, duckduckgo} {
+	for _, provider := range providers {
 		if provider != nil {
 			s.providers = append(s.providers, provider)
 		}
 	}
 	return s
+}
+
+// fallbackSearchReserve is the time kept for snippet-only fallbacks after a
+// slow primary provider with its own budget (agentSearcher) fails.
+const fallbackSearchReserve = 8 * time.Second
+
+// SearchBudget covers the default sequential budget plus the extra time that
+// slow providers with their own budget declare.
+func (s *LocalPrimarySearch) SearchBudget() time.Duration {
+	budget := providerSearchLimit
+	for index, provider := range s.providers {
+		if extra := SearchTimeBudget(provider); extra > providerSearchLimit {
+			budget += extra - providerSearchLimit
+			if index+1 < len(s.providers) {
+				budget = max(budget, extra+fallbackSearchReserve)
+			}
+		}
+	}
+	return budget
 }
 
 func (s *LocalPrimarySearch) Search(ctx context.Context, options SearchOptions) ([]SearchHit, error) {
@@ -58,7 +84,7 @@ func (s *LocalPrimarySearch) SearchWithDiagnostics(ctx context.Context, options 
 	if options.MaxResults < 1 || options.MaxResults > maxCompositeResults {
 		return report, errors.New("search max results must be between 1 and 20")
 	}
-	searchCtx, cancel := context.WithTimeout(ctx, providerSearchLimit)
+	searchCtx, cancel := context.WithTimeout(ctx, s.SearchBudget())
 	defer cancel()
 	var failures []error
 	allHits := []SearchHit{}
@@ -70,7 +96,13 @@ func (s *LocalPrimarySearch) SearchWithDiagnostics(ctx context.Context, options 
 		deadline, _ := searchCtx.Deadline()
 		budget := time.Until(deadline)
 		if index+1 < len(s.providers) {
-			budget = min(8*time.Second, budget*3/5)
+			if own := SearchTimeBudget(provider); own > providerSearchLimit && budget > 2*fallbackSearchReserve {
+				// A slow provider with its own budget keeps a reserve for
+				// the snippet-only fallbacks that follow it.
+				budget = min(own, budget-fallbackSearchReserve)
+			} else {
+				budget = min(8*time.Second, budget*3/5)
+			}
 		}
 		childCtx, childCancel := context.WithTimeout(searchCtx, budget)
 		attempt, err := NewCompositeSearch(provider).SearchWithDiagnostics(childCtx, options)
