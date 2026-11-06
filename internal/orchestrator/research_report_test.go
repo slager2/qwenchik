@@ -91,6 +91,9 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 			for index := range input.Claims {
 				input.Claims[index].Kind = "supported"
 				input.Claims[index].Quote = input.Claims[index].Claim
+				if strings.Contains(input.Claims[index].Claim, "Invented") {
+					input.Claims[index].Kind, input.Claims[index].Quote = "unknown", ""
+				}
 			}
 			covered := input.Criteria
 			if mode == "coverage_gap" {
@@ -109,6 +112,9 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 			return "", errors.New("section has no evidence")
 		}
 		answer := input.Evidence[0].Excerpt + " [" + input.Evidence[0].EvidenceID + "]"
+		if mode == "partial" {
+			answer = "Invented roadmap claim [" + input.Evidence[0].EvidenceID + "]\n\n" + answer
+		}
 		if mode == "list" {
 			answer = "- " + answer + "\n* " + input.Evidence[0].Excerpt + " [" + input.Evidence[0].EvidenceID + "][" + input.Evidence[len(input.Evidence)-1].EvidenceID + "]."
 		}
@@ -118,7 +124,7 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 }
 
 func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
-	for _, mode := range []string{"valid", "artifact_recovery", "correction", "fallback", "coverage_gap", "infrastructure", "list"} {
+	for _, mode := range []string{"valid", "artifact_recovery", "correction", "fallback", "coverage_gap", "infrastructure", "list", "partial"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx := context.Background()
 			f := newResearchRunStore(t)
@@ -171,7 +177,7 @@ func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
 			}
 			for index, section := range state.Report.Sections {
 				want := "supported"
-				if mode == "fallback" || (mode == "coverage_gap" && len(section.Criteria) > 0) {
+				if mode == "fallback" {
 					want = "fallback_excerpts"
 				}
 				// After the first section fails the same content check twice
@@ -180,6 +186,9 @@ func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
 				corrected := section.CorrectionUsed || (mode == "fallback" && index > 0 && section.Limitation == "report_circuit_breaker")
 				if section.Status != want || ((mode == "correction" || mode == "fallback") && !corrected) {
 					t.Fatalf("section validation/correction failed: %+v", section)
+				}
+				if mode == "partial" && (strings.Contains(section.Body, "Invented") || section.Limitation != "unsupported_claims_removed" || !strings.Contains(section.Body, "["+section.EvidenceIDs[0]+"]")) {
+					t.Fatalf("unsupported claim was not dropped individually: %+v", section)
 				}
 				if mode == "list" && (!strings.HasPrefix(section.Body, "- ") || strings.Count(section.Body, "\n- ") != 1) {
 					t.Fatalf("list items were not kept as a list: %q", section.Body)
@@ -198,7 +207,7 @@ func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
 					t.Fatalf("missing backend report section %q", heading)
 				}
 			}
-			if strings.Contains(answer, "UNSUPPORTED") {
+			if strings.Contains(answer, "UNSUPPORTED") || strings.Contains(answer, "Invented") {
 				t.Fatal("rejected section draft leaked into final report")
 			}
 			raw, err := files.ReadRange(ctx, f.task.ID, state.Report.ArtifactID, 0, 64<<10)

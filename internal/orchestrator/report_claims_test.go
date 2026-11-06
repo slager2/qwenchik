@@ -70,3 +70,25 @@ func TestReportBodyAcceptsLegacyEvidenceIDParagraphs(t *testing.T) {
 		t.Fatal("persisted body with an uncited line was accepted")
 	}
 }
+
+func TestReportReviewKeepsOnlySupportedUnits(t *testing.T) {
+	catalogue, aliases := reportTestCatalogue()
+	units, _ := parseReportDraft("- Python и R — основные языки [1]\n- Linux учат за месяц [2]\n- Выдуманный факт [1]", reportCatalogueResolver(catalogue, aliases), 4)
+	claims := []citationClaim{
+		{Claim: "Python и R — основные языки", EvidenceID: reportTestFirst, Quote: "Python and R are the core languages", Kind: "supported"},
+		{Claim: "Linux учат  за месяц (rephrased)", EvidenceID: reportTestSecond, Quote: "about one month", Kind: "supported"},
+		{Claim: "Выдуманный факт", EvidenceID: reportTestFirst, Quote: "", Kind: "unknown"},
+	}
+	kept, keptClaims := filterReportReview(units, claims, catalogue)
+	if len(kept) != 2 || kept[1].Claim != "Linux учат за месяц" || keptClaims[1].Claim != kept[1].Claim {
+		t.Fatalf("kept=%+v claims=%+v", kept, keptClaims)
+	}
+	if err := validateReportReview(kept, keptClaims, catalogue); err != nil {
+		t.Fatalf("kept units do not re-validate: %v", err)
+	}
+	// A quote from a source the unit does not cite is not support.
+	wrong := []citationClaim{{Claim: units[0].Claim, EvidenceID: reportTestSecond, Quote: "about one month", Kind: "supported"}}
+	if kept, _ := filterReportReview(units[:1], wrong, catalogue); len(kept) != 0 {
+		t.Fatal("claim kept with a quote from an uncited source")
+	}
+}

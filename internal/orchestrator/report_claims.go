@@ -237,3 +237,36 @@ func validateReportReview(units []reportUnit, claims []citationClaim, catalogue 
 	}
 	return nil
 }
+
+// filterReportReview keeps the units the critic supported with an exact
+// quote from one of their cited excerpts and drops the rest individually.
+// Review claims are matched to units by text; when the critic returned one
+// claim per unit, a claim with altered text falls back to its position.
+func filterReportReview(units []reportUnit, claims []citationClaim, catalogue []citationEvidence) ([]reportUnit, []citationClaim) {
+	excerpts := reportExcerpts(catalogue)
+	keptUnits, keptClaims := []reportUnit{}, []citationClaim{}
+	used := make([]bool, len(units))
+	next := 0
+	for index, claim := range claims {
+		match := -1
+		for candidate := next; candidate < len(units); candidate++ {
+			if normalizeReportClaim(units[candidate].Claim) == normalizeReportClaim(claim.Claim) {
+				match = candidate
+				break
+			}
+		}
+		if match < 0 && len(claims) == len(units) && index >= next && !used[index] {
+			match = index
+			claim.Claim = units[index].Claim
+		}
+		if match < 0 {
+			continue
+		}
+		used[match], next = true, match+1
+		if reportClaimSupported(units[match], claim, excerpts) {
+			claim.Claim = units[match].Claim
+			keptUnits, keptClaims = append(keptUnits, units[match]), append(keptClaims, claim)
+		}
+	}
+	return keptUnits, keptClaims
+}

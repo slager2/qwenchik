@@ -334,32 +334,37 @@ func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal,
 			if err == nil {
 				var review reportCitationReview
 				err = w.reportJSON(ctx, task, goal, "report_critic", identity, reportCriticPrompt, map[string]any{"claims_to_check": reportCriticClaims(units), "evidence_catalogue": reportModelSources(catalogue), "criteria": section.Criteria, "criterion_catalog": reportCriterionCatalog(task, *state, section.Criteria)}, reportReviewSchema(section.Criteria, claimLimit), &review, &reportCall{aliases: aliases})
+				var kept []reportUnit
 				if err == nil {
 					for index := range review.Claims {
 						review.Claims[index].EvidenceID = aliases.resolve(review.Claims[index].EvidenceID)
-						if review.Claims[index].Kind != "supported" {
-							err = errUnsupportedCitationClaim
-						}
 					}
-					if err == nil {
-						err = validateReportReview(units, review.Claims, catalogue)
-					}
-					for _, id := range section.Criteria {
-						if err == nil && !contains(review.CriteriaCovered, id) {
-							err = errUnsupportedCitationClaim
-						}
+					// Unsupported claims are dropped one by one; the section
+					// fails only when nothing it says could be verified.
+					kept, review.Claims = filterReportReview(units, review.Claims, catalogue)
+					if len(kept) == 0 {
+						err = errUnsupportedCitationClaim
 					}
 				}
 				if err == nil {
 					if breaker != nil {
 						breaker.success()
 					}
-					for index := range review.Claims {
-						review.Claims[index].Claim = units[index].Claim
+					// Coverage is claimed by the critic only for this section's
+					// criteria; uncovered ones are reported as unrepresented.
+					coveredCriteria := []string{}
+					for _, id := range review.CriteriaCovered {
+						if contains(section.Criteria, id) && !contains(coveredCriteria, id) {
+							coveredCriteria = append(coveredCriteria, id)
+						}
 					}
-					section.Body = renderReportUnits(units)
+					review.CriteriaCovered = coveredCriteria
+					section.Body = renderReportUnits(kept)
 					section.Status = "supported"
 					section.Limitation = ""
+					if len(kept) < len(units) {
+						section.Limitation = "unsupported_claims_removed"
+					}
 					section.RejectedDraft = ""
 					section.Review, _ = json.Marshal(review)
 					return nil
