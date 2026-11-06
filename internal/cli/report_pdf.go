@@ -2,6 +2,7 @@ package cli
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/slager2/qwenchik/internal/config"
 	reportpdf "github.com/slager2/qwenchik/internal/report/pdf"
@@ -20,4 +21,24 @@ func newReportPDFExporter(cfg config.Config, lister reportpdf.ArtifactLister, st
 	exporter.Renderer = reportpdf.NewChrome(binary)
 	logger.Info("research report PDF renderer detected", "binary", binary)
 	return exporter
+}
+
+// newReportPDFAutosaver saves PDFs of long research runs (REPORT_PDF_AUTO)
+// into REPORT_PDF_DIR, default <XDG documents>/Qwenchik. Only runs that
+// complete from now on (with a short grace window for a restart right after
+// completion) are considered.
+func newReportPDFAutosaver(cfg config.Config, exporter *reportpdf.Exporter, repo reportpdf.AutosaveRepository, logger *slog.Logger) *reportpdf.Autosaver {
+	dir := cfg.ReportPDFDir
+	if dir == "" {
+		dir = reportpdf.DefaultAutosaveDir()
+	}
+	mode := cfg.ReportPDFAuto
+	if dir == "" && mode != config.ReportPDFAutoNever {
+		logger.Warn("research report PDF auto-save disabled: no documents directory")
+		mode = config.ReportPDFAutoNever
+	}
+	if mode != config.ReportPDFAutoNever && exporter.Available() {
+		logger.Info("research report PDF auto-save enabled", "mode", mode, "dir", dir)
+	}
+	return &reportpdf.Autosaver{Exporter: exporter, Repo: repo, Dir: dir, Mode: mode, Since: time.Now().Add(-10 * time.Minute), Logger: logger}
 }

@@ -807,6 +807,11 @@ func serve(parent context.Context) error {
 		defer close(notificationsDone)
 		notifications.Run(ctx, deps.store, notificationSender, cfg.NotificationChannel)
 	}()
+	reportAutosaveDone := make(chan struct{})
+	go func() {
+		defer close(reportAutosaveDone)
+		newReportPDFAutosaver(cfg, reportExporter, deps.store, logger).Run(ctx)
+	}()
 	workerDone := make(chan error, 1)
 	go func() { workerDone <- deps.worker.Run(ctx) }()
 	serverDone := make(chan error, 1)
@@ -843,6 +848,11 @@ func serve(parent context.Context) error {
 	case <-notificationsDone:
 	case <-shutdownCtx.Done():
 		return errors.New("notification worker did not stop before shutdown deadline")
+	}
+	select {
+	case <-reportAutosaveDone:
+	case <-shutdownCtx.Done():
+		logger.Warn("report PDF auto-save did not stop before shutdown deadline")
 	}
 	if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
 		return serveErr

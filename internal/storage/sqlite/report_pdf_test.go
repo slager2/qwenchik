@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/slager2/qwenchik/internal/domain"
 )
@@ -48,5 +49,41 @@ func TestSaveReportPDFArtifactOnlyForTerminalResearchRuns(t *testing.T) {
 	}
 	if _, err := store.SaveReportPDFArtifact(ctx, artifact, "../escape"); err == nil {
 		t.Fatal("accepted unsafe storage reference")
+	}
+}
+
+func TestPendingReportPDFAutosaves(t *testing.T) {
+	ctx := context.Background()
+	store, turn, _ := researchConversationFixture(t, func(session *domain.ResearchSession) { session.Profile = domain.ResearchProfileOvernight })
+	since := time.Now().Add(-time.Minute)
+	if items, err := store.PendingReportPDFAutosaves(ctx, since, 10); err != nil || len(items) != 0 {
+		t.Fatalf("running task listed: %+v %v", items, err)
+	}
+	started, completed := time.Now().Add(-30*time.Minute).UTC(), time.Now().UTC()
+	if _, err := store.db.Exec(`UPDATE tasks SET status='completed',started_at=?,completed_at=? WHERE id=?`, stamp(started), stamp(completed), turn.Run.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordEvent(ctx, turn.Run.ID, "task.completed", nil, "user", nil); err != nil {
+		t.Fatal(err)
+	}
+	if items, err := store.PendingReportPDFAutosaves(ctx, time.Now().Add(time.Hour), 10); err != nil || len(items) != 0 {
+		t.Fatalf("completion before the watermark listed: %+v %v", items, err)
+	}
+	items, err := store.PendingReportPDFAutosaves(ctx, since, 10)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("completed research not listed: %+v %v", items, err)
+	}
+	item := items[0]
+	if item.TaskID != turn.Run.ID || item.Profile != domain.ResearchProfileOvernight || item.CompletedAt.Sub(item.StartedAt) < 29*time.Minute || item.Title == "" {
+		t.Fatalf("unexpected candidate %+v", item)
+	}
+	if err := store.RecordReportPDFAutosave(ctx, turn.Run.ID, "task.completed", nil); err == nil {
+		t.Fatal("accepted a foreign event type")
+	}
+	if err := store.RecordReportPDFAutosave(ctx, turn.Run.ID, EventReportPDFAutosaved, map[string]any{"file_name": "x.pdf"}); err != nil {
+		t.Fatal(err)
+	}
+	if items, err := store.PendingReportPDFAutosaves(ctx, since, 10); err != nil || len(items) != 0 {
+		t.Fatalf("handled run listed again: %+v %v", items, err)
 	}
 }

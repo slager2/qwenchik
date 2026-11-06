@@ -58,3 +58,62 @@ func (s *Store) SaveReportPDFArtifact(ctx context.Context, artifact domain.Artif
 	}
 	return artifact, tx.Commit()
 }
+
+// Report PDF auto-save outcome events (internal visibility).
+const (
+	EventReportPDFAutosaved = "report_pdf.autosaved"
+	EventReportPDFSkipped   = "report_pdf.autosave_skipped"
+	EventReportPDFFailed    = "report_pdf.autosave_failed"
+)
+
+// PendingReportPDFAutosaves lists research runs completed at or after since
+// that have no recorded auto-save outcome, oldest first.
+func (s *Store) PendingReportPDFAutosaves(ctx context.Context, since time.Time, limit int) ([]domain.ReportPDFCandidate, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT t.id,t.title,COALESCE(rs.profile,''),COALESCE(t.started_at,''),COALESCE(t.completed_at,''),e.created_at,
+		COALESCE((SELECT a.size_bytes FROM artifacts a WHERE a.task_id=t.id AND a.name='research_report.md' ORDER BY a.created_at DESC LIMIT 1),0)
+		FROM events e JOIN tasks t ON t.id=e.task_id LEFT JOIN research_sessions rs ON rs.task_id=t.id
+		WHERE e.type='task.completed' AND e.created_at>=? AND t.mode='research' AND t.status='completed'
+		AND NOT EXISTS(SELECT 1 FROM events m WHERE m.task_id=t.id AND m.type IN (?,?,?))
+		ORDER BY e.created_at,e.seq LIMIT ?`, stamp(since), EventReportPDFAutosaved, EventReportPDFSkipped, EventReportPDFFailed, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []domain.ReportPDFCandidate
+	seen := map[string]bool{}
+	for rows.Next() {
+		var item domain.ReportPDFCandidate
+		var started, completed, event string
+		if err := rows.Scan(&item.TaskID, &item.Title, &item.Profile, &started, &completed, &event, &item.ReportMarkdownBytes); err != nil {
+			return nil, err
+		}
+		if seen[item.TaskID] {
+			continue
+		}
+		seen[item.TaskID] = true
+		item.StartedAt, item.CompletedAt = parseTime(started), parseTime(completed)
+		if item.CompletedAt.IsZero() {
+			item.CompletedAt = parseTime(event)
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
+// RecordReportPDFAutosave records the auto-save outcome for a run so it is
+// not considered again.
+func (s *Store) RecordReportPDFAutosave(ctx context.Context, taskID, eventType string, payload map[string]any) error {
+	switch eventType {
+	case EventReportPDFAutosaved, EventReportPDFSkipped, EventReportPDFFailed:
+	default:
+		return ErrConflict
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	_, err := s.RecordEvent(ctx, taskID, eventType, nil, "internal", payload)
+	return err
+}
