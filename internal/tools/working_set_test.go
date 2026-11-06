@@ -332,6 +332,31 @@ func TestWorkingSetStrictArgumentsAndCancellation(t *testing.T) {
 	}
 }
 
+func TestWorkingSetFactsKeepExactPrefixOfLongQuoteSpans(t *testing.T) {
+	registry, repo, reader, ctx := workingSetFixture(t)
+	text := "Header line.\n" + strings.Repeat("Источник сообщает факт. ", 250)
+	artifact, _, err := reader.store.Put(ctx, "owned", "extract.txt", "text/plain", []byte(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.artifacts = append(repo.artifacts, artifact)
+	runes := []rune(text)
+	span := domain.QuoteSpan{Text: string(runes[13:]), Start: 13, End: len(runes), CoordinateSpace: "extracted_text_runes"}
+	repo.evidence = []domain.Evidence{{ID: "long", TaskID: "owned", HTTPStatus: 200, ExtractionMethod: "agentsearcher_extract", TextArtifactID: artifact.ID, Excerpt: span.Text, QuoteSpans: []domain.QuoteSpan{span}}}
+	value, err := registry.Execute(ctx, "researcher", "fact_list", json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	records := value.([]workingSetRecord)
+	if len(records) != 1 || records[0].Locator != "exact" || records[0].QuoteSpan == nil {
+		t.Fatalf("records = %+v", records)
+	}
+	got := records[0].QuoteSpan
+	if got.Start != 13 || got.End != 2013 || got.Text != string(runes[13:2013]) || records[0].Excerpt != got.Text {
+		t.Fatalf("long span was not cut to an exact 2000-rune prefix: %+v", got)
+	}
+}
+
 func TestWorkingSetResultAndReadBudgets(t *testing.T) {
 	registry, repo, reader, ctx := workingSetFixture(t)
 	text := strings.Repeat("東京😀", 600) + " alpha"

@@ -344,8 +344,14 @@ func (w WorkingSetTools) facts(ctx context.Context, args workingSetArgs) (any, e
 			if len(result) == limit {
 				break
 			}
-			if span.Text == "" || utf8.RuneCountInString(span.Text) > 2000 || !strings.Contains(text, span.Text) {
+			if span.Text == "" || !strings.Contains(text, span.Text) {
 				continue
+			}
+			// Evidence excerpts reach 4000-6000 runes; keep the first
+			// 2000 runes of a long span, still an exact slice of the text.
+			if spanRunes := []rune(span.Text); len(spanRunes) > 2000 {
+				span.Text = string(spanRunes[:2000])
+				span.End = span.Start + 2000
 			}
 			record := workingSetRecord{EvidenceID: item.ID, Excerpt: span.Text, Kind: "extractive_observation", Status: "source_claim", Locator: "unknown"}
 			if span.CoordinateSpace == "extracted_text_runes" && span.Start >= 0 && span.End >= span.Start && span.End <= len(runes) && string(runes[span.Start:span.End]) == span.Text {
