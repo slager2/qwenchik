@@ -318,6 +318,7 @@ h1, h2, h3, h4, h5, h6, .kicker, .label, .meta, th { font-family: "Noto Sans", "
 .report-title { font-size: 24pt; line-height: 1.2; margin: 0 0 10mm; color: #111827; font-weight: 700; }
 .question { border-left: 3pt solid #2563eb; background: #f3f6fc; padding: 4mm 5mm; margin: 0 0 8mm; border-radius: 0 2mm 2mm 0; }
 .question p { margin: 0; }
+.question p + p { white-space: pre-line; }
 .label { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; font-weight: 600; margin: 0 0 2mm !important; }
 .meta { display: grid; grid-template-columns: max-content 1fr; gap: 1.5mm 6mm; margin: 0 0 10mm; font-size: 9.5pt; }
 .meta dt { color: #6b7280; }

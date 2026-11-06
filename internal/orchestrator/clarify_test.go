@@ -92,3 +92,17 @@ func TestClarifyTimesOut(t *testing.T) {
 		t.Fatalf("timeout: %+v", got)
 	}
 }
+
+func TestReportQuestionKeepsClarifiedParagraphs(t *testing.T) {
+	goal := domain.RefinedResearchGoal("роадмап\nпо биоинформатике", domain.ClarificationChoice{
+		InterpretationGoal: "План с нуля.",
+		Answers:            []domain.ClarificationAnswer{{Question: "Часов в неделю?", Answer: "10"}},
+	})
+	want := "Уточнённая цель: План с нуля.\n\nИсходный вопрос: роадмап по биоинформатике\n\nУсловия пользователя: Часов в неделю — 10."
+	if got := reportQuestionText(goal); got != want {
+		t.Fatalf("question =\n%q\nwant\n%q", got, want)
+	}
+	if got := reportQuestionText("one\nline\n\n- not a list\n\n2. not a list"); got != "one line\n\n\\- not a list\n\n2\\. not a list" {
+		t.Fatalf("markers = %q", got)
+	}
+}

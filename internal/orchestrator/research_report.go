@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 
@@ -75,6 +76,29 @@ func reportCriterionCatalog(task domain.Task, state checkpointState, ids []strin
 
 func reportText(text string) string {
 	return strings.NewReplacer("[", "\\[", "]", "\\]", "*", "\\*", "`", "\\`", "_", "\\_", "#", "\\#").Replace(citationDisplayText(strings.Join(strings.Fields(text), " ")))
+}
+
+var reportBlockMarker = regexp.MustCompile(`^(\d+)([.)])`)
+
+// reportQuestionText renders the research question keeping its blank-line
+// paragraphs (a clarified goal lists the refined goal, the original question
+// and the user's constraints separately). Each paragraph is escaped like
+// other report text and cannot start a Markdown list or quote.
+func reportQuestionText(goal string) string {
+	var paragraphs []string
+	for _, paragraph := range strings.Split(strings.ReplaceAll(goal, "\r\n", "\n"), "\n\n") {
+		text := reportText(paragraph)
+		if text == "" {
+			continue
+		}
+		if strings.ContainsAny(text[:1], "-+>") {
+			text = `\` + text
+		} else {
+			text = reportBlockMarker.ReplaceAllString(text, `$1\$2`)
+		}
+		paragraphs = append(paragraphs, text)
+	}
+	return strings.Join(paragraphs, "\n\n")
 }
 
 // reportCall describes the evidence aliases used by one report role call. New
@@ -689,7 +713,7 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 		report.Outcome = "partial"
 	}
 	var markdown strings.Builder
-	fmt.Fprintf(&markdown, "# %s\n\n## %s\n\n%s\n\n## %s\n\n%s\n\n## %s\n\n", reportText(report.Title), labels.SummaryHeading, report.ExecutiveSummary, labels.QuestionHeading, reportText(goal), labels.ContentsHeading)
+	fmt.Fprintf(&markdown, "# %s\n\n## %s\n\n%s\n\n## %s\n\n%s\n\n## %s\n\n", reportText(report.Title), labels.SummaryHeading, report.ExecutiveSummary, labels.QuestionHeading, reportQuestionText(goal), labels.ContentsHeading)
 	for index, section := range report.Sections {
 		fmt.Fprintf(&markdown, "%d. %s\n", index+1, reportText(section.Title))
 	}
