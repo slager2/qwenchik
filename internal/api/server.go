@@ -129,6 +129,7 @@ type Server struct {
 	llmModel                  string
 	searchURL                 string
 	tavilyConfigured          bool
+	agentSearcher             agentSearcherStatus
 	ddgDisabled               bool
 	searchDiagnostics         func() []research.ProviderOutcome
 	artifactReader            ArtifactReader
@@ -1111,12 +1112,12 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 	searchStatus := "enabled"
 	searchMode := "duckduckgo"
 	searchType := "duckduckgo"
-	if s.searchURL != "" || s.tavilyConfigured {
+	if s.searchURL != "" || s.tavilyConfigured || s.agentSearcher.baseURL != "" {
 		searchStatus = "configured"
 		searchMode = "composite"
 		searchType = "composite"
 	}
-	if s.searchURL == "" && !s.tavilyConfigured && s.ddgDisabled {
+	if s.searchURL == "" && !s.tavilyConfigured && s.agentSearcher.baseURL == "" && s.ddgDisabled {
 		searchStatus, searchMode, searchType = "disabled", "disabled", "disabled"
 	}
 	sandboxStatus := "unavailable"
@@ -1225,6 +1226,7 @@ func (s *Server) searchProviderStatus() map[string]map[string]any {
 	if !s.ddgDisabled {
 		result["duckduckgo"]["status"] = "enabled"
 	}
+	s.addAgentSearcherStatus(result)
 	if s.searchDiagnostics != nil {
 		for _, outcome := range s.searchDiagnostics() {
 			if outcome.CheckedAt.IsZero() || outcome.Code == "provider_not_checked" {

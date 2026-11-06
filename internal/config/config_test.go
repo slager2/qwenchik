@@ -102,6 +102,7 @@ func clearConfigEnv(t *testing.T) {
 		"LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL", "LLM_CONTEXT_LENGTH",
 		"LLM_MAX_OUTPUT_TOKENS", "LLM_TEMPERATURE", "LLM_TOP_P", "LLM_ENABLE_THINKING",
 		"LLM_REQUEST_TIMEOUT_SECONDS", "LLM_MAX_CONCURRENCY", "SEARXNG_URL",
+		"AGENTSEARCHER_URL", "AGENTSEARCHER_SEARCH_DEPTH", "AGENTSEARCHER_TIMEOUT_SECONDS",
 		"CONTEXT_PROBE_ENABLED", "LAB_HOLD_RESOURCE_PAUSES", "MODEL_RSS_MAX_BYTES",
 		"TAVILY_API_KEY", "MAX_STEPS", "TASK_TIMEOUT_SECONDS", "MAX_SEARCH_QUERIES",
 		"MAX_INITIAL_PLAN_STEPS", "MAX_ROUND_STEPS", "MAX_TOTAL_ROUNDS", "MAX_TOTAL_STEPS", "MAX_FETCHES", "MAX_LLM_CALLS", "MAX_EVIDENCE", "MAX_QUESTIONS", "MAX_QUESTIONS_ACCEPTED", "MAX_CITATION_SOURCES", "MAX_CITATION_CLAIMS", "MAX_REPORT_SECTIONS", "MAX_REPORT_PARAGRAPHS", "MAX_REPORT_BYTES",
@@ -214,5 +215,36 @@ func TestValidateRejectsNonLoopbackBindAndLLM(t *testing.T) {
 	cfg.SearXNGURL = "http://127.0.0.1:8081"
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("local SearXNG validation failed: %v", err)
+	}
+	for _, bad := range []string{"http://search.example.com:8484", "http://10.0.0.2:8484", "http://127.0.0.1:8080", "http://127.0.0.1:8081", "http://u:p@127.0.0.1:8484"} {
+		cfg.AgentSearcherURL = bad
+		if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "AGENTSEARCHER_URL") {
+			t.Fatalf("AGENTSEARCHER_URL %q validation error = %v", bad, err)
+		}
+	}
+	cfg.AgentSearcherURL = "http://127.0.0.1:8484"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("local agentSearcher validation failed: %v", err)
+	}
+	cfg.AgentSearcherDepth = "deep"
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "AGENTSEARCHER_SEARCH_DEPTH") {
+		t.Fatalf("depth validation error = %v", err)
+	}
+	cfg.AgentSearcherDepth, cfg.AgentSearcherTimeoutSeconds = "basic", 600
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "AGENTSEARCHER_TIMEOUT_SECONDS") {
+		t.Fatalf("timeout validation error = %v", err)
+	}
+}
+
+func TestLoadAgentSearcherDefaults(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("AGENTSEARCHER_SEARCH_DEPTH", "")
+	t.Setenv("AGENTSEARCHER_URL", "http://127.0.0.1:8484/")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AgentSearcherURL != "http://127.0.0.1:8484" || cfg.AgentSearcherDepth != "advanced" || cfg.AgentSearcherTimeoutSeconds != 45 {
+		t.Fatalf("agentSearcher config = %q %q %d", cfg.AgentSearcherURL, cfg.AgentSearcherDepth, cfg.AgentSearcherTimeoutSeconds)
 	}
 }

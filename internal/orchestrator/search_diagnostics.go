@@ -159,7 +159,7 @@ func (w *Worker) executeObservedTool(ctx context.Context, taskID string, stage *
 func safeSearchOutcome(outcome research.ProviderOutcome) map[string]any {
 	provider := outcome.Provider
 	switch provider {
-	case "searxng", "tavily", "duckduckgo", "search":
+	case "agentsearcher", "searxng", "tavily", "duckduckgo", "search":
 	default:
 		provider = "search"
 	}

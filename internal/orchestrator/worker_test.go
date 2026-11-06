@@ -1411,6 +1411,12 @@ func TestToolResultCompactionBoundsModelContextAndKeepsSourceIDs(t *testing.T) {
 	if snippet, _ := searchResults[0]["snippet"].(string); utf8.RuneCountInString(snippet) != 600 {
 		t.Fatalf("compacted snippet length = %d runes, want 600", utf8.RuneCountInString(snippet))
 	}
+	searchHits[0].Provider = "agentsearcher"
+	searchHits[0].Snippet = strings.Repeat("ранжированный фрагмент ", 200)
+	searchResults, _ = compactToolResult(searchHits).([]map[string]any)
+	if snippet, _ := searchResults[0]["snippet"].(string); utf8.RuneCountInString(snippet) != 1500 {
+		t.Fatalf("compacted agentSearcher passage length = %d runes, want 1500", utf8.RuneCountInString(snippet))
+	}
 }
 
 func TestWorkerRunsGenericResearchAndStoresCitedEvidence(t *testing.T) {

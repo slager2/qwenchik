@@ -10,9 +10,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/slager2/qwenchik/internal/domain"
+	"github.com/slager2/qwenchik/internal/providers/research"
 	"github.com/slager2/qwenchik/internal/runtime/notifications"
 	"github.com/slager2/qwenchik/internal/runtime/pdfextract"
 	"github.com/slager2/qwenchik/internal/runtime/resources"
@@ -48,6 +50,9 @@ type Config struct {
 	LLMRequestTimeoutSecs        int
 	LLMMaxConcurrency            int
 	SearXNGURL                   string
+	AgentSearcherURL             string
+	AgentSearcherDepth           string
+	AgentSearcherTimeoutSeconds  int
 	TavilyAPIKey                 string
 	SearchEnableDDG              bool
 	SearchProviderPolicy         string
@@ -97,6 +102,8 @@ func Load() (Config, error) {
 		LLMAPIKey:           env("LLM_API_KEY", "EMPTY"),
 		LLMModel:            env("LLM_MODEL", "local-qwen"),
 		SearXNGURL:          env("SEARXNG_URL", ""),
+		AgentSearcherURL:    strings.TrimRight(strings.TrimSpace(env("AGENTSEARCHER_URL", "")), "/"),
+		AgentSearcherDepth:  strings.TrimSpace(env("AGENTSEARCHER_SEARCH_DEPTH", research.AgentSearcherDefaultDepth)),
 		TavilyAPIKey:        strings.TrimSpace(env("TAVILY_API_KEY", "")),
 	}
 	var err error
@@ -104,6 +111,12 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.SearchEnableDDG, err = boolEnv("SEARCH_ENABLE_DDG", true); err != nil {
+		return Config{}, err
+	}
+	if cfg.AgentSearcherDepth == "" {
+		cfg.AgentSearcherDepth = research.AgentSearcherDefaultDepth
+	}
+	if cfg.AgentSearcherTimeoutSeconds, err = intEnv("AGENTSEARCHER_TIMEOUT_SECONDS", int(research.AgentSearcherDefaultTimeout/time.Second)); err != nil {
 		return Config{}, err
 	}
 	if cfg.LLMContextLength, err = intEnv("LLM_CONTEXT_LENGTH", 32768); err != nil {
@@ -340,26 +353,20 @@ func (c Config) Validate() error {
 	if !isLoopbackHost(llmURL.Hostname()) {
 		return errors.New("LLM_BASE_URL must use a loopback host; remote LLM providers are not enabled")
 	}
-	if c.SearXNGURL != "" {
-		searchURL, err := url.Parse(c.SearXNGURL)
-		if err != nil || searchURL.Host == "" || searchURL.User != nil || searchURL.RawQuery != "" || searchURL.Fragment != "" || (searchURL.Scheme != "http" && searchURL.Scheme != "https") {
-			return errors.New("SEARXNG_URL must be an absolute local http(s) URL without credentials or query")
-		}
-		if !isLoopbackHost(searchURL.Hostname()) {
-			return errors.New("SEARXNG_URL must use a loopback host")
-		}
-		searchPort := searchURL.Port()
-		if searchPort == "" {
-			if searchURL.Scheme == "https" {
-				searchPort = "443"
-			} else {
-				searchPort = "80"
-			}
-		}
-		_, appPort, _ := net.SplitHostPort(c.BindAddr)
-		if searchPort == appPort {
-			return errors.New("SEARXNG_URL must use a port different from APP_BIND_ADDR")
-		}
+	if err := validateLoopbackServiceURL("SEARXNG_URL", c.SearXNGURL, c.BindAddr); err != nil {
+		return err
+	}
+	if err := validateLoopbackServiceURL("AGENTSEARCHER_URL", c.AgentSearcherURL, c.BindAddr); err != nil {
+		return err
+	}
+	if c.AgentSearcherURL != "" && c.AgentSearcherURL == strings.TrimRight(c.SearXNGURL, "/") {
+		return errors.New("AGENTSEARCHER_URL must differ from SEARXNG_URL")
+	}
+	if c.AgentSearcherDepth != "" && !research.ValidAgentSearcherDepth(c.AgentSearcherDepth) {
+		return errors.New("AGENTSEARCHER_SEARCH_DEPTH must be ultra-fast, fast, basic, or advanced")
+	}
+	if c.AgentSearcherTimeoutSeconds != 0 && (c.AgentSearcherTimeoutSeconds < 5 || c.AgentSearcherTimeoutSeconds > 120) {
+		return errors.New("AGENTSEARCHER_TIMEOUT_SECONDS must be 5..120")
 	}
 	llmPort := llmURL.Port()
 	if llmPort == "" {
@@ -425,6 +432,35 @@ func validateLoopbackAddr(addr string) error {
 	n, err := strconv.Atoi(port)
 	if err != nil || n < 1 || n > 65535 {
 		return errors.New("port must be between 1 and 65535")
+	}
+	return nil
+}
+
+// validateLoopbackServiceURL checks an optional local helper service URL:
+// absolute http(s), loopback host, no credentials/query/fragment, and a port
+// different from the app's own listener.
+func validateLoopbackServiceURL(name, raw, bindAddr string) error {
+	if raw == "" {
+		return nil
+	}
+	serviceURL, err := url.Parse(raw)
+	if err != nil || serviceURL.Host == "" || serviceURL.User != nil || serviceURL.RawQuery != "" || serviceURL.Fragment != "" || (serviceURL.Scheme != "http" && serviceURL.Scheme != "https") {
+		return errors.New(name + " must be an absolute local http(s) URL without credentials or query")
+	}
+	if !isLoopbackHost(serviceURL.Hostname()) {
+		return errors.New(name + " must use a loopback host")
+	}
+	servicePort := serviceURL.Port()
+	if servicePort == "" {
+		if serviceURL.Scheme == "https" {
+			servicePort = "443"
+		} else {
+			servicePort = "80"
+		}
+	}
+	_, appPort, _ := net.SplitHostPort(bindAddr)
+	if servicePort == appPort {
+		return errors.New(name + " must use a port different from APP_BIND_ADDR")
 	}
 	return nil
 }

@@ -29,10 +29,15 @@ func newSearchSmokeCommand(jsonMode *bool) *cobra.Command {
 			} else if allowExternal {
 				fmt.Fprintln(cmd.ErrOrStderr(), "External search is enabled for this probe; Tavily may charge for the request.")
 				provider, err = configuredSearchProvider(cfg)
+			} else if cfg.AgentSearcherURL != "" {
+				provider, err = newAgentSearcher(cfg)
+				if err == nil {
+					provider = research.NewCompositeSearch(provider)
+				}
 			} else if cfg.SearXNGURL != "" {
 				provider, err = research.NewSearXNG(cfg.SearXNGURL, nil)
 			} else {
-				return errors.New("no local SearXNG configured; use --allow-external to permit external search providers")
+				return errors.New("no local agentSearcher or SearXNG configured; use --allow-external to permit external search providers")
 			}
 			if err != nil {
 				return err
@@ -41,7 +46,7 @@ func newSearchSmokeCommand(jsonMode *bool) *cobra.Command {
 			if !ok {
 				return errors.New("no diagnostic search provider is enabled")
 			}
-			ctx, cancel := context.WithTimeout(cmd.Context(), 15*time.Second)
+			ctx, cancel := context.WithTimeout(cmd.Context(), research.SearchTimeBudget(provider)+3*time.Second)
 			defer cancel()
 			report, searchErr := diagnostic.SearchWithDiagnostics(ctx, research.SearchOptions{Query: query, MaxResults: 3, SafeSearch: true})
 			printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{"usable_hits": len(report.Hits), "outcomes": report.Outcomes})

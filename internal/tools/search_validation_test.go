@@ -371,3 +371,51 @@ func TestSearchDiagnosticsStripCredentialTextAndUnfetchableURLs(t *testing.T) {
 		t.Fatalf("URL exceeding fetch argument limit admitted: %#v err=%v", hits, err)
 	}
 }
+
+func TestValidatedAgentSearcherHitsKeepRankedPassages(t *testing.T) {
+	fetcher := &validationFetchStub{validate: func(context.Context, string) error { return nil }}
+	passage := strings.Repeat("ранжированный фрагмент страницы ", 120)
+	hits, err := validateSearchHits(context.Background(), fetcher, []research.SearchHit{
+		{Provider: "agentsearcher", URL: "https://example.org/a", Title: "A", Snippet: passage},
+		{Provider: "searxng", URL: "https://example.org/b", Title: "B", Snippet: passage},
+	}, nil, "query")
+	if err != nil || len(hits) != 2 {
+		t.Fatalf("hits=%#v err=%v", hits, err)
+	}
+	if hits[0].Provider != "agentsearcher" || hits[0].Taint != research.TaintExternal || len([]rune(hits[0].Snippet)) != 2000 {
+		t.Fatalf("agentSearcher hit = provider %q, %d runes", hits[0].Provider, len([]rune(hits[0].Snippet)))
+	}
+	if len([]rune(hits[1].Snippet)) != 400 {
+		t.Fatalf("snippet provider bound changed: %d runes", len([]rune(hits[1].Snippet)))
+	}
+	if o := SafeSearchHitObservation(research.SearchHitObservation{Provider: "agentsearcher", Fingerprint: "x", URL: "https://example.org/a", Snippet: passage}); o.Provider != "agentsearcher" || len([]rune(o.Snippet)) != 400 {
+		t.Fatalf("observation = %q %d", o.Provider, len([]rune(o.Snippet)))
+	}
+}
+
+func TestSearchCollectionBudgetFollowsProvider(t *testing.T) {
+	if got := searchCollectionTimeout(searchStub{}); got != 20 {
+		t.Fatalf("default search tool timeout = %d, want 20", got)
+	}
+	agent, err := research.NewAgentSearcher("http://127.0.0.1:8484", "advanced", 45*time.Second, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := searchCollectionTimeout(agent); got != 53 {
+		t.Fatalf("agentSearcher search tool timeout = %d, want 53", got)
+	}
+	parent, cancel := context.WithTimeout(context.Background(), 53*time.Second)
+	defer cancel()
+	ctx, collectionCancel := searchCollectionContext(parent, 45*time.Second)
+	defer collectionCancel()
+	if deadline, _ := ctx.Deadline(); time.Until(deadline) < 44*time.Second {
+		t.Fatalf("collection budget shortened to %v", time.Until(deadline))
+	}
+	parent20, cancel20 := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel20()
+	ctx20, cancelCtx20 := searchCollectionContext(parent20, 12*time.Second)
+	defer cancelCtx20()
+	if deadline, _ := ctx20.Deadline(); time.Until(deadline) > 12*time.Second {
+		t.Fatalf("default collection budget grew to %v", time.Until(deadline))
+	}
+}

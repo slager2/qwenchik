@@ -558,7 +558,7 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 				if cfg.SearchEnableDDG {
 					searchMode, searchType, searchStatus, ddgStatus = "duckduckgo", "duckduckgo", "configured", "configured"
 				}
-				if cfg.SearXNGURL != "" || cfg.TavilyAPIKey != "" {
+				if cfg.SearXNGURL != "" || cfg.TavilyAPIKey != "" || cfg.AgentSearcherURL != "" {
 					searchMode = "composite"
 					searchType = "composite"
 					searchStatus = "configured"
@@ -575,7 +575,9 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 						"mode":     searchMode,
 						"base_url": cfg.SearXNGURL,
 						"providers": map[string]any{
-							"searxng":    map[string]any{"status": providerStatus(cfg.SearXNGURL), "base_url": cfg.SearXNGURL},
+							"searxng": map[string]any{"status": providerStatus(cfg.SearXNGURL), "base_url": cfg.SearXNGURL},
+							"agentsearcher": map[string]any{"status": providerStatus(cfg.AgentSearcherURL), "base_url": cfg.AgentSearcherURL, "search_depth": cfg.AgentSearcherDepth,
+								"timeout_seconds": cfg.AgentSearcherTimeoutSeconds, "primary": cfg.AgentSearcherURL != "", "health": "not_checked"},
 							"tavily":     map[string]string{"status": providerStatusFromBool(cfg.TavilyAPIKey != "")},
 							"duckduckgo": map[string]any{"status": ddgStatus, "enabled": cfg.SearchEnableDDG, "fallback": true, "health": "not_checked", "endpoint": "https://html.duckduckgo.com/html/"},
 						},
@@ -587,6 +589,7 @@ func newSimpleCommand(name, short string, jsonMode *bool) *cobra.Command {
 				printValue(output{json: *jsonMode, out: cmd.OutOrStdout()}, map[string]any{
 					"app_bind_addr": cfg.BindAddr, "database_path": cfg.DatabasePath, "artifacts_path": cfg.ArtifactsPath,
 					"llm_base_url": cfg.LLMBaseURL, "llm_model": cfg.LLMModel, "searxng_url": cfg.SearXNGURL,
+					"agentsearcher_url": cfg.AgentSearcherURL, "agentsearcher_search_depth": cfg.AgentSearcherDepth,
 					"tavily_configured":      cfg.TavilyAPIKey != "",
 					"search_enable_ddg":      cfg.SearchEnableDDG,
 					"search_provider_policy": cfg.SearchProviderPolicy,
@@ -784,6 +787,9 @@ func serve(parent context.Context) error {
 	external := domain.EffectivePrivacyMode(cfg.ResearchPrivacyMode) == domain.PrivacyExternalSearch
 	apiServer.SetTavilyConfigured(external && cfg.TavilyAPIKey != "")
 	apiServer.SetDDGEnabled(external && cfg.SearchEnableDDG)
+	if external && cfg.AgentSearcherURL != "" {
+		apiServer.SetAgentSearcher(cfg.AgentSearcherURL, cfg.AgentSearcherDepth)
+	}
 	if diagnostic, ok := searchProvider.(interface {
 		HealthSnapshot() []research.ProviderOutcome
 	}); ok {
@@ -903,8 +909,16 @@ func configuredSearchProvider(cfg config.Config) (research.SearchProvider, error
 	default:
 		return nil, errors.New("unknown research privacy mode")
 	}
-	providers := make([]research.SearchProvider, 0, 3)
-	var searxng, tavily, ddg research.SearchProvider
+	providers := make([]research.SearchProvider, 0, 4)
+	var agentSearcher, searxng, tavily, ddg research.SearchProvider
+	if cfg.AgentSearcherURL != "" {
+		provider, err := newAgentSearcher(cfg)
+		if err != nil {
+			return nil, err
+		}
+		providers = append(providers, provider)
+		agentSearcher = provider
+	}
 	if cfg.SearXNGURL != "" {
 		provider, err := research.NewSearXNG(cfg.SearXNGURL, nil)
 		if err != nil {
@@ -930,12 +944,18 @@ func configuredSearchProvider(cfg config.Config) (research.SearchProvider, error
 	}
 	switch cfg.SearchProviderPolicy {
 	case "", "local_primary":
-		return research.NewLocalPrimarySearch(searxng, tavily, ddg), nil
+		// agentSearcher returns ranked passages from fetched pages, so it is
+		// the primary provider when configured; snippet providers are fallbacks.
+		return research.NewOrderedPrimarySearch(agentSearcher, searxng, tavily, ddg), nil
 	case "parallel":
 		return research.NewCompositeSearch(providers...), nil
 	default:
 		return nil, errors.New("SEARCH_PROVIDER_POLICY must be local_primary or parallel")
 	}
+}
+
+func newAgentSearcher(cfg config.Config) (*research.AgentSearcher, error) {
+	return research.NewAgentSearcher(cfg.AgentSearcherURL, cfg.AgentSearcherDepth, time.Duration(cfg.AgentSearcherTimeoutSeconds)*time.Second, nil)
 }
 
 func maxInputBytes(cfg config.Config) int {
@@ -1101,8 +1121,10 @@ func doctor(ctx context.Context, cfg config.Config) doctorReport {
 		if err != nil {
 			checks["search"] = doctorCheck{Status: "error", Message: "Offline corpus is unavailable or changed"}
 		}
-	} else if cfg.SearXNGURL == "" && cfg.TavilyAPIKey == "" && !cfg.SearchEnableDDG {
-		checks["search"] = doctorCheck{Status: "warning", Message: "Web search is disabled; configure SearXNG/Tavily or explicitly enable SEARCH_ENABLE_DDG"}
+	} else if cfg.SearXNGURL == "" && cfg.TavilyAPIKey == "" && cfg.AgentSearcherURL == "" && !cfg.SearchEnableDDG {
+		checks["search"] = doctorCheck{Status: "warning", Message: "Web search is disabled; configure agentSearcher/SearXNG/Tavily or explicitly enable SEARCH_ENABLE_DDG"}
+	} else if cfg.AgentSearcherURL != "" && cfg.ResearchPrivacyMode != domain.PrivacyLocalSearXNG {
+		checks["search"] = doctorAgentSearcher(ctx, cfg)
 	} else if cfg.SearXNGURL != "" {
 		provider, providerErr := research.NewSearXNG(cfg.SearXNGURL, nil)
 		if providerErr != nil {
@@ -1155,4 +1177,32 @@ func Execute(ctx context.Context, args []string) error {
 	root := NewRoot()
 	root.SetArgs(args)
 	return root.ExecuteContext(ctx)
+}
+
+// doctorAgentSearcher checks the local agentSearcher service's /health
+// endpoint only; it does not run a search, so doctor never sends a query to
+// the engines agentSearcher forwards to.
+func doctorAgentSearcher(ctx context.Context, cfg config.Config) doctorCheck {
+	if _, err := newAgentSearcher(cfg); err != nil {
+		return doctorCheck{Status: "warning", Message: "agentSearcher configuration is invalid"}
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(probeCtx, http.MethodGet, cfg.AgentSearcherURL+"/health", nil)
+	if err != nil {
+		return doctorCheck{Status: "warning", Message: "agentSearcher configuration is invalid"}
+	}
+	client := &http.Client{Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	response, err := client.Do(request)
+	if err != nil {
+		return doctorCheck{Status: "warning", Message: "agentSearcher is not running; search falls back to other configured providers (start it with: qwenchik start)"}
+	}
+	defer response.Body.Close()
+	var health struct {
+		Status string `json:"status"`
+	}
+	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 4096)).Decode(&health) != nil || health.Status != "ok" {
+		return doctorCheck{Status: "warning", Message: "agentSearcher health endpoint returned an unexpected response"}
+	}
+	return doctorCheck{Status: "ok", Message: "agentSearcher is running (primary search provider; search_depth " + cfg.AgentSearcherDepth + ")"}
 }

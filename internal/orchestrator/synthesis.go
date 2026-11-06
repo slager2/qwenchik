@@ -404,7 +404,13 @@ func compactToolResult(value any) any {
 				case "excerpt":
 					item = truncateRunes(text, 4000)
 				case "snippet":
-					item = truncateRunes(text, 600)
+					// agentSearcher hits carry ranked page passages; keep
+					// them usable while bounding model input.
+					limit := 600
+					if provider, _ := result["provider"].(string); provider == "agentsearcher" {
+						limit = 1500
+					}
+					item = truncateRunes(text, limit)
 				case "title":
 					item = truncateRunes(text, 120)
 				}

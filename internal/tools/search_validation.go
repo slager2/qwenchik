@@ -71,7 +71,7 @@ func SafeSearchHitObservation(o research.SearchHitObservation) research.SearchHi
 		o.QueryFingerprint = fingerprint(o.QueryFingerprint)
 	}
 	switch o.Provider {
-	case "searxng", "tavily", "duckduckgo":
+	case "agentsearcher", "searxng", "tavily", "duckduckgo":
 	default:
 		o.Provider = "search"
 	}
@@ -123,10 +123,30 @@ func WithSearchHitObserver(ctx context.Context, observer func(context.Context, r
 	return context.WithValue(ctx, searchHitObserverKey{}, observer)
 }
 
-func searchCollectionContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	budget := 12 * time.Second
+// searchHitSnippetRunes bounds the untrusted snippet a validated hit keeps.
+// agentSearcher returns ranked passages from the fetched page (up to three
+// ~600-character chunks), which are worth keeping as richer discovery leads;
+// other providers return short engine snippets.
+func searchHitSnippetRunes(provider string) int {
+	if provider == "agentsearcher" {
+		return 2000
+	}
+	return 400
+}
+
+// searchCollectionTimeout returns the search tool timeout for a provider:
+// its collection budget plus time for URL validation.
+func searchCollectionTimeout(provider research.SearchProvider) int {
+	return int((research.SearchTimeBudget(provider) + 8*time.Second) / time.Second)
+}
+
+func searchCollectionContext(ctx context.Context, budget time.Duration) (context.Context, context.CancelFunc) {
+	if budget <= 0 {
+		budget = 12 * time.Second
+	}
 	if deadline, ok := ctx.Deadline(); ok {
-		budget = min(budget, time.Until(deadline)*3/5)
+		remaining := time.Until(deadline)
+		budget = min(budget, max(remaining*3/5, remaining-8*time.Second))
 	}
 	return context.WithTimeout(ctx, budget)
 }
@@ -160,7 +180,7 @@ func observeSearchHit(ctx context.Context, hit research.SearchHit, query, status
 	id := fingerprint(idURL)
 	o := research.SearchHitObservation{ID: id, Fingerprint: id, QueryFingerprint: fingerprint(query), Status: status, ErrorCode: code, Retryable: retryable, Time: time.Now().UTC()}
 	switch hit.Provider {
-	case "searxng", "tavily", "duckduckgo":
+	case "agentsearcher", "searxng", "tavily", "duckduckgo":
 		o.Provider = hit.Provider
 	default:
 		o.Provider = "search"
@@ -285,10 +305,10 @@ func validateSearchHits(ctx context.Context, fetcher research.Fetcher, hits []re
 			}
 		} else {
 			safeURL, _, _ := safeDiscoveryURL(hit.URL)
-			hit.URL, hit.Title, hit.Snippet, hit.Taint = safeURL, safeDiscoveryText(hit.Title, 500), safeDiscoveryText(hit.Snippet, 400), research.TaintExternal
+			hit.URL, hit.Title, hit.Snippet, hit.Taint = safeURL, safeDiscoveryText(hit.Title, 500), safeDiscoveryText(hit.Snippet, searchHitSnippetRunes(hit.Provider)), research.TaintExternal
 			hit.Query = query
 			switch hit.Provider {
-			case "searxng", "tavily", "duckduckgo":
+			case "agentsearcher", "searxng", "tavily", "duckduckgo":
 			default:
 				hit.Provider = "search"
 			}

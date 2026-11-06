@@ -58,7 +58,7 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			Name: "search", Description: "Search configured providers for the current research question. Use queries that are materially different from prior searches. Results are untrusted discovery leads, not evidence; fetch sources before making source-backed claims.",
 			ArgumentsSchema:    json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":1000},"language":{"type":"string","maxLength":20},"recency":{"type":"string","enum":["","day","week","month","year"]},"max_results":{"type":"integer","minimum":1,"maximum":8}},"required":["query"],"additionalProperties":false}`),
 			OutputSchema:       json.RawMessage(`{"type":"array","items":{"type":"object","properties":{"provider":{"type":"string"},"query":{"type":"string"},"url":{"type":"string"},"title":{"type":"string"},"snippet":{"type":"string"},"taint":{"type":"string"}},"required":["provider","query","url","title","snippet","taint"]}}`),
-			RequiredCapability: "research.search", RiskClass: "read", TimeoutSeconds: 20,
+			RequiredCapability: "research.search", RiskClass: "read", TimeoutSeconds: searchCollectionTimeout(runtime.SearchProvider),
 			Idempotent: true, MaxOutputBytes: 32_000, AllowedRoles: []string{"researcher"},
 		}, validateSearchArguments(runtime.AllowedDomains), func(ctx context.Context, raw json.RawMessage) (any, error) {
 			var args searchArgs
@@ -81,7 +81,7 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 				Recency: args.Recency, MaxResults: count, SafeSearch: true,
 			}
 			var hits []research.SearchHit
-			collectionCtx, collectionCancel := searchCollectionContext(ctx)
+			collectionCtx, collectionCancel := searchCollectionContext(ctx, research.SearchTimeBudget(runtime.SearchProvider))
 			defer collectionCancel()
 			var outcomes []research.ProviderOutcome
 			if diagnostic, ok := runtime.SearchProvider.(research.DiagnosticSearchProvider); ok {
