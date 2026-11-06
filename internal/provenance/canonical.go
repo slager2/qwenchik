@@ -24,6 +24,15 @@ func CanonicalURL(raw string) (string, error) {
 }
 
 func BuildEvidence(taskID, query string, fetched research.FetchedDocument, extracted research.ExtractedDocument, rawArtifactID, textArtifactID string) (domain.Evidence, error) {
+	return BuildEvidenceWithPassages(taskID, query, fetched, extracted, rawArtifactID, textArtifactID, nil)
+}
+
+// BuildEvidenceWithPassages builds evidence like BuildEvidence, but first uses
+// search-provider passages of the same page (agentSearcher's reranked chunks)
+// to locate the excerpt inside the fetched extracted text. The excerpt stays
+// a verbatim span of extracted.Text; without a passage match the lexical
+// query selector is used.
+func BuildEvidenceWithPassages(taskID, query string, fetched research.FetchedDocument, extracted research.ExtractedDocument, rawArtifactID, textArtifactID string, passages []string) (domain.Evidence, error) {
 	canonical, err := CanonicalURL(fetched.FinalURL)
 	if err != nil {
 		return domain.Evidence{}, err
@@ -35,7 +44,10 @@ func BuildEvidence(taskID, query string, fetched research.FetchedDocument, extra
 	if retrievedAt.IsZero() {
 		retrievedAt = time.Now().UTC()
 	}
-	excerpt, start, end := SelectExcerptWithSpan(extracted.Text, query, 4000)
+	excerpt, start, end, matched := SelectPassageExcerptWithSpan(extracted.Text, passages, 4000)
+	if !matched {
+		excerpt, start, end = SelectExcerptWithSpan(extracted.Text, query, 4000)
+	}
 	quotes := []domain.QuoteSpan{}
 	if excerpt != "" {
 		quotes = append(quotes, domain.QuoteSpan{Start: start, End: end, Text: excerpt, CoordinateSpace: "extracted_text_runes"})

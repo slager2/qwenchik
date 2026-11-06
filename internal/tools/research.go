@@ -299,7 +299,7 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 				return nil, err
 			}
 			fetched.ContentSHA256 = rawArtifact.SHA256
-			evidence, err := provenance.BuildEvidence(taskID, args.OriginalQuery, fetched, extracted, rawArtifact.ID, textArtifact.ID)
+			evidence, err := provenance.BuildEvidenceWithPassages(taskID, args.OriginalQuery, fetched, extracted, rawArtifact.ID, textArtifact.ID, registry.urlLedger.Passages(taskID, args.URL))
 			if err != nil {
 				return nil, err
 			}

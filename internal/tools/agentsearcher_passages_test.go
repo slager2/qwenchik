@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/providers/research"
+	"github.com/slager2/qwenchik/internal/storage/artifacts"
+	"github.com/slager2/qwenchik/internal/storage/sqlite"
 )
 
 type wideSearchStub struct {
@@ -24,6 +28,73 @@ func (s wideSearchStub) Search(_ context.Context, options research.SearchOptions
 		hits = append(hits, research.SearchHit{Provider: "agentsearcher", Query: options.Query, URL: fmt.Sprintf("https://site%d.example.org/page", i), Title: "Page", Snippet: s.snippet, Taint: research.TaintExternal})
 	}
 	return hits, nil
+}
+
+const passagePageArticle = "A practical bioinformatics roadmap starts with Python and R, then moves to sequence alignment with BLAST. Next, learners study genome assembly, variant calling and RNA-seq differential expression."
+
+func passagePageText() string {
+	boilerplate := strings.Repeat("Email Bluesky Facebook LinkedIn Reddit Share\nFact-checked by Editorial Team about bioinformatics roadmap\n", 40)
+	return boilerplate + passagePageArticle + "\n" + boilerplate
+}
+
+type passagePageExtractor struct{}
+
+func (passagePageExtractor) Extract(context.Context, research.FetchedDocument) (research.ExtractedDocument, error) {
+	return research.ExtractedDocument{Title: "Roadmap", Text: passagePageText(), Method: "test_html", Taint: research.TaintExternal}, nil
+}
+
+func newPassageTestRegistry(t *testing.T, fetcher research.Fetcher, hits validationSearchHits) (*Registry, *sqlite.Store, context.Context) {
+	t.Helper()
+	ctx := context.Background()
+	store, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "passages.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	if _, err := store.CreateTask(ctx, domain.Task{ID: "passage-task", Title: "Research"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	artifactStore, err := artifacts.New(filepath.Join(t.TempDir(), "artifacts"), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := NewRegistry()
+	if err := RegisterResearchTools(registry, ResearchTools{
+		SearchProvider: hits, Fetcher: fetcher, Extractor: passagePageExtractor{}, Artifacts: artifactStore,
+		Repository: store, MaxFetchBytes: 1 << 20,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	toolCtx := WithTaskID(ctx, "passage-task")
+	if _, err := registry.Execute(toolCtx, "researcher", "search", json.RawMessage(`{"query":"bioinformatics roadmap"}`)); err != nil {
+		t.Fatal(err)
+	}
+	return registry, store, toolCtx
+}
+
+func TestFetchLocatesExcerptWithAgentSearcherPassages(t *testing.T) {
+	passage := "a practical bioinformatics roadmap starts with Python and R, then moves to sequence alignment with BLAST … learners study genome assembly, variant calling and RNA-seq differential expression"
+	hits := validationSearchHits{{Provider: "agentsearcher", URL: "https://docs.example.org/roadmap", Title: "Roadmap", Snippet: passage}}
+	registry, store, ctx := newPassageTestRegistry(t, &fetchStub{}, hits)
+	if got := registry.urlLedger.Passages("passage-task", "https://docs.example.org/roadmap"); len(got) != 1 || got[0] != passage {
+		t.Fatalf("ledger passages = %#v", got)
+	}
+	result, err := registry.Execute(ctx, "researcher", "fetch_url", json.RawMessage(`{"url":"https://docs.example.org/roadmap","original_query":"bioinformatics roadmap"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	excerpt, _ := result.(map[string]any)["excerpt"].(string)
+	if excerpt != passagePageArticle {
+		t.Fatalf("excerpt = %q", excerpt)
+	}
+	evidence, err := store.Evidence(context.Background(), "passage-task")
+	if err != nil || len(evidence) != 1 {
+		t.Fatalf("evidence=%#v err=%v", evidence, err)
+	}
+	span := evidence[0].QuoteSpans[0]
+	if string([]rune(passagePageText())[span.Start:span.End]) != evidence[0].Excerpt || evidence[0].Provider != "direct_http" {
+		t.Fatalf("span %#v does not slice the stored text", span)
+	}
 }
 
 func TestSearchAllowsWideAgentSearcherResultSetsWithinOutputLimit(t *testing.T) {

@@ -8,6 +8,12 @@ the quote text exactly. Entity decoding and whitespace normalization belong to
 extraction; the provenance selector does not normalize the stored text again.
 `SelectExcerpt` remains the string-only wrapper around `SelectExcerptWithSpan`.
 An unmatched query falls back to the actual bounded document prefix.
+When the search provider (agentSearcher) already returned reranked passages for
+the page, `BuildEvidenceWithPassages` first locates the densest region of the
+extracted text that shares word 4-grams with those passages and returns that
+region (plus a little sentence context) as the span; the excerpt is still an
+exact slice of the extracted text. Without a passage match the lexical query
+selector is used.
 
 Legacy quote spans without `coordinate_space` retain their original coordinates.
 They are not backfilled or relabeled as full-text positions. Citation validation
