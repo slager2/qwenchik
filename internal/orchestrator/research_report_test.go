@@ -317,6 +317,11 @@ func TestReportContentBreakerTripsOnlyAcrossDifferentSections(t *testing.T) {
 		t.Fatalf("same failure in two sections did not trip: %+v", breaker)
 	}
 	breaker.success()
+	for _, section := range []string{"section_4", "section_5", "section_6"} {
+		if breaker.observe(section, errUnsupportedCitationClaim) {
+			t.Fatal("unsupported claims in several sections tripped the breaker")
+		}
+	}
 	if breaker.tripped || len(breaker.failed) != 0 {
 		t.Fatalf("successful section did not reset breaker: %+v", breaker)
 	}

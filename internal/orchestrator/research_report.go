@@ -235,8 +235,12 @@ func (b *reportContentBreaker) success() {
 	b.failed, b.tripped = nil, false
 }
 
+// reportCircuitFailure reports systemic model failures (broken format or
+// mapping) that would likely repeat in every section. An unsupported claim is
+// not one: it depends on the section's own sources, so it must not deny the
+// remaining sections their draft and correction.
 func reportCircuitFailure(err error) bool {
-	return errors.Is(err, errInvalidModelOutput) || errors.Is(err, llm.ErrInvalidModelOutput) || errors.Is(err, llm.ErrOutputTruncated) || errors.Is(err, errCitationMapping) || errors.Is(err, errUnsupportedCitationClaim)
+	return errors.Is(err, errInvalidModelOutput) || errors.Is(err, llm.ErrInvalidModelOutput) || errors.Is(err, llm.ErrOutputTruncated) || errors.Is(err, errCitationMapping)
 }
 
 func validateReportBody(body string) error {
