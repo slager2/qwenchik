@@ -12,3 +12,4 @@
 .hallmark/
 repomix-*.xml
 internal/**/data/
+.env.bak*
