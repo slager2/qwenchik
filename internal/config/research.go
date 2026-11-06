@@ -174,6 +174,7 @@ func (c Config) ResearchProfile(name string) (domain.ResearchPolicy, error) {
 	budget.MaxReportParagraphs = min(budget.MaxReportParagraphs, caps.MaxReportParagraphs)
 	budget.MaxReportBytes = min(budget.MaxReportBytes, caps.MaxReportBytes)
 	budget.MaxStagnantRounds = min(budget.MaxStagnantRounds, budget.MaxRounds)
+	budget.MinRounds = min(budget.MinRounds, budget.MaxRounds)
 
 	policy := domain.ResearchPolicy{
 		PrivacyMode: domain.EffectivePrivacyMode(c.ResearchPrivacyMode), OfflineCorpusSHA256: c.OfflineCorpusSHA256,
@@ -256,7 +257,7 @@ func ValidateResearchPolicy(policy domain.ResearchPolicy) error {
 	if policy.SearchTarget < 0 || policy.SearchTarget > min(domain.MaxResearchSearchTarget, b.MaxSearchQueries) {
 		return errors.New("research search target exceeds the search query or plan capacity")
 	}
-	if b.WallTimeSeconds < 60 || b.WallTimeSeconds > 21600 || b.MaxRounds < 1 || b.MaxSteps < 1 || b.MaxSteps > 12 || b.MaxSearchQueries < 1 || b.MaxFetches < 1 || b.MaxLLMCalls < 1 || b.MaxEvidence < 1 || b.MaxQuestionsCreated < 1 || b.MaxQuestionsAccepted < 1 || b.MaxStagnantRounds < 1 || b.MaxCitationSources < 1 || b.MaxCitationClaims < 1 {
+	if b.WallTimeSeconds < 60 || b.WallTimeSeconds > 21600 || b.MaxRounds < 1 || b.MaxSteps < 1 || b.MaxSteps > 12 || b.MaxSearchQueries < 1 || b.MaxFetches < 1 || b.MaxLLMCalls < 1 || b.MaxEvidence < 1 || b.MaxQuestionsCreated < 1 || b.MaxQuestionsAccepted < 1 || b.MaxStagnantRounds < 1 || b.MaxCitationSources < 1 || b.MaxCitationClaims < 1 || b.MinRounds < 0 || b.MinRounds > 10 {
 		return errors.New("research budget limits are invalid")
 	}
 	claimLimit, sourceLimit := 8, 8

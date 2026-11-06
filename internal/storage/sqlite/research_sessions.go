@@ -275,7 +275,7 @@ func validateResearchSession(session domain.ResearchSession) error {
 		return invalid("wall time or HTTP attempt budget")
 	}
 	for _, value := range []int{budget.MaxRounds, budget.MaxSteps, budget.MaxSearchQueries, budget.MaxFetches, budget.MaxLLMCalls, budget.MaxEvidence,
-		budget.MaxQuestionsCreated, budget.MaxQuestionsAccepted, budget.MaxStagnantRounds, budget.MaxCitationSources, budget.MaxCitationClaims} {
+		budget.MaxQuestionsCreated, budget.MaxQuestionsAccepted, budget.MaxStagnantRounds, budget.MaxCitationSources, budget.MaxCitationClaims, budget.MinRounds} {
 		if value < 0 {
 			return invalid("budget")
 		}

@@ -58,6 +58,7 @@ func RoundResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 		b.MaxReportSections = 8
 		b.MaxReportParagraphs = 24
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 40, 24
+		b.MinRounds = 2
 	case ResearchProfileLongLaptop:
 		b.MaxTotalSteps = 64
 		b.MaxLLMCalls = 96
@@ -66,6 +67,7 @@ func RoundResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 		b.MaxReportSections = 8
 		b.MaxReportParagraphs = 32
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 64, 32
+		b.MinRounds = b.MaxRounds
 	case ResearchProfileOvernight:
 		b.MaxTotalSteps = 96
 		b.MaxLLMCalls = 128
@@ -74,6 +76,7 @@ func RoundResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 		b.MaxReportSections = 8
 		b.MaxReportParagraphs = 32
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 80, 40
+		b.MinRounds = b.MaxRounds
 	}
 	return b, true
 }
