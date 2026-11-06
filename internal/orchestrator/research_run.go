@@ -134,6 +134,11 @@ func (w *Worker) researchExecutor(ctx context.Context, taskID string) (context.C
 		stored.Budget, current.Budget = domain.ResearchBudget{}, domain.ResearchBudget{}
 		stored.KeepAwake, current.KeepAwake = false, false
 		stored.MaxContinuations, current.MaxContinuations = 0, 0
+		// Breadth targets derive from the profile like the budget: a deep or
+		// overnight session must not be rejected for differing from the
+		// server's default (standard) policy.
+		stored.FetchTarget, current.FetchTarget = 0, 0
+		stored.SearchTarget, current.SearchTarget = 0, 0
 		// Opt-in is snapshotted at submission, not hot-swapped on recovery.
 		stored.AdaptiveEnabled, current.AdaptiveEnabled = false, false
 		stored.SectionedReportEnabled, current.SectionedReportEnabled = false, false
