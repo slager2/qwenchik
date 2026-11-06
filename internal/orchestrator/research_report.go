@@ -342,8 +342,12 @@ func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal,
 		input := map[string]any{"research_question": goal, "section_title": section.Title, "evidence_catalogue": reportModelSources(catalogue), "criteria": section.Criteria, "criterion_catalog": reportCriterionCatalog(task, *state, section.Criteria), "correction": attempt > 0, "rejected_draft_untrusted": section.RejectedDraft, "validation_error": ""}
 		if attempt > 0 {
 			input["validation_error"] = reportDraftProblem(section.RejectedDraft, resolve, claimLimit)
-			if section.Limitation == "invalid_model_output" || section.Limitation == "output_truncated" {
-				input["validation_error"] = "the previous output was not complete valid JSON; return a shorter answer"
+			switch {
+			case section.Limitation == "output_truncated":
+				input["validation_error"] = "the previous output was cut off; return a shorter answer"
+			case input["validation_error"] == "":
+				// The draft itself was well formed; its fact check failed.
+				input["validation_error"] = "the previous answer could not be checked; write fewer, simpler claims that each restate one excerpt"
 			}
 		}
 		err := w.reportJSON(ctx, task, goal, "report_writer", identity, reportWriterPrompt(claimLimit, reportLabelsFor(goal)), input, finalizerOutputSchema(), &draft, &reportCall{aliases: aliases})

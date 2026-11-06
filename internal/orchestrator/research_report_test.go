@@ -62,6 +62,7 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 			Criteria   []string            `json:"criteria"`
 			Correction bool                `json:"correction"`
 			Section    string              `json:"section_title"`
+			Problem    string              `json:"validation_error"`
 		}
 		if err := json.Unmarshal([]byte(request.Messages[1].Content), &input); err != nil {
 			return "", err
@@ -106,6 +107,9 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 			}
 			raw, err := json.Marshal(reportCitationReview{Claims: input.Claims, CriteriaCovered: covered})
 			return string(raw), err
+		}
+		if input.Correction && !strings.Contains(input.Problem, "[1]") {
+			t.Fatalf("correction did not explain the format error: %q", input.Problem)
 		}
 		if mode == "infrastructure" {
 			return "", sqlite.ErrCheckpointInvalid
