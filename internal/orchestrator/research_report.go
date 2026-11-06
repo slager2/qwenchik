@@ -507,6 +507,12 @@ func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal,
 	return nil
 }
 
+// reportClaimLimit shares the run's claim and paragraph budget across report
+// sections, at most eight verified claims per section.
+func reportClaimLimit(claimBudget, paragraphBudget, sections int) int {
+	return min(8, min(claimBudget, paragraphBudget)/max(1, sections))
+}
+
 func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal string, state *checkpointState, missing, supplementary []string) (string, error) {
 	current, err := w.repo.GetTask(ctx, task.ID)
 	if err != nil {
@@ -686,7 +692,7 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 		}
 	}
 	covered := map[string]bool{}
-	claimLimit := min(8, min(claimBudget, paragraphBudget)/len(report.Sections))
+	claimLimit := reportClaimLimit(claimBudget, paragraphBudget, len(report.Sections))
 	breaker := &reportContentBreaker{}
 	catalogueIDs := make([]string, 0, len(catalogue))
 	for _, item := range catalogue {

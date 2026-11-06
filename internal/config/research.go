@@ -262,7 +262,7 @@ func ValidateResearchPolicy(policy domain.ResearchPolicy) error {
 	}
 	claimLimit, sourceLimit := 8, 8
 	if policy.Version == 2 {
-		claimLimit, sourceLimit = 32, 16
+		claimLimit, sourceLimit = domain.MaxRoundCitationClaims, 16
 		if err := validateResearchCaps(b); err != nil {
 			return err
 		}

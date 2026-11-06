@@ -13,16 +13,16 @@ func TestRoundProfilesHaveReachableFiniteBudgets(t *testing.T) {
 	}
 	for _, want := range []struct {
 		name                                                   string
-		rounds, steps, queries, fetches, llm, sections, claims int
+		rounds, steps, queries, fetches, llm, sections, claims, minRounds int
 	}{
-		{"quick", 1, 12, 4, 6, 24, 4, 8}, {"standard", 3, 20, 8, 16, 48, 6, 24}, {"deep_laptop", 5, 32, 16, 24, 64, 8, 24}, {"long_laptop", 8, 64, 32, 48, 96, 8, 32}, {"overnight_laptop", 10, 96, 48, 64, 128, 8, 32},
+		{"quick", 1, 12, 4, 6, 24, 4, 8, 0}, {"standard", 3, 20, 8, 16, 48, 6, 24, 0}, {"deep_laptop", 5, 32, 16, 24, 64, 8, 32, 2}, {"long_laptop", 8, 64, 32, 48, 96, 8, 64, 8}, {"overnight_laptop", 10, 96, 48, 64, 128, 8, 64, 10},
 	} {
 		p, err := cfg.ResearchProfile(want.name)
 		if err != nil {
 			t.Fatal(err)
 		}
 		b := p.Budget
-		if p.Version != 2 || b.MaxRounds != want.rounds || b.MaxTotalSteps != want.steps || b.MaxSearchQueries != want.queries || b.MaxFetches != want.fetches || b.MaxLLMCalls != want.llm || b.MaxReportSections != want.sections || b.MaxCitationClaims != want.claims {
+		if p.Version != 2 || b.MaxRounds != want.rounds || b.MaxTotalSteps != want.steps || b.MaxSearchQueries != want.queries || b.MaxFetches != want.fetches || b.MaxLLMCalls != want.llm || b.MaxReportSections != want.sections || b.MaxCitationClaims != want.claims || b.MinRounds != want.minRounds {
 			t.Fatalf("profile %s=%+v", want.name, b)
 		}
 		// A normal initial 2-search/2-fetch plan can actually reach every nominal round.

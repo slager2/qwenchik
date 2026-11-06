@@ -27,6 +27,10 @@ func (p ResearchPlans) Current() (Plan, error) {
 	return p.Rounds[len(p.Rounds)-1].Plan, nil
 }
 
+// MaxRoundCitationClaims is the v2 ceiling for verified report claims and
+// paragraphs: eight report sections with up to eight claims each.
+const MaxRoundCitationClaims = 64
+
 // Version-one defaults stay unchanged for already persisted sessions and callers.
 // New submissions use version-two budgets with an explicit total-step allowance.
 func RoundResearchBudgetForProfile(name string) (ResearchBudget, bool) {
@@ -53,28 +57,30 @@ func RoundResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 	case ResearchProfileDeepLaptop:
 		b.MaxTotalSteps = 32
 		b.MaxLLMCalls = 64
-		b.MaxCitationClaims = 24
+		b.MaxCitationClaims = 32
 		b.MaxCitationSources = 12
 		b.MaxReportSections = 8
-		b.MaxReportParagraphs = 24
+		b.MaxReportParagraphs = 32
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 40, 24
 		b.MinRounds = 2
 	case ResearchProfileLongLaptop:
 		b.MaxTotalSteps = 64
 		b.MaxLLMCalls = 96
-		b.MaxCitationClaims = 32
+		// Eight sections x eight verified claims: the long reports cover
+		// many entities, and claims stay checked against cited excerpts.
+		b.MaxCitationClaims = MaxRoundCitationClaims
 		b.MaxCitationSources = 16
 		b.MaxReportSections = 8
-		b.MaxReportParagraphs = 32
+		b.MaxReportParagraphs = MaxRoundCitationClaims
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 64, 32
 		b.MinRounds = b.MaxRounds
 	case ResearchProfileOvernight:
 		b.MaxTotalSteps = 96
 		b.MaxLLMCalls = 128
-		b.MaxCitationClaims = 32
+		b.MaxCitationClaims = MaxRoundCitationClaims
 		b.MaxCitationSources = 16
 		b.MaxReportSections = 8
-		b.MaxReportParagraphs = 32
+		b.MaxReportParagraphs = MaxRoundCitationClaims
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 80, 40
 		b.MinRounds = b.MaxRounds
 	}
