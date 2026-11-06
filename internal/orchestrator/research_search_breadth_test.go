@@ -121,3 +121,49 @@ func TestGoalKeywordQueryDropsRequestPhrasing(t *testing.T) {
 		}
 	}
 }
+
+func TestEnsureUserLanguageSearchAddsRussianQueryForEnglishOnlyPlan(t *testing.T) {
+	goal := "Составь роадмап по биоинформатике для новичка: какие навыки и курсы нужны"
+	plan := normalizeResearchPlan(domain.Plan{SchemaVersion: 1, Goal: goal, FinalDeliverable: "d", Subtasks: []domain.PlanStep{
+		{ID: "s1", Kind: "search", Description: "Bioinformatics learning roadmap", Query: "bioinformatics roadmap beginners", SuccessCriteria: []string{"x"}},
+		{ID: "s2", Kind: "search", Description: "Bioinformatics courses", Query: "bioinformatics online courses", SuccessCriteria: []string{"x"}},
+		{ID: "f1", Kind: "fetch", Description: "f", Dependencies: []string{"s1", "s2"}, SuccessCriteria: []string{"x"}},
+		{ID: "f2", Kind: "fetch", Description: "f", Dependencies: []string{"s1", "s2"}, SuccessCriteria: []string{"x"}},
+	}}, "Research", goal)
+	localized := ensureUserLanguageSearch(plan, goal, 12)
+	if countPlanKind(localized, "search") != 3 || localized.MaxSteps != 5 {
+		t.Fatalf("localized plan = %#v", localized)
+	}
+	first := localized.Subtasks[0]
+	if first.Kind != "search" || !nonLatinQuery(first.Query) || len(strings.Fields(first.Query)) > maxSearchQueryWords || !strings.Contains(first.Query, "биоинформатике") {
+		t.Fatalf("user-language facet = %#v", first)
+	}
+	for _, step := range localized.Subtasks {
+		if step.Kind == "fetch" && !contains(step.Dependencies, first.ID) {
+			t.Fatalf("fetch %s does not depend on the user-language search", step.ID)
+		}
+	}
+	w := New(nil, &scriptedLLM{}, registerPlanValidationResearchTools(t), Options{MaxSteps: 12})
+	if err := w.validateTaskPlanWithFetchLimit(localized, "Research", goal, maxResearchFetches); err != nil {
+		t.Fatalf("localized plan rejected: %v", err)
+	}
+	decision, ok, err := deterministicResearchAction(first, goal, "search", checkpointState{}, nil)
+	if err != nil || !ok || !strings.Contains(string(decision.ToolCall.Arguments), "биоинформатике") {
+		t.Fatalf("user-language facet is not searched deterministically: %s ok=%v err=%v", decision.ToolCall.Arguments, ok, err)
+	}
+	if again := ensureUserLanguageSearch(localized, goal, 12); len(again.Subtasks) != len(localized.Subtasks) {
+		t.Fatal("a plan with a user-language query must not change")
+	}
+	english := "Research protocol architecture and deployment limitations"
+	if same := ensureUserLanguageSearch(plan, english, 12); len(same.Subtasks) != len(plan.Subtasks) {
+		t.Fatal("an English request must not get an extra search")
+	}
+	if capped := ensureUserLanguageSearch(plan, goal, len(plan.Subtasks)); len(capped.Subtasks) != len(plan.Subtasks) {
+		t.Fatal("capacity ignored")
+	}
+	// Facets the backend widens for a Russian request use Russian keywords.
+	widened := widenResearchSearchFacets(plan, goal, 3, 12)
+	if added := widened.Subtasks[2]; added.Kind != "search" || !nonLatinQuery(added.Query) {
+		t.Fatalf("widened facet = %#v", added)
+	}
+}

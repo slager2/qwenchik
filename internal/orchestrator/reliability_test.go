@@ -156,8 +156,12 @@ func TestOrdinaryPlannerSchemaAndMalformedRealFormatRepair(t *testing.T) {
 		if err != nil || model.requests != 2 {
 			t.Fatalf("malformed plan repair: requests=%d err=%v", model.requests, err)
 		}
-		for _, step := range plan.Subtasks[2:] {
-			if !contains(step.Dependencies, "search_1") || !contains(step.Dependencies, "search_2") {
+		// The Russian request also gets a user-language search facet.
+		for _, step := range plan.Subtasks {
+			if step.Kind != "fetch" {
+				continue
+			}
+			if !contains(step.Dependencies, "search_1") || !contains(step.Dependencies, "search_2") || !contains(step.Dependencies, "search_3") {
 				t.Errorf("fetch dependencies not normalized: %#v", step)
 			}
 		}

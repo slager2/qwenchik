@@ -3,6 +3,8 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/slager2/qwenchik/internal/domain"
@@ -175,6 +177,95 @@ func widenResearchSearchFacets(plan domain.Plan, goal string, target, capacity i
 		step.Dependencies = append([]string{}, step.Dependencies...)
 		for _, search := range added {
 			step.Dependencies = append(step.Dependencies, search.ID)
+		}
+	}
+	plan.Subtasks = subtasks
+	plan.MaxSteps = len(subtasks)
+	return plan
+}
+
+// nonLatinScriptGoal reports whether the user's request is written mostly in
+// a non-Latin script (for example Russian), so English-only queries would
+// miss sources in the user's language.
+func nonLatinScriptGoal(goal string) bool {
+	goal = userURLPattern.ReplaceAllString(goal, " ")
+	latin, other := 0, 0
+	for _, r := range goal {
+		switch {
+		case unicode.Is(unicode.Latin, r):
+			latin++
+		case unicode.IsLetter(r):
+			other++
+		}
+	}
+	return other >= 3 && other*2 >= latin
+}
+
+func nonLatinQuery(query string) bool {
+	return strings.ContainsFunc(query, func(r rune) bool { return unicode.IsLetter(r) && !unicode.Is(unicode.Latin, r) })
+}
+
+// ensureUserLanguageSearch adds one search facet with concise keywords of
+// the user's own request when the request is in a non-Latin script and every
+// planned query is in another script (typically English). The facet runs
+// first, so the early search skip never drops it; every discovered-source
+// fetch depends on it. The plan is unchanged when a query already uses the
+// user's script, the step capacity or facet bound is reached, or the
+// request has no usable keywords.
+func ensureUserLanguageSearch(plan domain.Plan, goal string, capacity int) domain.Plan {
+	if !nonLatinScriptGoal(goal) || len(plan.Subtasks) >= capacity {
+		return plan
+	}
+	firstSearch, searches := -1, 0
+	used := map[string]bool{}
+	queries := []string{}
+	for index, step := range plan.Subtasks {
+		used[step.ID] = true
+		if step.Kind != "search" {
+			continue
+		}
+		if firstSearch < 0 {
+			firstSearch = index
+		}
+		searches++
+		query := step.Query
+		if query == "" {
+			query = canonicalStepSearchQuery(step)
+		}
+		if nonLatinQuery(query) {
+			return plan
+		}
+		queries = append(queries, query)
+	}
+	query := goalKeywordQuery(goal, 8)
+	if firstSearch < 0 || searches >= maxBackendSearchFacets || !nonLatinQuery(query) || duplicateResearchQuery(query, queries) {
+		return plan
+	}
+	id := ""
+	for n := 1; id == ""; n++ {
+		if candidate := fmt.Sprintf("search_%d", n); !used[candidate] {
+			id = candidate
+		}
+	}
+	facet := "Sources in the language of the user request: " + query
+	description := deterministicSearchFacetPrefix + facet + ". User request: " + goal
+	if utf8.RuneCountInString(description) > 1000 {
+		description = facet
+	}
+	added := domain.PlanStep{
+		ID: id, Kind: "search", Description: description, Query: query,
+		Dependencies: []string{}, ExpectedOutput: "Discovery leads in the user's language",
+		SuccessCriteria: []string{"The discovery query was executed and its results were recorded; search snippets are leads, not verified facts."},
+	}
+	subtasks := make([]domain.PlanStep, 0, len(plan.Subtasks)+1)
+	subtasks = append(subtasks, plan.Subtasks[:firstSearch]...)
+	subtasks = append(subtasks, added)
+	subtasks = append(subtasks, plan.Subtasks[firstSearch:]...)
+	userURLFetch := hasUserURL(goal)
+	for index := range subtasks {
+		step := &subtasks[index]
+		if step.Kind == "fetch" && !(index == 0 && userURLFetch) {
+			step.Dependencies = append(append([]string{}, step.Dependencies...), id)
 		}
 	}
 	plan.Subtasks = subtasks

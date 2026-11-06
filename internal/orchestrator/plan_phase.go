@@ -546,6 +546,10 @@ func (w *Worker) createPlan(ctx context.Context, task domain.Task, goal, memoryC
 		if widened := widenResearchSearchFacets(plan, goal, target, researchPlanCapacity(ctx, w.options.MaxSteps)); w.validateTaskPlanWithFetchLimit(widened, task.Title, goal, maxResearchFetches) == nil {
 			plan = widened
 		}
+		// A non-English request also searches in the user's language.
+		if localized := ensureUserLanguageSearch(plan, goal, researchPlanCapacity(ctx, w.options.MaxSteps)); w.validateTaskPlanWithFetchLimit(localized, task.Title, goal, maxResearchFetches) == nil {
+			plan = localized
+		}
 	}
 	if target := researchFetchTarget(ctx, task.Title+"\n"+goal); target > 0 && requiresWebResearch(task.Title+"\n"+goal) {
 		if expanded := expandResearchFetchBreadth(plan, target, researchPlanCapacity(ctx, w.options.MaxSteps)); w.validateTaskPlanWithFetchLimit(expanded, task.Title, goal, target) == nil {
