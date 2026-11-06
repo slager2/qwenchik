@@ -6,7 +6,7 @@ import (
 )
 
 func defaultResearchCaps(initial, queries int) domain.ResearchBudget {
-	return domain.ResearchBudget{MaxInitialPlanSteps: initial, MaxRoundSteps: 12, MaxTotalSteps: 96, MaxRounds: 10, MaxSearchQueries: queries, MaxFetches: 36, MaxLLMCalls: 128, MaxEvidence: 32, MaxQuestionsCreated: 80, MaxQuestionsAccepted: 40, MaxCitationSources: 8, MaxCitationClaims: 32, MaxReportSections: 8, MaxReportParagraphs: 32, MaxReportBytes: 512 << 10}
+	return domain.ResearchBudget{MaxInitialPlanSteps: initial, MaxRoundSteps: 12, MaxTotalSteps: 96, MaxRounds: 10, MaxSearchQueries: queries, MaxFetches: 64, MaxLLMCalls: 128, MaxEvidence: 32, MaxQuestionsCreated: 80, MaxQuestionsAccepted: 40, MaxCitationSources: 8, MaxCitationClaims: 32, MaxReportSections: 8, MaxReportParagraphs: 32, MaxReportBytes: 512 << 10}
 }
 func validateResearchCaps(b domain.ResearchBudget) error {
 	for _, v := range []struct {

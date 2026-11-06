@@ -220,27 +220,27 @@ func TestResearchProfileBudgetsMatchCanonicalAndExactBrief(t *testing.T) {
 		budget  domain.ResearchBudget
 	}{
 		{"quick", domain.ResearchBudget{
-			WallTimeSeconds: 300, MaxRounds: 1, MaxSteps: 12, MaxSearchQueries: 4, MaxFetches: 4,
+			WallTimeSeconds: 300, MaxRounds: 1, MaxSteps: 12, MaxSearchQueries: 4, MaxFetches: 6,
 			MaxLLMCalls: 10, MaxEvidence: 4, MaxQuestionsCreated: 6, MaxQuestionsAccepted: 2,
 			MaxStagnantRounds: 1, MaxCitationSources: 4, MaxCitationClaims: 8,
 		}},
 		{"standard", domain.ResearchBudget{
-			WallTimeSeconds: 1800, MaxRounds: 3, MaxSteps: 12, MaxSearchQueries: 8, MaxFetches: 8,
+			WallTimeSeconds: 1800, MaxRounds: 3, MaxSteps: 12, MaxSearchQueries: 8, MaxFetches: 16,
 			MaxLLMCalls: 24, MaxEvidence: 8, MaxQuestionsCreated: 16, MaxQuestionsAccepted: 6,
 			MaxStagnantRounds: 2, MaxCitationSources: 8, MaxCitationClaims: 8,
 		}},
 		{"deep_laptop", domain.ResearchBudget{
-			WallTimeSeconds: 7200, MaxRounds: 5, MaxSteps: 12, MaxSearchQueries: 16, MaxFetches: 12,
+			WallTimeSeconds: 7200, MaxRounds: 5, MaxSteps: 12, MaxSearchQueries: 16, MaxFetches: 24,
 			MaxLLMCalls: 40, MaxEvidence: 12, MaxQuestionsCreated: 30, MaxQuestionsAccepted: 10,
 			MaxStagnantRounds: 2, MaxCitationSources: 8, MaxCitationClaims: 8,
 		}},
 		{"long_laptop", domain.ResearchBudget{
-			WallTimeSeconds: 14400, MaxRounds: 8, MaxSteps: 12, MaxSearchQueries: 32, MaxFetches: 24,
+			WallTimeSeconds: 14400, MaxRounds: 8, MaxSteps: 12, MaxSearchQueries: 32, MaxFetches: 48,
 			MaxLLMCalls: 72, MaxEvidence: 24, MaxQuestionsCreated: 60, MaxQuestionsAccepted: 20,
 			MaxStagnantRounds: 2, MaxCitationSources: 8, MaxCitationClaims: 8,
 		}},
 		{"overnight_laptop", domain.ResearchBudget{
-			WallTimeSeconds: 21600, MaxRounds: 10, MaxSteps: 12, MaxSearchQueries: 48, MaxFetches: 36,
+			WallTimeSeconds: 21600, MaxRounds: 10, MaxSteps: 12, MaxSearchQueries: 48, MaxFetches: 64,
 			MaxLLMCalls: 96, MaxEvidence: 32, MaxQuestionsCreated: 80, MaxQuestionsAccepted: 24,
 			MaxStagnantRounds: 2, MaxCitationSources: 8, MaxCitationClaims: 8,
 		}},

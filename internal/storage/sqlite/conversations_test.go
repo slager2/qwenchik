@@ -495,7 +495,7 @@ func TestResearchSessionStandardDefaultsAndChatIsolation(t *testing.T) {
 	if session.ID != turn.Run.ID || session.TaskID != turn.Run.ID || session.ConversationID != turn.ConversationID || session.Goal != turn.UserMessage.Content || session.Status != "queued" || session.CurrentPhase != "queued" {
 		t.Fatalf("session identity: %#v", session)
 	}
-	if b.WallTimeSeconds != 1800 || b.MaxRounds != 3 || b.MaxSteps != 12 || b.MaxSearchQueries != 8 || b.MaxFetches != 8 || b.MaxLLMCalls != 24 || b.MaxEvidence != 8 ||
+	if b.WallTimeSeconds != 1800 || b.MaxRounds != 3 || b.MaxSteps != 12 || b.MaxSearchQueries != 8 || b.MaxFetches != 16 || b.MaxLLMCalls != 24 || b.MaxEvidence != 8 ||
 		b.MaxQuestionsCreated != 16 || b.MaxQuestionsAccepted != 6 || b.MaxStagnantRounds != 2 || b.MaxCitationSources != 8 || b.MaxCitationClaims != 8 || session.Profile != "standard" || session.Policy != domain.DefaultResearchPolicy() {
 		t.Fatalf("incorrect standard fallback: %#v", session)
 	}

@@ -192,7 +192,7 @@ func TestResearchFallbackIsDeterministicAndWellFormed(t *testing.T) {
 		if err := config.ValidateResearchPolicy(*turn.ResearchPolicy); err != nil {
 			t.Fatal(err)
 		}
-		if *turn.ResearchPolicy != wantPolicy || *turn.ResearchBudget != wantPolicy.Budget || turn.DeadlineSeconds != 1800 || turn.ResearchBudget.MaxSteps != 12 || turn.ResearchBudget.MaxSearchQueries != 8 || turn.ResearchBudget.MaxFetches != 8 {
+		if *turn.ResearchPolicy != wantPolicy || *turn.ResearchBudget != wantPolicy.Budget || turn.DeadlineSeconds != 1800 || turn.ResearchBudget.MaxSteps != 12 || turn.ResearchBudget.MaxSearchQueries != 8 || turn.ResearchBudget.MaxFetches != 16 {
 			t.Fatalf("fallback policy=%#v budget=%#v deadline=%d; want canonical=%#v", turn.ResearchPolicy, turn.ResearchBudget, turn.DeadlineSeconds, wantPolicy)
 		}
 		if turn.ResearchProfile != "standard" || turn.ModelSnapshot.Model != "local-qwen" || turn.ModelSnapshot.BaseURL != "" || turn.ModelSnapshot.PromptVersion != "local-research-v1" || turn.ModelSnapshot.SchemaVersion != 1 || turn.ModelSnapshot.StopSequences == nil || len(turn.ModelSnapshot.StopSequences) != 0 {

@@ -6,19 +6,19 @@ func ResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 	b := ResearchBudget{MaxSteps: 12, MaxStagnantRounds: 2, MaxCitationSources: 8, MaxCitationClaims: 8}
 	switch name {
 	case ResearchProfileQuick:
-		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 300, 1, 4, 4, 10, 4
+		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 300, 1, 4, 6, 10, 4
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted, b.MaxStagnantRounds, b.MaxCitationSources = 6, 2, 1, 4
 	case ResearchProfileStandard:
-		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 1800, 3, 8, 8, 24, 8
+		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 1800, 3, 8, 16, 24, 8
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 16, 6
 	case ResearchProfileDeepLaptop:
-		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 7200, 5, 16, 12, 40, 12
+		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 7200, 5, 16, 24, 40, 12
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 30, 10
 	case ResearchProfileLongLaptop:
-		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 14400, 8, 32, 24, 72, 24
+		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 14400, 8, 32, 48, 72, 24
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 60, 20
 	case ResearchProfileOvernight:
-		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 21600, 10, 48, 36, 96, 32
+		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 21600, 10, 48, 64, 96, 32
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 80, 24
 	default:
 		return ResearchBudget{}, false
@@ -33,9 +33,11 @@ const MaxResearchFetchTarget = 9
 // ResearchFetchTargetForProfile is how many distinct sources the initial
 // research plan of a profile tries to fetch. Fetch steps are deterministic
 // (no LLM call), so breadth costs wall time, bytes and evidence slots, not
-// LLM calls; each value leaves part of MaxFetches/MaxEvidence for a
-// continuation round (standard 6 of 8, deep 8 of 12, long/overnight 9 of
-// 24/36, capped by the plan capacity).
+// LLM calls; each value leaves part of MaxEvidence for a continuation round
+// (standard 6 of 8, deep 8 of 12, long/overnight 9 of 24/32, capped by the
+// plan capacity). MaxFetches counts attempts, failed ones included, so it is
+// about twice MaxEvidence: bot-blocking sites (403/unavailable) are common
+// and must not exhaust the budget before a second round.
 func ResearchFetchTargetForProfile(name string) int {
 	switch name {
 	case ResearchProfileQuick:
