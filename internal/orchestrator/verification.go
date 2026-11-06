@@ -38,6 +38,9 @@ type verificationResponse struct {
 	Missing        []string                    `json:"missing"`
 	Supplementary  []string                    `json:"supplementary_criteria"`
 	Assessments    map[string]criterionVerdict `json:"criterion_assessments"`
+	// FollowUps are next-round search suggestions of an exploring profile;
+	// they never change readiness.
+	FollowUps []string `json:"follow_up_queries,omitempty"`
 }
 
 func verificationCatalog(plan domain.Plan, state checkpointState) []verificationCriterion {

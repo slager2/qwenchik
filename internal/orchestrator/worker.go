@@ -580,6 +580,9 @@ func (w *Worker) runTask(parent context.Context, task domain.Task) {
 func (w *Worker) execute(ctx context.Context, claimed domain.Task) error {
 	for {
 		err := w.executeAttempt(ctx, claimed)
+		if errors.Is(err, errExplorationContinued) {
+			continue
+		}
 		if session, ok := ctx.Value(researchExecutionKey{}).(domain.ResearchSession); ok && session.Policy.AdaptiveEnabled && err != nil && ctx.Err() == nil {
 			var incomplete verificationIncompleteError
 			if errors.As(err, &incomplete) {
@@ -1153,6 +1156,11 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 	}
 	if verified.Status == verificationOutcomeBlocked || !verified.Complete || len(verified.Missing) != 0 {
 		return verificationIncompleteError{Summary: verified.Summary, Missing: verified.Missing}
+	}
+	if continued, err := w.requestExplorationContinuation(ctx, task.ID); err != nil {
+		return err
+	} else if continued {
+		return errExplorationContinued
 	}
 	if err := w.ensureActive(ctx, task.ID); err != nil {
 		return err
