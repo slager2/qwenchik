@@ -470,6 +470,11 @@ func deterministicResearchAction(step domain.PlanStep, goal, expectedTool string
 	if state.SearchQueryByStep != nil {
 		query = strings.TrimSpace(state.SearchQueryByStep[step.ID])
 	}
+	// A packed step (several facets joined by blank lines) keeps the actor
+	// path so no facet is silently dropped from the query.
+	if query == "" && strings.HasPrefix(strings.TrimSpace(step.Description), deterministicSearchFacetPrefix) && !strings.Contains(step.Description, "\n") {
+		query = conciseSearchQuery(step.Query)
+	}
 	if query == "" {
 		query = deterministicSearchQuery(step.Description, goal)
 	}
@@ -564,11 +569,12 @@ func deterministicSearchQuery(description, goal string) string {
 	if request == "" || strings.TrimSpace(goal) == "" || request != strings.TrimSpace(goal) || facet == "" {
 		return ""
 	}
-	query := strings.Join([]string{request, facet}, " ")
-	if len(query) > 1000 || strings.ContainsAny(query, "\x00\r\n") {
+	// Send the facet as a concise keyword query; the whole user request is a
+	// poor search query (it is long, conversational and often misspelled).
+	if strings.ContainsAny(facet, "\x00\r\n") {
 		return ""
 	}
-	return strings.Join(strings.Fields(query), " ")
+	return conciseSearchQuery(facet)
 }
 
 func (w *Worker) availableFetchURLs(taskID string, results map[string]any, failedURLs, userURLs []string, diverseSites bool) []string {

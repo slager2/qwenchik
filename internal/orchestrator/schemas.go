@@ -26,6 +26,7 @@ func planOutputSchemaWithRequiredKinds(maxSteps int, allowedKinds, _ []string) j
 			"id":               idSchema,
 			"kind":             map[string]any{"type": "string", "enum": allowedKinds},
 			"description":      boundedStringSchema(1, 1000),
+			"query":            boundedStringSchema(0, 200),
 			"dependencies":     boundedArraySchema(dependencyItems, 0, min(4, maxSteps)),
 			"expected_output":  boundedStringSchema(0, 500),
 			"success_criteria": boundedArraySchema(boundedStringSchema(1, 500), 1, 10),

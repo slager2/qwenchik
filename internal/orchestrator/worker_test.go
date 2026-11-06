@@ -1127,7 +1127,7 @@ func TestDeterministicResearchActionUsesOnlyValidatedPlanInputs(t *testing.T) {
 	if err := json.Unmarshal(decision.ToolCall.Arguments, &searchArgs); err != nil {
 		t.Fatal(err)
 	}
-	if searchArgs.Query != goal+" protocol data structures" || searchArgs.MaxResults != 8 {
+	if searchArgs.Query != "protocol data structures" || searchArgs.MaxResults != 8 {
 		t.Fatalf("deterministic search args=%+v", searchArgs)
 	}
 
@@ -1157,7 +1157,7 @@ func TestDeterministicResearchActionFallsBackForAmbiguousOrRepeatedInputs(t *tes
 		t.Fatalf("unvalidated search description bypassed actor: deterministic=%v err=%v", deterministic, err)
 	}
 	validated := domain.PlanStep{ID: "search_1", Kind: "search", Description: deterministicSearchFacetPrefix + "protocol data structures. User request: " + goal}
-	state := checkpointState{SearchQueryHistory: []string{goal + " protocol data structures"}}
+	state := checkpointState{SearchQueryHistory: []string{"protocol data structures"}}
 	if _, deterministic, err := deterministicResearchAction(validated, goal, "search", state, nil); err != nil || deterministic {
 		t.Fatalf("repeated search query bypassed duplicate handling: deterministic=%v err=%v", deterministic, err)
 	}

@@ -222,9 +222,12 @@ type Plan struct {
 }
 
 type PlanStep struct {
-	ID              string   `json:"id"`
-	Kind            string   `json:"kind"`
-	Description     string   `json:"description"`
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	Description string `json:"description"`
+	// Query is the planner's concise keyword search query for a search step.
+	// Optional: plans pinned before it existed still run from Description.
+	Query           string   `json:"query,omitempty"`
 	Dependencies    []string `json:"dependencies"`
 	ExpectedOutput  string   `json:"expected_output"`
 	SuccessCriteria []string `json:"success_criteria"`
