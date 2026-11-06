@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -81,11 +82,7 @@ func (a evidenceAliases) aliasList(ids []string) []string {
 func (a evidenceAliases) resolveList(ids []string) []string {
 	out := make([]string, len(ids))
 	for i, id := range ids {
-		if original, ok := a.toID[id]; ok {
-			out[i] = original
-		} else {
-			out[i] = id
-		}
+		out[i] = a.resolve(id)
 	}
 	return out
 }
@@ -115,9 +112,37 @@ func newNumberedEvidenceAliases(ids []string) evidenceAliases {
 	return aliases
 }
 
+// resolve maps an alias back to its evidence ID. A small model sometimes wraps
+// the alias (`[2]`, `"E2"`, `{"evidence_id": "2"}`); when exactly one known
+// alias or original ID occurs in such a value it is used, otherwise the value
+// is returned unchanged and later validation rejects it.
 func (a evidenceAliases) resolve(id string) string {
-	if original, ok := a.toID[strings.TrimSpace(id)]; ok {
+	trimmed := strings.TrimSpace(id)
+	if original, ok := a.toID[trimmed]; ok {
 		return original
+	}
+	if _, ok := a.toAlias[trimmed]; ok {
+		return trimmed
+	}
+	found := ""
+	for _, token := range aliasTokenPattern.FindAllString(trimmed, -1) {
+		candidate, ok := a.toID[token]
+		if !ok {
+			if _, known := a.toAlias[token]; !known {
+				continue
+			}
+			candidate = token
+		}
+		if found != "" && found != candidate {
+			return id
+		}
+		found = candidate
+	}
+	if found != "" {
+		return found
 	}
 	return id
 }
+
+// aliasTokenPattern matches alias-like tokens (2, E2) and UUIDs.
+var aliasTokenPattern = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|E?[0-9]+`)
