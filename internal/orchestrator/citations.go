@@ -51,6 +51,11 @@ type citationEvidence struct {
 	// search provider's passages of the page because the direct fetch
 	// failed; empty for directly fetched sources.
 	SourceText string `json:"source_text,omitempty"`
+	// Extracted marks text read by agentSearcher /extract, a normal
+	// fetched source; PDF marks a PDF text layer. Both only label the
+	// report and are not sent to the model.
+	Extracted bool `json:"-"`
+	PDF       bool `json:"-"`
 }
 
 type citationClaim struct {
@@ -144,6 +149,7 @@ func (w *Worker) citationCatalogue(ctx context.Context, taskID string, results m
 			if provenance.IsPassageEvidence(item) {
 				entry.SourceText = provenance.PassageEvidenceMethod
 			}
+			entry.Extracted, entry.PDF = provenance.IsExtractEvidence(item), provenance.IsPDFEvidence(item)
 			catalogue = append(catalogue, entry)
 			break
 		}
@@ -374,6 +380,8 @@ func citationReferences(answer string, catalogue []citationEvidence) (string, []
 		suffix += "\n- [" + source.EvidenceID + "] " + citationDisplayText(source.Title) + " — <" + url + ">"
 		if source.SourceText != "" {
 			suffix += " (" + reportLabelsRU.PassageSource + ")"
+		} else if source.PDF {
+			suffix += " (" + reportLabelsRU.PDFSource + ")"
 		}
 		refs = append(refs, map[string]string{"evidence_id": source.EvidenceID, "url": source.URL, "title": source.Title})
 	}

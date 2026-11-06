@@ -323,6 +323,38 @@ func selectReportEvidence(ids []string, catalogue []citationEvidence) []citation
 // reportModelSources is the model-facing evidence catalogue. URLs are left
 // out: the backend renders the source list, and a URL in view invites the
 // model to copy links into the body.
+// reportMethodNotes are the methodology lines describing how sources were
+// read: agentSearcher /extract (a normal fetch path) and agentSearcher
+// search passages (used because the direct fetch failed).
+func reportMethodNotes(labels reportLabels, catalogue []citationEvidence) []string {
+	extracted, passages := false, false
+	for _, source := range catalogue {
+		extracted = extracted || source.Extracted
+		passages = passages || source.SourceText != ""
+	}
+	notes := []string{}
+	if extracted {
+		notes = append(notes, labels.ExtractMethod)
+	}
+	if passages {
+		notes = append(notes, labels.PassageMethod)
+	}
+	return notes
+}
+
+// reportSourceNote is the source-list suffix: passage sources are marked
+// as such, PDF sources as PDF; extracted and directly fetched pages carry
+// no note.
+func reportSourceNote(labels reportLabels, source citationEvidence) string {
+	if source.SourceText != "" {
+		return " · " + labels.PassageSource
+	}
+	if source.PDF {
+		return " · " + labels.PDFSource
+	}
+	return ""
+}
+
 func reportModelSources(catalogue []citationEvidence) []map[string]string {
 	sources := make([]map[string]string, 0, len(catalogue))
 	for _, item := range catalogue {
@@ -737,11 +769,8 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 		fmt.Fprintf(&markdown, "- "+labels.Unrepresented+"\n", reportText(strings.Join(report.UnrepresentedCriteria, ", ")))
 	}
 	fmt.Fprintf(&markdown, "\n## %s\n\n%s\n", labels.MethodHeading, labels.MethodText)
-	for _, source := range catalogue {
-		if source.SourceText != "" {
-			fmt.Fprintf(&markdown, "\n%s\n", labels.PassageMethod)
-			break
-		}
+	for _, note := range reportMethodNotes(labels, catalogue) {
+		fmt.Fprintf(&markdown, "\n%s\n", note)
 	}
 	fmt.Fprintf(&markdown, "\nPrivacy mode: `%s`.\n", report.PrivacyMode)
 	if report.PrivacyMode == domain.PrivacyOffline {
@@ -749,11 +778,7 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 	}
 	fmt.Fprintf(&markdown, "\n## %s\n\n", labels.SourcesHeading)
 	for index, source := range catalogue {
-		note := ""
-		if source.SourceText != "" {
-			note = " · " + labels.PassageSource
-		}
-		fmt.Fprintf(&markdown, "%d. %s — <%s> · evidence `%s`%s\n", index+1, reportText(source.Title), source.URL, source.EvidenceID, note)
+		fmt.Fprintf(&markdown, "%d. %s — <%s> · evidence `%s`%s\n", index+1, reportText(source.Title), source.URL, source.EvidenceID, reportSourceNote(labels, source))
 	}
 	fmt.Fprintf(&markdown, "\n## %s\n\n"+labels.CoverageText+"\n\nGenerated at: %s · Run ID: %s\n", labels.CoverageHeading, len(catalogue), len(report.Sections), len(missing), report.Outcome, report.GeneratedAt, task.ID)
 	answer := markdown.String()

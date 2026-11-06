@@ -255,6 +255,29 @@ func TestCitationRunGatingPreservesLegacyAndChat(t *testing.T) {
 	}
 }
 
+func TestCitationCatalogueTreatsAgentSearcherExtractAsFetchedSource(t *testing.T) {
+	for _, method := range []string{"agentsearcher_extract", "agentsearcher_extract_pdf"} {
+		repo, state := citationFixture()
+		repo.evidence[0].Provider, repo.evidence[0].ExtractionMethod = "agentsearcher", method
+		catalogue, err := New(repo, &scriptedLLM{}, nil, Options{}).citationCatalogue(context.Background(), "research", state.ToolResults, []string{fixtureCitationID})
+		if err != nil || len(catalogue) != 1 || catalogue[0].SourceText != "" || !catalogue[0].Extracted {
+			t.Fatalf("%s catalogue = %#v err=%v", method, catalogue, err)
+		}
+		pdf := method == "agentsearcher_extract_pdf"
+		if catalogue[0].PDF != pdf {
+			t.Fatalf("%s PDF = %v", method, catalogue[0].PDF)
+		}
+		suffix, _ := citationReferences("Fact. ["+fixtureCitationID+"]", catalogue)
+		if strings.Contains(suffix, reportLabelsRU.PassageSource) || strings.Contains(suffix, "("+reportLabelsRU.PDFSource+")") != pdf {
+			t.Fatalf("%s source label = %q", method, suffix)
+		}
+		encoded, _ := json.Marshal(catalogue[0])
+		if strings.Contains(string(encoded), "Extracted") || strings.Contains(string(encoded), "source_text") {
+			t.Fatalf("report-only labels leaked into model input: %s", encoded)
+		}
+	}
+}
+
 func TestCitationCatalogueKeepsAgentSearcherPassageEvidenceWithHonestLabel(t *testing.T) {
 	repo, state := citationFixture()
 	repo.evidence[0].Provider, repo.evidence[0].ExtractionMethod = "agentsearcher", "agentsearcher_passages"
