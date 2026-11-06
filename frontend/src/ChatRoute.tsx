@@ -4,6 +4,8 @@ import { createCoalescedScheduler, nextFallbackDelay, runResyncResources } from 
 import { createRunEvidenceCache } from './evidence-cache.mjs'
 import { mergeRuntimeSnapshot } from './telemetry-state.mjs'
 import ChatComposer from './ChatComposer'
+import ClarificationPanel from './ClarificationPanel'
+import { clarificationUsable, readClarifyPreference, writeClarifyPreference } from './clarification-state.mjs'
 import ChatTranscript from './ChatTranscript'
 import { canUseResearchContext, citationReferences, explicitResearchContextReferences, createStreamState, terminal } from './conversation-state.mjs'
 import ResearchInspector from './ResearchInspector'
@@ -15,7 +17,7 @@ import { publicResearchEvents } from './research-state.mjs'
 import { reportPDFAvailability } from './report-pdf.mjs'
 import ChatSidebar from './ChatSidebar'
 import { recordReload, type ReloadReason } from './network-debug'
-import type { AgentEvent, Conversation, ConversationMessage, ConversationMode, ConversationSetup, DoctorResponse, Run, RunRuntime, Submission } from './types'
+import type { AgentEvent, ClarificationChoice, Conversation, ConversationMessage, ConversationMode, ConversationSetup, DoctorResponse, ResearchClarification, Run, RunRuntime, Submission } from './types'
 import { failure, ResourceStatus, useRemote } from './hooks/useRemote'
 import { useResearch } from './hooks/useResearch'
 import { useRunEventStream } from './hooks/useRunEventStream'
@@ -94,6 +96,11 @@ function ConversationView({ id, onSelect, onChanged }: { id: string; onSelect: (
   const modeRef = useRef(mode)
   modeRef.current = mode
   const [text, setText] = useState('')
+  // Pre-research clarification: the request waits here (status loading, then
+  // ready) until the user starts or skips; nothing is stored server-side.
+  const [clarifying, setClarifying] = useState<{ target: string; content: string; key: string; data?: ResearchClarification } | null>(null)
+  const clarifyAbort = useRef<AbortController | null>(null)
+  const [clarifyEnabled, setClarifyEnabled] = useState(() => readClarifyPreference(window.localStorage))
   const [title, setTitle] = useState('')
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -199,6 +206,7 @@ function ConversationView({ id, onSelect, onChanged }: { id: string; onSelect: (
     const key = submissionKey.current.key
     let shouldSaveSettings = settingsDirty
     const selectedSetup = { ...setup }
+    let clarifyAttempted = false
     const now = new Date().toISOString()
     setOptimistic([{ id: `pending-${key}`, conversation_id: id, run_id: '', role: 'user', content, status: 'pending', created_at: now, updated_at: now, last_event_seq: 0 }])
     void action(async () => {
@@ -214,14 +222,54 @@ function ConversationView({ id, onSelect, onChanged }: { id: string; onSelect: (
         shouldSaveSettings = false
         if (alive.current) { conversation.setData(item); setSettingsDirty(false) }
       }
-      const result = await api.submitMessage(target, content, selectedMode, key, selectedMode === 'chat' ? researchContextRunID : '')
-      submissionKey.current = null
-      if (!alive.current) return
-      if (!id) { void onChanged(); onSelect(target); return }
-      accept(result)
-      setOptimistic([])
-      setText('')
+      if (selectedMode === 'research' && clarifyEnabled && !clarifyAttempted) {
+        // A retried action (after a failed send) does not ask the model again.
+        clarifyAttempted = true
+        const controller = new AbortController()
+        clarifyAbort.current = controller
+        setClarifying({ target, content, key })
+        // Clarification never blocks research: errors, timeouts and an
+        // early "skip" (abort) all fall through to the original question.
+        const data = await api.clarify(target, content, controller.signal).catch(() => undefined)
+        if (clarifyAbort.current === controller) clarifyAbort.current = null
+        if (!alive.current) return
+        if (!controller.signal.aborted && clarificationUsable(data)) { setClarifying({ target, content, key, data }); return }
+        setClarifying(null)
+      }
+      await submitTurn(target, content, selectedMode, key)
     })
+  }
+
+  async function submitTurn(target: string, content: string, selectedMode: ConversationMode, key: string, clarification?: ClarificationChoice) {
+    const result = await api.submitMessage(target, content, selectedMode, key, selectedMode === 'chat' ? researchContextRunID : '', clarification)
+    submissionKey.current = null
+    if (!alive.current) return
+    setClarifying(null)
+    if (!id) { void onChanged(); onSelect(target); return }
+    accept(result)
+    setOptimistic([])
+    setText('')
+  }
+
+  function startResearch(clarification?: ClarificationChoice) {
+    const pending = clarifying
+    if (!pending) return
+    // Skipping while options load aborts the request; send() then submits.
+    if (!pending.data) { clarifyAbort.current?.abort(); return }
+    void action(() => submitTurn(pending.target, pending.content, 'research', pending.key, clarification))
+  }
+
+  function editClarifiedQuestion() {
+    clarifyAbort.current?.abort()
+    setClarifying(null)
+    setOptimistic([])
+    setError('')
+    setActionRetry(null)
+  }
+
+  function changeClarifyEnabled(value: boolean) {
+    setClarifyEnabled(value)
+    writeClarifyPreference(window.localStorage, value)
   }
 
   function operate(operation: 'retry' | 'continue') {
@@ -444,15 +492,16 @@ function ConversationView({ id, onSelect, onChanged }: { id: string; onSelect: (
       <ResourceStatus resource={conversation} /><ResourceStatus resource={snapshots} />{runID && <ResourceStatus resource={run} />}{history.error && <ResourceStatus resource={history} />}
       <ResearchOverview run={currentRun} runtime={currentRuntime} events={transcript.stream.events} answer={latestAssistant ?? null} evidence={research.evidence} busy={busy} onDetails={() => setDetails(true)} onReadAnswer={() => readAnswer()} onPause={pauseRun} onResume={resumeRun} onStop={stopRun} />
       <div className="chat-transcript" ref={listRef} onScroll={(event) => { if (!window.matchMedia('(max-width: 48rem)').matches) observeScroll(event.currentTarget) }}>
-        <ChatTranscript messages={content} loading={snapshots.loading} active={active} runID={runID} run={currentRun} references={references} evidenceCache={evidenceCache} submissionState={optimistic.length ? busy ? 'sending' : error ? 'failed' : 'sending' : undefined} reportPDF={reportPDF} onExample={(nextMode, prompt) => { setMode(nextMode); setText(prompt) }} />
+        <ChatTranscript messages={content} loading={snapshots.loading} active={active} runID={runID} run={currentRun} references={references} evidenceCache={evidenceCache} submissionState={optimistic.length && !(clarifying && !error) ? busy ? 'sending' : error ? 'failed' : 'sending' : undefined} reportPDF={reportPDF} onExample={(nextMode, prompt) => { setMode(nextMode); setText(prompt) }} />
+        {clarifying && <ClarificationPanel key={clarifying.key} clarification={clarifying.data} busy={!!clarifying.data && busy} onStart={startResearch} onSkip={() => startResearch()} onEdit={editClarifiedQuestion} />}
         {currentRun?.status === 'failed' && <div className="chat-action-error" role="alert"><Icon name="alert" size={18} /><div><strong>{currentRun.terminal_outcome === 'blocked' ? 'Ответ заблокирован проверкой' : 'Не удалось завершить ответ'}</strong><p>{failureMessage || currentRun.error_message || 'Можно повторить запрос.'}{currentRun.error_code ? ` Код: ${currentRun.error_code}` : typeof failurePayload?.error_code === 'string' ? ` Код: ${failurePayload.error_code}` : ''}</p><FailureDetails payload={failurePayload} />{verificationSummary && <p>{verificationSummary}</p>}{missingCriteria.length > 0 && <div className="chat-failure-missing"><strong>Не хватает критических критериев</strong><ul>{missingCriteria.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></div>}</div></div>}
         {currentRun?.status === 'cancelled' && <p className="chat-notice" role="status">Генерация остановлена. {hasPartial ? 'Полученный текст сохранён.' : 'Текст ответа не сформирован.'}</p>}
         {currentRun?.status === 'waiting_approval' && <p className="chat-notice" role="status">Нужно ваше решение. <a href="#/workspace">Открыть подтверждения в рабочем пространстве</a></p>}
         {currentRun && !active && <div className="chat-answer-actions"><Button size="sm" variant="ghost" icon={<Icon name="refresh" size={16} />} disabled={busy} onClick={() => operate('retry')}>Повторить ответ</Button><Button size="sm" variant="ghost" icon={<Icon name="play" size={16} />} disabled={busy || !hasPartial} title={!hasPartial ? 'Нет текста для продолжения' : 'Продолжить ответ новым запуском'} onClick={() => operate('continue')}>Продолжить ответ</Button></div>}
       </div>
-      {!follow && <IconButton className="chat-to-bottom" variant="secondary" label="К последнему сообщению" icon={<Icon name="arrow-down" />} onClick={() => setFollow(true)} />}
+      {!follow && !clarifying && <IconButton className="chat-to-bottom" variant="secondary" label="К последнему сообщению" icon={<Icon name="arrow-down" />} onClick={() => setFollow(true)} />}
       {error && <div className="chat-action-error" role="alert"><Icon name="alert" size={18} /><div><p>{error}</p>{actionRetry && <Button size="sm" variant="secondary" onClick={actionRetry} disabled={busy}>Повторить действие</Button>}</div></div>}
-      <ChatComposer mode={mode} privacyMode={currentRuntime?.privacy_mode || configuration.data?.research_limits?.privacy_mode} contextBudget={currentRuntime?.context_budget || doctor.data?.context_budget} onModeChange={changeMode} text={text} onTextChange={setText} onSend={send} busy={busy} active={active} run={currentRun} onStop={stopRun} researchContextRunID={researchContextRunID} researchContextReady={researchContextReady} onEnableResearchContext={enableResearchContext} onClearResearchContext={() => { setResearchContextRunID(''); submissionKey.current = null }} settings={setup} onSettingsChange={optimistic.length ? undefined : changeSettings} settingsError={setupProblem(setup)} settingsDirty={settingsDirty} settingsSaving={busy && settingsDirty} onSaveSettings={id && !active ? saveSettings : undefined} />
+      {!clarifying && <ChatComposer mode={mode} privacyMode={currentRuntime?.privacy_mode || configuration.data?.research_limits?.privacy_mode} contextBudget={currentRuntime?.context_budget || doctor.data?.context_budget} onModeChange={changeMode} text={text} onTextChange={setText} onSend={send} busy={busy} active={active} run={currentRun} onStop={stopRun} researchContextRunID={researchContextRunID} researchContextReady={researchContextReady} onEnableResearchContext={enableResearchContext} onClearResearchContext={() => { setResearchContextRunID(''); submissionKey.current = null }} settings={setup} onSettingsChange={optimistic.length ? undefined : changeSettings} settingsError={setupProblem(setup)} settingsDirty={settingsDirty} settingsSaving={busy && settingsDirty} onSaveSettings={id && !active ? saveSettings : undefined} clarify={clarifyEnabled} onClarifyChange={changeClarifyEnabled} />}
       <div className="chat-composer-note">
         <span className={backendReady ? 'chat-online' : 'chat-offline'}>Приложение: {health.error ? 'нет связи' : backendReady ? 'доступно' : 'проверяем соединение'}</span>
         <span className={modelReady && !doctor.error ? 'chat-online' : ''}>Qwen: {doctor.error ? 'проверка недоступна' : modelReady ? 'проверена по запросу' : health.data?.model?.status === 'configured' ? 'локальная · проверка по запросу' : 'доступность не проверена'}</span>

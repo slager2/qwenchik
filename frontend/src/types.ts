@@ -509,6 +509,22 @@ export interface RunRuntime {
   }
 }
 
+/** POST /api/conversations/{id}/clarify — options shown before research starts. */
+export interface ResearchClarification {
+  status: 'ready' | 'unavailable'
+  reason?: string
+  interpretations: Array<{ id: string; title: string; goal: string }>
+  questions: Array<{ id: string; question: string; options: string[] }>
+}
+
+/** The user's choice, sent with the research message as `clarification`. */
+export interface ClarificationChoice {
+  interpretation_title?: string
+  interpretation_goal?: string
+  answers?: Array<{ question: string; answer: string }>
+  extra?: string
+}
+
 export interface Submission {
   conversation_id: string
   user_message: ConversationMessage

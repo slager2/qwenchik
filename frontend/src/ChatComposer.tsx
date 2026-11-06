@@ -13,7 +13,7 @@ const privacyText = (mode?: string) => mode === 'offline' ? 'Офлайн: то�
 export default function ChatComposer({
   mode, privacyMode, contextBudget, onModeChange, text, onTextChange, onSend, busy, active, run, onStop,
   researchContextRunID, researchContextReady, onEnableResearchContext, onClearResearchContext,
-  settings, onSettingsChange, settingsError, settingsDirty, settingsSaving, onSaveSettings,
+  settings, onSettingsChange, settingsError, settingsDirty, settingsSaving, onSaveSettings, clarify, onClarifyChange,
 }: {
   mode: ConversationMode
   privacyMode?: string
@@ -36,6 +36,9 @@ export default function ChatComposer({
   settingsDirty?: boolean
   settingsSaving?: boolean
   onSaveSettings?: () => void
+  /** Clarify research questions before the run starts. */
+  clarify?: boolean
+  onClarifyChange?: (value: boolean) => void
 }) {
   const estimatedTokens = Math.ceil(text.length / 2.5)
   const availableTokens = contextBudget?.available_input_tokens ?? null
@@ -59,6 +62,7 @@ export default function ChatComposer({
           <select aria-label="Режим разговора" value={mode} disabled={busy || active} onChange={(event) => onModeChange(event.target.value as ConversationMode)}><option value="chat">Чат</option><option value="research">Исследование</option></select>
           <Icon name="chevron-down" size={14} className="chat-mode-control__chevron" />
         </label>
+        {research && onClarifyChange && <button type="button" className="chat-clarify-toggle" aria-pressed={!!clarify} aria-label="Уточнять вопрос перед исследованием" title={clarify ? 'Перед запуском модель предложит варианты трактовки и уточняющие вопросы' : 'Исследование начнётся сразу, без уточнения'} disabled={busy || active} onClick={() => onClarifyChange(!clarify)}><Icon name={clarify ? 'check' : 'sliders'} size={16} /><span className="chat-clarify-toggle__label">Уточнять</span></button>}
         <span className={`chat-token-meter${tokenWarning ? ' is-warning' : ''}`} role="status">
           {text.trim() ? <>{estimatedTokens.toLocaleString('ru-RU')} ток.{availableTokens !== null && <> из ~{availableTokens.toLocaleString('ru-RU')}</>}</> : ''}
           {contextBudget?.context_status === 'context_mismatch' && <span> · модель заблокирована: контекст не совпал</span>}

@@ -8,6 +8,7 @@ import { Icon } from './icons'
 import { IconButton } from './ui'
 import ReportPDFButton from './ReportPDFButton'
 import { reportPDFEligible } from './report-pdf.mjs'
+import { messageClarification } from './clarification-state.mjs'
 
 export default function ChatTranscript({ messages, loading, active, runID, run, references, evidenceCache, onExample, submissionState, reportPDF }: {
   messages: ConversationMessage[]
@@ -38,7 +39,7 @@ export default function ChatTranscript({ messages, loading, active, runID, run, 
                   : message.status === 'failed' ? 'Ответ не завершён' : ''
       const preparing = current && active && !['paused', 'failed', 'cancelled', 'completed'].includes(run?.status || '') && !['failed', 'interrupted', 'cancelled', 'stopped', 'partial'].includes(message.status) && run?.terminal_outcome !== 'blocked'
       const submission = message.role === 'user' && message.status === 'pending' ? submissionState === 'sending' ? 'Отправляем сообщение…' : submissionState === 'failed' ? 'Сообщение не отправлено' : '' : ''
-      return <article className={`chat-message chat-role-${message.role}`} key={message.id} data-message-id={message.id} tabIndex={message.role === 'assistant' ? -1 : undefined} aria-label={message.role === 'user' ? 'Ваше сообщение' : 'Ответ Qwen'}><header className="sr-only"><strong>{message.role === 'user' ? 'Вы' : 'Qwen'}</strong><time dateTime={message.created_at}>{new Date(message.created_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</time></header>{hasContent ? <MessageContent message={message} runID={runID} references={references} evidenceCache={evidenceCache} pdf={reportPDF && reportPDFEligible(message, run) ? reportPDF : undefined} /> : <p className="chat-muted chat-message-empty">{current && run?.status === 'paused' ? 'Ответ ещё не сформирован. Запуск на паузе.' : preparing ? 'Готовлю ответ…' : 'Текст ответа отсутствует.'}</p>}{submission && <p className="chat-muted chat-submission-state" role="status">{submission}</p>}{message.role === 'assistant' && meta && !(current && run?.status === 'paused' && !hasContent) && <footer className="chat-message-meta">{meta}</footer>}</article>
+      return <article className={`chat-message chat-role-${message.role}`} key={message.id} data-message-id={message.id} tabIndex={message.role === 'assistant' ? -1 : undefined} aria-label={message.role === 'user' ? 'Ваше сообщение' : 'Ответ Qwen'}><header className="sr-only"><strong>{message.role === 'user' ? 'Вы' : 'Qwen'}</strong><time dateTime={message.created_at}>{new Date(message.created_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</time></header>{hasContent ? <MessageContent message={message} runID={runID} references={references} evidenceCache={evidenceCache} pdf={reportPDF && reportPDFEligible(message, run) ? reportPDF : undefined} /> : <p className="chat-muted chat-message-empty">{current && run?.status === 'paused' ? 'Ответ ещё не сформирован. Запуск на паузе.' : preparing ? 'Готовлю ответ…' : 'Текст ответа отсутствует.'}</p>}<ClarifiedSummary message={message} />{submission && <p className="chat-muted chat-submission-state" role="status">{submission}</p>}{message.role === 'assistant' && meta && !(current && run?.status === 'paused' && !hasContent) && <footer className="chat-message-meta">{meta}</footer>}</article>
     })}
   </>
 }
@@ -76,4 +77,15 @@ function useRunEvidence(cache: RunEvidenceCache, runID: string) {
   }, [cache, runID])
   const entry = observed.runID === runID ? observed.entry : cache.get(runID)
   return { ...entry, retry: () => cache.load(runID, true) }
+}
+
+/** What the user chose before research started (stored on the user message). */
+function ClarifiedSummary({ message }: { message: ConversationMessage }) {
+  const clarified = messageClarification(message)
+  if (!clarified) return null
+  const items = [...clarified.answers.map((item) => item.question ? `${item.question.replace(/[\s?:]+$/, '')}: ${item.answer}` : item.answer), ...(clarified.extra ? [clarified.extra] : [])]
+  return <div className="chat-clarified" aria-label="Уточнение запроса">
+    <span><strong>Уточнено{clarified.title ? ':' : ''}</strong>{clarified.title ? ` ${clarified.title}` : ''}</span>
+    {items.length > 0 && <ul>{items.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul>}
+  </div>
 }

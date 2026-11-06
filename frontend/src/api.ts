@@ -1,5 +1,5 @@
 import type { AgentEvent, Approval, Artifact, Checkpoint, Evidence, Memory, MemoryMatch, MemoryStatus, Message, ProvidersResponse, Task, TaskStep } from './types'
-import type { Conversation, ConversationMessage, ConversationMode, ConversationSettingsPatch, DoctorResponse, HealthResponse, LabPolicyResponse, ResearchPlan, Run, RunRuntime, SourceRecord, Submission, Space, SpaceContextItem, SpaceResearchRun } from './types'
+import type { ClarificationChoice, Conversation, ConversationMessage, ConversationMode, ConversationSettingsPatch, DoctorResponse, HealthResponse, LabPolicyResponse, ResearchClarification, ResearchPlan, Run, RunRuntime, SourceRecord, Submission, Space, SpaceContextItem, SpaceResearchRun } from './types'
 import { recordHTTP } from './network-debug'
 
 export class ApiError extends Error {
@@ -77,7 +77,8 @@ export const api = {
   updateConversation: (id: string, patch: { title?: string; mode?: ConversationMode; space_id?: string } & ConversationSettingsPatch) => request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteConversation: (id: string) => request<void>(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   conversationMessages: (id: string, signal?: AbortSignal) => request<ConversationMessage[]>(`/api/conversations/${encodeURIComponent(id)}/messages`, { signal }),
-  submitMessage: (id: string, content: string, mode: ConversationMode, key: string, researchRunID = '') => request<Submission>(`/api/conversations/${encodeURIComponent(id)}/messages`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ content, mode, ...(mode === 'chat' && researchRunID ? { research_run_id: researchRunID } : {}) }) }),
+  submitMessage: (id: string, content: string, mode: ConversationMode, key: string, researchRunID = '', clarification?: ClarificationChoice) => request<Submission>(`/api/conversations/${encodeURIComponent(id)}/messages`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ content, mode, ...(mode === 'chat' && researchRunID ? { research_run_id: researchRunID } : {}), ...(mode === 'research' && clarification ? { clarification } : {}) }) }),
+  clarify: (id: string, content: string, signal?: AbortSignal) => request<ResearchClarification>(`/api/conversations/${encodeURIComponent(id)}/clarify`, { method: 'POST', body: JSON.stringify({ content }), signal }),
   conversationRun: (id: string, signal?: AbortSignal) => request<Run>(`/api/runs/${encodeURIComponent(id)}`, { signal }),
   runRuntime: (id: string, signal?: AbortSignal) => request<RunRuntime>(`/api/runs/${encodeURIComponent(id)}/runtime`, { signal }),
   cancelRun: (id: string) => request<Run>(`/api/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
