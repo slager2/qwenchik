@@ -52,7 +52,7 @@ func BuildPassageEvidence(taskID, query, rawURL, title, text, contentSHA256 stri
 	if retrievedAt.IsZero() {
 		retrievedAt = time.Now().UTC()
 	}
-	excerpt, start, end := SelectExcerptWithSpan(text, query, 4000)
+	excerpt, start, end := SelectExcerptWithSpan(text, query, DefaultExcerptRunes)
 	quotes := []domain.QuoteSpan{}
 	if excerpt != "" {
 		quotes = append(quotes, domain.QuoteSpan{Start: start, End: end, Text: excerpt, CoordinateSpace: "extracted_text_runes"})

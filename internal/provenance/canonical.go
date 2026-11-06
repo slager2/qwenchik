@@ -44,9 +44,9 @@ func BuildEvidenceWithPassages(taskID, query string, fetched research.FetchedDoc
 	if retrievedAt.IsZero() {
 		retrievedAt = time.Now().UTC()
 	}
-	excerpt, start, end, matched := SelectPassageExcerptWithSpan(extracted.Text, passages, 4000)
+	excerpt, start, end, matched := SelectPassageExcerptWithSpan(extracted.Text, passages, DefaultExcerptRunes)
 	if !matched {
-		excerpt, start, end = SelectExcerptWithSpan(extracted.Text, query, 4000)
+		excerpt, start, end = SelectExcerptWithSpan(extracted.Text, query, DefaultExcerptRunes)
 	}
 	quotes := []domain.QuoteSpan{}
 	if excerpt != "" {
