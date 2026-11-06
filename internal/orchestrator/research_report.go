@@ -649,7 +649,7 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 		}
 	}
 	covered := map[string]bool{}
-	claimLimit := min(4, min(claimBudget, paragraphBudget)/len(report.Sections))
+	claimLimit := min(8, min(claimBudget, paragraphBudget)/len(report.Sections))
 	breaker := &reportContentBreaker{}
 	catalogueIDs := make([]string, 0, len(catalogue))
 	for _, item := range catalogue {

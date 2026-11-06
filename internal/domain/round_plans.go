@@ -46,9 +46,9 @@ func RoundResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 	case ResearchProfileStandard:
 		b.MaxTotalSteps = 20
 		b.MaxLLMCalls = 48
-		b.MaxCitationClaims = 16
+		b.MaxCitationClaims = 24
 		b.MaxReportSections = 6
-		b.MaxReportParagraphs = 16
+		b.MaxReportParagraphs = 24
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 24, 16
 	case ResearchProfileDeepLaptop:
 		b.MaxTotalSteps = 32
