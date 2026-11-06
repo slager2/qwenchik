@@ -25,6 +25,7 @@ import (
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/llm"
 	"github.com/slager2/qwenchik/internal/providers/research"
+	reportpdf "github.com/slager2/qwenchik/internal/report/pdf"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
 	"github.com/slager2/qwenchik/internal/tools"
 )
@@ -154,6 +155,7 @@ type Server struct {
 	contextProbeWindow        int
 	contextProbeOutput        int
 	contextProbeResourceCheck func(context.Context) error
+	reportPDF                 *reportpdf.Exporter
 }
 
 func New(service TaskService, worker WorkerControl, dbPing func(context.Context) error, llmURL, llmKey, searchURL string, logger *slog.Logger) *Server {
@@ -934,7 +936,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	if s.worker == nil {
 		workerState = "absent"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "database": "ok", "worker": workerState, "worker_details": s.workerHealth(r.Context()), "runtime": s.runtimeHealth(), "api_version": 1, "model": map[string]string{"id": s.llmModel, "status": "configured"}})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "database": "ok", "worker": workerState, "worker_details": s.workerHealth(r.Context()), "runtime": s.runtimeHealth(), "report_pdf": map[string]bool{"available": s.reportPDFAvailable()}, "api_version": 1, "model": map[string]string{"id": s.llmModel, "status": "configured"}})
 }
 
 func (s *Server) doctor(w http.ResponseWriter, r *http.Request) {

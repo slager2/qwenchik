@@ -790,6 +790,8 @@ func serve(parent context.Context) error {
 		apiServer.SetSearchDiagnostics(diagnostic.HealthSnapshot)
 	}
 	apiServer.SetArtifactReader(artifactStore)
+	reportExporter := newReportPDFExporter(cfg, deps.store, artifactStore, deps.store, logger)
+	apiServer.SetReportPDF(reportExporter)
 	sandboxStatus := sandboxRuntime.Doctor(parent)
 	apiServer.SetSandboxStatus(sandboxStatus.Available, sandboxStatus.Message)
 	handler := apiServer.Handler()

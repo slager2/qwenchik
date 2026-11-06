@@ -71,6 +71,9 @@ type Config struct {
 	FetchTempTaskBytes           int64
 	FetchTempGlobalBytes         int64
 	AllowedDomains               []string
+	PDFRendererBin               string
+	ReportPDFDir                 string
+	ReportPDFAuto                string
 }
 
 func Load() (Config, error) {
@@ -149,6 +152,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg.AllowedDomains = splitList(os.Getenv("ALLOWED_DOMAINS"))
+	if err := loadReportPDF(&cfg); err != nil {
+		return Config{}, err
+	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}
