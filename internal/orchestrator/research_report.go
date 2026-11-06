@@ -44,6 +44,22 @@ func reportReviewSchema(criteria []string, claimLimit int) json.RawMessage {
 	return encodeSchema(schema)
 }
 
+// reportCriticSchema is the schema of a live critic call. It restricts
+// evidence_id to the given source IDs (aliases, or UUIDs for legacy pinned
+// inputs): a free string let the 4B model answer `{"evidence_id": "2"}`, which
+// resolved to no source and rejected every supported claim of the section.
+// Persisted reviews (resolved UUIDs) are still checked with reportReviewSchema.
+func reportCriticSchema(criteria []string, claimLimit int, evidenceIDs []string) json.RawMessage {
+	var schema map[string]any
+	_ = json.Unmarshal(reportReviewSchema(criteria, claimLimit), &schema)
+	if len(evidenceIDs) > 0 {
+		claims := schema["properties"].(map[string]any)["claims"].(map[string]any)
+		item := claims["items"].(map[string]any)["properties"].(map[string]any)
+		item["evidence_id"] = map[string]any{"type": "string", "enum": evidenceIDs}
+	}
+	return encodeSchema(schema)
+}
+
 func reportCriterionCatalog(task domain.Task, state checkpointState, ids []string) []map[string]string {
 	result := []map[string]string{}
 	if task.Plan != nil {
@@ -321,6 +337,10 @@ func reportDraftProblem(draft string, resolve func(string) (string, bool), claim
 
 func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal, inputHash string, state *checkpointState, section *domain.ReportSection, catalogue []citationEvidence, claimLimit int, breaker *reportContentBreaker, aliases *evidenceAliases) error {
 	resolve := reportCatalogueResolver(catalogue, aliases)
+	sourceIDs := make([]string, 0, len(catalogue))
+	for _, item := range catalogue {
+		sourceIDs = append(sourceIDs, item.EvidenceID)
+	}
 	start, attempts := 0, 2
 	if section.CorrectionUsed {
 		start = 1
@@ -358,7 +378,7 @@ func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal,
 			}
 			if err == nil {
 				var review reportCitationReview
-				err = w.reportJSON(ctx, task, goal, "report_critic", identity, reportCriticPrompt, map[string]any{"claims_to_check": reportCriticClaims(units), "evidence_catalogue": reportModelSources(catalogue), "criteria": section.Criteria, "criterion_catalog": reportCriterionCatalog(task, *state, section.Criteria)}, reportReviewSchema(section.Criteria, claimLimit), &review, &reportCall{aliases: aliases})
+				err = w.reportJSON(ctx, task, goal, "report_critic", identity, reportCriticPrompt, map[string]any{"claims_to_check": reportCriticClaims(units), "evidence_catalogue": reportModelSources(catalogue), "criteria": section.Criteria, "criterion_catalog": reportCriterionCatalog(task, *state, section.Criteria)}, reportCriticSchema(section.Criteria, claimLimit, aliases.aliasList(sourceIDs)), &review, &reportCall{aliases: aliases, legacySchema: reportCriticSchema(section.Criteria, claimLimit, sourceIDs)})
 				var kept []reportUnit
 				if err == nil {
 					for index := range review.Claims {
