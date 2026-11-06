@@ -470,6 +470,27 @@ func (s *Store) SubmitTurn(ctx context.Context, in domain.SubmitTurn, key string
 		return domain.SubmitResponse{}, ErrWebDisabled
 	}
 	taskDescription := content
+	researchGoal := ""
+	if in.Clarification != nil {
+		if operation != "send" || mode != "research" || in.ResearchRunID != "" {
+			return domain.SubmitResponse{}, domain.ErrInvalidConversation
+		}
+		choice := in.Clarification.Normalize()
+		if err := choice.Validate(); err != nil {
+			return domain.SubmitResponse{}, err
+		}
+		if !choice.Empty() {
+			researchGoal = domain.RefinedResearchGoal(content, choice)
+			taskDescription = researchGoal
+		}
+	} else if operation != "send" {
+		// A retried or continued clarified run keeps its refined goal.
+		if prior, e := userMessageResearchGoal(ctx, tx, userID); e != nil {
+			return domain.SubmitResponse{}, e
+		} else if prior != "" {
+			taskDescription = prior
+		}
+	}
 	if operation == "send" && c.SpaceID != "" {
 		if hint, hintErr := spaceContextHint(ctx, tx, c.SpaceID); hintErr != nil {
 			return domain.SubmitResponse{}, hintErr
@@ -502,6 +523,12 @@ func (s *Store) SubmitTurn(ctx context.Context, in domain.SubmitTurn, key string
 		userMetadata = string(encoded)
 	} else if in.ResearchContext != nil {
 		return domain.SubmitResponse{}, domain.ErrInvalidConversation
+	} else if researchGoal != "" {
+		encoded, e := json.Marshal(map[string]any{"clarification": in.Clarification.Normalize(), "research_goal": researchGoal})
+		if e != nil {
+			return domain.SubmitResponse{}, e
+		}
+		userMetadata = string(encoded)
 	}
 	if mode == "chat" && chatSnapshot == nil && in.ModelSnapshot != nil {
 		model := *in.ModelSnapshot
@@ -522,6 +549,9 @@ func (s *Store) SubmitTurn(ctx context.Context, in domain.SubmitTurn, key string
 		config := researchConfigFromTurn(in)
 		if sourceResearch != nil {
 			config = researchConfigFromSession(*sourceResearch)
+		}
+		if researchGoal != "" {
+			config.goal = researchGoal
 		}
 		if strings.TrimSpace(config.goal) == "" {
 			config.goal = content
@@ -611,6 +641,17 @@ func (s *Store) SubmitTurn(ctx context.Context, in domain.SubmitTurn, key string
 		return result, err
 	}
 	return result, tx.Commit()
+}
+
+// userMessageResearchGoal returns the refined research goal stored with a
+// clarified user message, or "" when the message was not clarified.
+func userMessageResearchGoal(ctx context.Context, q conversationQuery, id string) (string, error) {
+	message, err := conversationMessage(ctx, q, id)
+	if err != nil {
+		return "", err
+	}
+	goal, _ := message.Metadata["research_goal"].(string)
+	return goal, nil
 }
 
 func syncConversationTerminal(ctx context.Context, tx *sql.Tx, id string, status domain.TaskStatus, payload map[string]any) error {

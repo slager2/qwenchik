@@ -68,11 +68,15 @@ type Run struct {
 }
 
 type SubmitTurn struct {
-	ConversationID  string                `json:"conversation_id"`
-	Content         string                `json:"content"`
-	Mode            string                `json:"mode"`
-	ParentMessageID string                `json:"parent_message_id,omitempty"`
-	ResearchRunID   string                `json:"research_run_id,omitempty"`
+	ConversationID  string `json:"conversation_id"`
+	Content         string `json:"content"`
+	Mode            string `json:"mode"`
+	ParentMessageID string `json:"parent_message_id,omitempty"`
+	ResearchRunID   string `json:"research_run_id,omitempty"`
+	// Clarification refines a research question before the run starts; the
+	// merged goal drives planning and the report while Content stays the
+	// original question shown in the transcript.
+	Clarification   *ClarificationChoice  `json:"clarification,omitempty"`
 	ResearchContext *ResearchContext      `json:"-"`
 	Operation       string                `json:"operation,omitempty"`
 	SourceRunID     string                `json:"source_run_id,omitempty"`

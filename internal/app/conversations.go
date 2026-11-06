@@ -248,6 +248,17 @@ func (s *Service) SubmitTurn(ctx context.Context, in domain.SubmitTurn, key stri
 			return domain.SubmitResponse{}, domain.ErrInvalidConversation
 		}
 	}
+	if in.Clarification != nil {
+		choice := in.Clarification.Normalize()
+		if in.Operation != "send" || in.ResearchRunID != "" || choice.Validate() != nil {
+			return domain.SubmitResponse{}, domain.ErrInvalidConversation
+		}
+		in.Clarification = &choice
+		if choice.Empty() {
+			// "Skip" submits exactly what an unclarified turn would.
+			in.Clarification = nil
+		}
+	}
 	r, e := s.conversationRepo()
 	if e != nil {
 		return domain.SubmitResponse{}, e

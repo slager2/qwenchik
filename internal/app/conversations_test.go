@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/slager2/qwenchik/internal/domain"
@@ -52,5 +53,31 @@ func TestConversationServiceValidatesSettingsAndSubmitsDefaults(t *testing.T) {
 	retry, e := service.RepeatRun(ctx, turn.Run.ID, "retry", "retry-key")
 	if e != nil || retry.UserMessage.ID != turn.UserMessage.ID {
 		t.Fatalf("retry %#v %v", retry, e)
+	}
+}
+
+func TestSubmitTurnNormalizesClarification(t *testing.T) {
+	ctx := context.Background()
+	store, e := sqlite.Open(ctx, filepath.Join(t.TempDir(), "app.db"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer store.Close()
+	service := New(store)
+	c, e := service.CreateConversation(ctx, domain.Conversation{Mode: "research"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	tooLong := domain.ClarificationChoice{Extra: strings.Repeat("x", domain.MaxClarifyExtraRunes+1)}
+	if _, e = service.SubmitTurn(ctx, domain.SubmitTurn{ConversationID: c.ID, Content: "q", Clarification: &tooLong}, ""); !errors.Is(e, domain.ErrInvalidConversation) {
+		t.Fatalf("oversized clarification: %v", e)
+	}
+	skipped, e := service.SubmitTurn(ctx, domain.SubmitTurn{ConversationID: c.ID, Content: "What is WAL?", Clarification: &domain.ClarificationChoice{Extra: "  "}}, "")
+	if e != nil {
+		t.Fatal(e)
+	}
+	task, e := store.GetTask(ctx, skipped.Run.ID)
+	if e != nil || task.Description != "What is WAL?" || skipped.UserMessage.Metadata["research_goal"] != nil {
+		t.Fatalf("empty clarification changed the goal: %q %#v %v", task.Description, skipped.UserMessage.Metadata, e)
 	}
 }
