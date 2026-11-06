@@ -92,7 +92,7 @@ func (w *Worker) refreshSourceNotes(ctx context.Context, task domain.Task, state
 
 func compactSourceNotes(notes []domain.SourceNote) []domain.SourceNote {
 	selected := []domain.SourceNote{}
-	for _, note := range notes[:min(8, len(notes))] {
+	for _, note := range notes[:min(16, len(notes))] { // matches the v2 citation source cap
 		note.RelevantExcerpts = append([]string{}, note.RelevantExcerpts...)
 		for index := range note.RelevantExcerpts {
 			note.RelevantExcerpts[index] = truncateRunes(note.RelevantExcerpts[index], 1000)

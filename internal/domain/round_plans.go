@@ -54,6 +54,7 @@ func RoundResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 		b.MaxTotalSteps = 32
 		b.MaxLLMCalls = 64
 		b.MaxCitationClaims = 24
+		b.MaxCitationSources = 12
 		b.MaxReportSections = 8
 		b.MaxReportParagraphs = 24
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 40, 24
@@ -61,6 +62,7 @@ func RoundResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 		b.MaxTotalSteps = 64
 		b.MaxLLMCalls = 96
 		b.MaxCitationClaims = 32
+		b.MaxCitationSources = 16
 		b.MaxReportSections = 8
 		b.MaxReportParagraphs = 32
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 64, 32
@@ -68,6 +70,7 @@ func RoundResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 		b.MaxTotalSteps = 96
 		b.MaxLLMCalls = 128
 		b.MaxCitationClaims = 32
+		b.MaxCitationSources = 16
 		b.MaxReportSections = 8
 		b.MaxReportParagraphs = 32
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 80, 40

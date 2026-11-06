@@ -259,9 +259,9 @@ func ValidateResearchPolicy(policy domain.ResearchPolicy) error {
 	if b.WallTimeSeconds < 60 || b.WallTimeSeconds > 21600 || b.MaxRounds < 1 || b.MaxSteps < 1 || b.MaxSteps > 12 || b.MaxSearchQueries < 1 || b.MaxFetches < 1 || b.MaxLLMCalls < 1 || b.MaxEvidence < 1 || b.MaxQuestionsCreated < 1 || b.MaxQuestionsAccepted < 1 || b.MaxStagnantRounds < 1 || b.MaxCitationSources < 1 || b.MaxCitationClaims < 1 {
 		return errors.New("research budget limits are invalid")
 	}
-	claimLimit := 8
+	claimLimit, sourceLimit := 8, 8
 	if policy.Version == 2 {
-		claimLimit = 32
+		claimLimit, sourceLimit = 32, 16
 		if err := validateResearchCaps(b); err != nil {
 			return err
 		}
@@ -269,7 +269,7 @@ func ValidateResearchPolicy(policy domain.ResearchPolicy) error {
 			return errors.New("v2 max_steps must alias initial plan capacity")
 		}
 	}
-	if b.MaxQuestionsAccepted > b.MaxQuestionsCreated || b.MaxStagnantRounds > b.MaxRounds || b.MaxCitationSources > b.MaxEvidence || b.MaxCitationSources > 8 || b.MaxCitationClaims > claimLimit {
+	if b.MaxQuestionsAccepted > b.MaxQuestionsCreated || b.MaxStagnantRounds > b.MaxRounds || b.MaxCitationSources > b.MaxEvidence || b.MaxCitationSources > sourceLimit || b.MaxCitationClaims > claimLimit {
 		return errors.New("research budget relationships are invalid")
 	}
 	if policy.TaskFetchBudgetBytes < 1 || policy.TaskFetchBudgetBytes == math.MaxInt64 || policy.SourceFetchBytes < 1 || policy.PDFBytes < 1 || policy.SourceFetchBytes > policy.TaskFetchBudgetBytes || policy.PDFBytes > policy.TaskFetchBudgetBytes {
