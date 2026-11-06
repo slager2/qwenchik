@@ -61,6 +61,7 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 			Claims     []citationClaim     `json:"claims_to_check"`
 			Criteria   []string            `json:"criteria"`
 			Correction bool                `json:"correction"`
+			Section    string              `json:"section_title"`
 		}
 		if err := json.Unmarshal([]byte(request.Messages[1].Content), &input); err != nil {
 			return "", err
@@ -105,7 +106,7 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 		if mode == "infrastructure" {
 			return "", sqlite.ErrCheckpointInvalid
 		}
-		if mode == "fallback" || (mode == "correction" && !input.Correction) {
+		if mode == "fallback" || (mode == "correction" && !input.Correction) || (mode == "first_fails" && input.Section == "Основные сведения") {
 			return `{"answer":"UNSUPPORTED uncited assertion"}`, nil
 		}
 		if len(input.Evidence) == 0 {
@@ -124,7 +125,7 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 }
 
 func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
-	for _, mode := range []string{"valid", "artifact_recovery", "correction", "fallback", "coverage_gap", "infrastructure", "list", "partial"} {
+	for _, mode := range []string{"valid", "artifact_recovery", "correction", "fallback", "coverage_gap", "infrastructure", "list", "partial", "first_fails"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx := context.Background()
 			f := newResearchRunStore(t)
@@ -177,7 +178,7 @@ func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
 			}
 			for index, section := range state.Report.Sections {
 				want := "supported"
-				if mode == "fallback" {
+				if mode == "fallback" || (mode == "first_fails" && index == 0) {
 					want = "fallback_excerpts"
 				}
 				// After the first section fails the same content check twice
@@ -219,6 +220,11 @@ func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
 			}
 			if search.calls.Load() != 2 || fetcher.calls.Load() != 2 {
 				t.Fatal("report restart repeated discovery/fetch")
+			}
+			// One failed section must not skip the next: section 1 uses its
+			// draft and correction, section 2 still gets its own attempt.
+			if mode == "fallback" && len(model.calls()) != 6 {
+				t.Fatalf("later section was not attempted after one failure: calls=%d", len(model.calls()))
 			}
 			// planner + verifier + outline + two sections + two section critics.
 			if (mode == "valid" || mode == "artifact_recovery") && len(model.calls()) != 7 {
@@ -277,32 +283,22 @@ func TestReportSectionRetriesOnlyRepairableFailures(t *testing.T) {
 	}
 }
 
-func TestReportContentBreakerTripsOnlyOnRepeatedSameContentFailure(t *testing.T) {
+func TestReportContentBreakerTripsOnlyAcrossDifferentSections(t *testing.T) {
 	var breaker reportContentBreaker
-	if breaker.observe(errInvalidModelOutput) {
-		t.Fatal("circuit breaker tripped on the first content failure")
+	if breaker.observe("section_1", errCitationMapping) || breaker.observe("section_1", errCitationMapping) {
+		t.Fatal("draft and correction of one section tripped the breaker")
 	}
-	if breaker.failures != 1 || breaker.code != "invalid_model_output" {
-		t.Fatalf("first failure state=%+v", breaker)
-	}
-	if !breaker.observe(errInvalidModelOutput) || !breaker.tripped {
-		t.Fatalf("circuit breaker did not trip on repeated content failure: %+v", breaker)
-	}
-
-	breaker.success()
-	if breaker.tripped || breaker.failures != 0 || breaker.code != "" {
-		t.Fatalf("successful section did not reset breaker: %+v", breaker)
-	}
-	if breaker.observe(errCitationMapping) {
-		t.Fatal("circuit breaker tripped on a different first failure")
-	}
-	if breaker.observe(errUnsupportedCitationClaim) {
+	if breaker.observe("section_2", errUnsupportedCitationClaim) {
 		t.Fatal("different failure codes were counted as identical")
 	}
-	if breaker.failures != 1 || breaker.code != "claim_not_supported" {
-		t.Fatalf("different failure state=%+v", breaker)
+	if !breaker.observe("section_2", errCitationMapping) || !breaker.tripped {
+		t.Fatalf("same failure in two sections did not trip: %+v", breaker)
 	}
-	if breaker.observe(sqlite.ErrResearchBudgetExceeded) {
+	breaker.success()
+	if breaker.tripped || len(breaker.failed) != 0 {
+		t.Fatalf("successful section did not reset breaker: %+v", breaker)
+	}
+	if breaker.observe("section_3", sqlite.ErrResearchBudgetExceeded) || len(breaker.failed) != 0 {
 		t.Fatal("budget failure entered content circuit breaker")
 	}
 }

@@ -180,30 +180,33 @@ func reportFailureRepairable(err error) bool {
 	return errors.Is(err, errInvalidModelOutput) || errors.Is(err, llm.ErrInvalidModelOutput) || errors.Is(err, llm.ErrOutputTruncated) || errors.Is(err, errCitationMapping)
 }
 
-// reportContentBreaker stops spending model calls on a report after the same
-// content failure has happened twice. Budget, infrastructure and input-size
-// failures are deliberately excluded: they need their existing error paths,
-// not a content fallback that could hide a runtime problem.
+// reportContentBreaker stops spending correction calls on a report after the
+// same content failure has happened in two different sections in a row. One
+// bad section never dooms the rest: a tripped breaker only removes the
+// correction attempt, every section still gets its first attempt. Budget,
+// infrastructure and input-size failures are deliberately excluded: they
+// need their existing error paths, not a content fallback that could hide a
+// runtime problem.
 type reportContentBreaker struct {
-	code     string
-	failures int
-	tripped  bool
+	failed  map[string][]string // failure code -> distinct section IDs
+	tripped bool
 }
 
-func (b *reportContentBreaker) observe(err error) bool {
+func (b *reportContentBreaker) observe(sectionID string, err error) bool {
 	if b == nil || !reportContentFailure(err) || !reportCircuitFailure(err) {
 		return false
 	}
 	code := reportFailureCode(err)
 	if code == "" {
-		return false
+		return b.tripped
 	}
-	if b.code == code {
-		b.failures++
-	} else {
-		b.code, b.failures = code, 1
+	if b.failed == nil {
+		b.failed = map[string][]string{}
 	}
-	if b.failures >= 2 {
+	if !contains(b.failed[code], sectionID) {
+		b.failed[code] = append(b.failed[code], sectionID)
+	}
+	if len(b.failed[code]) >= 2 {
 		b.tripped = true
 	}
 	return b.tripped
@@ -213,7 +216,7 @@ func (b *reportContentBreaker) success() {
 	if b == nil {
 		return
 	}
-	b.code, b.failures, b.tripped = "", 0, false
+	b.failed, b.tripped = nil, false
 }
 
 func reportCircuitFailure(err error) bool {
@@ -294,20 +297,15 @@ func reportDraftProblem(draft string, resolve func(string) (string, bool), claim
 }
 
 func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal, inputHash string, state *checkpointState, section *domain.ReportSection, catalogue []citationEvidence, claimLimit int, breaker *reportContentBreaker, aliases *evidenceAliases) error {
-	if breaker != nil && breaker.tripped {
-		section.Status = "fallback_excerpts"
-		section.Limitation = "report_circuit_breaker"
-		section.Body = reportExcerptFallback(catalogue)
-		section.Review = nil
-		section.RejectedDraft = ""
-		return nil
-	}
 	resolve := reportCatalogueResolver(catalogue, aliases)
-	start := 0
+	start, attempts := 0, 2
 	if section.CorrectionUsed {
 		start = 1
 	}
-	for attempt := start; attempt < 2; attempt++ {
+	if breaker != nil && breaker.tripped {
+		attempts = start + 1
+	}
+	for attempt := start; attempt < attempts; attempt++ {
 		if attempt == 1 {
 			section.CorrectionUsed = true
 			if _, err := w.repo.SaveCheckpoint(ctx, task.ID, 1, *state); err != nil {
@@ -377,7 +375,7 @@ func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal,
 		if !reportContentFailure(err) {
 			return err
 		}
-		tripped := breaker != nil && breaker.observe(err)
+		tripped := breaker != nil && breaker.observe(section.ID, err)
 		section.RejectedDraft = truncateBytesUTF8(draft.Answer, 20_000)
 		section.Limitation = reportFailureCode(err)
 		if tripped || !reportFailureRepairable(err) {
