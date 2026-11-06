@@ -4,7 +4,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import ResearchSettings from './ResearchSettings.tsx'
 import ChatComposer from './ChatComposer.tsx'
-import { defaultSetup, conversationSetup, maxOutputTokens, setupProblem, settingsPatch, profileMinutes } from './research-settings.mjs'
+import { defaultSetup, conversationSetup, maxOutputTokens, setupProblem, settingsPatch, profileMinutes, withProfile, setupSummary } from './research-settings.mjs'
 
 test('stored settings preserve explicit temperature zero and otherwise use client defaults', () => {
   assert.deepEqual(defaultSetup, { profile: 'standard', timeBudgetMinutes: 30, maxOutputTokens: 5120, temperature: 0.2, topP: 0.8 })
@@ -52,4 +52,16 @@ test('composer keeps a single form, mode name, visible task label and context re
   assert.match(html, /<label for="conversation-input">Задача исследования<\/label>/)
   assert.match(html, /aria-label="Режим разговора"/)
   assert.match(html, /Нужен сохранённый ответ с проверенными ссылками на источники\./)
+})
+
+test('choosing a longer profile gives the run its whole time budget', () => {
+  const overnight = withProfile(defaultSetup, 'overnight_laptop')
+  assert.deepEqual(overnight, { ...defaultSetup, profile: 'overnight_laptop', timeBudgetMinutes: 360 })
+  assert.equal(setupProblem(overnight), '')
+  assert.equal(withProfile(overnight, 'quick').timeBudgetMinutes, 5)
+  assert.equal(withProfile(overnight, 'unknown'), overnight)
+  assert.equal(setupSummary(overnight), 'Ночной · 360 мин')
+  const html = renderToStaticMarkup(createElement(ResearchSettings, { mode: 'research', value: overnight, onChange() {} }))
+  assert.match(html, /Ночной · 360 мин/)
+  assert.match(html, /<option value="overnight_laptop" selected="">Ночной · до 360 мин<\/option>/)
 })

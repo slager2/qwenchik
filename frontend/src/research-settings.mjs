@@ -1,4 +1,5 @@
 export const profileMinutes = Object.freeze({ quick: 5, standard: 30, deep_laptop: 120, long_laptop: 240, overnight_laptop: 360 })
+export const profileLabels = Object.freeze({ quick: 'Быстрый', standard: 'Стандартный', deep_laptop: 'Глубокий', long_laptop: 'Долгий', overnight_laptop: 'Ночной' })
 export const maxOutputTokens = 5120
 export const defaultSetup = Object.freeze({ profile: 'standard', timeBudgetMinutes: 30, maxOutputTokens, temperature: 0.2, topP: 0.8 })
 
@@ -34,4 +35,17 @@ export function settingsPatch(setup) {
     research_settings: { profile: setup.profile, time_budget_seconds: Math.round(setup.timeBudgetMinutes * 60) },
     model_profile: { max_output_tokens: setup.maxOutputTokens, temperature: setup.temperature, top_p: setup.topP },
   }
+}
+
+// Switching profile gives the run that profile's whole time budget: keeping
+// the previous (shorter) limit would silently cut an overnight run to 30 min.
+export function withProfile(setup, profile) {
+  if (!Object.hasOwn(profileMinutes, profile)) return setup
+  return { ...setup, profile, timeBudgetMinutes: profileMinutes[profile] }
+}
+
+export function setupSummary(setup) {
+  const label = profileLabels[setup.profile] || profileLabels[defaultSetup.profile]
+  const minutes = Number.isFinite(setup.timeBudgetMinutes) ? Math.round(setup.timeBudgetMinutes) : profileMinutes[setup.profile]
+  return `${label} · ${minutes} мин`
 }
