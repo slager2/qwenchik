@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -63,6 +64,20 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 		}
 		if err := json.Unmarshal([]byte(request.Messages[1].Content), &input); err != nil {
 			return "", err
+		}
+		// Report roles see numbered source aliases, never raw evidence UUIDs.
+		for _, item := range input.Evidence {
+			if !regexp.MustCompile(`^[0-9]+$`).MatchString(item.EvidenceID) {
+				t.Fatalf("report role saw a raw evidence ID: %q", item.EvidenceID)
+			}
+		}
+		for _, item := range input.Notes {
+			if !regexp.MustCompile(`^[0-9]+$`).MatchString(item.EvidenceID) {
+				t.Fatalf("outline saw a raw evidence ID: %q", item.EvidenceID)
+			}
+		}
+		if regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`).Match(request.JSONSchema) {
+			t.Fatalf("report schema exposes raw evidence IDs: %s", request.JSONSchema)
 		}
 		if strings.Contains(request.Messages[0].Content, "Create a small research report outline") {
 			if len(input.Notes) != 2 {

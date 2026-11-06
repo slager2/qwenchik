@@ -2,7 +2,9 @@ package orchestrator
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -96,4 +98,41 @@ func (a evidenceAliases) aliasCatalog(catalog []verificationCriterion) []verific
 		out[i] = criterion
 	}
 	return out
+}
+
+// newNumberedEvidenceAliases numbers IDs 1..n in the given order. The report
+// uses the evidence catalogue order, which is also the order of the rendered
+// source list, so a model-facing [2] always means the second listed source.
+func newNumberedEvidenceAliases(ids []string) evidenceAliases {
+	aliases := evidenceAliases{toAlias: map[string]string{}, toID: map[string]string{}}
+	for _, id := range ids {
+		if id == "" || aliases.toAlias[id] != "" {
+			continue
+		}
+		alias := strconv.Itoa(len(aliases.ids) + 1)
+		aliases.ids = append(aliases.ids, id)
+		aliases.toAlias[id], aliases.toID[alias] = alias, id
+	}
+	return aliases
+}
+
+func (a evidenceAliases) resolve(id string) string {
+	if original, ok := a.toID[strings.TrimSpace(id)]; ok {
+		return original
+	}
+	return id
+}
+
+var aliasMarkerPattern = regexp.MustCompile(`\[\s*([0-9A-Za-z]{1,8})\s*\]`)
+
+// restoreMarkers rewrites model-facing [alias] markers to [evidence_id]
+// markers. Unknown markers are left untouched for validation to reject.
+func (a evidenceAliases) restoreMarkers(text string) string {
+	return aliasMarkerPattern.ReplaceAllStringFunc(text, func(marker string) string {
+		alias := aliasMarkerPattern.FindStringSubmatch(marker)[1]
+		if id, ok := a.toID[alias]; ok {
+			return "[" + id + "]"
+		}
+		return marker
+	})
 }
