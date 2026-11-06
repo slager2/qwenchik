@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/slager2/qwenchik/internal/config"
+	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/providers/research"
 )
 
@@ -62,6 +63,29 @@ func TestConfiguredSearchProviderPutsAgentSearcherFirst(t *testing.T) {
 	}
 	cfg.AgentSearcherURL = "http://10.1.2.3:8484"
 	if _, err := configuredSearchProvider(cfg); err == nil {
+		t.Fatal("non-loopback agentSearcher accepted")
+	}
+}
+
+func TestPageExtractorFollowsAgentSearcherAndPrivacyMode(t *testing.T) {
+	cfg := config.Config{AgentSearcherURL: "http://127.0.0.1:8484"}
+	extractor, err := newPageExtractor(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := extractor.(*research.AgentSearcherExtractor); !ok {
+		t.Fatalf("extractor=%T", extractor)
+	}
+	for _, mode := range []string{domain.PrivacyOffline, domain.PrivacyLocalSearXNG} {
+		cfg.ResearchPrivacyMode = mode
+		if extractor, err := newPageExtractor(cfg); err != nil || extractor != nil {
+			t.Fatalf("%s: extractor=%v err=%v", mode, extractor, err)
+		}
+	}
+	if extractor, err := newPageExtractor(config.Config{}); err != nil || extractor != nil {
+		t.Fatalf("unconfigured: extractor=%v err=%v", extractor, err)
+	}
+	if _, err := newPageExtractor(config.Config{AgentSearcherURL: "http://10.1.2.3:8484"}); err == nil {
 		t.Fatal("non-loopback agentSearcher accepted")
 	}
 }

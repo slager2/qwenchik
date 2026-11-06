@@ -709,12 +709,17 @@ func serve(parent context.Context) error {
 	if corpus, ok := searchProvider.(*research.OfflineCorpus); ok {
 		sourceExtractor = corpus
 	}
+	pageExtractor, err := newPageExtractor(cfg)
+	if err != nil {
+		return err
+	}
 	if err := tools.RegisterResearchTools(registry, tools.ResearchTools{
 		SearchProvider: searchProvider,
 		Fetcher:        fetcher,
 		Extractor:      sourceExtractor, Artifacts: artifactStore,
 		FetchPolicy: cfg.FetchPolicy(), PDFPolicy: cfg.PDFPolicy,
 		Repository: deps.store, MaxFetchBytes: cfg.MaxFetchBytes, AllowedDomains: cfg.AllowedDomains,
+		PageExtractor: pageExtractor,
 	}); err != nil {
 		return err
 	}
@@ -955,6 +960,20 @@ func configuredSearchProvider(cfg config.Config) (research.SearchProvider, error
 	default:
 		return nil, errors.New("SEARCH_PROVIDER_POLICY must be local_primary or parallel")
 	}
+}
+
+// newPageExtractor returns the agentSearcher /extract client that fetch_url
+// tries before its direct fetch. Like the agentSearcher search provider it is
+// used only in external_search privacy mode; nil when not configured.
+func newPageExtractor(cfg config.Config) (tools.PageExtractor, error) {
+	if cfg.AgentSearcherURL == "" || domain.EffectivePrivacyMode(cfg.ResearchPrivacyMode) != domain.PrivacyExternalSearch {
+		return nil, nil
+	}
+	extractor, err := research.NewAgentSearcherExtractor(cfg.AgentSearcherURL, 0, nil)
+	if err != nil {
+		return nil, err
+	}
+	return extractor, nil
 }
 
 func newAgentSearcher(cfg config.Config) (*research.AgentSearcher, error) {
