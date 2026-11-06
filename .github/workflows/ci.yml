@@ -28,6 +28,8 @@ jobs:
 
   windows:
     runs-on: windows-latest
+    permissions:
+      contents: write # only to publish failing test logs to the ci-windows-logs branch
     steps:
       # Keep LF line endings so fixture and golden-text comparisons match Linux.
       - name: Disable CRLF conversion
@@ -42,10 +44,15 @@ jobs:
       - name: Test
         shell: bash
         # Surface failing tests as annotations so they are readable without log access.
-        run: go test -json -tags sqlite_fts5 ./... 2>&1 | python .github/scripts/test-failures.py
+        run: |
+          go test -json -tags sqlite_fts5 ./... > test.json 2>&1 || true
+          python .github/scripts/test-failures.py < test.json
+      # Keep checking the build and launcher even when some tests fail.
       - name: Build qagent.exe
+        if: success() || failure()
         run: go build -tags sqlite_fts5 -o qagent.exe ./cmd/qagent
       - name: Launcher parses (PowerShell 7)
+        if: success() || failure()
         shell: pwsh
         run: |
           $errors = $null
@@ -54,10 +61,22 @@ jobs:
           ./scripts/qwenchik.ps1 help | Out-Null
           ./scripts/qwenchik.ps1 status
       - name: Launcher runs (Windows PowerShell 5.1)
+        if: success() || failure()
         shell: powershell
         run: |
           ./scripts/qwenchik.ps1 status
           try { ./scripts/qwenchik.ps1 start -NoOpen; exit 1 } catch { if ("$_" -notmatch 'setup') { throw } }
+      # Job logs need authentication even for public repositories; publish the
+      # raw go test JSON of failing pushes so it is readable via raw.githubusercontent.com.
+      - name: Publish failing test log
+        if: failure() && github.event_name == 'push' && hashFiles('test.json') != ''
+        shell: bash
+        run: |
+          mkdir ../logs && cp test.json ../logs/test.json && cd ../logs
+          git init -q -b ci-windows-logs
+          git add test.json
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -q -m "windows test log for ${GITHUB_SHA}"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" HEAD:ci-windows-logs
 
   frontend:
     runs-on: ubuntu-latest
