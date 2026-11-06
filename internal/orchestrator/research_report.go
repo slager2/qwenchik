@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/llm"
@@ -370,6 +371,7 @@ Rules:
 - Write short paragraphs or list items ("- "), one fact each. **Bold** is allowed.
 - End every paragraph and list item with its source number(s) in brackets, e.g. [2] or [1][3].
 - At most %d paragraphs/items. No headings, links, URLs or source list.
+- earlier_sections (if given) is what the report already said: do not repeat those facts or intros; add new facts for this section.
 - %s
 Return JSON {"answer": "..."}.
 Example answer:
@@ -395,7 +397,7 @@ func reportDraftProblem(draft string, resolve func(string) (string, bool), claim
 	return strings.Join(problems, "; ")
 }
 
-func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal, inputHash string, state *checkpointState, section *domain.ReportSection, catalogue []citationEvidence, claimLimit int, breaker *reportContentBreaker, aliases *evidenceAliases) error {
+func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal, inputHash string, state *checkpointState, section *domain.ReportSection, catalogue []citationEvidence, claimLimit int, breaker *reportContentBreaker, aliases *evidenceAliases, earlier []map[string]any) error {
 	resolve := reportCatalogueResolver(catalogue, aliases)
 	sourceIDs := make([]string, 0, len(catalogue))
 	for _, item := range catalogue {
@@ -420,6 +422,9 @@ func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal,
 		}
 		identity := fmt.Sprintf("%s:%s:%d", inputHash, section.ID, attempt)
 		input := map[string]any{"research_question": goal, "section_title": section.Title, "evidence_catalogue": reportModelSources(catalogue), "criteria": section.Criteria, "criterion_catalog": reportCriterionCatalog(task, *state, section.Criteria), "correction": attempt > 0, "rejected_draft_untrusted": section.RejectedDraft, "validation_error": ""}
+		if len(earlier) > 0 {
+			input["earlier_sections"] = earlier
+		}
 		if attempt > 0 {
 			input["validation_error"] = reportDraftProblem(section.RejectedDraft, resolve, claimLimit)
 			switch {
@@ -713,7 +718,7 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 				section.Status = "fallback_excerpts"
 				section.Body = reportExcerptFallback(nil)
 				section.Limitation = "evidence_unavailable"
-			} else if err := w.writeReportSection(ctx, task, goal, inputHash, state, section, selected, claimLimit, breaker, &sourceAliases); err != nil {
+			} else if err := w.writeReportSection(ctx, task, goal, inputHash, state, section, selected, claimLimit, breaker, &sourceAliases, reportEarlierSections(report.Sections[:index])); err != nil {
 				return "", err
 			}
 			if _, err := w.repo.SaveCheckpoint(ctx, task.ID, 1, *state); err != nil {
@@ -862,4 +867,36 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 		return "", err
 	}
 	return answer, nil
+}
+
+var reportMarkerPattern = regexp.MustCompile(`\[[^\]\n]{1,40}\]`)
+
+// reportEarlierSections summarizes already written sections for the next
+// writer call, so sections continue the report instead of restating the same
+// facts (a live run repeated section 1 almost verbatim in section 2). Only
+// verified bodies are used; markers are stripped and the text is bounded.
+func reportEarlierSections(sections []domain.ReportSection) []map[string]any {
+	const perSection, total = 1200, 4000
+	out := []map[string]any{}
+	used := 0
+	for _, section := range sections {
+		if section.Status != "supported" || strings.TrimSpace(section.Body) == "" || used >= total {
+			continue
+		}
+		statements := []string{}
+		for _, line := range strings.Split(section.Body, "\n") {
+			line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- "))
+			line = strings.Join(strings.Fields(reportMarkerPattern.ReplaceAllString(line, "")), " ")
+			if line != "" {
+				statements = append(statements, line)
+			}
+		}
+		text := truncateRunes(strings.Join(statements, " "), min(perSection, total-used))
+		if text == "" {
+			continue
+		}
+		used += utf8.RuneCountInString(text)
+		out = append(out, map[string]any{"title": section.Title, "already_said": text})
+	}
+	return out
 }
