@@ -9,7 +9,12 @@ import (
 
 const (
 	maxResearchSearchFacets = 3
-	maxResearchFetches      = 4
+	// plannerResearchFetches is the fetch range the planner is asked for; the
+	// backend widens breadth itself (expandResearchFetchBreadth).
+	plannerResearchFetches = 4
+	// maxResearchFetches bounds fetch steps in a planner-produced plan; only
+	// backend breadth expansion goes beyond it (researchFetchTarget).
+	maxResearchFetches = plannerResearchFetches
 )
 
 var quotedResearchTermPattern = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|“[^”]*”|‘[^’]*’|«[^»]*»`)

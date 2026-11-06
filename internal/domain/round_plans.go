@@ -79,5 +79,6 @@ func DefaultRoundResearchPolicy() ResearchPolicy {
 	p := DefaultResearchPolicy()
 	p.Version = 2
 	p.Budget, _ = RoundResearchBudgetForProfile(ResearchProfileStandard)
+	p.FetchTarget = min(ResearchFetchTargetForProfile(ResearchProfileStandard), p.Budget.MaxFetches, p.Budget.MaxEvidence)
 	return p
 }

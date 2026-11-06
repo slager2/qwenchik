@@ -26,6 +26,30 @@ func ResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 	return b, true
 }
 
+// MaxResearchFetchTarget is the largest initial-plan fetch breadth: the
+// 12-step plan capacity minus three search facets.
+const MaxResearchFetchTarget = 9
+
+// ResearchFetchTargetForProfile is how many distinct sources the initial
+// research plan of a profile tries to fetch. Fetch steps are deterministic
+// (no LLM call), so breadth costs wall time, bytes and evidence slots, not
+// LLM calls; each value leaves part of MaxFetches/MaxEvidence for a
+// continuation round (standard 6 of 8, deep 8 of 12, long/overnight 9 of
+// 24/36, capped by the plan capacity).
+func ResearchFetchTargetForProfile(name string) int {
+	switch name {
+	case ResearchProfileQuick:
+		return 2
+	case ResearchProfileStandard:
+		return 6
+	case ResearchProfileDeepLaptop:
+		return 8
+	case ResearchProfileLongLaptop, ResearchProfileOvernight:
+		return MaxResearchFetchTarget
+	}
+	return 0
+}
+
 func DefaultResearchPolicy() ResearchPolicy {
 	b, _ := ResearchBudgetForProfile(ResearchProfileStandard)
 	return ResearchPolicy{

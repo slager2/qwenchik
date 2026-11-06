@@ -690,7 +690,7 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 			newPlan = true
 		}
 	}
-	if err := w.validateTaskPlan(baseCompletionPlan(plan), task.Title, goal); err != nil {
+	if err := w.validateTaskPlanWithFetchLimit(baseCompletionPlan(plan), task.Title, goal, researchFetchTarget(ctx, task.Title+"\n"+goal)); err != nil {
 		if !errors.Is(err, errResearchPlanIncomplete) || newPlan {
 			return err
 		}
@@ -757,7 +757,9 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 	w.tools.SeedTaskURLs(task.ID, goal)
 	w.tools.RememberURLs(task.ID, state.ToolResults)
 	w.tools.RememberFetchedURLs(task.ID, state.ToolResults)
-	requiredResearchSources := minimumResearchFetches(task.Title + "\n" + goal)
+	// Fetch steps stop once the profile's breadth target (not just the hard
+	// minimum) of distinct sources has been collected.
+	requiredResearchSources := researchFetchTarget(ctx, task.Title+"\n"+goal)
 	requiredResearchFacets := minimumResearchSearches(task.Title + "\n" + goal)
 	initialSearchStepID := firstSearchStepID(plan)
 	attemptedFetchURLs := make(map[string]struct{})
