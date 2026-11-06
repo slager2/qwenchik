@@ -402,7 +402,9 @@ func compactToolResult(value any) any {
 			if text, ok := item.(string); ok {
 				switch key {
 				case "excerpt":
-					item = truncateRunes(text, 4000)
+					// whole stored excerpt: up to 6000 runes for agentSearcher
+					// extracted pages (provenance.ExtractExcerptRunes)
+					item = truncateRunes(text, 6000)
 				case "snippet":
 					// agentSearcher hits carry ranked page passages; keep
 					// them usable while bounding model input.

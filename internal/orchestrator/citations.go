@@ -133,7 +133,10 @@ func (w *Worker) citationCatalogue(ctx context.Context, taskID string, results m
 			if !strings.Contains(item.Excerpt, excerpt) {
 				continue
 			}
-			excerpt = utf8Prefix(excerpt, 8000) // whole stored excerpt (<= 4000 runes); 3000 bytes cut Cyrillic text to ~1500 characters
+			// 8000 bytes hold a whole 4000-rune excerpt and most of a 6000-rune
+			// agentSearcher extract excerpt while the critic catalogue (12-16
+			// sources) still fits the context; it stays a verbatim prefix.
+			excerpt = utf8Prefix(excerpt, 8000)
 			if len(strings.TrimSpace(excerpt)) < 8 {
 				continue
 			}

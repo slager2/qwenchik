@@ -1397,8 +1397,8 @@ func TestToolResultCompactionBoundsModelContextAndKeepsSourceIDs(t *testing.T) {
 		t.Fatalf("compacted evidence has type %T", compactToolResult(map[string]any{"evidence_id": "large-evidence", "excerpt": longExcerpt}))
 	}
 	gotExcerpt, _ := compactedEvidence["excerpt"].(string)
-	if got := utf8.RuneCountInString(gotExcerpt); got != 4000 {
-		t.Fatalf("compacted evidence excerpt has %d runes, want 4000", got)
+	if got := utf8.RuneCountInString(gotExcerpt); got != 6000 {
+		t.Fatalf("compacted evidence excerpt has %d runes, want 6000", got)
 	}
 	searchHits := make([]research.SearchHit, 10)
 	for index := range searchHits {
