@@ -16,13 +16,19 @@ func (w *Worker) validatePlan(plan domain.Plan, goal string) error {
 }
 
 func (w *Worker) validateTaskPlan(plan domain.Plan, taskTitle, goal string) error {
-	return w.validateTaskPlanWithFetchLimit(plan, taskTitle, goal, maxResearchFetches)
+	return w.validateTaskPlanWithLimits(plan, taskTitle, goal, maxResearchFetches, maxResearchSearchFacets)
 }
 
 // validateTaskPlanWithFetchLimit validates a plan whose fetch steps may have
-// been widened by the backend up to fetchLimit.
+// been widened by the backend up to fetchLimit and whose search facets may
+// have been widened up to maxBackendSearchFacets.
 func (w *Worker) validateTaskPlanWithFetchLimit(plan domain.Plan, taskTitle, goal string, fetchLimit int) error {
+	return w.validateTaskPlanWithLimits(plan, taskTitle, goal, fetchLimit, maxBackendSearchFacets)
+}
+
+func (w *Worker) validateTaskPlanWithLimits(plan domain.Plan, taskTitle, goal string, fetchLimit, searchLimit int) error {
 	fetchLimit = max(fetchLimit, maxResearchFetches)
+	searchLimit = max(searchLimit, maxResearchSearchFacets)
 	for _, step := range plan.Subtasks {
 		if isCompletionStep(step.ID) {
 			return fmt.Errorf("%w: continue_ step IDs are reserved for backend continuation", errInvalidModelOutput)
@@ -92,8 +98,8 @@ func (w *Worker) validateTaskPlanWithFetchLimit(plan domain.Plan, taskTitle, goa
 	if requiredSearches := minimumResearchSearches(taskTitle + "\n" + goal); searchCount < requiredSearches {
 		return fmt.Errorf("%w: research plan requires at least %d distinct search steps", errResearchPlanIncomplete, requiredSearches)
 	}
-	if researchRequest && searchCount > maxResearchSearchFacets {
-		return fmt.Errorf("%w: research plans support at most %d independent search facets", errResearchPlanIncomplete, maxResearchSearchFacets)
+	if researchRequest && searchCount > searchLimit {
+		return fmt.Errorf("%w: research plans support at most %d independent search facets", errResearchPlanIncomplete, searchLimit)
 	}
 	minimumFetches := minimumResearchFetches(taskTitle + "\n" + goal)
 	if fetchCount < minimumFetches {
@@ -532,6 +538,13 @@ func (w *Worker) createPlan(ctx context.Context, task domain.Task, goal, memoryC
 			if !preserved {
 				return domain.Plan{}, fmt.Errorf("%w: corrected plan must preserve every original search facet verbatim", errResearchPlanIncomplete)
 			}
+		}
+	}
+	// Widen search facets before fetch breadth: each facet adds distinct
+	// candidate sites for the fetch steps.
+	if target := researchSearchTarget(ctx, task.Title+"\n"+goal); target > 0 && requiresWebResearch(task.Title+"\n"+goal) {
+		if widened := widenResearchSearchFacets(plan, goal, target, researchPlanCapacity(ctx, w.options.MaxSteps)); w.validateTaskPlanWithFetchLimit(widened, task.Title, goal, maxResearchFetches) == nil {
+			plan = widened
 		}
 	}
 	if target := researchFetchTarget(ctx, task.Title+"\n"+goal); target > 0 && requiresWebResearch(task.Title+"\n"+goal) {

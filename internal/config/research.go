@@ -193,6 +193,8 @@ func (c Config) ResearchProfile(name string) (domain.ResearchPolicy, error) {
 		policy.MaxContinuations = max(0, budget.MaxRounds-1)
 	}
 	policy.FetchTarget = max(0, min(domain.ResearchFetchTargetForProfile(name), budget.MaxFetches, budget.MaxEvidence))
+	// Half of the search queries stay available for continuation rounds.
+	policy.SearchTarget = max(0, min(domain.ResearchSearchTargetForProfile(name), budget.MaxSearchQueries/2))
 	return policy, ValidateResearchPolicy(policy)
 }
 
@@ -250,6 +252,9 @@ func ValidateResearchPolicy(policy domain.ResearchPolicy) error {
 	b := policy.Budget
 	if policy.FetchTarget < 0 || policy.FetchTarget > min(domain.MaxResearchFetchTarget, b.MaxFetches, b.MaxEvidence) {
 		return errors.New("research fetch target exceeds the fetch, evidence, or plan capacity")
+	}
+	if policy.SearchTarget < 0 || policy.SearchTarget > min(domain.MaxResearchSearchTarget, b.MaxSearchQueries) {
+		return errors.New("research search target exceeds the search query or plan capacity")
 	}
 	if b.WallTimeSeconds < 60 || b.WallTimeSeconds > 21600 || b.MaxRounds < 1 || b.MaxSteps < 1 || b.MaxSteps > 12 || b.MaxSearchQueries < 1 || b.MaxFetches < 1 || b.MaxLLMCalls < 1 || b.MaxEvidence < 1 || b.MaxQuestionsCreated < 1 || b.MaxQuestionsAccepted < 1 || b.MaxStagnantRounds < 1 || b.MaxCitationSources < 1 || b.MaxCitationClaims < 1 {
 		return errors.New("research budget limits are invalid")

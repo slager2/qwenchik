@@ -760,7 +760,9 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 	// Fetch steps stop once the profile's breadth target (not just the hard
 	// minimum) of distinct sources has been collected.
 	requiredResearchSources := researchFetchTarget(ctx, task.Title+"\n"+goal)
-	requiredResearchFacets := minimumResearchSearches(task.Title + "\n" + goal)
+	// Search steps are skipped early only after the profile's search breadth
+	// target (not just the hard minimum) of facets has completed.
+	requiredResearchFacets := researchSearchTarget(ctx, task.Title+"\n"+goal)
 	initialSearchStepID := firstSearchStepID(plan)
 	attemptedFetchURLs := make(map[string]struct{})
 	for _, step := range plan.Subtasks {

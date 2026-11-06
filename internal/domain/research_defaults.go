@@ -52,6 +52,28 @@ func ResearchFetchTargetForProfile(name string) int {
 	return 0
 }
 
+// MaxResearchSearchTarget is the largest initial-plan search breadth.
+const MaxResearchSearchTarget = 5
+
+// ResearchSearchTargetForProfile is how many distinct search facets the
+// initial research plan of a profile runs. Each search is one query (one LLM
+// call only when the deterministic path cannot build it), and agentSearcher
+// returns reranked passages per hit, so more facets give fetch steps more
+// distinct, relevant candidate sites.
+func ResearchSearchTargetForProfile(name string) int {
+	switch name {
+	case ResearchProfileQuick:
+		return 2
+	case ResearchProfileStandard:
+		return 3
+	case ResearchProfileDeepLaptop:
+		return 4
+	case ResearchProfileLongLaptop, ResearchProfileOvernight:
+		return MaxResearchSearchTarget
+	}
+	return 0
+}
+
 func DefaultResearchPolicy() ResearchPolicy {
 	b, _ := ResearchBudgetForProfile(ResearchProfileStandard)
 	return ResearchPolicy{

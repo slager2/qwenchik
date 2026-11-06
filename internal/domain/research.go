@@ -43,7 +43,11 @@ type ResearchPolicy struct {
 	// FetchTarget is how many distinct sources the initial plan tries to
 	// fetch (breadth). Zero (sessions saved before it existed) means the
 	// request's minimum source count.
-	FetchTarget           int            `json:"fetch_target,omitempty"`
+	FetchTarget int `json:"fetch_target,omitempty"`
+	// SearchTarget is how many distinct search facets the initial plan
+	// runs. Zero (sessions saved before it existed) means the request's
+	// minimum search count.
+	SearchTarget          int            `json:"search_target,omitempty"`
 	Budget                ResearchBudget `json:"budget"`
 	TaskFetchBudgetBytes  int64          `json:"task_fetch_budget_bytes"`
 	SourceFetchBytes      int64          `json:"source_fetch_bytes"`

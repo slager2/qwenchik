@@ -5,10 +5,16 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/slager2/qwenchik/internal/domain"
 )
 
 const (
+	// maxResearchSearchFacets bounds search steps in a planner-produced plan.
 	maxResearchSearchFacets = 3
+	// maxBackendSearchFacets bounds search steps after backend widening
+	// (widenResearchSearchFacets, researchSearchTarget).
+	maxBackendSearchFacets = domain.MaxResearchSearchTarget
 	// plannerResearchFetches is the fetch range the planner is asked for; the
 	// backend widens breadth itself (expandResearchFetchBreadth).
 	plannerResearchFetches = 4

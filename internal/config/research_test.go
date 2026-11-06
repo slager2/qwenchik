@@ -284,6 +284,7 @@ func TestResearchBudgetsClampOnlyServerCapsAndPreserveWallTimes(t *testing.T) {
 		want.Budget.MaxSteps = 2
 		want.Budget.MaxInitialPlanSteps = 2
 		want.Budget.MaxSearchQueries = 3
+		want.SearchTarget = min(want.SearchTarget, 3/2) // derived from the capped query budget
 		if err != nil || got != want {
 			t.Fatalf("server caps changed unrelated profile limits for %s: got=%#v want=%#v err=%v", name, got, want, err)
 		}

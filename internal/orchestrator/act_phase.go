@@ -478,7 +478,7 @@ func deterministicResearchAction(step domain.PlanStep, goal, expectedTool string
 	}
 	// A packed step (several facets joined by blank lines) keeps the actor
 	// path so no facet is silently dropped from the query.
-	if query == "" && strings.HasPrefix(strings.TrimSpace(step.Description), deterministicSearchFacetPrefix) && !strings.Contains(step.Description, "\n") {
+	if query == "" && strings.HasPrefix(strings.TrimSpace(step.Description), deterministicSearchFacetPrefix) && !strings.Contains(searchStepFacet(step.Description), "\n") {
 		query = conciseSearchQuery(step.Query)
 	}
 	if query == "" {
@@ -557,6 +557,16 @@ func validOriginalQuery(query string) string {
 		return ""
 	}
 	return strings.Join(strings.Fields(query), " ")
+}
+
+// searchStepFacet returns the facet part of a canonical search description,
+// without the wrapper and the (possibly multi-line) user request.
+func searchStepFacet(description string) string {
+	facet := strings.TrimPrefix(strings.TrimSpace(description), deterministicSearchFacetPrefix)
+	if index := strings.LastIndex(facet, ". User request: "); index >= 0 {
+		facet = facet[:index]
+	}
+	return facet
 }
 
 func deterministicSearchQuery(description, goal string) string {
