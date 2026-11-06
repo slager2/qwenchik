@@ -232,7 +232,11 @@ func TestDoctorResearchPolicySnapshotIsSafeAndRuntimeOnly(t *testing.T) {
 			t.Fatal(response.Body.String())
 		}
 	}
-	if checks != 2 || models != 2 {
+	wantChecks := 2
+	if runtime.GOOS == "windows" {
+		wantChecks = 0 // PDF isolation is unsupported there, so the runtime is never probed
+	}
+	if checks != wantChecks || models != 2 {
 		t.Fatalf("runtime=%d models=%d", checks, models)
 	}
 	s.SetResearchPolicy(map[string]any{"pdf_bytes": -1, "pdf_cpu_limit": "1", "pdf_pages": 1.5, "pdf_allow_unsandboxed_fallback": "true"}, nil)
