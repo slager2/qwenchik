@@ -93,3 +93,25 @@ func TestRunReportPDFEndpoint(t *testing.T) {
 	}
 	conversationRequest(t, h, "GET", "/api/runs/missing/report.pdf", "", "", http.StatusNotFound)
 }
+
+func TestConversationMessagesCarryRunMode(t *testing.T) {
+	server, store := newTestServer(t)
+	defer store.Close()
+	h := server.Handler()
+	rec := conversationRequest(t, h, "POST", "/api/conversations", `{"title":"R","mode":"research"}`, "", 201)
+	var c domain.Conversation
+	if err := json.Unmarshal(rec.Body.Bytes(), &c); err != nil {
+		t.Fatal(err)
+	}
+	conversationRequest(t, h, "POST", "/api/conversations/"+c.ID+"/messages", `{"content":"Q","mode":"research"}`, "mode-submit", 202)
+	rec = conversationRequest(t, h, "GET", "/api/conversations/"+c.ID+"/messages", "", "", 200)
+	var messages []domain.ConversationMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &messages); err != nil || len(messages) != 2 {
+		t.Fatalf("unexpected messages %s %v", rec.Body.String(), err)
+	}
+	for _, message := range messages {
+		if message.RunMode != "research" {
+			t.Fatalf("message lacks run mode: %+v", message)
+		}
+	}
+}

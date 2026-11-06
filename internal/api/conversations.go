@@ -156,6 +156,21 @@ func (s *Server) conversationMessages(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, e)
 		return
 	}
+	modes := map[string]string{}
+	for i := range m {
+		id := m[i].RunID
+		if id == "" {
+			continue
+		}
+		mode, known := modes[id]
+		if !known {
+			if run, err := v.GetRun(r.Context(), id); err == nil {
+				mode = run.Mode
+			}
+			modes[id] = mode
+		}
+		m[i].RunMode = mode
+	}
 	writeJSON(w, 200, m)
 }
 func (s *Server) submitConversationMessage(w http.ResponseWriter, r *http.Request) {

@@ -35,6 +35,9 @@ type ConversationMessage struct {
 	LastEventSeq    int64             `json:"last_event_seq"`
 	Metadata        map[string]any    `json:"metadata,omitempty"`
 	Citations       []json.RawMessage `json:"citations,omitempty"`
+	// RunMode is the mode of the run that produced the message, filled by
+	// the API so clients can offer run-specific actions such as PDF export.
+	RunMode string `json:"run_mode,omitempty"`
 }
 
 type Run struct {
