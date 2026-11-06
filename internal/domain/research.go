@@ -17,12 +17,6 @@ type ResearchBudget struct {
 	MaxReportSections    int   `json:"max_report_sections,omitempty"`
 	MaxReportParagraphs  int   `json:"max_report_paragraphs,omitempty"`
 	MaxReportBytes       int   `json:"max_report_bytes,omitempty"`
-	// MinRounds is how many rounds a long profile keeps exploring after the
-	// verifier finds the criteria covered: follow-up questions about the
-	// entities found so far drive later rounds. Zero (quick/standard and
-	// sessions saved before it existed) completes once criteria are covered.
-	// Budgets, deadline, MaxRounds and stagnation still stop exploration.
-	MinRounds int `json:"min_rounds,omitempty"`
 	WallTimeSeconds      int64 `json:"wall_time_seconds"`
 	MaxRounds            int   `json:"max_rounds"`
 	MaxSteps             int   `json:"max_steps"`
@@ -35,6 +29,12 @@ type ResearchBudget struct {
 	MaxStagnantRounds    int   `json:"max_stagnant_rounds"`
 	MaxCitationSources   int   `json:"max_citation_sources"`
 	MaxCitationClaims    int   `json:"max_citation_claims"`
+	// MinRounds is how many rounds a long profile keeps exploring after the
+	// verifier finds the criteria covered: follow-up questions about the
+	// entities found so far drive later rounds. Zero (quick/standard and
+	// sessions saved before it existed) completes once criteria are covered.
+	// Budgets, deadline, MaxRounds and stagnation still stop exploration.
+	MinRounds int `json:"min_rounds,omitempty"`
 }
 
 type ResearchPolicy struct {
