@@ -108,13 +108,17 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 		if len(input.Evidence) == 0 {
 			return "", errors.New("section has no evidence")
 		}
-		raw, err := json.Marshal(map[string]string{"answer": input.Evidence[0].Excerpt + " [" + input.Evidence[0].EvidenceID + "]"})
+		answer := input.Evidence[0].Excerpt + " [" + input.Evidence[0].EvidenceID + "]"
+		if mode == "list" {
+			answer = "- " + answer + "\n* " + input.Evidence[0].Excerpt + " [" + input.Evidence[0].EvidenceID + "][" + input.Evidence[len(input.Evidence)-1].EvidenceID + "]."
+		}
+		raw, err := json.Marshal(map[string]string{"answer": answer})
 		return string(raw), err
 	}}
 }
 
 func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
-	for _, mode := range []string{"valid", "artifact_recovery", "correction", "fallback", "coverage_gap", "infrastructure"} {
+	for _, mode := range []string{"valid", "artifact_recovery", "correction", "fallback", "coverage_gap", "infrastructure", "list"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx := context.Background()
 			f := newResearchRunStore(t)
@@ -176,6 +180,9 @@ func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
 				corrected := section.CorrectionUsed || (mode == "fallback" && index > 0 && section.Limitation == "report_circuit_breaker")
 				if section.Status != want || ((mode == "correction" || mode == "fallback") && !corrected) {
 					t.Fatalf("section validation/correction failed: %+v", section)
+				}
+				if mode == "list" && (!strings.HasPrefix(section.Body, "- ") || strings.Count(section.Body, "\n- ") != 1) {
+					t.Fatalf("list items were not kept as a list: %q", section.Body)
 				}
 			}
 			if mode == "coverage_gap" && (state.Report.Outcome != "partial" || len(state.Report.UnrepresentedCriteria) == 0) {

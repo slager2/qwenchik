@@ -51,16 +51,11 @@ func TestVerifierSeesEvidenceAliasesAndReturnsOriginalIDs(t *testing.T) {
 	}
 }
 
-func TestNumberedEvidenceAliasesRestoreReportMarkers(t *testing.T) {
+func TestNumberedEvidenceAliasesFollowCatalogueOrder(t *testing.T) {
 	const first, second = "57100000-0000-4000-8000-000000000001", "b3600000-0000-4000-8000-000000000002"
 	a := newNumberedEvidenceAliases([]string{second, first, second, ""})
 	if a.toAlias[second] != "1" || a.toAlias[first] != "2" || len(a.ids) != 2 {
 		t.Fatalf("numbering must follow catalogue order: %#v", a.toAlias)
-	}
-	got := a.restoreMarkers("Fact [1].\n- Item [2][ 1 ] and [9] and [b]")
-	want := "Fact [" + second + "].\n- Item [" + first + "][" + second + "] and [9] and [b]"
-	if got != want {
-		t.Fatalf("restoreMarkers = %q, want %q", got, want)
 	}
 	if a.resolve("2") != first || a.resolve(first) != first || a.resolve("7") != "7" {
 		t.Fatal("resolve must map aliases and keep raw or unknown IDs")

@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -121,18 +120,4 @@ func (a evidenceAliases) resolve(id string) string {
 		return original
 	}
 	return id
-}
-
-var aliasMarkerPattern = regexp.MustCompile(`\[\s*([0-9A-Za-z]{1,8})\s*\]`)
-
-// restoreMarkers rewrites model-facing [alias] markers to [evidence_id]
-// markers. Unknown markers are left untouched for validation to reject.
-func (a evidenceAliases) restoreMarkers(text string) string {
-	return aliasMarkerPattern.ReplaceAllStringFunc(text, func(marker string) string {
-		alias := aliasMarkerPattern.FindStringSubmatch(marker)[1]
-		if id, ok := a.toID[alias]; ok {
-			return "[" + id + "]"
-		}
-		return marker
-	})
 }
