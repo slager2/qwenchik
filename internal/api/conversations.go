@@ -41,6 +41,7 @@ func (s *Server) conversationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/conversations/{conversationID}", s.deleteConversation)
 	mux.HandleFunc("GET /api/conversations/{conversationID}/messages", s.conversationMessages)
 	mux.HandleFunc("POST /api/conversations/{conversationID}/messages", s.submitConversationMessage)
+	mux.HandleFunc("POST /api/conversations/{conversationID}/clarify", s.clarifyConversationMessage)
 	mux.HandleFunc("POST /api/runs", s.createRun)
 	mux.HandleFunc("GET /api/runs/{runID}", s.getRun)
 	mux.HandleFunc("GET /api/runs/{runID}/runtime", s.runRuntime)
@@ -179,12 +180,14 @@ func (s *Server) submitConversationMessage(w http.ResponseWriter, r *http.Reques
 		Mode            string `json:"mode"`
 		ParentMessageID string `json:"parent_message_id"`
 		ResearchRunID   string `json:"research_run_id,omitempty"`
+		// Clarification is the optional result of POST .../clarify.
+		Clarification *domain.ClarificationChoice `json:"clarification,omitempty"`
 	}
 	if decodeRequest(w, r, &in) != nil {
 		writeError(w, 400, "invalid_request", "Некорректное сообщение.", false)
 		return
 	}
-	s.submitRun(w, r, domain.SubmitTurn{ConversationID: r.PathValue("conversationID"), Content: in.Content, Mode: in.Mode, ParentMessageID: in.ParentMessageID, ResearchRunID: in.ResearchRunID})
+	s.submitRun(w, r, domain.SubmitTurn{ConversationID: r.PathValue("conversationID"), Content: in.Content, Mode: in.Mode, ParentMessageID: in.ParentMessageID, ResearchRunID: in.ResearchRunID, Clarification: in.Clarification})
 }
 func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 	var in struct {

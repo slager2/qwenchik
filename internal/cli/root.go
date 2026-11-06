@@ -50,6 +50,9 @@ type dependencies struct {
 	worker *orchestrator.Worker
 }
 
+// The API serves POST /api/conversations/{id}/clarify through the worker.
+var _ api.Clarifier = (*orchestrator.Worker)(nil)
+
 func NewRoot() *cobra.Command {
 	var jsonMode bool
 	root := &cobra.Command{
