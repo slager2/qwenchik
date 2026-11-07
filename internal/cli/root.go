@@ -719,7 +719,7 @@ func serve(parent context.Context) error {
 		Extractor:      sourceExtractor, Artifacts: artifactStore,
 		FetchPolicy: cfg.FetchPolicy(), PDFPolicy: cfg.PDFPolicy,
 		Repository: deps.store, MaxFetchBytes: cfg.MaxFetchBytes, AllowedDomains: cfg.AllowedDomains,
-		PageExtractor: pageExtractor,
+		PageExtractor: pageExtractor, SiteMapper: newSiteMapper(cfg),
 	}); err != nil {
 		return err
 	}
@@ -975,6 +975,19 @@ func newPageExtractor(cfg config.Config) (tools.PageExtractor, error) {
 		return nil, err
 	}
 	return extractor, nil
+}
+
+// newSiteMapper returns the agentSearcher /map client of map_site (official
+// site discovery), under the same conditions as newPageExtractor.
+func newSiteMapper(cfg config.Config) tools.SiteMapper {
+	if cfg.AgentSearcherURL == "" || domain.EffectivePrivacyMode(cfg.ResearchPrivacyMode) != domain.PrivacyExternalSearch {
+		return nil
+	}
+	mapper, err := research.NewAgentSearcherMapper(cfg.AgentSearcherURL, 0, nil)
+	if err != nil {
+		return nil
+	}
+	return mapper
 }
 
 func newAgentSearcher(cfg config.Config) (*research.AgentSearcher, error) {

@@ -47,6 +47,10 @@ type ResearchTools struct {
 	// PageExtractor, when set, reads pages and PDFs through agentSearcher's
 	// /extract endpoint before the direct fetch is tried.
 	PageExtractor PageExtractor
+	// SiteMapper, when set, registers map_site (agentSearcher /map) for
+	// official site discovery. Like PageExtractor it is not used with a
+	// domain allow-list.
+	SiteMapper SiteMapper
 }
 
 // PageExtractor reads a page through an external local extraction service
@@ -182,6 +186,11 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 			registry.urlLedger.Remember(taskIDFromContext(ctx), safeHits)
 			return fitSearchHits(safeHits, searchOutputBytes), nil
 		}); err != nil {
+			return err
+		}
+	}
+	if runtime.SiteMapper != nil && runtime.Fetcher != nil && len(runtime.AllowedDomains) == 0 {
+		if err := registerSiteMapTool(registry, runtime); err != nil {
 			return err
 		}
 	}
