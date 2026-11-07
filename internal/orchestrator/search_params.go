@@ -144,17 +144,28 @@ func followUpSearchStep(step domain.PlanStep) bool {
 
 // researchSearchArguments are the backend-built arguments of a search step:
 // language from the query script, recency "year" for date-sensitive facets,
-// and, in follow-up rounds, the official domains seen so far as preferred
-// (not restricted) domains.
+// and as preferred (not restricted) domains the known official sites of
+// programmes the query names plus, in follow-up rounds, the official
+// domains seen so far.
 func researchSearchArguments(step domain.PlanStep, query string, state checkpointState, now time.Time) map[string]any {
 	arguments := map[string]any{"query": query, "max_results": researchSearchResults, "language": searchLanguage(query)}
 	if dateSensitiveText(query, now) {
 		arguments["recency"] = "year"
 	}
+	// Known official sites of programmes the query names lead.
+	domains := officialEntityDomains(query)
 	if followUpSearchStep(step) {
-		if domains := officialResultDomains(state.ToolResults, maxPreferredDomains); len(domains) > 0 {
-			arguments["preferred_domains"] = domains
+		for _, host := range officialResultDomains(state.ToolResults, maxPreferredDomains) {
+			if !contains(domains, host) {
+				domains = append(domains, host)
+			}
 		}
+	}
+	if len(domains) > maxPreferredDomains {
+		domains = domains[:maxPreferredDomains]
+	}
+	if len(domains) > 0 {
+		arguments["preferred_domains"] = domains
 	}
 	return arguments
 }

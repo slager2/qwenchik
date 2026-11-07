@@ -28,8 +28,15 @@ func TestResearchSearchArgumentsSetLanguageRecencyAndPreferredDomains(t *testing
 	}
 	followUp := researchSearchArguments(domain.PlanStep{ID: "continue_1_search", Kind: "search"}, "Stipendium Hungaricum eligibility", state, searchParamsNow)
 	domains, _ := followUp["preferred_domains"].([]string)
-	if followUp["language"] != "en" || followUp["recency"] != nil || strings.Join(domains, ",") != "studyinkorea.go.kr,mit.edu,stipendiumhungaricum.hu" {
+	if followUp["language"] != "en" || followUp["recency"] != nil || strings.Join(domains, ",") != "stipendiumhungaricum.hu,studyinkorea.go.kr,mit.edu" {
 		t.Fatalf("follow-up arguments = %#v", followUp)
+	}
+	known := researchSearchArguments(domain.PlanStep{ID: "search_3", Kind: "search"}, "GKS Korea scholarship undergraduate 2027 deadline", state, searchParamsNow)
+	if domains, _ := known["preferred_domains"].([]string); strings.Join(domains, ",") != "studyinkorea.go.kr" {
+		t.Fatalf("known official domains = %#v", known)
+	}
+	if got := strings.Join(officialEntityDomains("MEXT Japan, CSC China and Türkiye Burslari"), ","); got != "turkiyeburslari.gov.tr,campuschina.org,csc.edu.cn,studyinjapan.go.jp,mext.go.jp" {
+		t.Fatalf("officialEntityDomains = %q", got)
 	}
 	if _, err := json.Marshal(followUp); err != nil {
 		t.Fatal(err)

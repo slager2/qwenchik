@@ -228,6 +228,45 @@ func goalEntities(goal string) []string {
 	return names
 }
 
+// knownOfficialDomains are the official sites of frequently requested
+// programmes, keyed by folded name aliases. Live runs fetched aggregators
+// while these sites stayed unfetched.
+var knownOfficialDomains = []struct {
+	aliases []string
+	domains []string
+}{
+	{[]string{"stipendium hungaricum"}, []string{"stipendiumhungaricum.hu"}},
+	{[]string{"turkiye burslari", "turkiye scholarships"}, []string{"turkiyeburslari.gov.tr"}},
+	{[]string{"gks", "kgsp", "global korea scholarship"}, []string{"studyinkorea.go.kr"}},
+	{[]string{"csc", "chinese government scholarship"}, []string{"campuschina.org", "csc.edu.cn"}},
+	{[]string{"mext"}, []string{"studyinjapan.go.jp", "mext.go.jp"}},
+	{[]string{"daad"}, []string{"daad.de"}},
+	{[]string{"chevening"}, []string{"chevening.org"}},
+	{[]string{"bolashak", "болашак"}, []string{"bolashak.gov.kz"}},
+	{[]string{"erasmus mundus"}, []string{"erasmus-plus.ec.europa.eu"}},
+	{[]string{"eiffel"}, []string{"campusfrance.org"}},
+}
+
+// officialEntityDomains returns the known official domains of programmes
+// the text names (whole folded words), in table order.
+func officialEntityDomains(text string) []string {
+	folded := " " + entityFold(text) + " "
+	domains := []string{}
+	for _, item := range knownOfficialDomains {
+		for _, alias := range item.aliases {
+			if strings.Contains(folded, " "+alias+" ") {
+				for _, domain := range item.domains {
+					if !contains(domains, domain) {
+						domains = append(domains, domain)
+					}
+				}
+				break
+			}
+		}
+	}
+	return domains
+}
+
 // countryHintNames maps Russian country stems of parenthesised hints to the
 // English names used in keyword queries.
 var countryHintNames = []struct{ stem, name string }{
