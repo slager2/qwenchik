@@ -511,44 +511,66 @@ func fetchOriginalQuery(rawURL string, state checkpointState, goal string) strin
 			keys = append(keys, key)
 		}
 		sort.Strings(keys)
+		// A page often appears in several searches; the excerpt and extract
+		// chunks are chosen with this query, so take the one that matches the
+		// page best (a Hungarian call PDF was excerpted with a Korean query
+		// because that search sorted first, yielding its table of contents).
+		best, bestScore := "", -1
 		for _, key := range keys {
-			if query := searchResultQueryForURL(state.ToolResults[key], selected); query != "" {
-				return query
+			for _, hit := range searchResultHitsForURL(state.ToolResults[key], selected) {
+				if score := queryPageOverlap(hit[0], hit[1]+" "+selected); score > bestScore {
+					best, bestScore = hit[0], score
+				}
 			}
+		}
+		if best != "" {
+			return best
 		}
 	}
 	return validOriginalQuery(goal)
 }
 
-func searchResultQueryForURL(value any, selectedURL string) string {
-	match := func(rawURL, query string) string {
+// searchResultHitsForURL returns [query, title] of every hit for the URL.
+func searchResultHitsForURL(value any, selectedURL string) [][2]string {
+	out := [][2]string{}
+	add := func(rawURL, query, title string) {
 		canonical, err := provenance.CanonicalURL(rawURL)
 		if err != nil || canonical != selectedURL {
-			return ""
+			return
 		}
-		return validOriginalQuery(query)
+		if query = validOriginalQuery(query); query != "" {
+			out = append(out, [2]string{query, title})
+		}
 	}
 	switch hits := value.(type) {
 	case []research.SearchHit:
 		for _, hit := range hits {
-			if query := match(hit.URL, hit.Query); query != "" {
-				return query
-			}
+			add(hit.URL, hit.Query, hit.Title)
 		}
 	case []any:
 		for _, item := range hits {
-			hit, ok := item.(map[string]any)
-			if !ok {
-				continue
-			}
-			rawURL, _ := hit["url"].(string)
-			queryText, _ := hit["query"].(string)
-			if query := match(rawURL, queryText); query != "" {
-				return query
+			if hit, ok := item.(map[string]any); ok {
+				rawURL, _ := hit["url"].(string)
+				query, _ := hit["query"].(string)
+				title, _ := hit["title"].(string)
+				add(rawURL, query, title)
 			}
 		}
 	}
-	return ""
+	return out
+}
+
+// queryPageOverlap counts query words (3+ letters) found in the page's title
+// and URL.
+func queryPageOverlap(query, page string) int {
+	page = looseQuoteText(page)
+	score := 0
+	for _, word := range strings.Fields(looseQuoteText(query)) {
+		if utf8.RuneCountInString(word) >= 3 && strings.Contains(page, word) {
+			score++
+		}
+	}
+	return score
 }
 
 func validOriginalQuery(query string) string {
