@@ -113,6 +113,44 @@ func TestReportRunFixtureFallbackSectionsAreShort(t *testing.T) {
 	}
 }
 
+// With the GKS and CSC records that run's checker rejected (their quotes
+// are real spans of the cited excerpt), the report compares entities and
+// the dashboard takes rows round-robin.
+func TestReportRunFixtureComparesEntitiesWithFacts(t *testing.T) {
+	fixture := loadReportRunFixture(t)
+	const ev = "012dc6ab-5916-40d4-96d2-8beb56f0c834"
+	for index, section := range fixture.Report.Sections {
+		switch section.Title {
+		case "GKS":
+			fixture.Report.Sections[index].Facts = []domain.ReportFact{{Entity: "GKS", Attribute: "дедлайн приёма", Value: "15 to 30 September 2026", Year: "2026", EvidenceID: ev, Quote: "Open·Next: Undergraduate 2027 cycle: 15 to 30 September 2026.", Check: "critic"}}
+		case "CSC":
+			fixture.Report.Sections[index].Facts = []domain.ReportFact{{Entity: "CSC", Attribute: "дедлайн приёма", Value: "Январь – Апрель", EvidenceID: ev, Quote: "Open·Next: January – April", Check: "critic"}}
+		}
+	}
+	for _, section := range fixture.Report.Sections {
+		if err := validateReportFacts(section.Facts, selectReportEvidence(section.EvidenceIDs, fixture.Catalogue)); err != nil {
+			t.Fatalf("fixture fact of %s does not verify: %v", section.Title, err)
+		}
+	}
+	markdown := renderSectionedReport(&fixture.Report, fixture.Goal, fixture.RunID, fixture.Catalogue, fixture.Missing, fixture.Supplementary)
+	if path := os.Getenv("QWENCHIK_REPORT_RUN_COMPARE_SAMPLE"); path != "" {
+		_ = os.WriteFile(path, []byte(markdown), 0o644)
+	}
+	comparison := reportSection(markdown, "Сравнение")
+	for _, want := range []string{"| Объект | дедлайн приёма |", "| **GKS** | 15 – 30 сентября 2026 [" + ev + "] |", "| **CSC** | Январь – Апрель [" + ev + "] |", "| **Türkiye Burslari** | 10 января – 20 февраля ["} {
+		if !strings.Contains(comparison, want) {
+			t.Fatalf("comparison lacks %q:\n%s", want, markdown)
+		}
+	}
+	keyNumbers := reportSection(markdown, "Ключевые цифры")
+	if !strings.Contains(keyNumbers, "| GKS | дедлайн приёма |") || strings.Count(keyNumbers, "| Türkiye Burslari |") != 2 {
+		t.Fatalf("key numbers are not round-robin:\n%s", keyNumbers)
+	}
+	if gaps := reportSection(markdown, "Что не найдено"); strings.Contains(gaps, "**GKS** — сборы и расходы, дедлайн") {
+		t.Fatalf("gaps list the GKS deadline:\n%s", gaps)
+	}
+}
+
 func TestReportRunFixtureGapsNameEntityAttributes(t *testing.T) {
 	markdown := renderReportRunFixture(t)
 	gaps := reportSection(markdown, "Что не найдено")
