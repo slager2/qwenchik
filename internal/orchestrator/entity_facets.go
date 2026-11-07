@@ -13,9 +13,6 @@ import (
 	"github.com/slager2/qwenchik/internal/domain"
 )
 
-// maxGoalEntities bounds the named entities taken from one research goal.
-const maxGoalEntities = 6
-
 var quotedNamePattern = regexp.MustCompile(`[«"“„]([^«»"“”„\n]{2,80})[»"”“]`)
 
 // entityConnectors may join capitalized words inside one name ("University
@@ -99,16 +96,16 @@ func acronymToken(token string) bool {
 	return upper >= 2
 }
 
-// goalEntities returns the named entities of a research goal (programmes,
-// universities, products): quoted names, runs of Latin words in a
-// non-Latin (for example Russian) request, and in a Latin request runs of
-// two or more capitalized words or acronyms. Each is returned once, in
-// order of appearance, at most maxGoalEntities.
-func goalEntities(goal string) []string {
+// goalNameCandidates returns the proper names of a research goal: quoted
+// names, runs of Latin words in a non-Latin (for example Russian) request,
+// and in a Latin request runs of two or more capitalized words or
+// acronyms. Generic terms are skipped; each name is returned once, in order
+// of appearance.
+func goalNameCandidates(goal string) []string {
 	entities := []string{}
 	add := func(name string) {
 		name = strings.Join(strings.Fields(strings.Trim(name, " -&")), " ")
-		if utf8.RuneCountInString(name) < 3 || len(entities) >= maxGoalEntities || entityNoise[strings.ToLower(name)] {
+		if utf8.RuneCountInString(name) < 3 || len(entities) >= 2*maxGoalEntities || entityNoise[strings.ToLower(name)] || genericGoalTerm(name) {
 			return
 		}
 		folded := entityFold(name)
@@ -166,6 +163,14 @@ func goalEntities(goal string) []string {
 		flushName := func() {
 			for len(name) > 0 && entityConnectors[strings.ToLower(name[len(name)-1])] {
 				name = name[:len(name)-1]
+			}
+			// "Computer Science for Kazakh": a generic field before a
+			// connector is no part of the name.
+			for index, word := range name {
+				if index > 0 && entityConnectors[strings.ToLower(word)] && genericGoalTerm(strings.Join(name[:index], " ")) {
+					name = name[index+1:]
+					break
+				}
 			}
 			if len(name) >= 2 || len(name) == 1 && acronymToken(name[0]) {
 				add(strings.Join(name, " "))

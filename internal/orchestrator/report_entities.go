@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/slager2/qwenchik/internal/domain"
@@ -21,42 +20,11 @@ const (
 	reportEntityMax     = 8
 )
 
-var reportEntityCandidate = regexp.MustCompile(`\p{Lu}[\p{L}\p{N}'’-]*(?:[ \t]+(?:\p{Lu}[\p{L}\p{N}'’-]*|of|de|du|der|für|and|&))*`)
-
-// Words and acronyms that name attributes, subjects or document types, not
-// entities to compare.
-var reportEntityNoise = map[string]bool{"it": true, "ai": true, "ml": true, "cs": true, "gpa": true, "ielts": true, "toefl": true, "sat": true, "act": true, "gre": true, "gmat": true, "pdf": true, "html": true, "usd": true, "eur": true, "kzt": true, "faq": true, "computer science": true, "software engineering": true, "data science": true, "original task": true, "research": true, "bachelor": true, "master": true, "phd": true, "need": true, "full": true}
-
-// reportQuestionEntities extracts Latin-script proper names and acronyms of
-// the question (e.g. "Stipendium Hungaricum", "GKS", "MEXT").
+// reportQuestionEntities are the named entities of the question (e.g.
+// "Stipendium Hungaricum", "GKS", "MEXT"), from the shared goal extractor
+// that also drives entity search facets and the official-source rule.
 func reportQuestionEntities(goal string) []string {
-	entities := []string{}
-	seen := map[string]bool{}
-	for _, match := range reportEntityCandidate.FindAllString(goal, -1) {
-		match = strings.TrimSpace(strings.TrimRight(match, " &-"))
-		for _, word := range []string{" and", " of", " de", " du", " der", " für"} {
-			match = strings.TrimSuffix(match, word)
-		}
-		latin := false
-		for _, r := range match {
-			if r < 0x0400 && (r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= 0xC0) {
-				latin = true
-				break
-			}
-		}
-		key := strings.ToLower(match)
-		if !latin || len([]rune(match)) < 2 || reportEntityNoise[key] || seen[key] {
-			continue
-		}
-		// A single capitalised word that is not an acronym is too ambiguous
-		// (sentence starts, common nouns).
-		if !strings.Contains(match, " ") && strings.ToUpper(match) != match {
-			continue
-		}
-		seen[key] = true
-		entities = append(entities, match)
-	}
-	return entities
+	return goalEntities(goal)
 }
 
 // reportEntityEvidence lists the catalogue items that name the entity.
