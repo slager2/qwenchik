@@ -202,15 +202,7 @@ func (w *Worker) modelExecutor(ctx context.Context, model domain.ModelProfileSna
 	if availableTokens < 256 {
 		return nil, errInputBudgetExceeded
 	}
-	if availableTokens > int(^uint(0)>>1)/4 {
-		options.MaxInputBytes = int(^uint(0) >> 1)
-	} else {
-		options.MaxInputBytes = availableTokens * 4
-	}
-	// Role inputs are pinned in checkpoints (sqlite.MaxRoleContextInputBytes);
-	// a 64k context allowed ~230 KB requests, and a verifier input with eight
-	// full extract excerpts failed with "context snapshot exceeds size limit".
-	options.MaxInputBytes = min(options.MaxInputBytes, researchMaxInputBytes)
+	options.MaxInputBytes = researchInputBytes(availableTokens)
 	return New(w.repo, client, w.tools, options), nil
 }
 
@@ -278,3 +270,22 @@ func (w *Worker) runDeadline(ctx context.Context, taskID string) (time.Time, boo
 // researchMaxInputBytes keeps every pinned role input below the storage pin
 // limit with room for the snapshot and encoding overhead.
 const researchMaxInputBytes = sqlite.MaxRoleContextInputBytes - 32<<10
+
+// researchBytesPerToken sizes research role inputs from the model context.
+// Qwen3.5 tokenizes real web text at ~4.7 (English) to ~6.3 (Russian) UTF-8
+// bytes per token; JSON framing, URLs and numbers tokenize denser, so 3 keeps
+// the byte pre-check below the exact token admission (64k context -> ~171 KB,
+// 128k -> ~363 KB).
+const researchBytesPerToken = 3
+
+// researchInputBytes scales the research request budget with the available
+// prompt tokens, capped at the checkpoint pin limit: a 64k context with a
+// 4 bytes/token budget once allowed ~230 KB requests and a verifier input with
+// eight full extract excerpts failed with "context snapshot exceeds size
+// limit".
+func researchInputBytes(availableTokens int) int {
+	if availableTokens >= researchMaxInputBytes/researchBytesPerToken {
+		return researchMaxInputBytes
+	}
+	return max(1, availableTokens*researchBytesPerToken)
+}
