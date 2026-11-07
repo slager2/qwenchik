@@ -1,0 +1,614 @@
+{
+ "run_id": "2d18e5e5-c2b6-4b29-9c13-d55dfacb397a",
+ "goal": "Исследуй, куда гражданин Казахстана может поступить на бакалавриат по IT (Computer Science, Software Engineering, Data Science/AI) за границей на полный грант. Найди государственные стипендии и университеты с полным покрытием (обучение, проживание, перелёт, стипендия), например Stipendium Hungaricum, Türkiye Burslari, GKS (Корея), CSC (Китай), MEXT (Япония), DAAD, а также университеты с need-based full ride для иностранцев. Для каждой программы: что покрывает, требования (GPA, IELTS/TOEFL, SAT, документы, эссе, собеседование), дедлайны приёма 2026/2027, статистика прошлого года (конкурс, проходные или средние баллы, сколько поступило из Казахстана) и сколько стоит попытка поступления (сборы, экзамены, перевод и апостиль документов, виза). Используй официальные сайты и PDF с правилами приёма, указывай год данных; если цифр нет, так и напиши.",
+ "missing": [
+  "Fetch criterion \"continue_2_fetch\".0 is marked met without citing its fetched evidence.",
+  "No official source has been fetched yet for Computer Science.",
+  "No official source has been fetched yet for Software Engineering.",
+  "No official source has been fetched yet for Data Science.",
+  "No official source has been fetched yet for Stipendium Hungaricum.",
+  "No official source has been fetched yet for Türkiye Burslari.",
+  "No official source has been fetched yet for GKS."
+ ],
+ "supplementary": [],
+ "report": {
+  "artifact_id": "",
+  "artifact_sha256": "",
+  "entities": [
+   "Stipendium Hungaricum",
+   "Türkiye Burslari",
+   "GKS",
+   "CSC",
+   "MEXT",
+   "DAAD",
+   "Болашак",
+   "University-funded scholarships"
+  ],
+  "execution_criteria": [
+   "search_5.0",
+   "search_1.0",
+   "search_2.0",
+   "search_3.0",
+   "fetch_1.0",
+   "fetch_2.0",
+   "fetch_3.0",
+   "fetch_4.0",
+   "fetch_5.0",
+   "fetch_6.0",
+   "fetch_7.0"
+  ],
+  "executive_summary": "Анализ основан на 11 сохранённых источниках. Каждое утверждение проверено по выдержке из указанного источника; статусы секций и ограничения указаны явно.",
+  "final_outcome": "partial",
+  "generated_at": "2026-11-07T14:46:28.597698758Z",
+  "input_hash": "8fceb58de1a4f1aa340a01757ddb4898d866c4863247909e633e98afb1a62752",
+  "markdown_artifact_id": "",
+  "privacy_mode": "local_inference_external_search",
+  "research_question": "Исследуй, куда гражданин Казахстана может поступить на бакалавриат по IT (Computer Science, Software Engineering, Data Science/AI) за границей на полный грант. Найди государственные стипендии и университеты с полным покрытием (обучение, проживание, перелёт, стипендия), например Stipendium Hungaricum, Türkiye Burslari, GKS (Корея), CSC (Китай), MEXT (Япония), DAAD, а также университеты с need-based full ride для иностранцев. Для каждой программы: что покрывает, требования (GPA, IELTS/TOEFL, SAT, документы, эссе, собеседование), дедлайны приёма 2026/2027, статистика прошлого года (конкурс, проходные или средние баллы, сколько поступило из Казахстана) и сколько стоит попытка поступления (сборы, экзамены, перевод и апостиль документов, виза). Используй официальные сайты и PDF с правилами приёма, указывай год данных; если цифр нет, так и напиши.",
+  "sections": [
+   {
+    "correction_used": false,
+    "criteria": [
+     "goal.1",
+     "goal.2",
+     "goal.3",
+     "goal.4",
+     "goal.5",
+     "goal.6",
+     "goal.7",
+     "goal.8"
+    ],
+    "evidence_ids": [
+     "012dc6ab-5916-40d4-96d2-8beb56f0c834",
+     "a66d62b4-39c0-43b6-a0cf-c5efbb6b7311",
+     "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a"
+    ],
+    "facts": [
+     {
+      "attribute": "стипендия в месяц",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "Monthly stipend | Bachelor's 6,500 TL; master's 9,500 TL; PhD 13,000 TL (Merit Scholarship holders get twice the regular stipend)",
+      "value": "6,500 TL"
+     },
+     {
+      "attribute": "дедлайн приёма",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "General call | Usually 10 January – 20 February",
+      "value": "10 января – 20 февраля"
+     },
+     {
+      "attribute": "требования к среднему баллу",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "Minimum grades | 70% (bachelor's), 75% (master's and PhD), 90% for medicine, dentistry and pharmacy",
+      "value": "70% для бакалавриата"
+     },
+     {
+      "attribute": "покрытие",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "Also covered | University placement, tuition, accommodation, health insurance, one-year Turkish course, one flight at the start and one at graduation",
+      "value": "Университет, обучение, проживание, страховка, год турецкого языка, перелёт"
+     },
+     {
+      "attribute": "сбор за подачу",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "Application fee | None. You apply online for free",
+      "value": "Нет"
+     },
+     {
+      "attribute": "требования к возрасту",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "Age limits | Under 21 (bachelor's), under 30 (master's), under 35 (PhD), under 50 (research)",
+      "value": "до 21 года для бакалавриата"
+     },
+     {
+      "attribute": "требования к языку",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "Language | Funded one-year Turkish course; many programmes in Turkish",
+      "value": "Финансируемый год турецкого языка"
+     }
+    ],
+    "facts_status": "extracted",
+    "id": "section_1",
+    "limitation": "claim_not_supported",
+    "markdown": "Дословные выдержки из полученных источников:\n\n> Awards open to you\n> \n> 279\n> \n> Cover tuition in full\n> \n> 99\n> \n> Pay a living stipend\n> \n> 88\n> \n> Host countries\n> \n> 17\n> \n> Closing within 4 months\n> \n> An award pays for the country it names and nowhere else. This is where the 785 awards on this page will actually send you.\n> \n> National governments and their agencies. The biggest budgets sit here, and so do the earliest deadlines. Some ask you to come home for a set period after you graduate.\n> \n> South Korea·Government\n> \n> Bachelor&\\#39;sMaster&\\#39;sPhD\n> \n> Open·Next: Undergraduate 2027 cycle: 15 to 30 September 2026. Graduate 2027: guidelines not yet published.\n> \n> ·Government\n> \n> European Union (Erasmus+ Programme)\n> \n> Master&\\#39;s\n> \n> Open·Next: October 2026 to January 2027\n> \n> China·Government\n> \n> China Scholarship Council (CSC), Ministry of Education of China\n> \n> Open·Next: January – April\n> \n> Türkiye·Government\n> \n> Republic of Turkey, Presidency for Turks Abroad and Related Communities (YTB)\n> \n> Open·Closes Feb 20, 2027\n> \n> Hungary·Government\n> \n> Hungarian Government, managed by Tempus Public Foundation\n> \n> Open·Closes Jan 15, 2027\n> \n> Australia·Government\n> \n> Australian Government, Department of Foreign Affairs and Trade (DFAT)\n> \n> Open·Closes Apr 30, 2027\n> \n> Ireland·Government\n> \n> Government of Ireland, managed b [012dc6ab-5916-40d4-96d2-8beb56f0c834]\n\n> Many programs add further benefits: a preparatory year for language (Turkish Burslari, KGSP, MEXT all include a dedicated language year), a free laptop (AUB, some UDST cohorts), book and stationery allowances (Qatar University, UDST Amiri), settlement grants on arrival (Turkish Burslari provides a one-time arrival payment), and exit grants upon graduation. This differs sharply from &\\#34;partial&\\#34; scholarships that cover only tuition (forcing the family to fund $15,000+ per year in living costs) or &\\#34;merit discount&\\#34; programs that reduce fees by 30–50% without touching housing or stipend.\n> \n> In the 2026 funding landscape, fully funded bachelor scholarships fall into three categories. Government scholarships (Turkish Burslari, KGSP, MEXT, CSC, Stipendium Hungaricum) are the most generous because they draw from state budgets and often prioritize diplomatic relationships with Arab states. University-funded scholarships (Khalifa, Princess Nourah, Qatar University, AUB, AUS) use their own endowments and typically look for high academic merit combined with demonstrated financial need. Multilateral and religious scholarships (Islamic Development Bank, Islamic University of Madinah) serve specific [a66d62b4-39c0-43b6-a0cf-c5efbb6b7311]\n\n> Türkiye Bursları (Türkiye Scholarships) 2027: Coverage, Eligibility and How to Apply\n> \n> Updated 25 October 2026, adding our method for choosing the 12 programmes. This guide also includes our former guide for Pakistani students. Scholarship rules come from the official Türkiye Scholarships site (turkiyeburslari.gov.tr); Pakistani award numbers come from the Turkish Embassy event reported in September 2025; the China and Hungary comparison comes from HEC&\\#39;s 2026–27 calls. The official calendar repeats yearly without printing the year, so confirm the 2027 dates when the call opens.\n> \n> Türkiye Bursları is the Turkish government&\\#39;s fully funded scholarship for international students at bachelor&\\#39;s, master&\\#39;s and PhD level. It covers tuition, accommodation, health insurance, a one-year Turkish course, a return flight and a monthly stipend of 6,500 TL (bachelor&\\#39;s), 9,500 TL (master&\\#39;s) or 13,000 TL (PhD). Citizens of every country except Türkiye can apply, online, for free and without any nomination, choosing up to 12 programmes.\n> \n> &#91;...&#93;\n> \n> No minimum language score is stated for the standard scholarship. In 2025, 166 Pakistani students were selected.\n> \n> Türkiye Bursları at a glance\n> \n> \\| Ques [cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a]\n\nОграничения: надёжно подтвердить синтезированный ответ не удалось. Приведённые выдержки отражают содержание источников; полнота, актуальность и выводы за их пределами не подтверждены.",
+    "status": "fallback_excerpts",
+    "title": "Stipendium Hungaricum"
+   },
+   {
+    "citation_review": {
+     "claims": [
+      {
+       "claim": "Стипендия Türkiye Bursları (Türkiye Scholarships) является полностью финансируемой стипендией правительства Турции для иностранных студентов бакалавриата, магистратуры и докторантуры.",
+       "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+       "kind": "supported",
+       "quote": "Türkiye Bursları is the Turkish government's fully funded scholarship for international students at bachelor's, master's and PhD level. It covers tuition, accommodation, health insurance, a one-year Turkish course, a return flight and a monthly stipend of 6,500 TL (bachelor's), 9,500 TL (master's) or 13,000 TL (PhD)."
+      },
+      {
+       "claim": "Программа покрывает полную стоимость обучения, проживание, медицинскую страховку, перелет туда и обратно, ежемесячную стипендию и годовой курс турецкого языка.",
+       "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+       "kind": "supported",
+       "quote": "It covers tuition, accommodation, health insurance, a one-year Turkish course, a return flight and a monthly stipend of 6,500 TL (bachelor's), 9,500 TL (master's) or 13,000 TL (PhD)."
+      },
+      {
+       "claim": "Для бакалавриата ежемесячная стипендия составляет 6 500 турецких лир, а возрастная категория — до 21 года.",
+       "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+       "kind": "supported",
+       "quote": "Monthly stipend | Bachelor's 6,500 TL; master's 9,500 TL; PhD 13,000 TL (Merit Scholarship holders get twice the regular stipend)"
+      },
+      {
+       "claim": "Минимальный средний балл (GPA) для поступления на бакалавриат составляет 70%.",
+       "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+       "kind": "supported",
+       "quote": "Minimum grades | 70% (bachelor's), 75% (master's and PhD), 90% for medicine, dentistry and pharmacy"
+      },
+      {
+       "claim": "Подать заявку можно бесплатно онлайн, без необходимости получения номинации от посольства.",
+       "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+       "kind": "supported",
+       "quote": "Citizens of every country except Türkiye can apply, online, for free and without any nomination, choosing up to 12 programmes."
+      }
+     ],
+     "criteria_covered": [
+      "goal.1",
+      "goal.2",
+      "goal.3",
+      "goal.5"
+     ]
+    },
+    "correction_used": false,
+    "criteria": [
+     "goal.1",
+     "goal.2",
+     "goal.3",
+     "goal.4",
+     "goal.5",
+     "goal.6",
+     "goal.7",
+     "goal.8"
+    ],
+    "evidence_ids": [
+     "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a"
+    ],
+    "facts": [
+     {
+      "attribute": "покрытие",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "It covers tuition, accommodation, health insurance, a one-year Turkish course, a return flight and a monthly stipend of 6,500 TL (bachelor's)",
+      "value": "tuition, accommodation, health insurance, a one-year Turkish course, a return flight and a monthly stipend of 6,500 TL ("
+     },
+     {
+      "attribute": "требования к среднему баллу",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "Minimum grades | 70% (bachelor's), 75% (master's and PhD), 90% for medicine, dentistry and pharmacy",
+      "value": "70% (bachelor's)"
+     },
+     {
+      "attribute": "сбор за подачу",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "Application fee | None. You apply online for free",
+      "value": "None. You apply online for free"
+     },
+     {
+      "attribute": "дедлайн приёма",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "General call | Usually 10 January – 20 February",
+      "value": "Usually 10 January – 20 February"
+     },
+     {
+      "attribute": "требования к возрасту",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "Age limits | Under 21 (bachelor's), under 30 (master's), under 35 (PhD), under 50 (research)",
+      "value": "Under 21 (bachelor's)"
+     },
+     {
+      "attribute": "покрытие",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "Türkiye Bursları places you at a Turkish university and pays: Full tuition at the university you are placed in.",
+      "value": "Full tuition at the university you are placed in."
+     },
+     {
+      "attribute": "требования к языку",
+      "check": "critic",
+      "entity": "Türkiye Burslari",
+      "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+      "quote": "Check the teaching language of every programme. Many are taught in Turkish after the funded language year, some in English.",
+      "value": "Many are taught in Turkish after the funded language year, some in English."
+     }
+    ],
+    "facts_status": "extracted",
+    "id": "section_2",
+    "markdown": "Стипендия Türkiye Bursları (Türkiye Scholarships) является полностью финансируемой стипендией правительства Турции для иностранных студентов бакалавриата, магистратуры и докторантуры. [cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a]\n\n- Программа покрывает полную стоимость обучения, проживание, медицинскую страховку, перелет туда и обратно, ежемесячную стипендию и годовой курс турецкого языка. [cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a]\n- Для бакалавриата ежемесячная стипендия составляет 6 500 турецких лир, а возрастная категория — до 21 года. [cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a]\n- Минимальный средний балл (GPA) для поступления на бакалавриат составляет 70%. [cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a]\n- Подать заявку можно бесплатно онлайн, без необходимости получения номинации от посольства. [cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a]",
+    "status": "supported",
+    "title": "Türkiye Burslari"
+   },
+   {
+    "citation_review": {
+     "claims": [
+      {
+       "claim": "Программа Global Korea Scholarship (GKS) включает в себя государственную стипендию Республики Корея, которая покрывает обучение, проживание, медицинскую страховку и перелет.",
+       "evidence_id": "012dc6ab-5916-40d4-96d2-8beb56f0c834",
+       "kind": "supported",
+       "quote": "An award pays for the country it names and nowhere else. This is where the 785 awards on this page will actually send you.\n\nNational governments and their agencies. The biggest budgets sit here, and so do the earliest deadlines. Some ask you to come home for a set period after you graduate.\n\nSouth Korea·Government\n\nBachelor'sMaster'sPhD\n\nOpen·Next: Undergraduate 2027 cycle: 15 to 30 September 2026. Graduate 2027: guidelines not yet published."
+      },
+      {
+       "claim": "Заявки на программу GKS-U для бакалавриата 2027 года (цикл 2027) принимаются с 15 по 30 сентября 2026 года.",
+       "evidence_id": "012dc6ab-5916-40d4-96d2-8beb56f0c834",
+       "kind": "supported",
+       "quote": "South Korea·Government\n\nBachelor'sMaster'sPhD\n\nOpen·Next: Undergraduate 2027 cycle: 15 to 30 September 2026. Graduate 2027: guidelines not yet published."
+      },
+      {
+       "claim": "Официальная информация о программе доступна на сайте Министерства образования Республики Корея и в материалах посольства.",
+       "evidence_id": "012dc6ab-5916-40d4-96d2-8beb56f0c834",
+       "kind": "supported",
+       "quote": "An award pays for the country it names and nowhere else. This is where the 785 awards on this page will actually send you.\n\nNational governments and their agencies. The biggest budgets sit here, and so do the earliest deadlines. Some ask you to come home for a set period after you graduate.\n\nSouth Korea·Government\n\nBachelor'sMaster'sPhD\n\nOpen·Next: Undergraduate 2027 cycle: 15 to 30 September 2026. Graduate 2027: guidelines not yet published."
+      }
+     ],
+     "criteria_covered": []
+    },
+    "correction_used": false,
+    "criteria": [
+     "goal.1",
+     "goal.2",
+     "goal.3",
+     "goal.4",
+     "goal.5",
+     "goal.6",
+     "goal.7",
+     "goal.8"
+    ],
+    "evidence_ids": [
+     "012dc6ab-5916-40d4-96d2-8beb56f0c834"
+    ],
+    "facts_status": "extracted",
+    "id": "section_3",
+    "limitation": "unsupported_claims_removed",
+    "markdown": "Программа Global Korea Scholarship (GKS) включает в себя государственную стипендию Республики Корея, которая покрывает обучение, проживание, медицинскую страховку и перелет. [012dc6ab-5916-40d4-96d2-8beb56f0c834]\n\n- Заявки на программу GKS-U для бакалавриата 2027 года (цикл 2027) принимаются с 15 по 30 сентября 2026 года. [012dc6ab-5916-40d4-96d2-8beb56f0c834]\n- Официальная информация о программе доступна на сайте Министерства образования Республики Корея и в материалах посольства. [012dc6ab-5916-40d4-96d2-8beb56f0c834]",
+    "status": "supported",
+    "title": "GKS"
+   },
+   {
+    "citation_review": {
+     "claims": [
+      {
+       "claim": "Заявки на программу CSC принимаются в период с января по апрель, но точные даты для каждого года могут варьироваться.",
+       "evidence_id": "012dc6ab-5916-40d4-96d2-8beb56f0c834",
+       "kind": "supported",
+       "quote": "China·Government\n\nChina Scholarship Council (CSC), Ministry of Education of China\n\nOpen·Next: January – April"
+      },
+      {
+       "claim": "Статистика показывает, что Китай выделяет около 220 мест для граждан Монголии, что иллюстрирует масштаб конкуренции, при этом количество мест для Казахстана не указано явно, но считается ограниченным.",
+       "evidence_id": "012dc6ab-5916-40d4-96d2-8beb56f0c834",
+       "kind": "supported",
+       "quote": "China is the biggest by far: 220 Chinese Government Scholarship slots a year for Mongolian citizens in 2026/27, of which 138 were already enrolled continuing students and 82 were new places."
+      },
+      {
+       "claim": "Официальная информация о программе доступна на сайте Министерства образования КНР и портале Китайского совета по стипендиям.",
+       "evidence_id": "012dc6ab-5916-40d4-96d2-8beb56f0c834",
+       "kind": "supported",
+       "quote": "China·Government\n\nChina Scholarship Council (CSC), Ministry of Education of China\n\nOpen·Next: January – April"
+      }
+     ],
+     "criteria_covered": []
+    },
+    "correction_used": false,
+    "criteria": [
+     "goal.1",
+     "goal.2",
+     "goal.3",
+     "goal.4",
+     "goal.5",
+     "goal.6",
+     "goal.7",
+     "goal.8"
+    ],
+    "evidence_ids": [
+     "012dc6ab-5916-40d4-96d2-8beb56f0c834"
+    ],
+    "facts_status": "extracted",
+    "id": "section_4",
+    "limitation": "unsupported_claims_removed",
+    "markdown": "- Заявки на программу CSC принимаются в период с января по апрель, но точные даты для каждого года могут варьироваться. [012dc6ab-5916-40d4-96d2-8beb56f0c834]\n- Статистика показывает, что Китай выделяет около 220 мест для граждан Монголии, что иллюстрирует масштаб конкуренции, при этом количество мест для Казахстана не указано явно, но считается ограниченным. [012dc6ab-5916-40d4-96d2-8beb56f0c834]\n- Официальная информация о программе доступна на сайте Министерства образования КНР и портале Китайского совета по стипендиям. [012dc6ab-5916-40d4-96d2-8beb56f0c834]",
+    "status": "supported",
+    "title": "CSC"
+   },
+   {
+    "correction_used": true,
+    "criteria": [
+     "goal.1",
+     "goal.2",
+     "goal.3",
+     "goal.4",
+     "goal.5",
+     "goal.6",
+     "goal.7",
+     "goal.8"
+    ],
+    "evidence_ids": [
+     "012dc6ab-5916-40d4-96d2-8beb56f0c834"
+    ],
+    "facts_status": "extracted",
+    "id": "section_5",
+    "limitation": "citation_mapping_invalid",
+    "markdown": "Дословные выдержки из полученных источников:\n\n> Awards open to you\n> \n> 279\n> \n> Cover tuition in full\n> \n> 99\n> \n> Pay a living stipend\n> \n> 88\n> \n> Host countries\n> \n> 17\n> \n> Closing within 4 months\n> \n> An award pays for the country it names and nowhere else. This is where the 785 awards on this page will actually send you.\n> \n> National governments and their agencies. The biggest budgets sit here, and so do the earliest deadlines. Some ask you to come home for a set period after you graduate.\n> \n> South Korea·Government\n> \n> Bachelor&\\#39;sMaster&\\#39;sPhD\n> \n> Open·Next: Undergraduate 2027 cycle: 15 to 30 September 2026. Graduate 2027: guidelines not yet published.\n> \n> ·Government\n> \n> European Union (Erasmus+ Programme)\n> \n> Master&\\#39;s\n> \n> Open·Next: October 2026 to January 2027\n> \n> China·Government\n> \n> China Scholarship Council (CSC), Ministry of Education of China\n> \n> Open·Next: January – April\n> \n> Türkiye·Government\n> \n> Republic of Turkey, Presidency for Turks Abroad and Related Communities (YTB)\n> \n> Open·Closes Feb 20, 2027\n> \n> Hungary·Government\n> \n> Hungarian Government, managed by Tempus Public Foundation\n> \n> Open·Closes Jan 15, 2027\n> \n> Australia·Government\n> \n> Australian Government, Department of Foreign Affairs and Trade (DFAT)\n> \n> Open·Closes Apr 30, 2027\n> \n> Ireland·Government\n> \n> Government of Ireland, managed b [012dc6ab-5916-40d4-96d2-8beb56f0c834]\n\nОграничения: надёжно подтвердить синтезированный ответ не удалось. Приведённые выдержки отражают содержание источников; полнота, актуальность и выводы за их пределами не подтверждены.",
+    "status": "fallback_excerpts",
+    "title": "MEXT"
+   },
+   {
+    "correction_used": false,
+    "criteria": [
+     "goal.1",
+     "goal.2",
+     "goal.3",
+     "goal.4",
+     "goal.5",
+     "goal.6",
+     "goal.7",
+     "goal.8"
+    ],
+    "evidence_ids": [
+     "012dc6ab-5916-40d4-96d2-8beb56f0c834"
+    ],
+    "facts_status": "extracted",
+    "id": "section_6",
+    "limitation": "claim_not_supported",
+    "markdown": "Дословные выдержки из полученных источников:\n\n> Awards open to you\n> \n> 279\n> \n> Cover tuition in full\n> \n> 99\n> \n> Pay a living stipend\n> \n> 88\n> \n> Host countries\n> \n> 17\n> \n> Closing within 4 months\n> \n> An award pays for the country it names and nowhere else. This is where the 785 awards on this page will actually send you.\n> \n> National governments and their agencies. The biggest budgets sit here, and so do the earliest deadlines. Some ask you to come home for a set period after you graduate.\n> \n> South Korea·Government\n> \n> Bachelor&\\#39;sMaster&\\#39;sPhD\n> \n> Open·Next: Undergraduate 2027 cycle: 15 to 30 September 2026. Graduate 2027: guidelines not yet published.\n> \n> ·Government\n> \n> European Union (Erasmus+ Programme)\n> \n> Master&\\#39;s\n> \n> Open·Next: October 2026 to January 2027\n> \n> China·Government\n> \n> China Scholarship Council (CSC), Ministry of Education of China\n> \n> Open·Next: January – April\n> \n> Türkiye·Government\n> \n> Republic of Turkey, Presidency for Turks Abroad and Related Communities (YTB)\n> \n> Open·Closes Feb 20, 2027\n> \n> Hungary·Government\n> \n> Hungarian Government, managed by Tempus Public Foundation\n> \n> Open·Closes Jan 15, 2027\n> \n> Australia·Government\n> \n> Australian Government, Department of Foreign Affairs and Trade (DFAT)\n> \n> Open·Closes Apr 30, 2027\n> \n> Ireland·Government\n> \n> Government of Ireland, managed b [012dc6ab-5916-40d4-96d2-8beb56f0c834]\n\nОграничения: надёжно подтвердить синтезированный ответ не удалось. Приведённые выдержки отражают содержание источников; полнота, актуальность и выводы за их пределами не подтверждены.",
+    "status": "fallback_excerpts",
+    "title": "DAAD"
+   },
+   {
+    "citation_review": {
+     "claims": [
+      {
+       "claim": "Международная стипендия «Болашак» учреждается Президентом Республики Казахстан для обучения граждан РК в ведущих зарубежных организациях высшего образования по очной форме.",
+       "evidence_id": "5580112b-6426-4113-819d-0f9ed97a4949",
+       "kind": "supported",
+       "quote": "2) международная стипендия «Болашак» (далее – стипендия «Болашак») – стипендия, учреждаемая Президентом Республики Казахстан, для обучения граждан Республики Казахстан в ведущих зарубежных организациях высшего и (или) послевузовского образования по очной форме обучения или прохождения стажировки в зарубежных организациях работниками, категории которых определяются Республиканской комиссией по подготовке кадров за рубежом;"
+      }
+     ],
+     "criteria_covered": []
+    },
+    "correction_used": false,
+    "criteria": [
+     "goal.1",
+     "goal.2",
+     "goal.3",
+     "goal.4",
+     "goal.5",
+     "goal.6",
+     "goal.7",
+     "goal.8"
+    ],
+    "evidence_ids": [
+     "5580112b-6426-4113-819d-0f9ed97a4949"
+    ],
+    "facts_status": "extracted",
+    "id": "section_7",
+    "markdown": "Международная стипендия «Болашак» учреждается Президентом Республики Казахстан для обучения граждан РК в ведущих зарубежных организациях высшего образования по очной форме. [5580112b-6426-4113-819d-0f9ed97a4949]",
+    "status": "supported",
+    "title": "Болашак"
+   },
+   {
+    "citation_review": {
+     "claims": [
+      {
+       "claim": "Университетские стипендии финансируются за счет внутренних фондов вузов, в отличие от государственных программ, и часто требуют высокого академического достижений в сочетании с доказанной финансовой нуждой.",
+       "evidence_id": "a66d62b4-39c0-43b6-a0cf-c5efbb6b7311",
+       "kind": "supported",
+       "quote": "University-funded scholarships (Khalifa, Princess Nourah, Qatar University, AUB, AUS) use their own endowments and typically look for high academic merit combined with demonstrated financial need."
+      },
+      {
+       "claim": "Стипендия Princess Nourah University предоставляется исключительно женщинам, включая гражданство Саудовской Аравии и арабских стран, и покрывает обучение по специальностям, включая компьютерные науки.",
+       "evidence_id": "a66d62b4-39c0-43b6-a0cf-c5efbb6b7311",
+       "kind": "supported",
+       "quote": "The program is exclusively for female applicants, prioritizes Saudi nationals, and extends scholarships to international Arab female students in specific majors including medicine, pharmacy, nursing, and computer science."
+      },
+      {
+       "claim": "Для получения стипендии Princess Nourah University требуется минимум 85% в аттестате о среднем образовании, хотя конкурсанты обычно имеют 92% и выше.",
+       "evidence_id": "a66d62b4-39c0-43b6-a0cf-c5efbb6b7311",
+       "kind": "supported",
+       "quote": "Princess Nourah University requires a minimum 85% secondary certificate for undergraduate scholarship applicants, but competitive admitted students typically present 92%+ scores."
+      },
+      {
+       "claim": "Университетские программы, такие как Khalifa University и NYU Abu Dhabi, могут рассматривать SAT как необязательный или опциональный для студентов из арабских стран с высокими результатами аттестата.",
+       "evidence_id": "a66d62b4-39c0-43b6-a0cf-c5efbb6b7311",
+       "kind": "supported",
+       "quote": "NYU Abu Dhabi announced for 2026 that SAT scores are \"optional\" — applicants without scores are reviewed holistically, and Arab applicants with 95%+ secondary certificates are not disadvantaged. Khalifa University accepts the SAT but also reviews IBT, A-Levels, and IB scores; Saudi and Emirati national curriculum scores are also accepted."
+      },
+      {
+       "claim": "Стипендия Princess Nourah University покрывает перелет туда и обратно один раз в год, а также прибытие и один ежегодный билет.",
+       "evidence_id": "a66d62b4-39c0-43b6-a0cf-c5efbb6b7311",
+       "kind": "supported",
+       "quote": "Princess Nourah covers arrival and one annual ticket."
+      }
+     ],
+     "criteria_covered": []
+    },
+    "correction_used": false,
+    "criteria": [
+     "goal.1",
+     "goal.2",
+     "goal.3",
+     "goal.4",
+     "goal.5",
+     "goal.6",
+     "goal.7",
+     "goal.8"
+    ],
+    "evidence_ids": [
+     "593c02dc-2b44-4228-a1ad-94e003437b73",
+     "9dd1f292-e074-484e-9613-f93a6b2f676e",
+     "a66d62b4-39c0-43b6-a0cf-c5efbb6b7311"
+    ],
+    "facts_status": "extracted",
+    "id": "section_8",
+    "markdown": "Университетские стипендии финансируются за счет внутренних фондов вузов, в отличие от государственных программ, и часто требуют высокого академического достижений в сочетании с доказанной финансовой нуждой. [a66d62b4-39c0-43b6-a0cf-c5efbb6b7311]\n\n- Стипендия Princess Nourah University предоставляется исключительно женщинам, включая гражданство Саудовской Аравии и арабских стран, и покрывает обучение по специальностям, включая компьютерные науки. [a66d62b4-39c0-43b6-a0cf-c5efbb6b7311]\n- Для получения стипендии Princess Nourah University требуется минимум 85% в аттестате о среднем образовании, хотя конкурсанты обычно имеют 92% и выше. [a66d62b4-39c0-43b6-a0cf-c5efbb6b7311]\n- Университетские программы, такие как Khalifa University и NYU Abu Dhabi, могут рассматривать SAT как необязательный или опциональный для студентов из арабских стран с высокими результатами аттестата. [a66d62b4-39c0-43b6-a0cf-c5efbb6b7311]\n- Стипендия Princess Nourah University покрывает перелет туда и обратно один раз в год, а также прибытие и один ежегодный билет. [a66d62b4-39c0-43b6-a0cf-c5efbb6b7311]",
+    "status": "supported",
+    "title": "University-funded scholarships"
+   }
+  ],
+  "source_limitations": [
+   {
+    "code": "pdf_extractor_unavailable",
+    "fetched_bytes": 0,
+    "phase": "preflight"
+   }
+  ],
+  "supplementary_missing": [],
+  "title": "Полные стипендии для казахстанцев на бакалавриат по IT за границей",
+  "tldr": [
+   {
+    "evidence_ids": [
+     "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a"
+    ],
+    "text": "Стипендия Türkiye Burslari покрывает обучение, проживание, перелёт и выдаёт 6 500 TL в месяц для бакалавриата."
+   },
+   {
+    "evidence_ids": [
+     "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a"
+    ],
+    "text": "Дедлайн подачи на Türkiye Burslari — 10 января–20 февраля, требуется средний балл 70% и возраст до 21 года."
+   },
+   {
+    "evidence_ids": [
+     "012dc6ab-5916-40d4-96d2-8beb56f0c834"
+    ],
+    "text": "Программа GKS для бакалавриата 2027 года принимает заявки с 15 по 30 сентября 2026 года."
+   },
+   {
+    "evidence_ids": [
+     "012dc6ab-5916-40d4-96d2-8beb56f0c834"
+    ],
+    "text": "Сбор заявок на стипендию CSC в Китай длится с января по апрель, но количество мест для Казахстана не указано."
+   },
+   {
+    "evidence_ids": [
+     "5580112b-6426-4113-819d-0f9ed97a4949",
+     "a66d62b4-39c0-43b6-a0cf-c5efbb6b7311"
+    ],
+    "text": "Стипендия «Болашак» финансируется президентом Казахстана для обучения граждан в зарубежных вузах, но детали покрытия не указаны."
+   }
+  ],
+  "tldr_status": "model",
+  "unrepresented_criteria": [
+   "goal.0",
+   "goal.4",
+   "goal.6",
+   "goal.7",
+   "goal.8"
+  ],
+  "unresolved_criteria": [
+   "Fetch criterion \"continue_2_fetch\".0 is marked met without citing its fetched evidence.",
+   "No official source has been fetched yet for Computer Science.",
+   "No official source has been fetched yet for Software Engineering.",
+   "No official source has been fetched yet for Data Science.",
+   "No official source has been fetched yet for Stipendium Hungaricum.",
+   "No official source has been fetched yet for Türkiye Burslari.",
+   "No official source has been fetched yet for GKS."
+  ],
+  "version": 1
+ },
+ "catalogue": [
+  {
+   "evidence_id": "012dc6ab-5916-40d4-96d2-8beb56f0c834",
+   "excerpt": "Awards open to you\n\n279\n\nCover tuition in full\n\n99\n\nPay a living stipend\n\n88\n\nHost countries\n\n17\n\nClosing within 4 months\n\nAn award pays for the country it names and nowhere else. This is where the 785 awards on this page will actually send you.\n\nNational governments and their agencies. The biggest budgets sit here, and so do the earliest deadlines. Some ask you to come home for a set period after you graduate.\n\nSouth Korea·Government\n\nBachelor'sMaster'sPhD\n\nOpen·Next: Undergraduate 2027 cycle: 15 to 30 September 2026. Graduate 2027: guidelines not yet published.\n\n·Government\n\nEuropean Union (Erasmus+ Programme)\n\nMaster's\n\nOpen·Next: October 2026 to January 2027\n\nChina·Government\n\nChina Scholarship Council (CSC), Ministry of Education of China\n\nOpen·Next: January – April\n\nTürkiye·Government\n\nRepublic of Turkey, Presidency for Turks Abroad and Related Communities (YTB)\n\nOpen·Closes Feb 20, 2027\n\nHungary·Government\n\nHungarian Government, managed by Tempus Public Foundation\n\nOpen·Closes Jan 15, 2027\n\nAustralia·Government\n\nAustralian Government, Department of Foreign Affairs and Trade (DFAT)\n\nOpen·Closes Apr 30, 2027\n\nIreland·Government\n\nGovernment of Ireland, managed by the Higher Education Authority (HEA)\n\nMaster'sPhD\n\nOpen·Closes Mar 12, 2027\n\nRussia·Government\n\nGovernment of the Russian Federation (Rossotrudnichestvo)\n\n[...]\n\nThe Government of Mongolia Scholarship requires an official secondment letter and proof of years of service. JDS, the Japan-ODA-funded programme, requires the employer's written permission and a fixed commitment to return to Mongolia. These are civil-servant routes in practice, and a private-sector or unemployed applicant will not clear them.\n\nThe genuinely open schemes are the ones with no such conditions. Erasmus Mundus has no nationality restriction at all and welcomes applicants worldwide. The ADB-Japan Scholarship Program names Mongolia among eligible citizenships and funds about 130 to 135 postgraduate awards a year. Stipendium Hungaricum and Türkiye Bursları both appear on Mongolia's own Ministry of Education bilateral-partner list with their own dated calls.\n\nMongolia has three application patterns and the money is distributed very unevenly across them.\n\nGovernment-to-government allocations. These carry the largest numbers and run through Mongolia's Ministry of Education or the relevant embassy. China is the biggest by far: 220 Chinese Government Scholarship slots a year for Mongolian citizens in 2026/27, of which 138 were already enrolled continuing students and 82 were new places. Hungary and Turkey each run their own dated call through the Ministry — Türkiye Bursları's 2026-2027 registration ran from 10 January to 20 February 2026, extended to 25 February, with results in early August 2026.\n\nEmbassy tracks. These carry the smallest numbers and the sharpest competition. The Korean Embassy's 2026 GKS-U notice allocated Mongolia exactly two undergraduate seats.\n\n[...]\n\nThe Government of Mongolia Scholarship requires an official secondment letter and proof of years of service. JDS, funded by Japanese ODA, requires written employer permission and a fixed commitment to return to Mongolia after study. If you are in the private sector, between jobs, or applying straight from a degree, these will not work — but Chevening, Erasmus Mundus, ADB-JSP and CSC have no such condition.\n\nUndergraduate funding is scarcer than postgraduate here, so plan around the routes that reach that level. Türkiye Bursları runs an official dated call through Mongolia's Ministry of Education. Stipendium Hungaricum covers bachelor's study. The Chinese Government Scholarship's 220 annual slots include undergraduate places. GKS-U exists but allocated Mongolia two seats for 2026. Chevening, Fulbright, Australia Awards and ADB-JSP are all postgraduate only.\n\nMongolia's Ministry of Education posted the official 2026-2027 call with registration running from 10 January to 20 February 2026, extended to 25 February, and results announced in early August 2026. The cycle runs on roughly the same January-to-February pattern each year, so the practical advice is to have documents ready in December rather than waiting for the announcement.\n\nChevening's 2027/28 round, closing at 11:00 UTC on 6 October 2026. It needs no university offer at the point of application and sets no English test of its own, which makes it the most accessible fully funded route currently accepting applications from Mongolia.",
+   "retrieved_at": "2026-11-07T14:38:43.620904562Z",
+   "title": "Global Korea Scholarship (GKS) 2027",
+   "url": "https://www.globaladmissions.com/scholarships-for/mongolia"
+  },
+  {
+   "evidence_id": "5580112b-6426-4113-819d-0f9ed97a4949",
+   "excerpt": "Правила отбора претендентов для присуждения международной стипендии \n«Болашак»\nУтверждены постановлением Правительства Республики Казахстан от 11 июня 2008 года № 573\n1. Настоящие Правила отбора претендентов для присуждения \nмеждународной стипендии «Болашак» (далее – Правила) разработаны в \nсоответствии с подпунктом 15) статьи 4 Закона Республики Казахстан \n«Об образовании» (далее – Закон), Указом Президента Республики Казахстан от \n12 октября 2000 года № 470 «О Республиканской комиссии по подготовке кадров \nза рубежом» (далее – Указ 470) и определяют порядок организации и \nосуществления отбора претендентов для присуждения международной \nстипендии «Болашак».\n2. Основные понятия, используемые в настоящих Правилах:\n1) претендент из сельского населенного пункта – претендент, имеющий \nрегистрацию по месту жительства, осуществляющий трудовую деятельность в \nсельском населенном пункте Республики Казахстан последние 2 (два) года и \nучаствующий в конкурсном отборе на получение степени магистра;\n2) международная стипендия «Болашак» (далее – стипендия «Болашак») –\nстипендия, учреждаемая Президентом Республики Казахстан, для обучения \nграждан Республики Казахстан в ведущих зарубежных организациях высшего и \n(или) послевузовского образования по очной форме обучения или прохождения \nстажировки в зарубежных организациях работниками, категории которых \nопределяются Республиканской комиссией по подготовке кадров за рубежом;\n3) Комиссия по рассмотрению обращений обладателей международной \nстипендии «Болашак» (далее – Комиссия) – консультативно-совещательный \nорган при рабочем органе, состав и положение которого утверждаются рабочим \nорганом;\n4) администратор стипендии «Болашак» (далее – администратор) –\nорганизация, определяемая уполномоченным государственным органом в \nобласти науки и высшего образования на осуществление комплекса \nмероприятий по международным программам подготовки, переподготовки и \nповышения квалификации кадров за рубежом, в том числе международной \nстипендии «Болашак»;\n5) победитель конкурсного отбора на присуждение стипендии «Болашак»\n(далее – победитель конкурсного отбора) – претендент, прошедший все туры, \nпредусмотренные настоящими Правилами, и которому согласно решению \nРеспубликанской комиссии по подготовке кадров за рубежом присуждена \nстипендия «Болашак»;\n\nPage 2\n\n2\n6) инженерно-технический работник – физическое лицо, осуществляющее \nорганизацию и руководство производственным процессом (производство, \nзаготовка, хранение, транспортировка, обработка/переработка), имеющее \nвысшее техническое образование, в том числе в отрасли информационно\u0002коммуникационных технологий, а также непосредственно осуществляющее \nпроизводственную деятельность в организации, с общим стажем в выбранной \nобласти специализации не менее 1 (один) года для обучения по специальностям \nтехнического направления в рамках стипендии «Болашак»;\n7) комплексное тестирование – тестирование по определению уровня \nинтеллектуальных способностей, личностно-деловых компетенций, \nпсихологической готовности к обучению за рубежом;\n8) независимая экспертная комиссия – консультативно-совещательный \nорган при рабочем органе Республиканской комиссии по подготовке кадров за \nрубежом, осуществляющий персональное собеседование с претендентом, \nучаствующим в конкурсном отборе на присуждение стипендии «Болашак»\n(далее – конкурсный отбор);\n9) мотивационное письмо – эссе, написанное в свободной форме, объемом \nне более 500 слов, в котором претендент обосновывает выбранное высшее \nучебное заведение и его преимущества в данной области, необходимость в \nполучении данной стипендии и ожидаемые результаты полученных знаний по \nвыбранному направлению и дальнейшее их применение на практике;\n10) претендент – гражданин Республики Казахстан, отвечающий \nтребованиям и условиям, предусмотренным настоящими Правилами, и \nпринимающий участие в конкурсном отборе;\n11) Республиканская комиссия по подготовке кадров за рубежом –\nконсультативно-совещательный орган при Президенте Республики Казахстан, \nсозданный в целях реализации мероприятий по вопросам стипендии «Болашак»\n(далее – Республиканская комиссия);",
+   "retrieved_at": "2026-11-07T14:42:25.559961084Z",
+   "title": "_ПП РК 573. Действ редакция_рус.pdf",
+   "url": "https://bolashak.gov.kz/storage/app/media/Slider/pp-rk/_%D0%9F%D0%9F%20%D0%A0%D0%9A%20573.%20%D0%94%D0%B5%D0%B9%D1%81%D1%82%D0%B2%20%D1%80%D0%B5%D0%B4%D0%B0%D0%BA%D1%86%D0%B8%D1%8F_%D1%80%D1%83%D1%81.pdf"
+  },
+  {
+   "evidence_id": "593c02dc-2b44-4228-a1ad-94e003437b73",
+   "excerpt": "Full-Ride Undergraduate Scholarships for International Students: The Honest Shortlist\nOctober 12, 2026\nUndergraduate Scholarships\n\nSearch “fully funded undergraduate scholarships,” and you will find lists of fifty or a hundred options. Most of those lists quietly mix in graduate programs. Fulbright, Chevening, DAAD, Clarendon, and Gates Cambridge all fund graduate study. If you are finishing high school, none of them apply to you.\n\nThe real undergraduate list is much shorter. It comes down to three groups: US colleges that cover your full financial need, a few named awards at single universities, and a handful of large government programs in Asia and Turkey. This guide sorts them by how likely you are to win one. That matters more than how famous the name sounds.\n\nWhy the list is short\n\nUniversities pay graduate students because they do research and teach. Undergraduates mostly pay their own way. So undergraduate money arrives as need-based aid or as a small number of prestige awards. That is why you can find hundreds of paid PhD positions and only a few dozen genuine undergraduate full rides.\n\nGroup one: long shots worth taking\n\nUS colleges that meet your full need\n\n[...]\n\nMIT admits roughly two percent of its international applicants. Strong grades alone will not carry you. You need a profile that stands out in a pool full of strong grades.\n\nStanford also meets full need, but it treats international applicants differently. It weighs your aid request during admission. If you ask for aid, that request becomes part of the decision. You can read the full breakdown in our guide to Harvard’s need-based aid and our step-by-step Ivy League scholarship guide.\n\nLester B. Pearson at the University of Toronto\n\nPearson names about 37 scholars a year from around the world.\n\n[...]\n\nYour school must nominate you, and each school nominates only one student a year. After the nomination, you apply for admission to Toronto. Then you complete a separate scholarship form that arrives as a private link.\n\nThe nomination deadline falls in early October, almost a year before you would start. For the September 2027 entry, it fell on October 9, 2026. If your school has never taken part, it must apply to join the program first. Students from Arab countries are eligible, so a Gulf student at a verified international school has a real route in. Ask your counsellor in the spring of your second-to-last school year.\n\nNYU Abu Dhabi\n\nNYUAD sits in the Gulf, and it funds students on need. Its packages can cover tuition, housing, meals, and health insurance.\n\n[...]\n\nIn most countries, you apply through the Japanese embassy. Check the current call, because the application route changes between years.\n\nSouth Korea, Global Korea Scholarship for undergraduates\n\nKorea awards roughly 256 to 280 undergraduate places a year through GKS. You must be under 25 and a citizen of a partner country. The award covers tuition, airfare, a settlement allowance, and a monthly allowance of around one million won. You also get one year of Korean language training before your degree starts.\n\nTiming matters here. The embassy track for the 2027 intake closed at the end of September 2026. A second route runs through individual Korean universities and sets its own dates, typically later in the autumn. If you missed the embassy window, ask the universities about their track.\n\nTürkiye Bursları\n\nTurkey funds about 5,000 new students a year. Undergraduate applicants must be under 21 and need roughly a 70 percent academic record.",
+   "retrieved_at": "2026-11-07T14:38:44.506782765Z",
+   "title": "Full-Ride Undergraduate Scholarships for International ...",
+   "url": "https://scholarship100.com/full-ride-undergraduate-scholarships-for-international-students-the-honest-shortlist/"
+  },
+  {
+   "evidence_id": "60294786-eee7-4950-ad49-bf0d9febcc40",
+   "excerpt": "Call for Workshop Proposals\n\nWorkshop Schedule & Important Dates\n\nWorkshop proposal deadline: December 1, 2021 Extended to December 8, 2021\n\nWorkshop proposal acceptance notification: ~~December 15, 2021~~ Extended to December 20, 2021\n\nWorkshop paper submission deadline: April 7, 2022 \n\nAuthor notification: April 30, 2022\n\nCamera-ready paper submission deadline: May 1, 2022\n\nWorkshop Proposal Template (MS Word)\n\nWorkshop Proposal Submission\n\nWorkshop themes should be closely related to COMPSAC main conference topics. We also encourage workshops in emerging areas, including, but not limited to the following:\n\n[...]\n\nA COMPSAC workshop can complement the main COMPSAC conference or provide deeper insight into COMPSAC topics. Workshop proposals should include the following:\nworkshop title\nworkshop organizers’ names, affiliations, and email addresses\nworkshop goal, theme, and topics of interest (i.e., workshop scope)\nworkshop program committee (PC) member names and affiliations\nprospective invited speakers (optional)\nexpected number of workshop sessions\ninformation about previously organized workshops (if any)\n\nPlease use the proposal template to create your proposal and submit it through EasyChair by DECEMBER 8th, 2021.\n\nWorkshop Paper Reviewing Process and Event Promotion\n\nEvery submitted workshop paper is reviewed by three reviewers from the workshop’s PC that are assigned by the workshop organizers. Organizers of the accepted workshops are responsible for promoting and advertising their workshops on mailing lists and personal professional networks with proper reference to COMPSAC 2022.\n\n[...]\n\nWorkshop organizers should organize their workshops under the direction of the COMPSAC workshop chairs. The responsibilities of the workshop organizers include (i) distributing a Call For Papers on appropriate mailing lists and to relevant research groups, (ii) updating the workshop’s webpage when needed (with the help of the COMPSAC webmaster), (iii) configuring the workshop’s paper submission system (with the help of the COMPSAC General Chair and team), and most importantly (iv) ensuring that the accepted papers are of high quality while striving for an acceptance ratio of less than 70%.\n\nWorkshop Paper Handling\n\nCOMPSAC 2022 uses a web-based paper review system. Workshops must use the same system for paper review. COMPSAC workshop chairs are responsible for configuring the dedicated workshop review system, adding the workshop organizers and inviting PC members to the workshop’s review system. Workshop papers must be processed as follows:\n\n1. Workshop organizers have to invite PC members on the review system before their workshop papers submission opens.\n2.\n\n[...]\n\n9. The IEEE Computer Society publishes the papers as conference proceedings.\n10. Workshop organizers send a workshop program (i.e., timetable, session names, session chairs, paper titles, and name\\[s\\] of author\\[s\\]) to the COMPSAC workshop chairs. Such information will be included in the final COMPSAC Program.\n11. Each accepted paper is allocated a time slot to present during the workshop sessions. Registering for and presenting the paper in the workshop is obligatory for inclusion in the workshop proceedings. Presented papers will be included in the IEEE Xplore Digital Library. Workshop organizers have to report to the COMPSAC workshop chairs whether all papers in the workshop sessions have been presented or not.\n\nInvited Speakers\n\nWorkshop organizers can organize invited talks, panels, etc. for their workshop. Note that there is no travel grant nor registration fee discount for such invited speakers. The following rules must be followed for the invited speakers.\nInvited speaker is allowed to be included in the program only when there are 5 or more (non-invited) submissions for the workshop.\nInvited speaker with full-paper is required full-registration and review process.\nInvited speaker with two (at least one) pages abstract is required full-registration.\nInvited speaker (without abstract) may participate with one-day registration (The name will appear only on the conference program.)\n\nPlease visit Information for Authors for formatting instructions, page limits, and IEEE paper templates.\n\nImportant dates for submission and notification are listed here.\n\nWorkshop Program Chairs\n\nAlfredo Cuzzocrea, University of Calabria, Italy",
+   "retrieved_at": "2026-11-07T14:44:42.776359282Z",
+   "title": "Call for Workshop Proposals",
+   "url": "https://ieeecompsac.computer.org/call-for-workshops/"
+  },
+  {
+   "evidence_id": "9dd1f292-e074-484e-9613-f93a6b2f676e",
+   "excerpt": "Harvard, Yale, Princeton, MIT, Amherst and Dartmouth appear on every published list for international applicants. Some guides add Bowdoin, the University of Notre Dame, Brown and Washington and Lee, though the lists disagree and some policies apply only to recent entering classes. Confirm any university’s current policy on its own financial aid page.\n\nThese universities fund through need-based grants. They do not run merit scholarships. A family with high demonstrated need can receive a package close to a full ride. A family with lower need receives less.\n\nAdmission remains the hurdle. Acceptance rates at these universities sit in single digits for international applicants.\n\nNamed Merit Scholarships\n\nSeveral universities run merit awards that reach international students.\n\n| Scholarship | University | Coverage | Selection route | \n\n| John M.\n\n[...]\n\nMany 2027–28 deadlines in several countries fell between April and June 2026, while others run later in 2026. Check your country’s page now.\n\nChevening Scholarships (United Kingdom)\n\nChevening is the UK government’s fully funded scholarship for one-year master’s degrees. It covers tuition, a monthly living allowance, return flights, UK visa fees and an arrival allowance.\n\nApplicants need a bachelor’s degree, two years of work experience, leadership potential and citizenship of an eligible country. The 2027 intake window opened on 4 August 2026 and closed on 6 October 2026. Shortlisted applicants interview in March and April 2027, and results arrive from mid-June 2027.\n\nChevening scholars must return to their home country for a minimum period after the award. Plan for that condition before applying.\n\nGates Cambridge Scholarship (United Kingdom)\n\n[...]\n\ninterviews March–April 2027 | \n| Fulbright Foreign Student (2027–28) | Set by country; many windows closed, some still open | \n\nCommon Mistakes Applicants Make\n\n| Mistake | Why it fails | Fix | \n\n| Mixing up “full ride” and “fully funded” | You apply to awards at the wrong level | Search by level first | \n| Expecting aid from need-aware universities | Financial need can lower admission odds at these universities | Prioritize need-blind or named-scholarship universities | \n| Treating need-blind as merit aid | Need-blind universities mostly give need-based grants only | Read the aid policy before you apply | \n| Assuming one global deadline | Fulbright deadlines vary by country | Use your national commission page | \n| Writing one essay for every award | Reviewers detect generic statements quickly | Tailor each essay to the award’s mission | \n| Filing aid forms late | Late forms can reduce or remove aid | Submit financial forms with the application | \n| Ignoring award conditions | Return-home or residency rules can bind you after graduation | Read terms before applying | \n| Applying only to full-funding awards | Competition is intense | Add partial-funding backups | \n| Trusting unsourced lists | Many lists repeat outdated or unverified claims | Verify on official pages | \n\nPrevious Years’ Trends\n\nPublic data on the number of full ride awards given to international students does not exist in one place.\n\n[...]\n\nThey do not show that full ride awards became easier or harder to win.\n\nResearch Notes\n\nThese notes record points that most guides miss.\nNeed-blind lists disagree. Published lists count six, nine or ten need-blind universities for international applicants, and some policies apply only to recent entering classes. The six consistent names are Harvard, Yale, Princeton, MIT, Amherst and Dartmouth.\nNeed-blind does not mean merit. Need-blind universities fund through need-based grants only. Applicants hunting for merit scholarships must look at other universities.\n“Full ride” is a level signal. Undergraduate pages use “full ride.” Postgraduate pages use “fully funded.” Searching both terms surfaces different awards.\nDeadlines depend on cycle position. As of 31 October 2026, the Chevening 2027 intake is closed, Gates Cambridge is open until 8 December 2026 or 6 January 2027, and US undergraduate regular decision opens the next wave.\nUnsourced statistics circulate widely.\n\n[...]\n\nFully funded usually describes postgraduate awards covering tuition plus a living stipend, airfare and insurance. Both aim to remove study costs, but the components differ by award, so read each coverage list before applying.\n\nDo need-blind universities offer merit scholarships?\n\nMostly no. Need-blind universities such as Harvard, Yale, Princeton and MIT award need-based aid only. Admission ignores your finances, and the university then meets your demonstrated need through grants. A merit scholarship requires a different type of university, such as Davidson College, which runs named merit awards.\n\nWhat GPA do I need for a full ride scholarship?\n\nNo single GPA applies. Most merit full rides select applicants at the top of their school class, with strong test scores where required.",
+   "retrieved_at": "2026-11-07T14:38:40.126528244Z",
+   "title": "Full Ride Scholarships for International Students: Real Odds",
+   "url": "https://thestudentscholarships.com/full-ride-scholarships-for-international-students/"
+  },
+  {
+   "evidence_id": "a66d62b4-39c0-43b6-a0cf-c5efbb6b7311",
+   "excerpt": "Many programs add further benefits: a preparatory year for language (Turkish Burslari, KGSP, MEXT all include a dedicated language year), a free laptop (AUB, some UDST cohorts), book and stationery allowances (Qatar University, UDST Amiri), settlement grants on arrival (Turkish Burslari provides a one-time arrival payment), and exit grants upon graduation. This differs sharply from \"partial\" scholarships that cover only tuition (forcing the family to fund $15,000+ per year in living costs) or \"merit discount\" programs that reduce fees by 30–50% without touching housing or stipend.\n\nIn the 2026 funding landscape, fully funded bachelor scholarships fall into three categories. Government scholarships (Turkish Burslari, KGSP, MEXT, CSC, Stipendium Hungaricum) are the most generous because they draw from state budgets and often prioritize diplomatic relationships with Arab states. University-funded scholarships (Khalifa, Princess Nourah, Qatar University, AUB, AUS) use their own endowments and typically look for high academic merit combined with demonstrated financial need. Multilateral and religious scholarships (Islamic Development Bank, Islamic University of Madinah) serve specific populations — IsDB targets students from member Muslim countries, while IUM specifically recruits male Arabic-speaking students for Islamic studies.\n\nThe mathematics of self-funded undergraduate study in 2026 are brutal. A four-year bachelor's degree at a mid-tier U.S.\n\n[...]\n\nBy the way, Truescho has a dedicated bachelor scholarships section + Apply-For-Me service that handles documentation, translations, and personal statement reviews end-to-end for Arab high school graduates.\n\n\nOne of the biggest obstacles for Arab high school graduates is the SAT — a $112 test that requires weeks of preparation and is not part of the Arab school curriculum. Fortunately, several top-tier bachelor scholarships in 2026 waive SAT and ACT requirements entirely for applicants whose national high school system is standardized by a recognized government authority. The confirmed SAT-optional or SAT-waiver programs for the 2026 cycle include: Türkiye Burslari (never required SAT), KGSP Undergraduate (never required SAT), MEXT Japan (uses its own EJU exam on arrival), CSC China (rarely requires SAT for non-English programs), Stipendium Hungaricum (no SAT needed), Azerbaijan Government, IsDB Scholarship, and Shanghai Government SGS.\n\nNYU Abu Dhabi announced for 2026 that SAT scores are \"optional\" — applicants without scores are reviewed holistically, and Arab applicants with 95%+ secondary certificates are not disadvantaged. Khalifa University accepts the SAT but also reviews IBT, A-Levels, and IB scores; Saudi and Emirati national curriculum scores are also accepted.\n\n[...]\n\nAcademic evaluation is based on high school transcripts, personal statement, and study plan.\n\nPrincess Nourah University requires a minimum 85% secondary certificate for undergraduate scholarship applicants, but competitive admitted students typically present 92%+ scores. The program is exclusively for female applicants, prioritizes Saudi nationals, and extends scholarships to international Arab female students in specific majors including medicine, pharmacy, nursing, and computer science.\n\nYes. Türkiye Burslari, KGSP Korea, MEXT Japan, CSC China (non-English programs), Azerbaijan Government, IsDB, Shanghai Government SGS, and Reach Oxford all accept applications without IELTS. Alternatives include the Medium of Instruction (MOI) letter, Duolingo English Test, or in-country testing upon arrival. Full list in our scholarships without IELTS 2026 guide.\n\nMEXT Undergraduate applications for 2027 intake open at Japanese embassies worldwide in April–May 2026, with deadlines typically in early June. The process includes written exams in mathematics and English (or Japanese), followed by an embassy interview. Successful applicants start Japanese language preparation in April 2027 before beginning undergraduate study in September 2027.\n\nGovernment scholarships (Türkiye Burslari, KGSP, MEXT, CSC) are funded by state budgets, cover every cost, and usually include a mandatory language preparation year. University scholarships (Khalifa, Princess Nourah, HBKU, AUB) are funded by institutional endowments, target specific faculties, and often require higher standardized test scores. Government programs accept more applicants; university programs often pay slightly higher stipends.\n\nMost fully funded bachelor scholarships cover round-trip airfare at least once — some annually. Türkiye Burslari covers arrival and final departure flights. KGSP covers arrival only.\n\n[...]\n\nKhalifa University and UDST Amiri include annual return flights for international students. Princess Nourah covers arrival and one annual ticket. Always verify airfare coverage in the specific scholarship agreement.\n\nFully funded bachelor scholarships in 2026 represent the single best path for academically capable Arab high school graduates to access world-class education without the $150,000+ tuition trap. The 20 programs profiled in this monthly-updated guide — from Türkiye Burslari's generous stipend-plus-language structure to Princess Nourah's unique opportunity for Saudi and international female students, from KGSP's one-year Korean prep to NYU Abu Dhabi's need-blind admissions — cover every major world region, every field of study, and every combination of GPA and test-score profile. The applicants who succeed in 2026 will not be those with the highest single score, but those who start preparing 12–18 months early, apply to 5–8 programs in parallel, draft personal statements that are genuinely tailored to each country, and verify every document against official portal requirements. Bookmark this page, set calendar reminders for February and October 2026 (the two biggest deadline clusters), and start building your application portfolio now.\n\nFor graduate-level follow-up, see our fully funded master's scholarships 2026 guide.",
+   "retrieved_at": "2026-11-07T14:38:40.695587357Z",
+   "title": "Fully Funded Bachelor Scholarships 2026: Top 20 | Truescho",
+   "url": "https://truescho.com/en/blog/fully-funded-bachelor-scholarships-2026"
+  },
+  {
+   "evidence_id": "ca5c4e3e-c5b5-4179-8861-62fc1b8fee45",
+   "excerpt": "Scholarship Program for Studying at Universities in Kazakhstan\n\nDear Applicants,\n\nThe acceptance of documents for participation in scholarship programs has started.\n\nApplicants can apply online from 30 March to 31 May 2026 until 23:59 Astana time  at the following link: https://studyin.kz/admission.\n\nNumber of Scholarships:\n\n1. Bachelor's degree – 490\n2. Master's degree – 50\n3. PhD – 10\n\nThe operator of the Scholarship Program is JSC \"Center for International Programs\".\n\nThe application for participation in the scholarship programs for the full period of study must be completed in Kazakh, Russian, or English.\n\nThe list of universities participating in the scholarship program, as well as the available fields of study, is available on the Study In portal during the application process.",
+   "retrieved_at": "2026-11-07T14:38:40.313507486Z",
+   "title": "Scholarship Program",
+   "url": "https://bolashak.gov.kz/en/scholarship-program"
+  },
+  {
+   "evidence_id": "cb7496d3-d1e7-4bc7-814d-fa51a1c1a37a",
+   "excerpt": "Türkiye Bursları (Türkiye Scholarships) 2027: Coverage, Eligibility and How to Apply\n\nUpdated 25 October 2026, adding our method for choosing the 12 programmes. This guide also includes our former guide for Pakistani students. Scholarship rules come from the official Türkiye Scholarships site (turkiyeburslari.gov.tr); Pakistani award numbers come from the Turkish Embassy event reported in September 2025; the China and Hungary comparison comes from HEC's 2026–27 calls. The official calendar repeats yearly without printing the year, so confirm the 2027 dates when the call opens.\n\nTürkiye Bursları is the Turkish government's fully funded scholarship for international students at bachelor's, master's and PhD level. It covers tuition, accommodation, health insurance, a one-year Turkish course, a return flight and a monthly stipend of 6,500 TL (bachelor's), 9,500 TL (master's) or 13,000 TL (PhD). Citizens of every country except Türkiye can apply, online, for free and without any nomination, choosing up to 12 programmes.\n\n[...]\n\nNo minimum language score is stated for the standard scholarship. In 2025, 166 Pakistani students were selected.\n\nTürkiye Bursları at a glance\n\n| Question | Official answer | \n\n| Levels | Associate degree, bachelor's, master's, PhD, art programmes, a Merit Scholarship and a research scholarship | \n| Monthly stipend | Bachelor's 6,500 TL; master's 9,500 TL; PhD 13,000 TL (Merit Scholarship holders get twice the regular stipend) | \n| Also covered | University placement, tuition, accommodation, health insurance, one-year Turkish course, one flight at the start and one at graduation | \n| Nationality | All countries; not Turkish citizens or people who lost Turkish citizenship | \n| Age limits | Under 21 (bachelor's), under 30 (master's), under 35 (PhD), under 50 (research) | \n| Minimum grades | 70% (bachelor's), 75% (master's and PhD), 90% for medicine, dentistry and pharmacy | \n| Application fee | None. You apply online for free | \n| Programme choices | Up to 12 | \n| General call | Usually 10 January – 20 February | \n\nWhat does Türkiye Bursları cover?\n\nTürkiye Bursları places you at a Turkish university and pays:\nFull tuition at the university you are placed in.\n\n[...]\n\nThe official site sets three rules for your choices: you can only pick from the universities and departments the portal offers for your educational background, the committee judges how consistent your choices are, and you should check the equivalence and validity of each field in your own country before you apply. Within those rules, this is the method we suggest:\n\n1. Pick one field family, not one subject. For an FSc pre-engineering student interested in computing, that might be computer engineering, software engineering and electrical-electronics engineering. Those choices tell one story; adding business administration and nursing does not.\n2. Check the teaching language of every programme. Many are taught in Turkish after the funded language year, some in English. A mix is fine, but know which is which before your interview, because you may be asked.\n3. Spread your choices across universities. This is our suggestion, not an official rule: placing all 12 at the best-known universities in Istanbul and Ankara means competing with the most applicants for the same places.\n\n[...]\n\nHUF 140,000 to 180,000 (PhD) | \n| Housing | Accommodation covered | On-campus room or a housing allowance | Free dormitory place or HUF 40,000 a month | \n| Age limits | Under 21 / 30 / 35 | Under 25 / 35 / 40 | Set by the call and HEC | \n| Language | Funded one-year Turkish course; many programmes in Turkish | Chinese-taught programmes need HSK; some English-taught programmes | Many English-taught programmes; two semesters of Hungarian for full-time bachelor's and master's students | \n| Last deadline | Usually 20 February | HEC portal: 5 January 2026 | 15 January 2026, 16:00 Pakistan time | \n\nWhich one fits which student? Türkiye suits applicants who want the most complete package, with housing, flights and a language year all covered, and who are comfortable studying partly in Turkish. Hungary suits students who want an English-taught degree inside the EU and can add some money of their own, because the bachelor's and master's stipend is only about €110 a month. China suits postgraduate applicants who are ready to contact a supervisor early, because a pre-acceptance letter is often the deciding document.\n\n[...]\n\nIs there an application fee?\n\nNo. Applying for Türkiye Bursları is free.\n\nSources\nTürkiye Scholarships: full-time programmes (coverage, stipends, age and grade limits)\nTürkiye Scholarships: programmes and eligibility\nTürkiye Scholarships: how to apply\nTürkiye Scholarships: evaluation and selection\nTürkiye Scholarships: calendar\nThe Nation: record number of Pakistani students depart for Türkiye on scholarships (26 September 2025)\nHEC: Chinese Government Scholarship Program 2026–27\nHEC: Stipendium Hungaricum Scholarship Program 2026–27\nChina and Hungary stipends, housing and language rules as verified for our Chinese Government Scholarship guide and Stipendium Hungaricum guide\n\nSee also study in Turkey (direct university admission, costs and the residence permit), scholarships for Pakistani students and fully funded scholarships in Europe. Found something out of date? Send a correction.",
+   "retrieved_at": "2026-11-07T14:38:39.709196791Z",
+   "title": "Türkiye Bursları (Türkiye Scholarships) 2027: Coverage, Eligibility and How to Apply",
+   "url": "https://www.opportunitynest.org/guides/turkiye-burslari-scholarship"
+  },
+  {
+   "evidence_id": "e0c8e0e3-ddc2-43a4-90fd-359fef8b8439",
+   "excerpt": "KAZAKHSTAN GOVERNMENT FULLY FUNDED SCHOLARSHIPS 2026–2027\n\n\nApplications are now open for the Kazakhstan Government Fully Funded Scholarships 2026–2027, inviting international students from all countries to pursue Bachelor's, Master's, and PhD degrees. This prestigious opportunity provides full financial support to outstanding students who wish to study abroad and gain a high-quality education in a rapidly developing academic environment. Join us now for a new opportunity at The Light of Engineering.\n\nThe scholarship is funded by the Ministry of Science and Higher Education of the Republic of Kazakhstan and aims to promote global academic exchange and cooperation. Kazakhstan has emerged as a promising destination for higher education, offering world-class universities, modern facilities, and a multicultural academic experience.\n\nSCHOLARSHIP BENEFITS\nFull coverage of tuition fees\nMonthly stipend to support living expenses\nOpportunity to study in top universities in Kazakhstan\nAccess to high-quality education with international standards\nExposure to diverse cultures and languages (English, Kazakh, Russian)\n\nELIGIBILITY CRITERIA\n\nTo qualify, applicants must:\nBe a citizen of any country\nBe a non-citizen of Kazakhstan (including individuals of Kazakh origin living abroad)\nPossess relevant academic qualifications (high school, Bachelor's, or Master's degree)\nHave strong academic performance (minimum GPA of 2.33/4.0 for postgraduate applicants)\nDemonstrate proficiency in English, German, or French (certificate not required if it is your native language)\n\nAVAILABLE PROGRAMS\n\nThe scholarship supports full-time study across the following categories:\nBachelor's Degree Programs — 490 scholarships\nMaster's Degree Programs — 50 scholarships\nPhD Degree Programs — 10 scholarships\n\nPrograms are available across various academic disciplines in leading universities throughout Kazakhstan.\n\nREQUIRED DOCUMENTS\n\nApplicants must prepare and submit:\nCopy of valid identification (passport or ID)\nAcademic certificates and transcripts\nMotivational essay (in English, Kazakh, or Russian)\nLetter of recommendation (from academic institution or employer)\nMedical certificate for studying abroad\nHIV/AIDS-free medical certificate from an authorized institution\nInvitation letter from a Kazakhstan university (if available)\n\nHOW TO APPLY\n\n1.\n\n[...]\n\nUpload all required documents\n6. Submit your application before the deadline\n\nADDITIONAL INFORMATION\n\nKazakhstan is quickly gaining recognition as a top study destination due to its affordable cost of living, modern infrastructure, and strong academic system. The country offers flexible study options in multiple languages and provides a vibrant student life. With its rich natural resources and economic growth, Kazakhstan is considered one of the most developed nations in Central Asia.\n\nThis scholarship program provides 550 awards, supporting international students in achieving their academic and professional goals while fostering cultural exchange.\n\nAPPLICATION DEADLINE: May 31, 2026\n\nWe wish all applicants every success. May this scholarship be the beginning of a transformative academic journey and a meaningful contribution to your community and country.\n\nFor application support CV writing, cover letters, motivational essays, and professional emails, contact The Light of Engineering on WhatsApp:",
+   "retrieved_at": "2026-11-07T14:38:44.821886874Z",
+   "title": "Kazakhstan Government Fully Funded Scholarships 2026-2027 Bachelor's ...",
+   "url": "https://www.thelightofengineering.com/2026/04/kazakhstan-government-fully-funded.html"
+  },
+  {
+   "evidence_id": "ec2ca42e-5f37-4f31-b96d-509ad74edfe8",
+   "excerpt": "COMPSAC is the IEEE Computer Society Signature Conference on Computers, Software and Applications. It is a major international forum for academia, industry, and government to discuss research results and advancements, emerging challenges, and future trends in computer and software technologies and applications. The theme of COMPSAC 2022 is “Computers, Software, and Applications in an Uncertain World”.\n\nIt is clear that we are heading towards an uncertain world catalyzed by the consequences of the COVID-19 pandemic and ongoing political disputes. This uncertainty has significant and direct implications for all aspects of the computer industry. To thrive in this increasingly uncertain world, innovations of computer hardware, software, and applications have emerged as a pressing need. The emerging interconnected world demands new developments in sensor-based communication hardware and operating systems. Software engineering continues to prove essential to our daily lives ranging from financial services, health care, remote learning platforms, social networks to the era of connected and autonomous vehicles, and artificial intelligence control. Governing organizations have responded to this trend by defining regulations and standards to address issues such as safety, security, and resiliency of computer hardware and software systems and applications. However, unique challenges originate from mandating these requirements under uncertainty in the absence of sound and complete solutions applicable to these new types of systems and applications. As computer researchers, we see these challenges as opportunities to fill gaps in how all dimensions of computing are developed, utilized, and supported. How to improve the resiliency of these components across a wide range of use domains is a significant challenge we suddenly find ourselves facing. How do we design systems that are able to withstand the stress of global-scale use, and still provide robust and secure services to end-users? For over 45 years, COMPSAC has been an outlet for researchers to share and discuss innovative and novel approaches to problems such as these, and we look forward to hearing your ideas in 2022!\n\nCOMPSAC 2022, organized as a tightly integrated union of symposia, will focus on technical aspects of issues relevant to computers, software and applications, with an emphasis on topics related to improving collaboration with intelligence and resilience. The technical program will include keynote addresses, research papers, industrial case studies, fast abstracts, a doctoral symposium, poster sessions, and workshops and tutorials on emerging and important topics related to the conference theme. Highlights of the conference will include plenary and specialized panels that will address the technical challenges facing researchers and practitioners who are driving fundamental changes in *Computers, Software, and Applications in an Uncertain World.* Panels will also address cultural and societal challenges with respect to computing and collaboration raised by rapidly changing communication norms.\n\nAuthors are invited to submit original, unpublished research work, as well as industrial practice reports. Simultaneous submission to other publication venues is not permitted except as highlighted in the COMPSAC 2022 JC & CJ program. All submissions must adhere to IEEE Publishing Policies and will be vetted through the IEEE CrossCheck portal.",
+   "retrieved_at": "2026-11-07T14:42:24.7838018Z",
+   "title": "CALL FOR PAPERS",
+   "url": "https://ieeecompsac.computer.org/call-for-papers/"
+  },
+  {
+   "evidence_id": "f4761be6-d34a-4595-b990-5be07281a403",
+   "excerpt": "FSE 2027\n\nThe ACM International Conference on the Foundations of Software Engineering (FSE) is an internationally renowned forum for researchers, practitioners, and educators to present and discuss the most recent innovations, trends, experiences, and challenges in the field of software engineering. FSE brings together experts from academia and industry to exchange the latest research results and trends as well as their practical application in all areas of software engineering.\n\nIn 2027, the conference will be held in Shenzhen, China.",
+   "retrieved_at": "2026-11-07T14:44:43.513049833Z",
+   "title": "FSE 2027 - conf.researchr.org",
+   "url": "https://conf.researchr.org/home/fse-2027"
+  }
+ ]
+}
