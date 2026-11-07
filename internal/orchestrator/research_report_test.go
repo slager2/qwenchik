@@ -91,7 +91,7 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 				t.Fatalf("outline lost compact notes: %+v", input.Notes)
 			}
 			// Duplicate IDs are schema-valid model content, not corrupt durable state.
-			raw, err := json.Marshal(map[string]any{"title": "Research Report Outline: Проверяемый отчёт", "sections": []map[string]any{{"title": "Основные сведения", "evidence_ids": []string{input.Notes[0].EvidenceID, input.Notes[0].EvidenceID}, "criteria": input.IDs}, {"title": "Независимый источник", "evidence_ids": []string{input.Notes[1].EvidenceID}, "criteria": []string{}}}})
+			raw, err := json.Marshal(map[string]any{"title": "Research Report Outline: Проверяемый отчёт", "entities": []string{}, "sections": []map[string]any{{"title": "Основные сведения", "evidence_ids": []string{input.Notes[0].EvidenceID, input.Notes[0].EvidenceID}, "criteria": input.IDs}, {"title": "Независимый источник", "evidence_ids": []string{input.Notes[1].EvidenceID}, "criteria": []string{}}}})
 			return string(raw), err
 		}
 		if reply, ok := reportFactsFixtureReply(request, input.Evidence); ok {

@@ -31,6 +31,7 @@ type reportLabels struct {
 	Language          string // instruction fragment for the model
 	WriterExample     string
 	DefaultSection    string
+	CrossSection      string // cross-cutting section of an entity outline
 	Summary           string // executive summary format: source count
 	SummaryHeading    string
 	QuestionHeading   string
@@ -60,6 +61,7 @@ var reportLabelsRU = reportLabels{
 	Language:          "Write in Russian, even when the sources are in another language.",
 	WriterExample:     "Первый факт из источника 1 [1].\n- Факт из источника 2 [2].\n- Факт, который подтверждают источники 1 и 3 [1][3].",
 	DefaultSection:    "Подтверждённые сведения",
+	CrossSection:      "Общие условия, расходы и шаги",
 	Summary:           "Анализ основан на %d сохранённых источниках. Каждое утверждение проверено по выдержке из указанного источника; статусы секций и ограничения указаны явно.",
 	SummaryHeading:    "Краткое резюме",
 	QuestionHeading:   "Вопрос исследования",
@@ -99,6 +101,7 @@ var reportLabelsEN = reportLabels{
 	Language:          "Write in the language of the research question.",
 	WriterExample:     "First fact from source 1 [1].\n- A fact from source 2 [2].\n- A fact stated by sources 1 and 3 [1][3].",
 	DefaultSection:    "Verified findings",
+	CrossSection:      "Costs, conditions and next steps",
 	Summary:           "The analysis is based on %d stored sources. Every statement was checked against an excerpt of the cited source; section statuses and limitations are stated explicitly.",
 	SummaryHeading:    "Summary",
 	QuestionHeading:   "Research question",

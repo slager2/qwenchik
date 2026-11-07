@@ -71,7 +71,7 @@ func roundModelFixture(t *testing.T, rounds int, reviews *int) *researchRunModel
 			return fmt.Sprintf(`{"status":"continue","summary":"Inspect new evidence","tool_call":{"name":"fetch_url","arguments":{"url":%q,"original_query":"protocol deployment"}}}`, input.URLs[0]), nil
 		}
 		if strings.Contains(req.Messages[0].Content, "Create a small research report outline") {
-			b, err := json.Marshal(map[string]any{"title": "Protocol review", "sections": []map[string]any{{"title": "Architecture and limitations", "evidence_ids": []string{input.Notes[0].EvidenceID}, "criteria": input.IDs}}})
+			b, err := json.Marshal(map[string]any{"title": "Protocol review", "entities": []string{}, "sections": []map[string]any{{"title": "Architecture and limitations", "evidence_ids": []string{input.Notes[0].EvidenceID}, "criteria": input.IDs}}})
 			return string(b), err
 		}
 		if len(input.Claims) > 0 {
