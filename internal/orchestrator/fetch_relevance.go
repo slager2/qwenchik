@@ -6,8 +6,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/slager2/qwenchik/internal/providers/research"
 	"github.com/slager2/qwenchik/internal/provenance"
+	"github.com/slager2/qwenchik/internal/providers/research"
 )
 
 // A search hit whose title and URL share no word with the goal's entities,
