@@ -316,7 +316,16 @@ qwenchik start --model 4b # start once with another model
 qwenchik install-search   # one-time: install agentSearcher (local search service)
 ```
 
-`qwenchik model` writes a systemd drop-in (`qwenchik-model.service.d/model.conf`) that only swaps the GGUF next to the installed model and adds its flags; the base unit is untouched. Qwen3.5-9B IQ4_XS (5.2 GB, ~19 tok/s, 64k context in 5.7 GB VRAM) gave the most complete deep reports on an RTX 3050 6 GB in a side-by-side test; 4B (~32 tok/s) stays as the faster option. With 9B set `MIN_FREE_VRAM_MB=32` in `.env`, because llama.cpp allocates nearly all VRAM up front.
+`qwenchik model` writes a systemd drop-in (`qwenchik-model.service.d/model.conf`) that swaps the GGUF next to the installed model and sets its context (`-c`), KV-cache type (`-ctk`/`-ctv`) and `--fit off`; the base unit is untouched. It also writes `qwenchik-app.service.d/context.conf` with the same `LLM_CONTEXT_LENGTH`, so the app's configured context always matches the server's `n_ctx` (the app refuses inference on a mismatch).
+
+| model | context | KV cache | VRAM | prompt tok/s (20k / ~120k) | gen tok/s (20k / ~120k) |
+|---|---|---|---|---|---|
+| Qwen3.5-9B IQ4_XS (`9b`) | 131072 | `turbo3` | 5.5 GB | 570 / 320–330 | 16.8 / 9.6–10 |
+| Qwen3.5-4B Q4_K_M (`4b`) | 131072 | `q8_0` | 5.1 GB | 980 / 560 | 29.8 / 17 |
+
+Measured on an RTX 3050 Laptop 6 GB (Vulkan, llama.cpp b10298). Both models are the hybrid qwen35 architecture (only every fourth layer keeps a KV cache, training context 262144), so the KV type decides how far the context goes. For 9B, `q8_0` KV fits 65536 (5.7 GB) but not 98304; `q4_0` fits 98304 but not 131072; `turbo4`/`turbo3` fit 131072 but not 196608; `turbo2` reaches 196608 (5.7 GB) but not 262144. A retrieval test (five facts hidden inside 60k–190k tokens of real Russian and English web text, answered as strict JSON with verbatim evidence quotes) found no loss with `turbo3` (15/15 facts and quotes at 100k–125k), one wrong fact with `turbo4` at 120k, and paraphrased or corrupted "verbatim" quotes with `turbo2` (2/5 at 120k, 3/5 at 190k) — unusable for citation checks. At 64k all KV types answered 5/5; `turbo*` types are 5–20% slower than `q8_0`/`q4_0`. 9B IQ4_XS gave the most complete deep reports in a side-by-side test; 4B stays as the faster option. With 9B set `MIN_FREE_VRAM_MB=32` in `.env`, because llama.cpp allocates nearly all VRAM up front.
+
+Research requests scale with the context: ~3 bytes per available prompt token (131072 context → ~363 KB per request, 65536 → ~171 KB), capped below the 448 KB per-input checkpoint pin limit (16 MB of pins per run). Larger inputs mean larger checkpoints; checkpoints over 64 KB are gzip-compressed.
 
 The model and app run natively because GPU offload is unavailable inside the Docker Desktop VM. Only SearXNG runs in a container (`compose.searxng.yml`). Its secret is generated once into `~/.config/qwenchik/searxng.env`. Without SearXNG, search falls back to the other configured providers. When run without a terminal (for example from a desktop menu entry with `Exec=~/.local/bin/qwenchik start`), the launcher reports results through desktop notifications.
 
