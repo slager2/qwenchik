@@ -207,6 +207,10 @@ func (w *Worker) modelExecutor(ctx context.Context, model domain.ModelProfileSna
 	} else {
 		options.MaxInputBytes = availableTokens * 4
 	}
+	// Role inputs are pinned in checkpoints (sqlite.MaxRoleContextInputBytes);
+	// a 64k context allowed ~230 KB requests, and a verifier input with eight
+	// full extract excerpts failed with "context snapshot exceeds size limit".
+	options.MaxInputBytes = min(options.MaxInputBytes, researchMaxInputBytes)
 	return New(w.repo, client, w.tools, options), nil
 }
 
@@ -270,3 +274,7 @@ func (w *Worker) runDeadline(ctx context.Context, taskID string) (time.Time, boo
 	}
 	return time.Now().Add(w.options.TaskTimeout), false
 }
+
+// researchMaxInputBytes keeps every pinned role input below the storage pin
+// limit with room for the snapshot and encoding overhead.
+const researchMaxInputBytes = sqlite.MaxRoleContextInputBytes - 32<<10

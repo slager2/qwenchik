@@ -18,8 +18,8 @@ import (
 
 const (
 	MaxRoleContextPins       = 128
-	MaxRoleContextInputBytes = 128 << 10
-	MaxRoleContextTotalBytes = 1 << 20
+	MaxRoleContextInputBytes = 192 << 10
+	MaxRoleContextTotalBytes = 8 << 20
 )
 
 var roleContextSlot = regexp.MustCompile(`^[0-9a-f]{64}$`)

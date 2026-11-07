@@ -153,7 +153,9 @@ func TestRoleContextStrictJSONAndLimits(t *testing.T) {
 		t.Fatalf("pin count overflow: %v", err)
 	}
 	input := json.RawMessage(`{"x":"` + strings.Repeat("x", MaxRoleContextInputBytes-8) + `"}`)
-	for i := 0; i < 7; i++ {
+	// As many maximal pins as fit under the total limit; one more overflows.
+	fit := (MaxRoleContextTotalBytes - 1) / MaxRoleContextInputBytes
+	for i := 0; i < fit; i++ {
 		if _, err := s.PinRoleContext(ctx, turn.Run.ID, roleSlot(fmt.Sprintf("large-%d", i)), input); err != nil {
 			t.Fatal(err)
 		}
