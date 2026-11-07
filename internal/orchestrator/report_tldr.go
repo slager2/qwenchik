@@ -49,12 +49,14 @@ func reportFactText(fact domain.ReportFact) string {
 	return text
 }
 
-// reportStatements lists the verified statements of a report: fact records
+// reportStatements lists the verified statements of a report: the fact
+// records the report shows (own entity, one per attribute, readable values)
 // first, then up to three kept claims of each supported section.
-func reportStatements(sections []domain.ReportSection) []reportStatement {
+func reportStatements(report *domain.ResearchReportState, question string) []reportStatement {
+	sections := report.Sections
 	statements := []reportStatement{}
-	for _, section := range sections {
-		for _, fact := range section.Facts {
+	for _, facts := range reportDisplayFacts(report, question) {
+		for _, fact := range facts {
 			statements = append(statements, reportStatement{Text: reportFactText(fact), EvidenceIDs: []string{fact.EvidenceID}})
 		}
 	}
@@ -170,7 +172,7 @@ func (w *Worker) writeReportTLDR(ctx context.Context, task domain.Task, goal, in
 		}
 		return nil
 	}
-	statements := reportStatements(report.Sections)
+	statements := reportStatements(report, goal)
 	report.TLDR, report.TLDRStatus = nil, "fallback"
 	if len(statements) >= 2 {
 		input := map[string]any{"tldr_format": "v1", "research_question": goal, "statements": []map[string]any{}}
