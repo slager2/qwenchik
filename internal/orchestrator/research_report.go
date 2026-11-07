@@ -814,44 +814,18 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 	if len(missing) > 0 || len(supplementary) > 0 || len(report.UnrepresentedCriteria) > 0 {
 		report.Outcome = "partial"
 	}
-	var markdown strings.Builder
-	fmt.Fprintf(&markdown, "# %s\n\n## %s\n\n%s\n\n## %s\n\n%s\n\n## %s\n\n", reportText(report.Title), labels.SummaryHeading, report.ExecutiveSummary, labels.QuestionHeading, reportQuestionText(goal), labels.ContentsHeading)
-	for index, section := range report.Sections {
-		fmt.Fprintf(&markdown, "%d. %s\n", index+1, reportText(section.Title))
-	}
-	for _, section := range report.Sections {
-		fmt.Fprintf(&markdown, "\n## %s\n\n%s\n\n"+labels.SectionStatus+"\n", reportText(section.Title), section.Body, labels.status(section.Status))
-		if section.Limitation != "" {
-			fmt.Fprintf(&markdown, labels.SectionLimit+"\n", reportText(labels.limitation(section.Limitation)))
+	if !report.ByteBudgetFallback {
+		if err := w.writeReportTLDR(ctx, task, goal, inputHash, report, catalogue, &sourceAliases); err != nil {
+			if errors.Is(err, errCitationMapping) {
+				return "", sqlite.ErrCheckpointInvalid
+			}
+			return "", err
+		}
+		if _, err := w.repo.SaveCheckpoint(ctx, task.ID, 1, *state); err != nil {
+			return "", err
 		}
 	}
-	fmt.Fprintf(&markdown, "\n## %s\n\n%s\n", labels.LimitsHeading, labels.LimitsText)
-	for _, item := range missing {
-		fmt.Fprintf(&markdown, "- %s\n", reportText(item))
-	}
-	for _, item := range supplementary {
-		fmt.Fprintf(&markdown, "- "+labels.SupplementaryItem+"\n", reportText(item))
-	}
-	for _, failure := range report.SourceLimitations {
-		fmt.Fprintf(&markdown, "- "+labels.SourceUnused+"\n", reportText(publicError(failure.Code)), failure.Code, failure.FetchedBytes)
-	}
-	if len(report.UnrepresentedCriteria) > 0 {
-		fmt.Fprintf(&markdown, "- "+labels.Unrepresented+"\n", reportText(strings.Join(report.UnrepresentedCriteria, ", ")))
-	}
-	fmt.Fprintf(&markdown, "\n## %s\n\n%s\n", labels.MethodHeading, labels.MethodText)
-	for _, note := range reportMethodNotes(labels, catalogue) {
-		fmt.Fprintf(&markdown, "\n%s\n", note)
-	}
-	fmt.Fprintf(&markdown, "\nPrivacy mode: `%s`.\n", report.PrivacyMode)
-	if report.PrivacyMode == domain.PrivacyOffline {
-		fmt.Fprintf(&markdown, "\n"+labels.OfflineText+"\n", report.OfflineCorpusSHA256)
-	}
-	fmt.Fprintf(&markdown, "\n## %s\n\n", labels.SourcesHeading)
-	for index, source := range catalogue {
-		fmt.Fprintf(&markdown, "%d. %s — <%s> · evidence `%s`%s\n", index+1, reportText(source.Title), source.URL, source.EvidenceID, reportSourceNote(labels, source))
-	}
-	fmt.Fprintf(&markdown, "\n## %s\n\n"+labels.CoverageText+"\n\nGenerated at: %s · Run ID: %s\n", labels.CoverageHeading, len(catalogue), len(report.Sections), len(missing), report.Outcome, report.GeneratedAt, task.ID)
-	answer := markdown.String()
+	answer := renderSectionedReport(report, goal, task.ID, catalogue, missing, supplementary)
 	if len(answer) > reportByteBudget {
 		if !roundPlanSession(ctx) {
 			return "", errInputBudgetExceeded

@@ -211,12 +211,16 @@ func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
 				t.Fatal(err)
 			}
 			answer := messages[1].Content
-			headings := []string{"## Contents", "## Limitations", "## Methodology", "## Sources", "## Coverage"}
+			headings := []string{"## TL;DR", "## Contents", "## Limitations", "## Methodology", "## Sources", "## Verification", "## Coverage", "| # | Source | Site |"}
 			if mode != "fallback" {
-				headings = append(headings, "Section status: supported by sources.")
+				headings = append(headings, "| supported by sources |")
 			}
 			if mode == "russian" {
-				headings = []string{"## Содержание", "## Ограничения", "## Методология", "## Источники", "## Покрытие", "Статус секции: подтверждено источниками.", "Анализ основан на 2 сохранённых источниках"}
+				headings = []string{"## Коротко", "## Содержание", "## Ограничения", "## Методология", "## Источники", "## Проверка", "## Покрытие", "| подтверждено источниками |", "**Факты**"}
+			}
+			// Statuses moved into the verification table at the end.
+			if strings.Contains(answer, "Section status:") || strings.Contains(answer, "Статус секции:") || strings.Contains(answer, "Анализ основан на") {
+				t.Fatalf("noisy per-section status or boilerplate summary in the body: %s", answer)
 			}
 			if state.Report.Title != "Проверяемый отчёт" {
 				t.Fatalf("outline label leaked into the report title: %q", state.Report.Title)
@@ -241,13 +245,14 @@ func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
 			}
 			// One failed section must not skip the next: section 1 uses its
 			// draft and correction, section 2 still gets its own attempt.
-			// Each section also gets a fact extraction and a fact check.
-			if mode == "fallback" && len(model.calls()) != 10 {
+			// Each section also gets a fact extraction and a fact check, the
+			// report one TL;DR call.
+			if mode == "fallback" && len(model.calls()) != 11 {
 				t.Fatalf("later section was not attempted after one failure: calls=%d", len(model.calls()))
 			}
 			// planner + verifier + outline + two sections + two section critics
-			// + two fact extractions + two fact checks.
-			if (mode == "valid" || mode == "artifact_recovery") && len(model.calls()) != 11 {
+			// + two fact extractions + two fact checks + TL;DR.
+			if (mode == "valid" || mode == "artifact_recovery") && len(model.calls()) != 12 {
 				t.Fatalf("completed report calls replayed after reopen: count=%d", len(model.calls()))
 			}
 			items, err := f.store.Artifacts(ctx, f.task.ID)
