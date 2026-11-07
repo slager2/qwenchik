@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -1097,7 +1099,7 @@ func balancedSearchResultURLs(results map[string]any, fetched map[string]struct{
 	}
 	facets := []facet{}
 	for index, key := range keys {
-		urls := searchResultURLsForValue(results[key])
+		urls := officialFirst(results[key], searchResultURLsForValue(results[key]))
 		if len(urls) == 0 {
 			continue
 		}
@@ -1126,3 +1128,58 @@ func balancedSearchResultURLs(results map[string]any, fetched map[string]struct{
 		}
 	}
 }
+
+// officialFirst stably moves likely official sources to the front of one
+// search's hits: government/education domains, then domains named after the
+// searched programme (stipendiumhungaricum.hu for a Stipendium Hungaricum
+// query). Live runs fetched aggregators while studyinkorea.go.kr and the
+// official call pages sat unfetched in the results.
+func officialFirst(value any, urls []string) []string {
+	query := ""
+	for _, rawURL := range urls {
+		if canonical, err := provenance.CanonicalURL(rawURL); err == nil {
+			if hits := searchResultHitsForURL(value, canonical); len(hits) > 0 {
+				query = hits[0][0]
+				break
+			}
+		}
+	}
+	ranked := append([]string(nil), urls...)
+	sort.SliceStable(ranked, func(i, j int) bool {
+		return officialSourceScore(ranked[i], query) > officialSourceScore(ranked[j], query)
+	})
+	return ranked
+}
+
+var officialHostPattern = regexp.MustCompile(`(^|\.)(gov|edu|ac|int|mil)(\.[a-z]{2})?$|(^|\.)(gov|edu|go|ac)\.[a-z]{2}$|(^|\.)gov\.|(^|\.)europa\.eu$`)
+
+func officialSourceScore(rawURL, query string) int {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return 0
+	}
+	host := strings.TrimPrefix(strings.ToLower(parsed.Hostname()), "www.")
+	score := 0
+	if officialHostPattern.MatchString(host) {
+		score += 2
+	}
+	compact := strings.ReplaceAll(strings.ReplaceAll(host, "-", ""), ".", " ")
+	words := strings.Fields(latinFold.Replace(looseQuoteText(query)))
+	for i := range words {
+		// Programme names are often one or two query words glued together.
+		candidates := []string{words[i]}
+		if i+1 < len(words) {
+			candidates = append(candidates, words[i]+words[i+1])
+		}
+		for _, candidate := range candidates {
+			if utf8.RuneCountInString(candidate) >= 6 && strings.Contains(compact, candidate) {
+				return score + 1
+			}
+		}
+	}
+	return score
+}
+
+// latinFold maps common Latin diacritics to ASCII so "Türkiye Burslari"
+// matches turkiyeburslari.gov.tr.
+var latinFold = strings.NewReplacer("ü", "u", "ö", "o", "ş", "s", "ç", "c", "ğ", "g", "ı", "i", "é", "e", "è", "e", "á", "a", "à", "a", "í", "i", "ó", "o", "ú", "u", "ñ", "n", "ä", "a", "ß", "ss", "ő", "o", "ű", "u")
