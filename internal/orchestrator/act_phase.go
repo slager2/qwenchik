@@ -618,7 +618,7 @@ func (w *Worker) availableFetchURLs(taskID string, results map[string]any, faile
 			}
 		}
 	}
-	candidates := searchResultURLs(results)
+	candidates := balancedSearchResultURLs(results, fetched)
 	candidates = append(candidates, w.tools.KnownTaskURLs(taskID)...)
 	var candidatesForFetch []string
 	seen := make(map[string]struct{})
@@ -1055,4 +1055,52 @@ func (w *Worker) recordSearchValidationMiss(ctx context.Context, taskID string, 
 		"recovered": true,
 	})
 	return err
+}
+
+// balancedSearchResultURLs orders search hits for fetching so every search
+// facet gets sources: facets with the fewest already fetched hits go first
+// and hits are taken round-robin across facets. Taking hits in result order
+// let the first search consume every fetch; in a live run all ten sources
+// covered one of three requested scholarships.
+func balancedSearchResultURLs(results map[string]any, fetched map[string]struct{}) []string {
+	keys := make([]string, 0, len(results))
+	for key := range results {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	type facet struct {
+		urls    []string
+		fetched int
+		order   int
+	}
+	facets := []facet{}
+	for index, key := range keys {
+		urls := searchResultURLsForValue(results[key])
+		if len(urls) == 0 {
+			continue
+		}
+		item := facet{urls: urls, order: index}
+		for _, rawURL := range urls {
+			if canonical, err := provenance.CanonicalURL(rawURL); err == nil {
+				if _, done := fetched[canonical]; done {
+					item.fetched++
+				}
+			}
+		}
+		facets = append(facets, item)
+	}
+	sort.SliceStable(facets, func(i, j int) bool { return facets[i].fetched < facets[j].fetched })
+	ordered := []string{}
+	for position := 0; ; position++ {
+		added := false
+		for _, item := range facets {
+			if position < len(item.urls) {
+				ordered = append(ordered, item.urls[position])
+				added = true
+			}
+		}
+		if !added {
+			return ordered
+		}
+	}
 }
