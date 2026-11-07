@@ -11,6 +11,7 @@ import { researchPlanPresentation, resourceReasonLabel, resumeEligibility } from
 import { formatSourceBytes, planningFailure, publicResearchEvents, researchError, researchQueries, researchSources } from './research-state.mjs'
 import ResearchProgress from './ResearchProgress'
 import ReportPDFButton from './ReportPDFButton'
+import ReportObsidianButton from './ReportObsidianButton'
 import type { AgentEvent, DoctorResponse, Evidence, ProvidersResponse, ResearchPlan, Run, RunRuntime, SourceRecord, VerificationCriterionRecord } from './types'
 
 interface Remote<T> { data?: T; error: string; loading: boolean; reload: (reason?: ReloadReason) => Promise<void> }
@@ -108,7 +109,7 @@ export default function ResearchInspector({ resources, events, run, showHeading 
       <p>Секций: {safeCount(report.sections) ?? 'неизвестно'} · Итог файла: {outcomes[report.outcome] || (report.outcome === 'completed' ? 'Завершено' : 'Не уточнён')}</p>
       {report.artifact_id && <a href={`/api/tasks/${encodeURIComponent(currentRuntime.task_id)}/artifacts/${encodeURIComponent(report.artifact_id)}`}>Скачать отчёт с metadata (JSON)</a>}
       {report.markdown_artifact_id && <p><a href={`/api/tasks/${encodeURIComponent(currentRuntime.task_id)}/artifacts/${encodeURIComponent(report.markdown_artifact_id)}`}>Скачать Markdown</a></p>}
-      {reportPDF && run && terminal && run.status !== 'failed' && <p><ReportPDFButton runID={run.id} disabled={reportPDF.disabled} reason={reportPDF.reason} /></p>}
+      {reportPDF && run && terminal && run.status !== 'failed' && <p><ReportPDFButton runID={run.id} disabled={reportPDF.disabled} reason={reportPDF.reason} /> <ReportObsidianButton runID={run.id} /></p>}
       {stringList(report.unrepresented_criteria).length > 0 && <><h4>Не отражено в сохранённом отчёте</h4><ul>{stringList(report.unrepresented_criteria).map((item, index) => <li key={index}>{item}</li>)}</ul></>}
     </> : <p>{!currentRuntime ? 'Наличие файла отчёта неизвестно: сведения запуска недоступны.' : terminal ? 'Файл отчёта не сохранён.' : 'Файл отчёта пока не сохранён. Этапы и внутренние проверки не подтверждают доставку ответа.'}</p>}</section>}
     {failedPlanning && <section className="chat-action-error" aria-label="Ошибка планирования" role="status">

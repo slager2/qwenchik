@@ -98,11 +98,21 @@
 .chat-code__bar button:hover { color: var(--text); }
 .chat-markdown pre { max-width: 100%; margin: 0; padding: var(--space-4); overflow: auto; font-size: .8125rem; line-height: 1.6; white-space: pre; overflow-wrap: normal; }
 .chat-markdown pre code { font-size: inherit; }
-.chat-table-scroll { max-width: 100%; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
-.chat-markdown table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); line-height: 1.5; }
-.chat-markdown :is(th, td) { min-width: 6rem; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.chat-table-scroll { max-width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); }
+.chat-table-scroll:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.chat-markdown table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--text-sm); line-height: 1.45; font-variant-numeric: tabular-nums; }
+.chat-markdown :is(th, td) { min-width: 6rem; max-width: 24rem; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; white-space: normal; overflow-wrap: break-word; }
+.chat-markdown :is(th, td) + :is(th, td) { border-left: 1px solid var(--border); }
 .chat-markdown tr:last-child td { border-bottom: 0; }
-.chat-markdown th { background: var(--bg-subtle); font-weight: 600; }
+.chat-markdown th { background: var(--bg-subtle); color: var(--text); font-weight: 600; white-space: nowrap; }
+.chat-markdown tbody tr:nth-child(even) td { background: var(--bg-muted); }
+.chat-markdown tbody tr:hover td { background: var(--bg-hover); }
+/* The first column names the row (program, source): keep it visible while
+   a wide comparison table scrolls sideways. */
+.chat-markdown :is(th, td):first-child { position: sticky; left: 0; z-index: 1; background: var(--bg-subtle); }
+.chat-markdown tbody tr:nth-child(even) td:first-child { background: var(--bg-muted); }
+.chat-markdown td a.chat-cite { top: -.3em; }
+.report-export-done { max-width: 32ch; overflow: hidden; font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
 .chat-image-label { color: var(--text-tertiary); font-size: var(--text-sm); }
 .chat-markdown a.chat-cite { position: relative; top: -.45em; margin-inline: 1px; padding: 0 .2em; border-radius: 4px; font-size: .72em; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 0; text-decoration: none; }
 .chat-markdown a.chat-cite:hover { background: var(--accent-soft); }
@@ -232,6 +242,8 @@ details.research-overview__note ul { margin: var(--space-1) 0 var(--space-2); pa
   .chat-transcript { flex: 0 0 auto; min-height: 0; overflow: visible; padding-top: var(--space-4); }
   .chat-center > :not(.chat-transcript, .chat-to-bottom) { width: calc(100% - 2 * var(--space-3)); }
   .chat-transcript { padding-inline: var(--space-3); }
+  .chat-markdown table { font-size: var(--text-xs); }
+  .chat-markdown :is(th, td) { min-width: 4.5rem; max-width: 15rem; padding: var(--space-2); }
   .chat-composer-area { position: sticky; bottom: 0; z-index: 2; padding-top: var(--space-2); }
   .chat-composer-area::before { content: ''; position: absolute; inset: calc(-1 * var(--space-4)) 0 100%; background: linear-gradient(transparent, var(--bg)); pointer-events: none; }
   .chat-empty h2 { font-size: var(--text-2xl); }

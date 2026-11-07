@@ -5,3 +5,5 @@ export function reportPDFEligible(
 ): boolean
 export function reportPDFAvailability(health: { report_pdf?: { available: boolean } } | null | undefined): { disabled: boolean; reason: string }
 export function filenameFromDisposition(header: string | null | undefined, fallback?: string): string
+export function obsidianExportMessage(result: { path?: string; notes?: number } | null | undefined): string
+export function reportObsidianURL(runID: string): string

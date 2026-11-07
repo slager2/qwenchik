@@ -7,6 +7,7 @@ import type { RunEvidenceCache } from './evidence-cache.mjs'
 import { Icon } from './icons'
 import { IconButton } from './ui'
 import ReportPDFButton from './ReportPDFButton'
+import ReportObsidianButton from './ReportObsidianButton'
 import { reportPDFEligible } from './report-pdf.mjs'
 import { messageClarification } from './clarification-state.mjs'
 
@@ -62,7 +63,7 @@ const MessageContent = memo(function MessageContent({ message, runID, references
       setCopied(false)
     }
   }
-  return <div ref={container}>{headings.length >= 2 && <nav className="report-outline" aria-label="Разделы ответа"><details><summary><Icon name="menu" size={16} />Разделы ответа · {headings.length}</summary><div className="report-outline-links">{headings.map((heading) => <button key={heading.id} type="button" title={heading.text} onClick={() => focusReportHeading(container.current, heading.id)}>{heading.text}</button>)}</div></details></nav>}<MarkdownMessage content={message.content} idPrefix={prefix} references={message.role === 'assistant' ? refs : []} />{message.role === 'assistant' && <div className="chat-message-actions"><IconButton label="Скопировать ответ" title={copied ? 'Скопировано' : 'Копировать'} onClick={() => void copyMessage()} disabled={!message.content.trim()} icon={<Icon name={copied ? 'check' : 'copy'} size={18} />} />{copied && <span className="chat-muted" role="status">Ответ скопирован</span>}{pdf && <ReportPDFButton runID={message.run_id} disabled={pdf.disabled} reason={pdf.reason} />}</div>}{historicalRunID && historical.error && <p className="chat-muted">{historical.error} <button type="button" onClick={() => void historical.retry()}>Загрузить источники</button></p>}</div>
+  return <div ref={container}>{headings.length >= 2 && <nav className="report-outline" aria-label="Разделы ответа"><details><summary><Icon name="menu" size={16} />Разделы ответа · {headings.length}</summary><div className="report-outline-links">{headings.map((heading) => <button key={heading.id} type="button" title={heading.text} onClick={() => focusReportHeading(container.current, heading.id)}>{heading.text}</button>)}</div></details></nav>}<MarkdownMessage content={message.content} idPrefix={prefix} references={message.role === 'assistant' ? refs : []} />{message.role === 'assistant' && <div className="chat-message-actions"><IconButton label="Скопировать ответ" title={copied ? 'Скопировано' : 'Копировать'} onClick={() => void copyMessage()} disabled={!message.content.trim()} icon={<Icon name={copied ? 'check' : 'copy'} size={18} />} />{copied && <span className="chat-muted" role="status">Ответ скопирован</span>}{pdf && <ReportPDFButton runID={message.run_id} disabled={pdf.disabled} reason={pdf.reason} />}{pdf && <ReportObsidianButton runID={message.run_id} />}</div>}{historicalRunID && historical.error && <p className="chat-muted">{historical.error} <button type="button" onClick={() => void historical.retry()}>Загрузить источники</button></p>}</div>
 })
 
 function useRunEvidence(cache: RunEvidenceCache, runID: string) {

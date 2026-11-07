@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { filenameFromDisposition, reportPDFAvailability, reportPDFEligible, reportPDFURL } from './report-pdf.mjs'
+import { filenameFromDisposition, obsidianExportMessage, reportObsidianURL, reportPDFAvailability, reportPDFEligible, reportPDFURL } from './report-pdf.mjs'
 
 const answer = { role: 'assistant', run_id: 'run-1', content: '# Отчёт', status: 'completed', run_mode: 'research' }
 
@@ -31,4 +31,11 @@ test('download URL and file name parsing', () => {
   assert.equal(filenameFromDisposition('attachment; filename="report.pdf"'), 'report.pdf')
   assert.equal(filenameFromDisposition("attachment; filename*=utf-8''..%2F..%2Fevil.pdf"), '.. .. evil.pdf')
   assert.equal(filenameFromDisposition(null), 'Отчёт исследования.pdf')
+})
+
+test('Obsidian export status names the folder and the note count', () => {
+  assert.equal(reportObsidianURL('a/b'), '/api/runs/a%2Fb/report/obsidian')
+  assert.equal(obsidianExportMessage({ path: '/home/u/Документы/Qwenchik/2026-11-07 Гранты', notes: 6 }), 'Сохранено 6 заметок: 2026-11-07 Гранты')
+  assert.equal(obsidianExportMessage({ path: 'C:\\Docs\\Qwenchik\\R', notes: 2 }), 'Сохранено 2 заметки: R')
+  assert.equal(obsidianExportMessage({ path: '/x/One', notes: 21 }), 'Сохранено 21 заметка: One')
 })

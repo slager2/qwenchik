@@ -38,3 +38,23 @@ export function filenameFromDisposition(header, fallback = 'Отчёт иссл�
 function sanitize(name) {
   return name.replace(/[\\/\u0000-\u001f]/g, ' ').trim()
 }
+
+/** Endpoint that writes the report as an Obsidian vault folder. */
+export function reportObsidianURL(runID) {
+  return `/api/runs/${encodeURIComponent(runID)}/report/obsidian`
+}
+
+/** Status line after an Obsidian export: notes count and folder path. */
+export function obsidianExportMessage(result) {
+  const notes = Number(result?.notes) || 0
+  const path = String(result?.path ?? '')
+  const folder = path.split(/[\\/]/).filter(Boolean).pop() || path
+  return `Сохранено ${notes} ${plural(notes, 'заметка', 'заметки', 'заметок')}: ${folder}`
+}
+
+function plural(n, one, few, many) {
+  const mod10 = n % 10, mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return one
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few
+  return many
+}
