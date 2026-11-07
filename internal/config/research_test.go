@@ -230,8 +230,8 @@ func TestResearchProfileBudgetsMatchCanonicalAndExactBrief(t *testing.T) {
 			MaxStagnantRounds: 2, MaxCitationSources: 8, MaxCitationClaims: 8,
 		}},
 		{"deep_laptop", domain.ResearchBudget{
-			WallTimeSeconds: 7200, MaxRounds: 5, MaxSteps: 12, MaxSearchQueries: 16, MaxFetches: 24,
-			MaxLLMCalls: 40, MaxEvidence: 12, MaxQuestionsCreated: 30, MaxQuestionsAccepted: 10,
+			WallTimeSeconds: 7200, MaxRounds: 5, MaxSteps: 12, MaxSearchQueries: 16, MaxFetches: 32,
+			MaxLLMCalls: 40, MaxEvidence: 24, MaxQuestionsCreated: 30, MaxQuestionsAccepted: 10,
 			MaxStagnantRounds: 2, MaxCitationSources: 8, MaxCitationClaims: 8,
 		}},
 		{"long_laptop", domain.ResearchBudget{

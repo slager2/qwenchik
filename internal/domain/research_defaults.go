@@ -12,7 +12,7 @@ func ResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 1800, 3, 8, 16, 24, 8
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 16, 6
 	case ResearchProfileDeepLaptop:
-		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 7200, 5, 16, 24, 40, 12
+		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 7200, 5, 16, 32, 40, 24
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 30, 10
 	case ResearchProfileLongLaptop:
 		b.WallTimeSeconds, b.MaxRounds, b.MaxSearchQueries, b.MaxFetches, b.MaxLLMCalls, b.MaxEvidence = 14400, 8, 32, 48, 72, 24

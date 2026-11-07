@@ -55,10 +55,10 @@ func RoundResearchBudgetForProfile(name string) (ResearchBudget, bool) {
 		b.MaxReportParagraphs = 24
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 24, 16
 	case ResearchProfileDeepLaptop:
-		b.MaxTotalSteps = 32
+		b.MaxTotalSteps = 48
 		b.MaxLLMCalls = 64
 		b.MaxCitationClaims = 48
-		b.MaxCitationSources = 12
+		b.MaxCitationSources = 16
 		b.MaxReportSections = 8
 		b.MaxReportParagraphs = 48
 		b.MaxQuestionsCreated, b.MaxQuestionsAccepted = 40, 24

@@ -15,7 +15,7 @@ func TestRoundProfilesHaveReachableFiniteBudgets(t *testing.T) {
 		name                                                              string
 		rounds, steps, queries, fetches, llm, sections, claims, minRounds int
 	}{
-		{"quick", 1, 12, 4, 6, 24, 4, 8, 0}, {"standard", 3, 20, 8, 16, 48, 6, 24, 0}, {"deep_laptop", 5, 32, 16, 24, 64, 8, 48, 2}, {"long_laptop", 8, 64, 32, 48, 96, 8, 64, 8}, {"overnight_laptop", 10, 96, 48, 64, 128, 8, 64, 10},
+		{"quick", 1, 12, 4, 6, 24, 4, 8, 0}, {"standard", 3, 20, 8, 16, 48, 6, 24, 0}, {"deep_laptop", 5, 48, 16, 32, 64, 8, 48, 2}, {"long_laptop", 8, 64, 32, 48, 96, 8, 64, 8}, {"overnight_laptop", 10, 96, 48, 64, 128, 8, 64, 10},
 	} {
 		p, err := cfg.ResearchProfile(want.name)
 		if err != nil {
