@@ -179,8 +179,15 @@ func prepareInvocation(ctx context.Context, repo invocationRepository, taskID, k
 	if err != nil {
 		return domain.Invocation{}, false, err
 	}
-	attempt := 1
+	attempt, counted := 1, 0
 	for _, prior := range history {
+		// A call cut by a resource pause (thermal/RAM guard) did not fail on
+		// its own; two such pauses during one planner call killed a live run
+		// with failed_recovery_required. Only real failures use the 2-attempt
+		// budget; the guard's own probe limit bounds repeated pauses.
+		if prior.Status != "resource_pause" && prior.ErrorCode != "resource_pause" {
+			counted++
+		}
 		if prior.Kind != kind || prior.InputHash != inputHash || prior.StepID != step || prior.Role != role {
 			return domain.Invocation{}, false, ErrRecoveryRequired
 		}
@@ -200,7 +207,7 @@ func prepareInvocation(ctx context.Context, repo invocationRepository, taskID, k
 			return domain.Invocation{}, false, ErrRecoveryRequired
 		}
 	}
-	if attempt > 2 {
+	if counted >= 2 || attempt > maxInvocationAttempts {
 		return domain.Invocation{}, false, ErrRecoveryRequired
 	}
 	in, err := repo.BeginInvocation(ctx, domain.Invocation{TaskID: taskID, StepID: step, Role: role, Kind: kind, OperationID: operation, InputHash: inputHash, IdempotencyKey: fmt.Sprintf("%s-attempt-%d", operation, attempt), Attempt: attempt})
@@ -212,6 +219,10 @@ func prepareInvocation(ctx context.Context, repo invocationRepository, taskID, k
 	}
 	return in, false, nil
 }
+
+// maxInvocationAttempts bounds attempts of one operation including those
+// cut by resource pauses.
+const maxInvocationAttempts = 12
 
 func retryableInvocationFailure(code string) bool {
 	switch code {
