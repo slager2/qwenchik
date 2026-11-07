@@ -50,8 +50,8 @@ func siteMapWords(text string) []string {
 
 // rankDiscoveredURLs keeps the discovered URLs whose path matches the
 // research criteria: instruction words and common official-page words in the
-// path, PDFs, and the current or next year score; paths naming only years
-// before the previous one lose. The site root is dropped (search already
+// path, PDFs, and the current or next year score; paths whose newest year is
+// before the previous one are dropped. The site root is dropped (search already
 // found it) and at most two URLs share one path. Ties keep discovery order.
 func rankDiscoveredURLs(urls []string, instructions string, now time.Time, limit int) []string {
 	wanted := map[string]bool{}
@@ -97,11 +97,12 @@ func rankDiscoveredURLs(urls []string, instructions string, now time.Time, limit
 				newest = max(newest, year)
 			}
 		}
-		switch {
-		case newest >= now.Year():
+		if newest > 0 && newest < now.Year()-1 {
+			// A page about an outdated call or intake.
+			continue
+		}
+		if newest >= now.Year() {
 			score += 3
-		case newest > 0 && newest < now.Year()-1:
-			score -= 4
 		}
 		if score >= 2 {
 			candidates = append(candidates, scored{url: raw, score: score, order: index, path: parsed.Host + path})

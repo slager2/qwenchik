@@ -114,6 +114,10 @@ type checkpointState struct {
 	SourceNotes                []domain.SourceNote           `json:"source_notes,omitempty"`
 	Adaptive                   *domain.AdaptiveResearchState `json:"adaptive_research,omitempty"`
 	Completion                 completionState               `json:"completion,omitempty"`
+	// SiteDiscoveryRounds and MappedSites record official site discovery
+	// (map_site): the rounds that ran it and the hosts already mapped.
+	SiteDiscoveryRounds []int    `json:"site_discovery_rounds,omitempty"`
+	MappedSites         []string `json:"mapped_sites,omitempty"`
 	PlanAttempt                int                           `json:"plan_attempt,omitempty"`
 	AttemptStartSeq            int64                         `json:"attempt_start_seq,omitempty"`
 	HistoricalObservations     []planObservations            `json:"historical_observations,omitempty"`
@@ -828,6 +832,13 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 		approvalGrant := ""
 		var fetchURLs []string
 		requiredURL := step.Kind == "fetch" && step.ID == plan.Subtasks[0].ID && hasUserURL(goal) && (noDiscoveryPattern.MatchString(goal) || !requiresWebResearch(goal))
+		if step.Kind == "fetch" && !requiredURL && !state.PendingApproval {
+			// Later rounds first map the official sites seen so far, so
+			// their call pages and PDFs become fetch candidates.
+			if err := w.discoverOfficialSites(ctx, task.ID, goal, &stage, &state); err != nil {
+				return err
+			}
+		}
 		if step.Kind == "fetch" {
 			fetchURLs = w.availableFetchURLs(task.ID, state.ToolResults, state.FailedFetchURLs, userProvidedURLs(goal), minimumResearchFetches(task.Title+"\n"+goal) > 1)
 			if requiredURL {

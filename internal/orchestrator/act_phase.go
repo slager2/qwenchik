@@ -642,7 +642,10 @@ func (w *Worker) availableFetchURLs(taskID string, results map[string]any, faile
 			}
 		}
 	}
-	candidates := balancedSearchResultURLs(results, fetched)
+	// Pages discovered on official sites (map_site) lead the list; they may
+	// share a site with an already fetched source, which is their point.
+	discovered := discoveredFetchURLs(results, fetched, maxDiscoveredPerFetch)
+	candidates := append(append([]string{}, discovered...), balancedSearchResultURLs(results, fetched)...)
 	candidates = append(candidates, w.tools.KnownTaskURLs(taskID)...)
 	var candidatesForFetch []string
 	seen := make(map[string]struct{})
@@ -656,7 +659,7 @@ func (w *Worker) availableFetchURLs(taskID string, results map[string]any, faile
 		}
 		seen[canonical] = struct{}{}
 		if _, alreadyFetched := fetched[canonical]; !alreadyFetched {
-			if diverseSites {
+			if diverseSites && !contains(discovered, canonical) {
 				if _, alreadyUsed := usedSites[researchSourceSite(canonical)]; alreadyUsed {
 					continue
 				}
@@ -665,6 +668,11 @@ func (w *Worker) availableFetchURLs(taskID string, results map[string]any, faile
 		}
 	}
 	available := make([]string, 0, 6)
+	for _, candidate := range candidatesForFetch {
+		if contains(discovered, candidate) {
+			available = append(available, candidate)
+		}
+	}
 	selectedSites := make(map[string]struct{})
 	if diverseSites {
 		for _, candidate := range candidatesForFetch {
@@ -672,7 +680,7 @@ func (w *Worker) availableFetchURLs(taskID string, results map[string]any, faile
 			if site == "" {
 				continue
 			}
-			if _, exists := selectedSites[site]; exists {
+			if _, exists := selectedSites[site]; exists || contains(available, candidate) {
 				continue
 			}
 			selectedSites[site] = struct{}{}
