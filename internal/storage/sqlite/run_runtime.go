@@ -50,7 +50,7 @@ func (s *Store) RunRuntime(ctx context.Context, taskID string) (map[string]any, 
 	if decodeErr != nil {
 		return nil, ErrCheckpointInvalid
 	}
-	if len(decoded) > 4<<20 {
+	if len(decoded) > checkpointDecodedLimit {
 		return nil, ErrCheckpointInvalid
 	}
 	if len(decoded) > 0 {
