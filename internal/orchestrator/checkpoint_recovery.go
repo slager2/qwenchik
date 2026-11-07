@@ -366,7 +366,12 @@ func (w *Worker) reconcileResearchState(ctx context.Context, taskID string, stat
 			}
 		}
 		if fetched == nil {
-			return checkpointState{}, false, errFetchOutcomeUnknown
+			// The fetch was interrupted (e.g. a resource pause) before its
+			// evidence was saved. Failing the whole run lost a live research
+			// mid-way; instead record a failed attempt charged with the
+			// per-source byte ceiling, so the task byte budget stays an upper
+			// bound, and let the step try its next candidate URL.
+			return w.recoverInterruptedFetch(ctx, taskID, state, arguments.URL)
 		}
 		fetchedBytes := artifactSizes[fetched.RawArtifactID]
 		result = recoveredEvidenceResult(*fetched, fetchedBytes)
@@ -440,4 +445,44 @@ func evidenceMatchesURL(item domain.Evidence, rawURL string) bool {
 		}
 	}
 	return false
+}
+
+// interruptedFetchBytes is the conservative byte charge of an interrupted
+// fetch whose real size is unknown: the per-source download ceiling.
+func interruptedFetchBytes(ctx context.Context) int64 {
+	if session, ok := ctx.Value(researchExecutionKey{}).(domain.ResearchSession); ok && session.Policy.SourceFetchBytes > 0 {
+		return session.Policy.SourceFetchBytes
+	}
+	return 16 << 20
+}
+
+func (w *Worker) recoverInterruptedFetch(ctx context.Context, taskID string, state checkpointState, rawURL string) (checkpointState, bool, error) {
+	canonical, err := provenance.CanonicalURL(rawURL)
+	if err != nil {
+		return checkpointState{}, false, errFetchOutcomeUnknown
+	}
+	attempt, err := invocationHash([]any{"interrupted_fetch", taskID, state.CurrentStep, canonical, state.AttemptStartSeq})
+	if err != nil {
+		return checkpointState{}, false, err
+	}
+	if _, err := w.repo.RecordEvent(ctx, taskID, "tool.failed", stagePointer(executionStage("fetch_url")), "user", map[string]any{
+		"step_id": state.CurrentStep, "tool": "fetch_url", "target_url": canonical,
+		"code": "fetch_interrupted", "error_code": "fetch_interrupted", "failure": "fetch_interrupted",
+		"attempt_id": attempt, "fetched_bytes": interruptedFetchBytes(ctx), "status": "failed",
+		"message":         "Загрузка прервалась до сохранения; источник пропущен, исследование продолжается.",
+		"try_next_source": true, "retryable": false, "recovered": true,
+	}); err != nil {
+		return checkpointState{}, false, err
+	}
+	state.PendingTool = ""
+	state.PendingToolIdempotent = false
+	state.PendingArguments = nil
+	state.PendingSummary = ""
+	state.PendingTarget = ""
+	state.PendingRisk = ""
+	state.PendingApproval = false
+	if !contains(state.FailedFetchURLs, canonical) {
+		state.FailedFetchURLs = append(state.FailedFetchURLs, canonical)
+	}
+	return state, true, nil
 }

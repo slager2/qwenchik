@@ -128,7 +128,7 @@ func TestReconcileFetchEvidenceWrittenBeforeToolCompleted(t *testing.T) {
 	}
 }
 
-func TestReconcileFetchWithoutEvidenceFailsClosed(t *testing.T) {
+func TestReconcileFetchWithoutEvidenceSkipsSourceConservatively(t *testing.T) {
 	ctx := context.Background()
 	store, worker, task, _, _ := newInterruptedFetch(t, ctx)
 	defer store.Close()
@@ -136,11 +136,32 @@ func TestReconcileFetchWithoutEvidenceFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := worker.reconcileResearchState(ctx, task.ID, state); !errors.Is(err, errFetchOutcomeUnknown) {
-		t.Fatalf("interrupted fetch without evidence error = %v, want errFetchOutcomeUnknown", err)
+	recovered, changed, err := worker.reconcileResearchState(ctx, task.ID, state)
+	if err != nil || !changed {
+		t.Fatalf("interrupted fetch without evidence: changed=%t err=%v", changed, err)
 	}
-	if _, canReplace, err := worker.canReplacePlan(ctx, task.ID); !errors.Is(err, errFetchOutcomeUnknown) || canReplace {
-		t.Fatalf("unknown fetch outcome allowed plan replacement: canReplace=%t err=%v", canReplace, err)
+	if recovered.PendingTool != "" || len(recovered.PendingArguments) != 0 || !contains(recovered.FailedFetchURLs, "https://docs.example.com/page") {
+		t.Fatalf("interrupted fetch state = %#v", recovered)
+	}
+	again, _, err := worker.reconcileResearchState(ctx, task.ID, state)
+	if err != nil || again.PendingTool != "" {
+		t.Fatalf("second reconcile: %#v %v", again, err)
+	}
+	events, err := store.EventsAfter(ctx, task.ID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failures := 0
+	for _, event := range events {
+		if event.Type == "tool.failed" && containsJSONString(event.Payload, `"code":"fetch_interrupted"`) {
+			failures++
+			if !containsJSONString(event.Payload, `"fetched_bytes":16777216`) {
+				t.Fatalf("interrupted fetch not charged conservatively: %s", event.Payload)
+			}
+		}
+	}
+	if failures != 1 {
+		t.Fatalf("fetch_interrupted events = %d, want 1", failures)
 	}
 }
 
