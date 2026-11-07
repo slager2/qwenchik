@@ -42,6 +42,13 @@ type siteMapArgs struct {
 // official site.
 var siteMapHints = []string{"call", "apply", "application", "admission", "deadline", "guideline", "guide", "notice", "announcement", "eligib", "requirement", "scholarship", "calendar", "faq", "programme", "program", "document", "download", "brochure", "regulation", "tuition", "fee"}
 
+// siteMapStopWords carry no relevance in instructions.
+var siteMapStopWords = map[string]bool{"for": true, "the": true, "and": true, "with": true, "from": true}
+
+// numberedCopy matches the "-2", "-3" suffix of re-posted pages
+// (final-call-...-2/), which count as the same path.
+var numberedCopy = regexp.MustCompile(`-[0-9]{1,2}$`)
+
 var siteMapYear = regexp.MustCompile(`(?:^|[^0-9])(20[0-9]{2})(?:[^0-9]|$)`)
 
 func siteMapWords(text string) []string {
@@ -56,7 +63,7 @@ func siteMapWords(text string) []string {
 func rankDiscoveredURLs(urls []string, instructions string, now time.Time, limit int) []string {
 	wanted := map[string]bool{}
 	for _, word := range siteMapWords(instructions) {
-		if len([]rune(word)) >= 3 {
+		if len([]rune(word)) >= 3 && !siteMapStopWords[word] {
 			wanted[word] = true
 		}
 	}
@@ -102,10 +109,11 @@ func rankDiscoveredURLs(urls []string, instructions string, now time.Time, limit
 			continue
 		}
 		if newest >= now.Year() {
-			score += 3
+			// Freshness outweighs one more matching path word.
+			score += 5
 		}
 		if score >= 2 {
-			candidates = append(candidates, scored{url: raw, score: score, order: index, path: parsed.Host + path})
+			candidates = append(candidates, scored{url: raw, score: score, order: index, path: parsed.Host + numberedCopy.ReplaceAllString(path, "")})
 		}
 	}
 	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].score > candidates[j].score })
