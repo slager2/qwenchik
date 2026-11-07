@@ -67,6 +67,29 @@ func TestReportFactsPersistedValidation(t *testing.T) {
 	}
 }
 
+// Run 2d18e5e5: the Stipendium Hungaricum section extracted only Türkiye
+// Burslari facts, and the checker rejected "Open·Next: January – April"
+// because the quote alone does not name CSC.
+func TestReportFactExtractionHelpers(t *testing.T) {
+	entities := []string{"Stipendium Hungaricum", "Türkiye Burslari", "GKS", "CSC"}
+	if got := reportSectionEntity("Stipendium Hungaricum", entities); got != "Stipendium Hungaricum" || reportSameEntity("Türkiye Burslari", got) {
+		t.Fatalf("section entity=%q", got)
+	}
+	if got := reportSectionEntity("GKS (Корея)", entities); got != "GKS" {
+		t.Fatalf("section entity=%q", got)
+	}
+	if got := reportSectionEntity("Сравнение программ", entities); got != "" {
+		t.Fatalf("generic section entity=%q", got)
+	}
+	excerpt := "China·Government\n\nChina Scholarship Council (CSC), Ministry of Education of China\n\nOpen·Next: January – April"
+	if got := reportQuoteContext(excerpt, "Open·Next: January – April"); !strings.Contains(got, "China Scholarship Council (CSC)") {
+		t.Fatalf("context=%q", got)
+	}
+	if got := reportQuoteContext(excerpt, "not in the excerpt"); got != "" {
+		t.Fatalf("context of a missing quote=%q", got)
+	}
+}
+
 func TestReportNumbers(t *testing.T) {
 	got := strings.Join(reportNumbers("от 4 500 до 9 000 лир, IELTS 6.5, 2026/2027, 43,700"), ",")
 	if got != "4500,9000,65,2026,2027,43700" {
