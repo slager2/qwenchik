@@ -73,12 +73,7 @@ func TestAcquisitionCannotEraseUnmetUserDeliverableCriteria(t *testing.T) {
 		}
 		_ = json.Unmarshal([]byte(req.Messages[1].Content), &in)
 		if len(in.Claims) > 0 {
-			for i := range in.Claims {
-				in.Claims[i].Kind = "supported"
-				in.Claims[i].Quote = in.Claims[i].Claim
-			}
-			b, err := json.Marshal(reportCitationReview{Claims: in.Claims, CriteriaCovered: []string{}})
-			return string(b), err
+			return indexedCriticReply(req.Messages[1].Content, nil, nil)
 		}
 		return base.respond(ctx, req, index, stream)
 	}}

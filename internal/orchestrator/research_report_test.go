@@ -94,19 +94,11 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 			return string(raw), err
 		}
 		if len(input.Claims) > 0 {
-			for index := range input.Claims {
-				input.Claims[index].Kind = "supported"
-				input.Claims[index].Quote = input.Claims[index].Claim
-				if strings.Contains(input.Claims[index].Claim, "Invented") {
-					input.Claims[index].Kind, input.Claims[index].Quote = "unknown", ""
-				}
-			}
 			covered := input.Criteria
 			if mode == "coverage_gap" {
 				covered = []string{}
 			}
-			raw, err := json.Marshal(reportCitationReview{Claims: input.Claims, CriteriaCovered: covered})
-			return string(raw), err
+			return indexedCriticReply(request.Messages[1].Content, covered, func(claim string) bool { return !strings.Contains(claim, "Invented") })
 		}
 		if input.Correction && !strings.Contains(input.Problem, "[1]") {
 			t.Fatalf("correction did not explain the format error: %q", input.Problem)

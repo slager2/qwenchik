@@ -42,6 +42,9 @@ func reportReviewSchema(criteria []string, claimLimit int) json.RawMessage {
 		item["enum"] = criteria
 	}
 	properties["criteria_covered"] = boundedArraySchema(item, 0, len(criteria))
+	// Persisted quotes come from the indexed critic, which allows longer spans.
+	claimProperties := properties["claims"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	claimProperties["quote"] = map[string]any{"type": "string", "maxLength": reportQuoteMaxLength}
 	schema["required"] = []string{"claims", "criteria_covered"}
 	return encodeSchema(schema)
 }
@@ -110,6 +113,14 @@ type reportCall struct {
 	aliases      *evidenceAliases
 	legacySchema json.RawMessage
 	legacy       bool
+	// formatLegacy (when set) reports whether a pinned input predates the
+	// role's current input/output format; legacyFormatSchema then gives the
+	// previous format's schema (aliasLegacy: the pinned input holds raw IDs)
+	// and legacyFormat is set for the caller.
+	formatLegacy       func(pinned string) bool
+	legacyFormatSchema func(aliasLegacy bool) json.RawMessage
+	legacyFormatSystem string
+	legacyFormat       bool
 }
 
 func (w *Worker) reportJSON(ctx context.Context, task domain.Task, goal, role, identity, system string, input any, schema json.RawMessage, target any, calls ...*reportCall) error {
@@ -125,6 +136,13 @@ func (w *Worker) reportJSON(ctx context.Context, task domain.Task, goal, role, i
 		call.legacy = true
 		if call.legacySchema != nil {
 			schema = call.legacySchema
+		}
+	}
+	if call != nil && call.formatLegacy != nil && pinned != nil && call.formatLegacy(string(pinned)) {
+		call.legacyFormat = true
+		schema = call.legacyFormatSchema(call.legacy)
+		if call.legacyFormatSystem != "" {
+			system = call.legacyFormatSystem
 		}
 	}
 	// Allow completed journal replay even at the quota, but do not create more
@@ -442,16 +460,32 @@ func (w *Worker) writeReportSection(ctx context.Context, task domain.Task, goal,
 				err = errCitationMapping
 			}
 			if err == nil {
-				var review reportCitationReview
-				err = w.reportJSON(ctx, task, goal, "report_critic", identity, reportCriticPrompt, map[string]any{"claims_to_check": reportCriticClaims(units), "evidence_catalogue": reportModelSources(catalogue), "criteria": section.Criteria, "criterion_catalog": reportCriterionCatalog(task, *state, section.Criteria)}, reportCriticSchema(section.Criteria, claimLimit, aliases.aliasList(sourceIDs)), &review, &reportCall{aliases: aliases, legacySchema: reportCriticSchema(section.Criteria, claimLimit, sourceIDs)})
+				var critic reportCriticReview
+				review := reportCitationReview{}
+				call := &reportCall{aliases: aliases, legacySchema: reportIndexedCriticSchema(section.Criteria, len(units), sourceIDs), formatLegacy: reportCriticPinnedLegacy, legacyFormatSystem: reportCriticPrompt, legacyFormatSchema: func(aliasLegacy bool) json.RawMessage {
+					if aliasLegacy {
+						return reportCriticSchema(section.Criteria, claimLimit, sourceIDs)
+					}
+					return reportCriticSchema(section.Criteria, claimLimit, aliases.aliasList(sourceIDs))
+				}}
+				criticInput := map[string]any{"critic_format": reportCriticFormat, "claims_to_check": reportIndexedCriticClaims(units), "evidence_catalogue": reportModelSources(catalogue), "criteria": section.Criteria, "criterion_catalog": reportCriterionCatalog(task, *state, section.Criteria)}
+				err = w.reportJSON(ctx, task, goal, "report_critic", identity, reportIndexedCriticPrompt, criticInput, reportIndexedCriticSchema(section.Criteria, len(units), aliases.aliasList(sourceIDs)), &critic, call)
 				var kept []reportUnit
 				if err == nil {
-					for index := range review.Claims {
-						review.Claims[index].EvidenceID = aliases.resolve(review.Claims[index].EvidenceID)
+					review.CriteriaCovered = critic.CriteriaCovered
+					for index := range critic.Claims {
+						critic.Claims[index].EvidenceID = aliases.resolve(critic.Claims[index].EvidenceID)
+						for item := range critic.Claims[index].Evidence {
+							critic.Claims[index].Evidence[item].EvidenceID = aliases.resolve(critic.Claims[index].Evidence[item].EvidenceID)
+						}
 					}
 					// Unsupported claims are dropped one by one; the section
 					// fails only when nothing it says could be verified.
-					kept, review.Claims = filterReportReview(units, review.Claims, catalogue)
+					if call.legacyFormat {
+						kept, review.Claims = filterReportReview(units, legacyCriticClaims(critic.Claims), catalogue)
+					} else {
+						kept, review.Claims = filterIndexedReview(units, critic.Claims, catalogue)
+					}
 					if len(kept) == 0 {
 						err = errUnsupportedCitationClaim
 					}

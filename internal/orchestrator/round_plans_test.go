@@ -75,12 +75,7 @@ func roundModelFixture(t *testing.T, rounds int, reviews *int) *researchRunModel
 			return string(b), err
 		}
 		if len(input.Claims) > 0 {
-			for i := range input.Claims {
-				input.Claims[i].Kind = "supported"
-				input.Claims[i].Quote = input.Claims[i].Claim
-			}
-			b, err := json.Marshal(reportCitationReview{Claims: input.Claims, CriteriaCovered: input.Criteria})
-			return string(b), err
+			return indexedCriticReply(req.Messages[1].Content, input.Criteria, nil)
 		}
 		if len(input.Evidence) > 0 {
 			b, err := json.Marshal(map[string]string{"answer": input.Evidence[0].Excerpt + " [" + input.Evidence[0].EvidenceID + "]"})
