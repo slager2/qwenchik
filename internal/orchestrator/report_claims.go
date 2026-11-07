@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -203,7 +204,54 @@ func reportQuoteSupported(quote, excerpt string) bool {
 	if len(strings.TrimSpace(quote)) < 8 {
 		return false
 	}
-	return strings.Contains(excerpt, quote) || strings.Contains(strings.Join(strings.Fields(excerpt), " "), strings.Join(strings.Fields(quote), " "))
+	if strings.Contains(excerpt, quote) || strings.Contains(strings.Join(strings.Fields(excerpt), " "), strings.Join(strings.Fields(quote), " ")) {
+		return true
+	}
+	// The live critic copied facts correctly but 42% of its quotes failed the
+	// exact check: «» for “”, commas added between list lines, segments
+	// joined with "...". Accept a quote whose word/number sequence occurs in
+	// the excerpt; each "..."-joined segment must be long enough and appear
+	// in order, so paraphrases and invented quotes still fail.
+	loose := looseQuoteText(excerpt)
+	position := 0
+	segments := 0
+	for _, segment := range quoteEllipsis.Split(quote, -1) {
+		segment = looseQuoteText(segment)
+		if segment == "" {
+			continue
+		}
+		if utf8.RuneCountInString(segment) < 20 {
+			return false
+		}
+		index := strings.Index(loose[position:], segment)
+		if index < 0 {
+			return false
+		}
+		position += index + len(segment)
+		segments++
+	}
+	return segments > 0
+}
+
+var quoteEllipsis = regexp.MustCompile(`\.{3,}|…|\[\.\.\.\]`)
+
+// looseQuoteText keeps only lower-cased letters and digits, one space between
+// words: punctuation, quote marks, dashes and line breaks do not matter.
+func looseQuoteText(text string) string {
+	var builder strings.Builder
+	space := false
+	for _, r := range strings.ToLower(text) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			if space && builder.Len() > 0 {
+				builder.WriteByte(' ')
+			}
+			builder.WriteRune(r)
+			space = false
+			continue
+		}
+		space = true
+	}
+	return builder.String()
 }
 
 // reportClaimSupported checks one review claim against one unit.
