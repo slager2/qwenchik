@@ -14,7 +14,7 @@ import (
 
 // TemplateVersion changes whenever the generated HTML or stylesheet changes,
 // so cached PDFs rendered from an older layout are not served again.
-const TemplateVersion = "report-pdf-v2"
+const TemplateVersion = "report-pdf-v3"
 
 // Source is one entry of the report source list.
 type Source struct {
@@ -344,9 +344,13 @@ blockquote p:last-child { margin-bottom: 0; }
 code { font-size: 8.8pt; background: #f1f3f5; padding: 0 1mm; border-radius: 1mm; overflow-wrap: anywhere; }
 pre { font-size: 8.5pt; background: #f6f8fa; border: 0.5pt solid #d0d7de; padding: 3mm; border-radius: 1.5mm; white-space: pre-wrap; overflow-wrap: anywhere; }
 pre code { background: none; padding: 0; }
-table { border-collapse: collapse; width: 100%; margin: 0 0 4mm; font-size: 9pt; break-inside: auto; }
-th, td { border: 0.5pt solid #d0d7de; padding: 1.5mm 2.5mm; vertical-align: top; text-align: left; }
-th { background: #f3f4f6; font-weight: 600; }
+table { border-collapse: collapse; width: 100%; max-width: 100%; table-layout: auto; margin: 0 0 4mm; font-size: 8.6pt; line-height: 1.35; break-inside: auto; font-family: "Noto Sans", "DejaVu Sans", "Liberation Sans", sans-serif; }
+thead { display: table-header-group; }
+th, td { border: 0.5pt solid #d0d7de; padding: 1.3mm 2mm; vertical-align: top; text-align: left; overflow-wrap: anywhere; word-break: normal; hyphens: auto; }
+th { background: #eef2f8; color: #111827; font-weight: 600; }
+tbody tr:nth-child(even) td { background: #f8fafc; }
+td:first-child { font-weight: 500; }
+td a[href^="#source-"] { font-size: 7.8pt; white-space: nowrap; }
 tr { break-inside: avoid; }
 hr { border: 0; border-top: 0.6pt solid #d0d7de; margin: 6mm 0; }
 .image-ref { color: #6b7280; font-style: italic; }
