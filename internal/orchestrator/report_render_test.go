@@ -80,14 +80,15 @@ func TestRenderedReportHasTablesAndHonestGaps(t *testing.T) {
 		position = next
 	}
 	for _, want := range []string{
-		"| Объект | мест | дедлайн | стипендия в месяц |",
-		"| **Stipendium Hungaricum** | 110 (бакалавриат, Казахстан) (2025-2026) [" + evKZ + "] | 15 января 2026, 14:00 CET (2026/2027) [" + evSH + "] | — |",
-		"| **Türkiye Burslari** | около 5 000 в год [" + evTB + "] | 10 января – 20 февраля 2026 [" + evTB + "] | 4 500 TL [" + evTB + "] |",
-		"**Stipendium Hungaricum**: стипендия в месяц — не найдено в проверенных источниках.",
+		"| Объект | стипендия в месяц | дедлайн | мест |",
+		"| **Stipendium Hungaricum** | — | 15 января 2026, 14:00 CET (2026/2027) [" + evSH + "] | 110 (бакалавриат, Казахстан) (2025-2026) [" + evKZ + "] |",
+		"| **Türkiye Burslari** | 4 500 TL [" + evTB + "] | 10 января – 20 февраля 2026 [" + evTB + "] | около 5 000 в год [" + evTB + "] |",
+		"**Stipendium Hungaricum** — стипендия в месяц: не найдено в проверенных источниках.",
 		"**MEXT**: подтверждённых сведений не найдено.",
 		"| [" + evGKS + "] | [GKS 2027 Undergraduate Guidelines](https://www.studyinkorea.go.kr/gks/2027-undergraduate.pdf) | studyinkorea.go.kr | да | PDF | 2027 |",
 		"| GKS (Корея) | подтверждено источниками | часть утверждений не подтвердилась выдержками и удалена; фактов проверено: 3 |",
-		"| Türkiye Burslari | возраст | до 21 года | [" + evTB + "] |",
+		"| возраст | до 21 года | [" + evTB + "] |",
+		"| Türkiye Burslari | стипендия в месяц | 4 500 TL | [" + evTB + "] |",
 		"- Самый ранний дедлайн у Stipendium Hungaricum — 15 января 2026. [" + evSH + "]",
 	} {
 		if !strings.Contains(markdown, want) {

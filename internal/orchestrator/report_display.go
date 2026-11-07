@@ -39,7 +39,7 @@ var reportAttributeCategories = []reportAttributeCategory{
 		question:  regexp.MustCompile(`сбор|стоит|стоимост|расход|\bfee|\bcost`)},
 	{key: "stipend", labelRU: "стипендия", labelEN: "stipend", priority: 1,
 		attribute: regexp.MustCompile(`стипенди|в месяц|stipend|monthly|allowance`),
-		question:  regexp.MustCompile(`стипенди|stipend`)},
+		question:  regexp.MustCompile(`стипенди|\bstipends?\b`)},
 	{key: "coverage", labelRU: "покрытие", labelEN: "coverage", priority: 8,
 		attribute: regexp.MustCompile(`покры|cover|что входит|включ`),
 		question:  regexp.MustCompile(`покры|cover`)},

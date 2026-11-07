@@ -54,8 +54,9 @@ func reportFactsFixtureReply(request llm.ChatRequest, evidence []citationEvidenc
 			return `{"facts":[]}`, true
 		}
 		quote := strings.TrimSuffix(truncateRunes(evidence[0].Excerpt, 60), "…")
-		words := strings.Fields(quote)
-		value := strings.Join(words[:min(3, len(words))], " ")
+		// A Russian value with no numbers: shown in Russian and English
+		// reports alike and grounded in any quote.
+		value := "выдержка источника"
 		raw, _ := json.Marshal(map[string]any{"facts": []map[string]string{{"entity": "Protocol " + evidence[0].EvidenceID, "attribute": "описание", "value": value, "year": "", "evidence_id": evidence[0].EvidenceID, "quote": quote}}})
 		return string(raw), true
 	case strings.Contains(system, "You check fact records"):

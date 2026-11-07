@@ -22,6 +22,7 @@ type reportLayoutLabels struct {
 	SourceNo, SourceTitle, SourceSite, SourceOfficial, SourceType, SourceYear string
 	Yes, No, NotFound, NothingFound, NoTLDR, FactsVerified, TLDRModel         string
 	TLDRFallback, TLDRCount, ComparisonNote, OfficialNote                     string
+	FactsOnly, ExcerptsIntro, NoSectionData, Unrepresented                    string
 }
 
 var reportLayoutRU = reportLayoutLabels{
@@ -33,6 +34,10 @@ var reportLayoutRU = reportLayoutLabels{
 	FactsVerified: "фактов проверено: %d", TLDRModel: "проверено по подтверждённым утверждениям", TLDRFallback: "первые подтверждённые утверждения разделов", TLDRCount: "выводов: %d",
 	ComparisonNote: "Ячейка: значение (год данных) и источник. «—» — значение не найдено в проверенных источниках.",
 	OfficialNote:   "«Офиц.» определяется по домену (государственные, образовательные и сайты программ).",
+	FactsOnly:      "Связного текста не получилось подтвердить; ниже только проверенные факты.",
+	ExcerptsIntro:  "Связного текста не получилось подтвердить; ниже короткие выдержки из источников.",
+	NoSectionData:  "Подтверждённых сведений по этому разделу в полученных источниках не найдено.",
+	Unrepresented:  "Не все пункты вопроса раскрыты подтверждёнными разделами (%d); пробелы перечислены в разделе «Что не найдено».",
 }
 
 var reportLayoutEN = reportLayoutLabels{
@@ -44,6 +49,10 @@ var reportLayoutEN = reportLayoutLabels{
 	FactsVerified: "facts verified: %d", TLDRModel: "checked against verified statements", TLDRFallback: "first verified statement of each section", TLDRCount: "conclusions: %d",
 	ComparisonNote: "Cell: value (year of data) and source. \"—\": not found in verified sources.",
 	OfficialNote:   "\"Official\" is derived from the domain (government, education and program sites).",
+	FactsOnly:      "The section text could not be verified; only verified facts are shown.",
+	ExcerptsIntro:  "The section text could not be verified; short source excerpts follow.",
+	NoSectionData:  "No verified information for this section was found in the fetched sources.",
+	Unrepresented:  "Not every part of the question is covered by a verified section (%d); gaps are listed under \"Not found\".",
 }
 
 func reportLayoutFor(question string) reportLayoutLabels {
@@ -116,13 +125,13 @@ type reportFactTable struct {
 	groups     *reportEntityGroups
 }
 
-func buildReportFactTable(sections []domain.ReportSection, known []string) reportFactTable {
+func buildReportFactTable(sections [][]domain.ReportFact, known []string) reportFactTable {
 	table := reportFactTable{attrName: map[string]string{}, cells: map[string][]domain.ReportFact{}, groups: newReportEntityGroups(known)}
 	seenEntity := map[string]bool{}
-	for _, section := range sections {
-		for _, fact := range section.Facts {
+	for _, facts := range sections {
+		for _, fact := range facts {
 			entity := table.groups.key(fact.Entity)
-			attribute := looseQuoteText(fact.Attribute)
+			attribute := reportAttributeKey(fact.Attribute)
 			if !seenEntity[entity] {
 				seenEntity[entity] = true
 				table.entities = append(table.entities, entity)
@@ -137,8 +146,8 @@ func buildReportFactTable(sections []domain.ReportSection, known []string) repor
 	return table
 }
 
-// comparisonColumns are the attributes shared by at least two entities,
-// most shared first, at most five.
+// comparisonColumns are at most five attributes: those shared by most
+// entities first, then by key-number priority.
 func (t reportFactTable) comparisonColumns() []string {
 	counts := map[string]int{}
 	for _, attribute := range t.attributes {
@@ -148,13 +157,27 @@ func (t reportFactTable) comparisonColumns() []string {
 			}
 		}
 	}
-	columns := []string{}
+	byPriority := func(columns []string) []string {
+		sort.SliceStable(columns, func(i, j int) bool {
+			return reportAttributePriority(t.attrName[columns[i]]) < reportAttributePriority(t.attrName[columns[j]])
+		})
+		return columns
+	}
+	shared, single := []string{}, []string{}
 	for _, attribute := range t.attributes {
 		if counts[attribute] >= 2 {
-			columns = append(columns, attribute)
+			shared = append(shared, attribute)
+		} else {
+			single = append(single, attribute)
 		}
 	}
-	sort.SliceStable(columns, func(i, j int) bool { return counts[columns[i]] > counts[columns[j]] })
+	columns := byPriority(shared)
+	if len(columns) < 2 {
+		// Entities with no attribute in common are still compared on
+		// their most important attributes.
+		columns = append(columns, byPriority(single)...)
+		return columns[:min(4, len(columns))]
+	}
 	return columns[:min(5, len(columns))]
 }
 
@@ -187,37 +210,31 @@ func writeComparison(b *strings.Builder, table reportFactTable, columns []string
 	fmt.Fprintf(b, "\n%s\n\n", layout.ComparisonNote)
 }
 
-// keyNumbers picks up to six numeric facts, one per entity and attribute,
-// spreading over entities first. Attributes already shown by the comparison
-// table are used only when nothing else is left.
-func keyNumbers(table reportFactTable, compared []string) []domain.ReportFact {
-	picked := []domain.ReportFact{}
-	used := map[string]bool{}
-	for _, entity := range table.entities {
-		for _, attribute := range compared {
-			used[entity+"|"+attribute] = true
-		}
-	}
-	picked = append(picked, pickKeyNumbers(table, used)...)
-	return picked
-}
+const (
+	reportKeyNumbersPerEntity = 2
+	reportKeyNumbersMax       = 8
+)
 
-func pickKeyNumbers(table reportFactTable, used map[string]bool) []domain.ReportFact {
+// keyNumbers is the dashboard: round-robin over entities, each giving its
+// most important numeric facts (stipend, deadline, places, GPA/language)
+// first, at most two per entity.
+func keyNumbers(table reportFactTable) []domain.ReportFact {
+	candidates := map[string][]domain.ReportFact{}
+	for _, entity := range table.entities {
+		for _, attribute := range table.attributes {
+			if facts := table.cells[entity+"|"+attribute]; len(facts) > 0 && len(reportNumbers(facts[0].Value)) > 0 {
+				candidates[entity] = append(candidates[entity], facts[0])
+			}
+		}
+		sort.SliceStable(candidates[entity], func(i, j int) bool {
+			return reportAttributePriority(candidates[entity][i].Attribute) < reportAttributePriority(candidates[entity][j].Attribute)
+		})
+	}
 	picked := []domain.ReportFact{}
-	for added := true; added && len(picked) < 6; {
-		added = false
+	for round := 0; round < reportKeyNumbersPerEntity; round++ {
 		for _, entity := range table.entities {
-			for _, attribute := range table.attributes {
-				key := entity + "|" + attribute
-				facts := table.cells[key]
-				if used[key] || len(facts) == 0 || len(reportNumbers(facts[0].Value)) == 0 {
-					continue
-				}
-				if len(picked) < 6 {
-					used[key], added = true, true
-					picked = append(picked, facts[0])
-				}
-				break // one per entity and round
+			if round < len(candidates[entity]) && len(picked) < reportKeyNumbersMax {
+				picked = append(picked, candidates[entity][round])
 			}
 		}
 	}
@@ -336,36 +353,101 @@ func dedupeReportBody(body string, seen map[string]bool) string {
 	return strings.TrimSpace(regexp.MustCompile(`\n{3,}`).ReplaceAllString(strings.Join(lines, "\n"), "\n\n"))
 }
 
-// reportGaps lists entity × attribute holes of the comparison and entities
-// with no verified information at all.
-func reportGaps(table reportFactTable, columns []string, entities []string, sections []domain.ReportSection, layout reportLayoutLabels) []string {
+// reportGaps lists, per entity, the attributes the question asks about that
+// no verified fact or verified section text covers ("Stipendium Hungaricum —
+// дедлайн, стипендия"), and entities with no verified information at all.
+func reportGaps(report *domain.ResearchReportState, table reportFactTable, goal string, layout reportLayoutLabels) []string {
+	russian := reportLanguage(goal) == "ru"
+	categories := reportQuestionCategories(goal)
+	supported := ""
+	bodies := map[string]string{}
+	for _, section := range report.Sections {
+		if section.Status != "supported" {
+			continue
+		}
+		body := reportMarkerPattern.ReplaceAllString(section.Body, "")
+		supported += " " + body
+		if name := reportSectionEntity(section.Title, report.Entities); name != "" {
+			bodies[table.groups.key(name)] += " " + strings.ToLower(body)
+		}
+	}
+	entities := []string{}
+	seen := map[string]bool{}
+	for _, name := range report.Entities {
+		if key := table.groups.key(name); !seen[key] {
+			seen[key] = true
+			entities = append(entities, key)
+		}
+	}
+	for _, key := range table.entities {
+		if !seen[key] {
+			seen[key] = true
+			entities = append(entities, key)
+		}
+	}
+	columns := table.comparisonColumns()
 	gaps := []string{}
-	for _, entity := range table.entities {
+	for _, key := range entities {
+		name := table.groups.display[key]
+		hasFacts := false
+		for _, attribute := range table.attributes {
+			hasFacts = hasFacts || len(table.cells[key+"|"+attribute]) > 0
+		}
+		if !hasFacts && bodies[key] == "" && !reportEntityNamed(name, supported) {
+			gaps = append(gaps, fmt.Sprintf("**%s**: %s.", reportText(name), layout.NothingFound))
+			continue
+		}
 		missing := []string{}
-		for _, column := range columns {
-			if len(table.cells[entity+"|"+column]) == 0 {
-				missing = append(missing, table.attrName[column])
+		if len(categories) > 0 {
+			for _, category := range categories {
+				if len(table.cells[key+"|category:"+category.key]) > 0 || category.attribute.MatchString(bodies[key]) {
+					continue
+				}
+				label := category.labelEN
+				if russian {
+					label = category.labelRU
+				}
+				missing = append(missing, label)
+			}
+		} else if len(table.entities) >= 2 {
+			for _, column := range columns {
+				if len(table.cells[key+"|"+column]) == 0 {
+					missing = append(missing, table.attrName[column])
+				}
 			}
 		}
 		if len(missing) > 0 {
-			gaps = append(gaps, fmt.Sprintf("**%s**: %s — %s.", reportText(table.groups.display[entity]), reportText(strings.Join(missing, ", ")), layout.NotFound))
-		}
-	}
-	text := ""
-	for _, section := range sections {
-		if section.Status == "supported" {
-			text += " " + section.Body
-		}
-		for _, fact := range section.Facts {
-			text += " " + fact.Entity
-		}
-	}
-	for _, entity := range entities {
-		if !reportEntityNamed(entity, text) {
-			gaps = append(gaps, fmt.Sprintf("**%s**: %s.", reportText(entity), layout.NothingFound))
+			gaps = append(gaps, fmt.Sprintf("**%s** — %s: %s.", reportText(name), reportText(strings.Join(missing, ", ")), layout.NotFound))
 		}
 	}
 	return gaps[:min(12, len(gaps))]
+}
+
+// writeFallbackSection renders a section whose text did not verify: its
+// verified facts when there are any, else at most two short excerpts.
+func writeFallbackSection(b *strings.Builder, section domain.ReportSection, facts []domain.ReportFact, entity string, catalogue []citationEvidence, layout reportLayoutLabels) {
+	if len(facts) > 0 {
+		fmt.Fprintf(b, "%s\n\n", layout.FactsOnly)
+		writeFactsTable(b, facts, layout, reportFactEntities(facts) > 1)
+		return
+	}
+	excerpts := reportShortExcerpts(selectReportEvidence(section.EvidenceIDs, catalogue), entity)
+	if len(excerpts) == 0 {
+		fmt.Fprintf(b, "%s\n\n", layout.NoSectionData)
+		return
+	}
+	fmt.Fprintf(b, "%s\n\n", layout.ExcerptsIntro)
+	for _, excerpt := range excerpts {
+		fmt.Fprintf(b, "> %s [%s]\n\n", reportText(excerpt.Text), excerpt.EvidenceID)
+	}
+}
+
+func reportFactEntities(facts []domain.ReportFact) int {
+	entities := map[string]bool{}
+	for _, fact := range facts {
+		entities[looseQuoteText(fact.Entity)] = true
+	}
+	return len(entities)
 }
 
 // renderSectionedReport builds the report Markdown from verified state.
@@ -382,18 +464,13 @@ func renderSectionedReport(report *domain.ResearchReportState, goal, taskID stri
 	if len(report.TLDR) > 0 {
 		b.WriteString("\n")
 	}
-	table := buildReportFactTable(report.Sections, report.Entities)
-	columns := table.comparisonColumns()
-	compare := len(table.entities) >= 2 && len(columns) > 0
-	compared := []string{}
-	if compare {
-		compared = columns
-	}
-	if numbers := keyNumbers(table, compared); len(numbers) >= 2 {
+	display := reportDisplayFacts(report, goal)
+	table := buildReportFactTable(display, report.Entities)
+	if numbers := keyNumbers(table); len(numbers) >= 2 {
 		fmt.Fprintf(&b, "## %s\n\n", layout.KeyNumbers)
 		writeFactsTable(&b, numbers, layout, true)
 	}
-	if compare {
+	if columns := table.comparisonColumns(); len(table.entities) >= 2 && len(columns) > 0 {
 		writeComparison(&b, table, columns, layout)
 	}
 	fmt.Fprintf(&b, "## %s\n\n", labels.ContentsHeading)
@@ -401,25 +478,22 @@ func renderSectionedReport(report *domain.ResearchReportState, goal, taskID stri
 		fmt.Fprintf(&b, "%d. %s\n", index+1, reportText(section.Title))
 	}
 	seen := map[string]bool{}
-	for _, section := range report.Sections {
+	for index, section := range report.Sections {
 		fmt.Fprintf(&b, "\n## %s\n\n", reportText(section.Title))
-		body := section.Body
-		if section.Status == "supported" {
-			body = dedupeReportBody(body, seen)
+		facts := display[index]
+		if section.Status != "supported" {
+			writeFallbackSection(&b, section, facts, reportSectionEntity(section.Title, report.Entities), catalogue, layout)
+			continue
 		}
-		if strings.TrimSpace(body) != "" {
+		if body := dedupeReportBody(section.Body, seen); strings.TrimSpace(body) != "" {
 			fmt.Fprintf(&b, "%s\n\n", body)
 		}
-		if len(section.Facts) > 0 {
-			entities := map[string]bool{}
-			for _, fact := range section.Facts {
-				entities[looseQuoteText(fact.Entity)] = true
-			}
+		if len(facts) > 0 {
 			fmt.Fprintf(&b, "**%s**\n\n", layout.Facts)
-			writeFactsTable(&b, section.Facts, layout, len(entities) > 1)
+			writeFactsTable(&b, facts, layout, reportFactEntities(facts) > 1)
 		}
 	}
-	if gaps := reportGaps(table, columns, report.Entities, report.Sections, layout); len(gaps) > 0 {
+	if gaps := reportGaps(report, table, goal, layout); len(gaps) > 0 {
 		fmt.Fprintf(&b, "\n## %s\n\n", layout.Gaps)
 		for _, gap := range gaps {
 			fmt.Fprintf(&b, "- %s\n", gap)
@@ -427,17 +501,14 @@ func renderSectionedReport(report *domain.ResearchReportState, goal, taskID stri
 	}
 	fmt.Fprintf(&b, "\n## %s\n\n%s\n", labels.QuestionHeading, reportQuestionText(goal))
 	fmt.Fprintf(&b, "\n## %s\n\n%s\n", labels.LimitsHeading, labels.LimitsText)
-	for _, item := range missing {
+	for _, item := range reportLimitationItems(append(append([]string{}, missing...), supplementary...), reportLanguage(goal) == "ru") {
 		fmt.Fprintf(&b, "- %s\n", reportText(item))
-	}
-	for _, item := range supplementary {
-		fmt.Fprintf(&b, "- "+labels.SupplementaryItem+"\n", reportText(item))
 	}
 	for _, failure := range report.SourceLimitations {
 		fmt.Fprintf(&b, "- "+labels.SourceUnused+"\n", reportText(publicError(failure.Code)), failure.Code, failure.FetchedBytes)
 	}
 	if len(report.UnrepresentedCriteria) > 0 {
-		fmt.Fprintf(&b, "- "+labels.Unrepresented+"\n", reportText(strings.Join(report.UnrepresentedCriteria, ", ")))
+		fmt.Fprintf(&b, "- "+layout.Unrepresented+"\n", len(report.UnrepresentedCriteria))
 	}
 	fmt.Fprintf(&b, "\n## %s\n\n%s\n", labels.MethodHeading, labels.MethodText)
 	for _, note := range reportMethodNotes(labels, catalogue) {
@@ -456,13 +527,13 @@ func renderSectionedReport(report *domain.ResearchReportState, goal, taskID stri
 		tldrNote = layout.TLDRModel
 	}
 	fmt.Fprintf(&b, "| %s | %s | %s |\n", layout.TLDR, tldrNote, fmt.Sprintf(layout.TLDRCount, len(report.TLDR)))
-	for _, section := range report.Sections {
+	for index, section := range report.Sections {
 		notes := []string{}
 		if section.Limitation != "" {
 			notes = append(notes, reportCell(labels.limitation(section.Limitation)))
 		}
-		if len(section.Facts) > 0 {
-			notes = append(notes, fmt.Sprintf(layout.FactsVerified, len(section.Facts)))
+		if len(display[index]) > 0 {
+			notes = append(notes, fmt.Sprintf(layout.FactsVerified, len(display[index])))
 		}
 		note := strings.Join(notes, "; ")
 		if note == "" {
