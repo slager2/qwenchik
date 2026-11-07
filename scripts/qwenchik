@@ -110,7 +110,10 @@ start_agentsearcher() {
   fi
   say "Запускаю agentSearcher (локальный поиск)…"
   # Только loopback: HOST/PORT задают адрес API, --host/--port дублируют их.
+  # Полный текст страницы до 60 000 символов (по умолчанию 20 000 резало
+  # официальные правила приёма); qagent принимает до 200 000.
   AGENTSEARCHER_HOST="$AGENTSEARCHER_HOST" AGENTSEARCHER_PORT="$AGENTSEARCHER_PORT" \
+    AGENTSEARCHER_MAX_RAW_CHARS="${AGENTSEARCHER_MAX_RAW_CHARS:-60000}" \
     setsid "$AGENTSEARCHER_BIN" serve --host "$AGENTSEARCHER_HOST" --port "$AGENTSEARCHER_PORT" \
     >>"$AGENTSEARCHER_LOG" 2>&1 </dev/null &
   echo $! >"$AGENTSEARCHER_PID"
