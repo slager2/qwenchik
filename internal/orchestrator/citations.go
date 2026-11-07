@@ -307,7 +307,7 @@ func (w *Worker) reviewCitationClaims(ctx context.Context, taskID, answer string
 			schema = encodeSchema(decoded)
 		}
 	}
-	criticCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	criticCtx, cancel := context.WithTimeout(ctx, 180*time.Second) // prefill of a full catalogue alone can exceed 30 s on this laptop
 	defer cancel()
 	attempts := 2
 	if corrected, _ := ctx.Value(finalizerCorrectedKey{}).(bool); corrected {

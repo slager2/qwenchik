@@ -134,7 +134,7 @@ func Load() (Config, error) {
 	if cfg.LLMEnableThinking, err = boolEnv("LLM_ENABLE_THINKING", false); err != nil {
 		return Config{}, err
 	}
-	if cfg.LLMRequestTimeoutSecs, err = intEnv("LLM_REQUEST_TIMEOUT_SECONDS", 120); err != nil {
+	if cfg.LLMRequestTimeoutSecs, err = intEnv("LLM_REQUEST_TIMEOUT_SECONDS", 600); err != nil {
 		return Config{}, err
 	}
 	if cfg.LLMMaxConcurrency, err = intEnv("LLM_MAX_CONCURRENCY", 1); err != nil {
