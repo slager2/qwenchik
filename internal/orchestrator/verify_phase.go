@@ -303,11 +303,13 @@ func (w *Worker) verify(ctx context.Context, task domain.Task, goal, memoryConte
 	if len(result.Summary) > 1000 || len(result.Missing) > 20 || len(result.CriterionAssessments) > 120 {
 		return verification{}, errInvalidModelOutput
 	}
+	var ownedEvidence []domain.Evidence
 	if w.repo != nil {
 		evidence, err := w.repo.Evidence(ctx, task.ID)
 		if err != nil {
 			return verification{}, err
 		}
+		ownedEvidence = evidence
 		var unavailable []string
 		result.CriterionAssessments, unavailable = filterVerificationEvidence(result.CriterionAssessments, evidence)
 		for _, missing := range unavailable {
@@ -315,6 +317,29 @@ func (w *Worker) verify(ctx context.Context, task domain.Task, goal, memoryConte
 		}
 	}
 	criticalMissing, supplementaryMissing := verificationCriterionFindings(plan, state, result.CriterionAssessments)
+	// A date-sensitive request is not done while its dated evidence is stale
+	// or a named entity lacks an official source: another round searches
+	// "<entity> <year> official" instead.
+	freshnessFollowUps := []string{}
+	if holdVerdict, applies := freshnessRuleApplies(ctx, state); applies {
+		accepted := map[string]bool{}
+		for _, assessment := range result.CriterionAssessments {
+			if assessment.Met {
+				for _, id := range assessment.EvidenceIDs {
+					accepted[id] = true
+				}
+			}
+		}
+		gaps, queries := freshnessCoverageGaps(goal, ownedEvidence, accepted, researchNow())
+		if len(gaps) > 0 {
+			freshnessFollowUps = queries
+			if holdVerdict {
+				for _, gap := range gaps {
+					criticalMissing = appendVerificationMissing(criticalMissing, gap)
+				}
+			}
+		}
+	}
 	if session, ok := ctx.Value(researchExecutionKey{}).(domain.ResearchSession); ok && session.Policy.AdaptiveEnabled {
 		prefix := fmt.Sprintf("continue_%d_fetch", state.Completion.Continuations)
 		searchPrefix := fmt.Sprintf("continue_%d_search", state.Completion.Continuations)
@@ -426,7 +451,9 @@ func (w *Worker) verify(ctx context.Context, task domain.Task, goal, memoryConte
 		}
 		followUps := []string{}
 		if exploring {
-			followUps = researchFollowUps(response.FollowUps, goal, plan, state)
+			followUps = researchFollowUps(append(append([]string{}, freshnessFollowUps...), response.FollowUps...), goal, plan, state)
+		} else if len(freshnessFollowUps) > 0 && !result.Complete {
+			followUps = researchFollowUps(freshnessFollowUps, goal, plan, state)
 		}
 		if extended, ok := w.repo.(interface {
 			CommitVerificationWithFollowUps(context.Context, string, string, string, []string, []string, []domain.VerificationCriterionResult, []string) error
