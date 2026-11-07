@@ -40,6 +40,30 @@ func TestFreshnessCoverageGapsFlagStaleDatesAndMissingOfficialSources(t *testing
 	}
 }
 
+func TestFreshnessCoverageGapsOnlyForNamedProgrammes(t *testing.T) {
+	// Evidence of the live run: aggregators and conference pages, no
+	// official programme site.
+	evidence := []domain.Evidence{
+		freshnessEvidence("e1", "https://www.opportunitynest.org/guides/turkiye-burslari-scholarship", "Türkiye Bursları 2027", "Türkiye Burslari 2027 applications open in January 2027."),
+		freshnessEvidence("e2", "https://ieeecompsac.computer.org/call-for-papers/", "CALL FOR PAPERS", "COMPSAC 2027 Computer Science, Software Engineering and Data Science tracks."),
+		freshnessEvidence("e3", "https://www.campuschina.org/content/details3_74776.html", "Chinese Government Scholarship 2027", "Applications for 2027 open in December 2026."),
+	}
+	gaps, queries := freshnessCoverageGaps(kzITGrantGoal, evidence, nil, searchParamsNow)
+	joined := strings.Join(gaps, " | ")
+	for _, generic := range []string{"Computer Science", "Software Engineering", "Data Science"} {
+		if strings.Contains(joined, generic) {
+			t.Fatalf("generic field %q demands an official source: %q", generic, gaps)
+		}
+	}
+	// CSC is covered by its known official site; five programmes are not.
+	if len(gaps) != 5 || strings.Contains(joined, "CSC") || !strings.Contains(joined, "for GKS.") {
+		t.Fatalf("gaps = %q", gaps)
+	}
+	if !contains(queries, "GKS Korea scholarship undergraduate 2027 official") || !contains(queries, "Türkiye Burslari undergraduate 2027 official") {
+		t.Fatalf("queries = %q", queries)
+	}
+}
+
 func TestFreshnessRuleAppliesOnlyToExploringProfilesWithRoundsLeft(t *testing.T) {
 	session := func(profile string) context.Context {
 		s := domain.ResearchSession{Profile: profile}

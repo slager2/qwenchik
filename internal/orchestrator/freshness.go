@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -32,7 +33,9 @@ func freshnessCoverageGaps(goal string, evidence []domain.Evidence, accepted map
 			usable = append(usable, item)
 		}
 	}
-	entities := goalEntities(goal)
+	// Only real named entities (programmes, universities, products) need an
+	// official source; generic fields such as Computer Science do not.
+	entities := extractGoalEntities(goal)
 	addQuery := func(subject string) {
 		query := conciseSearchQuery(subject + " " + strconv.Itoa(year) + " official")
 		if query != "" && !contains(queries, query) {
@@ -56,13 +59,19 @@ func freshnessCoverageGaps(goal string, evidence []domain.Evidence, accepted map
 			addQuery(goalKeywordQuery(goal, 6))
 		}
 		for _, entity := range entities {
-			addQuery(entity)
+			addQuery(entityQueryStem(entity, goal))
 		}
 	}
-	for _, entity := range entities {
+	for _, goalEntity := range entities {
+		entity := goalEntity.Name
 		words := strings.Fields(entityFold(entity))
+		known := officialEntityDomains(entity)
 		official := false
 		for _, item := range usable {
+			if knownOfficialHost(item.CanonicalURL, known) {
+				official = true
+				break
+			}
 			if officialSourceScore(item.CanonicalURL, entity) < 1 {
 				continue
 			}
@@ -78,10 +87,26 @@ func freshnessCoverageGaps(goal string, evidence []domain.Evidence, accepted map
 		}
 		if !official {
 			gaps = append(gaps, truncateRunes("No official source has been fetched yet for "+entity+".", 240))
-			addQuery(entity)
+			addQuery(entityQueryStem(goalEntity, goal))
 		}
 	}
 	return gaps, queries
+}
+
+// knownOfficialHost reports whether the URL is on one of the domains or
+// their subdomains.
+func knownOfficialHost(rawURL string, domains []string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.TrimPrefix(strings.ToLower(parsed.Hostname()), "www.")
+	for _, suffix := range domains {
+		if host == suffix || strings.HasSuffix(host, "."+suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 // freshnessRuleApplies reports whether the freshness and official-coverage
