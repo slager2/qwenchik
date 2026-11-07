@@ -917,6 +917,8 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 				Language   string `json:"language"`
 				Recency    string `json:"recency"`
 				MaxResults int    `json:"max_results"`
+				// Kept when a repeated query is diversified.
+				PreferredDomains []string `json:"preferred_domains,omitempty"`
 			}
 			if err := json.Unmarshal(decision.ToolCall.Arguments, &arguments); err != nil {
 				return fmt.Errorf("%w: search query arguments could not be decoded", errInvalidModelOutput)

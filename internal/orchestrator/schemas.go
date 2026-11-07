@@ -55,6 +55,9 @@ func actionOutputSchema(descriptors []tools.Descriptor, fetchURLs []string) json
 	toolCalls := make([]any, 0, len(descriptors))
 	for _, descriptor := range descriptors {
 		argumentsSchema := strictToolArgumentsSchema(descriptor.ArgumentsSchema)
+		if descriptor.Name == "search" {
+			omitBackendSearchArguments(argumentsSchema)
+		}
 		if descriptor.Name == "fetch_url" && len(fetchURLs) > 0 {
 			if properties, ok := argumentsSchema["properties"].(map[string]any); ok {
 				properties["url"] = map[string]any{"type": "string", "enum": fetchURLs}
@@ -84,6 +87,25 @@ func actionOutputSchema(descriptors []tools.Descriptor, fetchURLs []string) json
 		"required":             []string{"status", "summary", "tool_call"},
 		"additionalProperties": false,
 	})
+}
+
+// backendSearchArguments are search arguments only the backend sets (the
+// official domains seen in earlier rounds); the actor never chooses them.
+var backendSearchArguments = []string{"preferred_domains"}
+
+func omitBackendSearchArguments(schema map[string]any) {
+	properties, _ := schema["properties"].(map[string]any)
+	required, _ := schema["required"].([]string)
+	kept := make([]string, 0, len(required))
+	for _, name := range required {
+		if !contains(backendSearchArguments, name) {
+			kept = append(kept, name)
+		}
+	}
+	for _, name := range backendSearchArguments {
+		delete(properties, name)
+	}
+	schema["required"] = kept
 }
 
 func strictToolArgumentsSchema(raw json.RawMessage) map[string]any {

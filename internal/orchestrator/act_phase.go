@@ -489,7 +489,7 @@ func deterministicResearchAction(step domain.PlanStep, goal, expectedTool string
 	if query == "" || duplicateResearchQuery(query, state.SearchQueryHistory) {
 		return actionDecision{}, false, nil
 	}
-	arguments, err := json.Marshal(map[string]any{"query": query, "max_results": researchSearchResults})
+	arguments, err := json.Marshal(researchSearchArguments(step, query, state, researchNow()))
 	if err != nil {
 		return actionDecision{}, false, err
 	}
