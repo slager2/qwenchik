@@ -7,7 +7,7 @@ import (
 )
 
 func TestLongReportsGiveEverySectionEightClaims(t *testing.T) {
-	for profile, want := range map[string]int{domain.ResearchProfileStandard: 6, domain.ResearchProfileDeepLaptop: 4, domain.ResearchProfileLongLaptop: 8, domain.ResearchProfileOvernight: 8} {
+	for profile, want := range map[string]int{domain.ResearchProfileStandard: 6, domain.ResearchProfileDeepLaptop: 6, domain.ResearchProfileLongLaptop: 8, domain.ResearchProfileOvernight: 8} {
 		b, _ := domain.RoundResearchBudgetForProfile(profile)
 		sections := b.MaxReportSections
 		if profile == domain.ResearchProfileStandard {
