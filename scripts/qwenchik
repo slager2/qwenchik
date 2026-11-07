@@ -7,6 +7,8 @@
 #   qwenchik open                            открыть UI в браузере
 #   qwenchik logs [model|app|search]         хвост журналов
 #   qwenchik install-search                  установить agentSearcher (локальный поиск)
+#   qwenchik model [4b|9b]                   показать или сменить модель (выбор сохраняется)
+#   qwenchik start --model 9b                запустить с выбранной моделью
 #
 # Модель и приложение работают нативно через systemd user units (GPU/Vulkan
 # доступен только так). В Docker живёт только SearXNG — он не нужен для GPU и
@@ -134,6 +136,53 @@ stop_agentsearcher() {
   rm -f "$AGENTSEARCHER_PID"
 }
 
+# Модели: имя -> файл GGUF (рядом с моделью из базового unit) и доп. флаги.
+# 9B занимает почти все 6 ГБ видеопамяти при контексте 64k: --fit off не даёт
+# llama.cpp самой урезать контекст, который приложение ожидает (65536).
+MODEL_UNIT="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/qwenchik-model.service"
+MODEL_DROPIN="$MODEL_UNIT.d/model.conf"
+MODEL_CHOICE="$CONFIG_DIR/model"
+model_file() { case $1 in 4b) echo Qwen3.5-4B-Q4_K_M.gguf ;; 9b) echo Qwen3.5-9B-IQ4_XS.gguf ;; *) return 1 ;; esac; }
+model_extra() { case $1 in 9b) echo ' "--fit" "off"' ;; *) echo '' ;; esac; }
+current_model() { [[ -f $MODEL_CHOICE ]] && cat "$MODEL_CHOICE" || echo 4b; }
+
+apply_model() {
+  local name=$1 file base dir line
+  file=$(model_file "$name") || die "неизвестная модель: $name (есть 4b, 9b)"
+  [[ -f $MODEL_UNIT ]] || die "нет $MODEL_UNIT: сначала qagent runtime install"
+  base=$(grep -m1 '^ExecStart=' "$MODEL_UNIT") || die "в $MODEL_UNIT нет ExecStart"
+  dir=$(sed -E 's#.*"-m" "([^"]*)/[^"/]*".*#\1#' <<<"$base")
+  [[ -f "$dir/$file" ]] || die "нет файла модели $dir/$file"
+  mkdir -p "$CONFIG_DIR" "$(dirname "$MODEL_DROPIN")"
+  echo "$name" >"$MODEL_CHOICE"
+  if [[ $name == 4b && $base == *"/$file\""* ]]; then
+    rm -f "$MODEL_DROPIN"
+  else
+    line=$(sed -E "s#\"-m\" \"[^\"]*\"#\"-m\" \"$dir/$file\"#" <<<"$base")$(model_extra "$name")
+    printf '[Service]\n# Создано qwenchik model %s\nExecStart=\n%s\n' "$name" "$line" >"$MODEL_DROPIN"
+  fi
+  systemctl --user daemon-reload
+}
+
+cmd_model() {
+  if [[ -z ${1:-} ]]; then
+    echo "Текущая модель: $(current_model) ($(model_file "$(current_model)"))"
+    return 0
+  fi
+  apply_model "$1"
+  say "Модель: $1 ($(model_file "$1"))"
+  if unit_active qwenchik-model; then
+    say "Перезапускаю модель и приложение…"
+    systemctl --user restart qwenchik-model.service
+    wait_url "$MODEL_HEALTH" 300 || die "модель не ответила: qwenchik logs model"
+    if unit_active qwenchik-app; then
+      systemctl --user restart qwenchik-app.service
+      wait_url "$APP_URL/api/health" 60 || die "приложение не ответило: qwenchik logs app"
+    fi
+    say "Готово: $APP_URL"
+  fi
+}
+
 cmd_install_search() {
   command -v python3 >/dev/null || die "python3 не установлен"
   python3 -c 'import venv, ensurepip' 2>/dev/null ||
@@ -159,19 +208,23 @@ cmd_install_search() {
 }
 
 cmd_start() {
-  local search=0 open=1
-  for arg in "$@"; do
-    case $arg in
+  local search=0 open=1 model=""
+  while (($#)); do
+    case $1 in
       --search) search=1 ;;
       --no-open) open=0 ;;
-      *) die "неизвестный флаг: $arg" ;;
+      --model) shift; model=${1:-} ;;
+      --model=*) model=${1#--model=} ;;
+      *) die "неизвестный флаг: $1" ;;
     esac
+    shift
   done
+  apply_model "${model:-$(current_model)}"
   ((search)) && start_search
   start_agentsearcher
   say "Запускаю модель…"
   systemctl --user start qwenchik-model.service
-  wait_url "$MODEL_HEALTH" 180 || die "модель не ответила за 3 минуты: qwenchik logs model"
+  wait_url "$MODEL_HEALTH" 300 || die "модель не ответила за 5 минут: qwenchik logs model"
   say "Запускаю приложение…"
   systemctl --user start qwenchik-app.service
   wait_url "$APP_URL/api/health" 60 || die "приложение не ответило: qwenchik logs app"
@@ -192,6 +245,7 @@ cmd_stop() {
 
 cmd_status() {
   local u
+  printf '  %-16s %s\n' model "$(current_model)"
   for u in qwenchik-model qwenchik-app docker-desktop; do
     if unit_active "$u"; then printf '  %-16s запущен\n' "$u"; else printf '  %-16s остановлен\n' "$u"; fi
   done
@@ -231,5 +285,6 @@ case ${1:-} in
   open) cmd_open ;;
   logs) shift; cmd_logs "$@" ;;
   install-search) cmd_install_search ;;
-  *) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  model) shift; cmd_model "$@" ;;
+  *) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

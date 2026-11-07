@@ -311,8 +311,12 @@ qwenchik start            # model + app natively (GPU/Vulkan), opens the browser
 qwenchik start --search   # also SearXNG in Docker; starts Docker Desktop only if it was not running
 qwenchik stop             # stops everything start brought up and frees RAM/VRAM
 qwenchik status | open | logs [model|app|search]
+qwenchik model 9b         # switch the local model (4b or 9b); the choice is remembered
+qwenchik start --model 4b # start once with another model
 qwenchik install-search   # one-time: install agentSearcher (local search service)
 ```
+
+`qwenchik model` writes a systemd drop-in (`qwenchik-model.service.d/model.conf`) that only swaps the GGUF next to the installed model and adds its flags; the base unit is untouched. Qwen3.5-9B IQ4_XS (5.2 GB, ~19 tok/s, 64k context in 5.7 GB VRAM) gave the most complete deep reports on an RTX 3050 6 GB in a side-by-side test; 4B (~32 tok/s) stays as the faster option. With 9B set `MIN_FREE_VRAM_MB=32` in `.env`, because llama.cpp allocates nearly all VRAM up front.
 
 The model and app run natively because GPU offload is unavailable inside the Docker Desktop VM. Only SearXNG runs in a container (`compose.searxng.yml`). Its secret is generated once into `~/.config/qwenchik/searxng.env`. Without SearXNG, search falls back to the other configured providers. When run without a terminal (for example from a desktop menu entry with `Exec=~/.local/bin/qwenchik start`), the launcher reports results through desktop notifications.
 
