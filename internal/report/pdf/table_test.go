@@ -5,6 +5,12 @@ import (
 	"testing"
 )
 
+func TestFooterLabelKeepsSpacesAfterEscapes(t *testing.T) {
+	if got := string(footerLabel("Гранты на IT")); got != `"\000413 \000440 \000430 \00043d \000442 \00044b  \00043d \000430  IT"` {
+		t.Fatalf("footer=%s", got)
+	}
+}
+
 func TestBuildHTMLNumbersCitationsInsideTables(t *testing.T) {
 	id := "3c757d00-1032-43dc-8b10-547adc82b579"
 	markdown := "## Сравнение\n\n| Объект | дедлайн |\n|---|---|\n| **SH** | 15 января 2026 [" + id + "] |\n\n| № | Источник |\n|---|---|\n| [" + id + "] | [SH](https://stipendiumhungaricum.hu/apply/) |\n"

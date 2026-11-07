@@ -228,7 +228,9 @@ func footerLabel(title string) template.CSS {
 	b.WriteByte('"')
 	for _, r := range label {
 		if r < 0x20 || r == '"' || r == '\\' || r == '<' || r == '>' || r == '&' || r > 0x7e {
-			fmt.Fprintf(&b, "\\%06x", r)
+			// A CSS hex escape swallows one following space, so it always ends
+			// with its own terminating space and real spaces survive.
+			fmt.Fprintf(&b, "\\%06x ", r)
 			continue
 		}
 		b.WriteRune(r)
