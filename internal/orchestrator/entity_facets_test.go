@@ -34,7 +34,7 @@ func TestEnsureEntitySearchFacetsAddsOneFacetPerUncoveredEntity(t *testing.T) {
 		}
 	}
 	// The user-language slot stays free; GKS and Türkiye Burslari get facets.
-	if strings.Join(queries, "|") != "Stipendium Hungaricum application deadline|GKS deadline requirements 2026|Türkiye Burslari deadline requirements 2026" {
+	if strings.Join(queries, "|") != "Stipendium Hungaricum application deadline|GKS scholarship 2026 deadline requirements|Türkiye Burslari 2026 deadline requirements" {
 		t.Fatalf("queries = %q", queries)
 	}
 	fetch := got.Subtasks[len(got.Subtasks)-1]

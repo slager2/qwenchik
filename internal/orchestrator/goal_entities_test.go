@@ -3,6 +3,8 @@ package orchestrator
 import (
 	"strings"
 	"testing"
+
+	"github.com/slager2/qwenchik/internal/domain"
 )
 
 // kzITGrantGoal is the goal of a live deep run whose facets searched
@@ -44,6 +46,54 @@ func TestExtractGoalEntitiesCap(t *testing.T) {
 	goal := "Сравни стипендии, например Alpha One, Beta Two, Gamma Three, Delta Four, Epsilon Five, Zeta Six, Eta Seven, Theta Eight, Iota Nine, Kappa Ten."
 	if got := extractGoalEntities(goal); len(got) != maxGoalEntities || got[0].Name != "Alpha One" {
 		t.Fatalf("entities = %+v", got)
+	}
+}
+
+func TestEntityFacetsForLiveKazakhstanGoal(t *testing.T) {
+	// The live planner packed every programme into one query (no results)
+	// and the old facets searched "Computer Science deadline requirements".
+	plan := domain.Plan{Subtasks: []domain.PlanStep{
+		{ID: "search_1", Kind: "search", Query: "Stipendium Hungaricum Türkiye Burslari GKS CSC MEXT DAAD Bachelor Computer Science Software Engineering Data Science Kazakhstan citizens 2026 2027", SuccessCriteria: []string{"x"}},
+		{ID: "search_2", Kind: "search", Query: "стипендии бакалавриат IT для граждан Казахстана 2026", SuccessCriteria: []string{"x"}},
+		{ID: "fetch_1", Kind: "fetch", Dependencies: []string{"search_1"}, SuccessCriteria: []string{"x"}},
+	}}
+	got := ensureEntitySearchFacets(plan, kzITGrantGoal, 8, 30, searchParamsNow)
+	queries := []string{}
+	for _, step := range got.Subtasks[2:] {
+		if step.Kind == "search" {
+			queries = append(queries, step.Query)
+		}
+	}
+	want := []string{
+		"Stipendium Hungaricum scholarship undergraduate 2027 deadline requirements",
+		"Türkiye Burslari undergraduate 2027 deadline requirements",
+		"GKS Korea scholarship undergraduate 2027 deadline requirements",
+		"CSC China scholarship undergraduate 2027 deadline requirements",
+		"MEXT Japan scholarship undergraduate 2027 deadline requirements",
+		"DAAD scholarship undergraduate 2027 deadline requirements",
+	}
+	if strings.Join(queries, "|") != strings.Join(want, "|") {
+		t.Fatalf("queries:\n%s", strings.Join(queries, "\n"))
+	}
+	for _, query := range queries {
+		if strings.Contains(query, "Computer Science") || strings.Contains(query, "Data Science") {
+			t.Fatalf("generic field facet: %q", query)
+		}
+	}
+	// A query naming at most two entities still covers them.
+	covered := domain.Plan{Subtasks: []domain.PlanStep{{ID: "search_1", Kind: "search", Query: "GKS Korea scholarship 2027"}}}
+	if !planCoversEntity(covered, "GKS", goalEntities(kzITGrantGoal)...) || planCoversEntity(plan, "GKS", goalEntities(kzITGrantGoal)...) {
+		t.Fatal("coverage of packed and single-entity queries is wrong")
+	}
+}
+
+func TestEntitySearchQueryWithoutProgrammeWords(t *testing.T) {
+	goal := "Compare Notion and Obsidian Sync pricing for teams in 2026"
+	if got := entitySearchQuery(goalEntity{Name: "Obsidian Sync"}, goal, searchParamsNow); got != "Obsidian Sync 2026 pricing" {
+		t.Fatalf("query = %q", got)
+	}
+	if got := entitySearchQuery(goalEntity{Name: "Erasmus Mundus", Hint: "Европа"}, "Магистратура: стипендия Erasmus Mundus (Европа)", searchParamsNow); got != "Erasmus Mundus Europe scholarship master's" {
+		t.Fatalf("query = %q", got)
 	}
 }
 

@@ -206,20 +206,41 @@ func entityFold(text string) string {
 	return latinFold.Replace(looseQuoteText(text))
 }
 
-// planCoversEntity reports whether a search step already searches for the
-// entity: every entity word (2+ characters) occurs in its query or facet.
-func planCoversEntity(plan domain.Plan, entity string) bool {
+// maxEntitiesPerCoveringQuery is how many goal entities one planned search
+// may name and still count as covering each of them. A live planner query
+// packed six programmes into one search that returned no results.
+const maxEntitiesPerCoveringQuery = 2
+
+// searchTextNamesEntity reports whether every entity word (2+ characters)
+// occurs in the folded search text.
+func searchTextNamesEntity(text, entity string) bool {
 	words := strings.Fields(entityFold(entity))
+	covered := len(words) > 0
+	for _, word := range words {
+		covered = covered && strings.Contains(text, " "+word)
+	}
+	return covered
+}
+
+// planCoversEntity reports whether a search step already searches for the
+// entity: every entity word occurs in its query or facet, and the step does
+// not name more than maxEntitiesPerCoveringQuery of the goal's entities.
+func planCoversEntity(plan domain.Plan, entity string, entities ...string) bool {
 	for _, step := range plan.Subtasks {
 		if step.Kind != "search" {
 			continue
 		}
 		text := " " + entityFold(step.Query+" "+searchStepFacet(step.Description)) + " "
-		covered := len(words) > 0
-		for _, word := range words {
-			covered = covered && strings.Contains(text, " "+word)
+		if !searchTextNamesEntity(text, entity) {
+			continue
 		}
-		if covered {
+		named := 0
+		for _, other := range entities {
+			if searchTextNamesEntity(text, other) {
+				named++
+			}
+		}
+		if named <= maxEntitiesPerCoveringQuery {
 			return true
 		}
 	}
@@ -240,7 +261,9 @@ var entityAttributeHints = []struct {
 	{[]string{"price", "pricing", "тариф"}, "pricing"},
 }
 
-func entityAttributeHint(goal string) string {
+// goalAttributeHints returns every attribute hint the request asks about,
+// in entityAttributeHints order.
+func goalAttributeHints(goal string) []string {
 	words := strings.FieldsFunc(strings.ToLower(goal), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsNumber(r) })
 	hints := []string{}
 	for _, item := range entityAttributeHints {
@@ -250,9 +273,17 @@ func entityAttributeHint(goal string) string {
 				matched = matched || strings.HasPrefix(word, stem)
 			}
 		}
-		if matched && len(hints) < 2 {
+		if matched {
 			hints = append(hints, item.hint)
 		}
+	}
+	return hints
+}
+
+func entityAttributeHint(goal string) string {
+	hints := goalAttributeHints(goal)
+	if len(hints) > 2 {
+		hints = hints[:2]
 	}
 	if len(hints) == 0 {
 		return "official"
@@ -277,11 +308,27 @@ func researchYear(goal string, now time.Time) int {
 }
 
 // entitySearchQuery is the keyword facet of one named entity:
-// "<entity> <attribute hint> <year>".
-func entitySearchQuery(entity, goal string, now time.Time) string {
-	query := entity + " " + entityAttributeHint(goal)
-	if year := researchYear(goal, now); year > 0 && !strings.Contains(entity, strconv.Itoa(year)) {
+// "<entity> <country> <programme word> <level> <year> <attributes>", for
+// example "GKS Korea scholarship undergraduate 2027 deadline requirements".
+// The country and programme word keep a bare acronym (GKS, CSC, MEXT) from
+// drifting to unrelated pages.
+func entitySearchQuery(entity goalEntity, goal string, now time.Time) string {
+	stem := entityQueryStem(entity, goal)
+	query := stem
+	if year := researchYear(goal, now); year > 0 && !strings.Contains(entity.Name, strconv.Itoa(year)) {
 		query += " " + strconv.Itoa(year)
+	}
+	attributes := []string{}
+	for _, hint := range goalAttributeHints(goal) {
+		if !strings.Contains(" "+strings.ToLower(stem)+" ", " "+hint+" ") && len(attributes) < 2 {
+			attributes = append(attributes, hint)
+		}
+	}
+	if len(attributes) == 0 && stem == entity.Name {
+		attributes = append(attributes, "official")
+	}
+	if len(attributes) > 0 {
+		query += " " + strings.Join(attributes, " ")
 	}
 	return conciseSearchQuery(query)
 }
@@ -309,10 +356,11 @@ func entitySearchLimit(ctx context.Context, workerLimit int) int {
 // user-language facet of a non-Latin request whose planned queries are all
 // in another script.
 func ensureEntitySearchFacets(plan domain.Plan, goal string, searchLimit, capacity int, now time.Time) domain.Plan {
-	entities := goalEntities(goal)
+	entities := extractGoalEntities(goal)
 	if len(entities) == 0 {
 		return plan
 	}
+	names := goalEntities(goal)
 	searches, lastSearch := 0, -1
 	used := map[string]bool{}
 	queries := []string{}
@@ -342,7 +390,7 @@ func ensureEntitySearchFacets(plan domain.Plan, goal string, searchLimit, capaci
 		if searches+len(added) >= limit || len(plan.Subtasks)+len(added) >= capacity {
 			break
 		}
-		if planCoversEntity(plan, entity) {
+		if planCoversEntity(plan, entity.Name, names...) {
 			continue
 		}
 		query := entitySearchQuery(entity, goal, now)
@@ -357,7 +405,7 @@ func ensureEntitySearchFacets(plan domain.Plan, goal string, searchLimit, capaci
 		}
 		used[id] = true
 		queries = append(queries, query)
-		facet := "Official sources for the named entity " + entity + ": " + query
+		facet := "Official sources for the named entity " + entity.Name + ": " + query
 		description := deterministicSearchFacetPrefix + facet + ". User request: " + goal
 		if utf8.RuneCountInString(description) > 1000 {
 			description = facet

@@ -227,3 +227,92 @@ func goalEntities(goal string) []string {
 	}
 	return names
 }
+
+// countryHintNames maps Russian country stems of parenthesised hints to the
+// English names used in keyword queries.
+var countryHintNames = []struct{ stem, name string }{
+	{"коре", "Korea"}, {"китай", "China"}, {"кнр", "China"}, {"япони", "Japan"}, {"венгри", "Hungary"},
+	{"турци", "Turkey"}, {"германи", "Germany"}, {"франци", "France"}, {"итали", "Italy"},
+	{"испани", "Spain"}, {"сша", "USA"}, {"америк", "USA"}, {"великобритани", "UK"}, {"англи", "UK"},
+	{"канад", "Canada"}, {"австрали", "Australia"}, {"австри", "Austria"}, {"чехи", "Czech Republic"},
+	{"польш", "Poland"}, {"казахстан", "Kazakhstan"}, {"малайзи", "Malaysia"}, {"сингапур", "Singapore"},
+	{"тайван", "Taiwan"}, {"бруне", "Brunei"}, {"нидерланд", "Netherlands"}, {"голланди", "Netherlands"},
+	{"швеци", "Sweden"}, {"финлянди", "Finland"}, {"норвеги", "Norway"}, {"швейцари", "Switzerland"},
+	{"бельги", "Belgium"}, {"ирланди", "Ireland"}, {"росси", "Russia"}, {"индонези", "Indonesia"},
+	{"таиланд", "Thailand"}, {"оаэ", "UAE"}, {"саудовск", "Saudi Arabia"}, {"катар", "Qatar"}, {"европ", "Europe"},
+}
+
+// entityHintKeyword is the query form of an entity hint: the English name
+// of a Russian country hint, a Latin hint as written, nothing otherwise.
+func entityHintKeyword(hint string) string {
+	if hint == "" {
+		return ""
+	}
+	if latinToken(strings.ReplaceAll(hint, " ", "")) {
+		return hint
+	}
+	lower := strings.ToLower(hint)
+	for _, item := range countryHintNames {
+		if strings.HasPrefix(lower, item.stem) {
+			return item.name
+		}
+	}
+	return ""
+}
+
+// goalProgramWord is the programme word added to entity queries: what kind
+// of thing the request is about.
+func goalProgramWord(goal string) string {
+	lower := strings.ToLower(goal)
+	switch {
+	case containsAnyText(lower, "стипенди", "грант", "scholarship", "grant", "fellowship", "funding", "financial aid"):
+		return "scholarship"
+	case containsAnyText(lower, "программ", "program"):
+		return "program"
+	}
+	return ""
+}
+
+// goalLevelWord is the study level of an admissions request.
+func goalLevelWord(goal string) string {
+	lower := strings.ToLower(goal)
+	switch {
+	case containsAnyText(lower, "бакалавр", "bachelor", "undergraduate"):
+		return "undergraduate"
+	case containsAnyText(lower, "магистр", "master's", "masters", "master degree"):
+		return "master's"
+	case containsAnyText(lower, "аспирант", "докторант", "phd", "doctoral"):
+		return "PhD"
+	}
+	return ""
+}
+
+func containsAnyText(text string, parts ...string) bool {
+	for _, part := range parts {
+		if strings.Contains(text, part) {
+			return true
+		}
+	}
+	return false
+}
+
+// entityQueryStem is the entity with its country hint, programme word and
+// study level, words the entity name does not already contain:
+// "GKS Korea scholarship undergraduate".
+func entityQueryStem(entity goalEntity, goal string) string {
+	parts := []string{entity.Name}
+	folded := " " + entityFold(entity.Name) + " "
+	for _, word := range []string{entityHintKeyword(entity.Hint), goalProgramWord(goal), goalLevelWord(goal)} {
+		if word == "" {
+			continue
+		}
+		key := entityFold(word)
+		// "Türkiye Burslari" already names Turkey and a scholarship.
+		if strings.Contains(folded, " "+key) || key == "turkey" && strings.Contains(folded, " turkiye") ||
+			key == "scholarship" && strings.Contains(folded, " burs") {
+			continue
+		}
+		parts = append(parts, word)
+	}
+	return strings.Join(parts, " ")
+}
