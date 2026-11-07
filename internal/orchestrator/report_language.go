@@ -39,7 +39,7 @@ type reportLabels struct {
 	LimitsHeading     string
 	LimitsText        string
 	SupplementaryItem string
-	SourceUnused      string // title, code, bytes
+	SourceUnused      string // public reason
 	Unrepresented     string
 	MethodHeading     string
 	MethodText        string
@@ -69,7 +69,7 @@ var reportLabelsRU = reportLabels{
 	LimitsHeading:     "Ограничения",
 	LimitsText:        "Проверка той же локальной моделью не является независимым доказательством фактической истинности. Объём отчёта ограничен доступными выдержками и бюджетом.",
 	SupplementaryItem: "Дополнительный критерий не подтверждён: %s",
-	SourceUnused:      "Источник не использован: %s (%s); прочитано %d байт.",
+	SourceUnused:      "Источник не использован: %s",
 	Unrepresented:     "Секционное покрытие не подтверждено для критериев: %s",
 	MethodHeading:     "Методология",
 	MethodText:        "Источники загружены и извлечены backend. Каждое утверждение проверено по точной выдержке из процитированного источника; неподтверждённые утверждения удалены, а секции без подтверждённых утверждений заменены выдержками. Список источников собран кодом.",
@@ -109,7 +109,7 @@ var reportLabelsEN = reportLabels{
 	LimitsHeading:     "Limitations",
 	LimitsText:        "Verification by the same local model is not independent proof of factual truth. The report is limited to the available excerpts and budget.",
 	SupplementaryItem: "Supplementary criterion not confirmed: %s",
-	SourceUnused:      "Source not used: %s (%s); read %d bytes.",
+	SourceUnused:      "Source not used: %s",
 	Unrepresented:     "Section coverage not confirmed for criteria: %s",
 	MethodHeading:     "Methodology",
 	MethodText:        "Sources were fetched and extracted by the backend. Each statement was checked against an exact excerpt of its cited source; unsupported statements were removed and sections without supported statements were replaced with excerpts. The source list is assembled by code.",

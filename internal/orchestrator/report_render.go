@@ -505,7 +505,7 @@ func renderSectionedReport(report *domain.ResearchReportState, goal, taskID stri
 		fmt.Fprintf(&b, "- %s\n", reportText(item))
 	}
 	for _, failure := range report.SourceLimitations {
-		fmt.Fprintf(&b, "- "+labels.SourceUnused+"\n", reportText(publicError(failure.Code)), failure.Code, failure.FetchedBytes)
+		fmt.Fprintf(&b, "- "+labels.SourceUnused+"\n", reportText(publicError(failure.Code)))
 	}
 	if len(report.UnrepresentedCriteria) > 0 {
 		fmt.Fprintf(&b, "- "+layout.Unrepresented+"\n", len(report.UnrepresentedCriteria))
