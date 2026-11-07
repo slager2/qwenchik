@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net"
 	"regexp"
 	"strings"
@@ -78,8 +79,28 @@ func reportCriterionCatalog(task domain.Task, state checkpointState, ids []strin
 	return result
 }
 
+// reportTextEscaper escapes Markdown control characters and the three HTML
+// metacharacters in one pass, so an entity it writes is never escaped again.
+var reportTextEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", "\\", "\\\\", "[", "\\[", "]", "\\]", "*", "\\*", "`", "\\`", "_", "\\_", "#", "\\#", "|", "\\|", "~", "\\~")
+
+// reportPlainText is source or model text with HTML entities decoded
+// (pages and older escaping leave "&#39;", "&amp;#34;") and whitespace
+// collapsed.
+func reportPlainText(text string) string {
+	for range 3 {
+		decoded := html.UnescapeString(text)
+		if decoded == text {
+			break
+		}
+		text = decoded
+	}
+	return strings.Join(strings.Fields(text), " ")
+}
+
+// reportText renders source or model text as inline Markdown: entities are
+// decoded first, then everything is escaped exactly once.
 func reportText(text string) string {
-	return strings.NewReplacer("[", "\\[", "]", "\\]", "*", "\\*", "`", "\\`", "_", "\\_", "#", "\\#").Replace(citationDisplayText(strings.Join(strings.Fields(text), " ")))
+	return reportTextEscaper.Replace(reportPlainText(text))
 }
 
 var reportBlockMarker = regexp.MustCompile(`^(\d+)([.)])`)
