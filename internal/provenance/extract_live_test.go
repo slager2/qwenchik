@@ -32,6 +32,7 @@ func TestLiveAgentSearcherExtract(t *testing.T) {
 		// Answers a plain Go HTTP client with 402/403.
 		{"https://www.investopedia.com/terms/b/bitcoin.asp", "who created bitcoin", "Nakamoto", false},
 		{"https://arxiv.org/pdf/1706.03762", "number of attention heads", "parallel attention layers", true},
+		{"https://stipendiumhungaricum.hu/news/application-is-on-for-the-2026-2027-stipendium-hungaricum-scholarship/", "Stipendium Hungaricum 2026 application deadline eligibility", "2026", false},
 	} {
 		ctx, cancel := context.WithTimeout(context.Background(), extractor.Budget())
 		page, err := extractor.Extract(ctx, tc.url, tc.query)
@@ -44,10 +45,15 @@ func TestLiveAgentSearcherExtract(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		span := evidence.QuoteSpans[0]
-		if page.PDF != tc.pdf || string([]rune(text)[span.Start:span.End]) != evidence.Excerpt || !strings.Contains(evidence.Excerpt, tc.want) {
+		runes := []rune(text)
+		for _, span := range evidence.QuoteSpans {
+			if string(runes[span.Start:span.End]) != span.Text {
+				t.Fatalf("%s: span %d..%d is not exact", tc.url, span.Start, span.End)
+			}
+		}
+		if page.PDF != tc.pdf || len(evidence.QuoteSpans) == 0 || !strings.Contains(evidence.Excerpt, tc.want) {
 			t.Fatalf("%s: pdf=%v chunks=%d method=%s excerpt=%q", tc.url, page.PDF, len(page.Chunks), evidence.ExtractionMethod, evidence.Excerpt)
 		}
-		t.Logf("%s: %d runes text, %d chunks, method %s, excerpt %d runes", tc.url, len([]rune(text)), len(page.Chunks), evidence.ExtractionMethod, len([]rune(evidence.Excerpt)))
+		t.Logf("%s: %d runes text, %d chunks, method %s, excerpt %d runes in %d spans", tc.url, len(runes), len(page.Chunks), evidence.ExtractionMethod, len([]rune(evidence.Excerpt)), len(evidence.QuoteSpans))
 	}
 }

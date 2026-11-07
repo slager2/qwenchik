@@ -19,8 +19,9 @@ const (
 	// MaxExcerptSpans is the most query-ranked chunks one excerpt keeps.
 	MaxExcerptSpans = 5
 	// spanContextRunes bounds the neighbouring text kept on each side of a
-	// located chunk: the rest of its sentence plus about one sentence more.
-	spanContextRunes = 320
+	// located chunk: the rest of its sentence plus a few more. agentSearcher
+	// chunks are often only 150-400 characters, so context matters.
+	spanContextRunes = 700
 	// maxSpanCoreRunes bounds the located chunk region itself. agentSearcher
 	// chunks are about 600 characters; a located region much longer than its
 	// chunk would be a false match spread over the page.
@@ -94,41 +95,73 @@ func (t textWords) locate(chunk string) (start, end int, ok bool) {
 
 func sentenceEnd(r rune) bool { return strings.ContainsRune(".!?;", r) }
 
-// expand widens a located region to sentence boundaries and about one
-// neighbouring sentence on each side, at most context runes per side.
+// spanContextSentences is how many neighbouring sentences (or lines) a
+// span keeps on each side of its located chunk.
+const spanContextSentences = 3
+
+// expand widens a located region to sentence boundaries with up to
+// spanContextSentences neighbouring sentences on each side, at most context
+// runes per side. A line break counts as a boundary only after sentence
+// punctuation or as a paragraph break, because PDF text wraps lines inside
+// sentences; without any sentence boundary in reach the span ends at the
+// farthest line break (list items), else at the located region itself.
 func (t textWords) expand(start, end, context int) (int, int) {
 	runes := t.runes
-	// Backwards: stop at the second sentence or line boundary.
-	from := max(0, start-context)
-	boundaries := 0
-	for position := start - 1; position >= from; position-- {
-		if runes[position] == '\n' || (position > 0 && sentenceEnd(runes[position-1]) && unicode.IsSpace(runes[position])) {
-			boundaries++
-			start = position + 1
-			if boundaries == 2 || runes[position] == '\n' && position > 0 && runes[position-1] == '\n' {
-				break
-			}
+	boundary := func(position int) bool {
+		// position is a whitespace rune that may end a sentence or paragraph.
+		if position <= 0 || !unicode.IsSpace(runes[position]) {
+			return false
 		}
-		if position == from && boundaries == 0 && from == 0 {
-			start = 0
+		previous := runes[position-1]
+		if sentenceEnd(previous) || previous == ':' {
+			return true
 		}
+		return runes[position] == '\n' && (previous == '\n' || position+1 < len(runes) && runes[position+1] == '\n')
 	}
-	// Forwards: finish the sentence, then one more.
-	limit := min(len(runes), end+context)
-	boundaries = 0
-	for position := end; position < limit; position++ {
-		if runes[position] == '\n' && position+1 < len(runes) && runes[position+1] == '\n' {
+	from := max(0, start-context)
+	boundaries, lineStart := 0, -1
+	newStart := start
+	for position := start - 1; position >= from && boundaries < spanContextSentences+1; position-- {
+		if position == 0 {
+			newStart, boundaries = 0, boundaries+1
 			break
 		}
-		end = position + 1
-		if sentenceEnd(runes[position]) && (position+1 == len(runes) || unicode.IsSpace(runes[position+1])) {
-			boundaries++
-			if boundaries == 2 {
-				break
+		if boundary(position) {
+			if position+1 < newStart && unicode.IsSpace(runes[position+1]) {
+				newStart = position + 1
+				continue
 			}
+			boundaries++
+			newStart = position + 1
+		} else if runes[position] == '\n' {
+			lineStart = position + 1
 		}
 	}
-	return t.trim(start, end)
+	if boundaries == 0 && lineStart >= 0 {
+		newStart = lineStart
+	}
+	limit := min(len(runes), end+context)
+	boundaries, lineEnd := 0, -1
+	newEnd := end
+	for position := end; position < limit && boundaries < spanContextSentences+1; position++ {
+		if position+1 == len(runes) {
+			newEnd, boundaries = len(runes), boundaries+1
+			break
+		}
+		if boundary(position) {
+			if position > newEnd && unicode.IsSpace(runes[position-1]) {
+				continue
+			}
+			boundaries++
+			newEnd = position
+		} else if runes[position] == '\n' {
+			lineEnd = position
+		}
+	}
+	if boundaries == 0 && lineEnd >= 0 {
+		newEnd = lineEnd
+	}
+	return t.trim(newStart, newEnd)
 }
 
 func (t textWords) trim(start, end int) (int, int) {
@@ -223,14 +256,24 @@ func SelectMultiSpanExcerpt(text string, chunks []string, maxSpans, maxRunes int
 			cost += separator
 		}
 		if used+cost > maxRunes {
-			// Keep the located chunk without its context when that fits.
-			candidate = span{}
-			candidate.start, candidate.end = words.trim(coreStart, coreEnd)
-			cost = candidate.end - candidate.start
+			// Narrow the context to the remaining budget, else keep the
+			// located chunk alone when that fits.
+			extra := 0
 			if len(selected) > 0 {
-				cost += separator
+				extra = separator
 			}
-			if cost > maxRunes-used || candidate.end-candidate.start < minSpanRunes {
+			room := maxRunes - used - extra
+			core := coreEnd - coreStart
+			if room < minSpanRunes || core > room {
+				continue
+			}
+			candidate = span{}
+			candidate.start, candidate.end = words.expand(coreStart, coreEnd, (room-core)/2)
+			if candidate.end-candidate.start > room {
+				candidate.start, candidate.end = words.trim(coreStart, coreEnd)
+			}
+			cost = candidate.end - candidate.start + extra
+			if candidate.end <= candidate.start || cost > maxRunes-used {
 				continue
 			}
 		}
