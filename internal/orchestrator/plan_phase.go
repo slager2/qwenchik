@@ -543,6 +543,11 @@ func (w *Worker) createPlan(ctx context.Context, task domain.Task, goal, memoryC
 	// Widen search facets before fetch breadth: each facet adds distinct
 	// candidate sites for the fetch steps.
 	if target := researchSearchTarget(ctx, task.Title+"\n"+goal); target > 0 && requiresWebResearch(task.Title+"\n"+goal) {
+		// Every named programme/university/product gets its own facet
+		// before generic angles fill the remaining search slots.
+		if entities := ensureEntitySearchFacets(plan, goal, entitySearchLimit(ctx, w.options.MaxSearchQueries), researchPlanCapacity(ctx, w.options.MaxSteps), researchNow()); w.validateTaskPlanWithFetchLimit(entities, task.Title, goal, maxResearchFetches) == nil {
+			plan = entities
+		}
 		if widened := widenResearchSearchFacets(plan, goal, target, researchPlanCapacity(ctx, w.options.MaxSteps)); w.validateTaskPlanWithFetchLimit(widened, task.Title, goal, maxResearchFetches) == nil {
 			plan = widened
 		}
