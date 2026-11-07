@@ -617,7 +617,11 @@ func deterministicSearchQuery(description, goal string) string {
 	return conciseSearchQuery(facet)
 }
 
-func (w *Worker) availableFetchURLs(taskID string, results map[string]any, failedURLs, userURLs []string, diverseSites bool) []string {
+// availableFetchURLs returns up to six fetch candidates: discovered official
+// pages first, then search hits balanced across facets and known task URLs.
+// Hits whose title and URL share nothing with the goal (see
+// goalRelevanceTerms) follow every relevant candidate.
+func (w *Worker) availableFetchURLs(taskID, goal string, results map[string]any, failedURLs, userURLs []string, diverseSites bool) []string {
 	fetched := make(map[string]struct{})
 	userProvided := make(map[string]struct{}, len(userURLs))
 	for _, rawURL := range userURLs {
@@ -667,6 +671,23 @@ func (w *Worker) availableFetchURLs(taskID string, results map[string]any, faile
 			candidatesForFetch = append(candidatesForFetch, canonical)
 		}
 	}
+	// Off-topic hits go last and never take a diverse-site slot.
+	offTopic := map[string]bool{}
+	if terms := goalRelevanceTerms(goal); len(terms) > 0 {
+		titles := searchHitTitles(results)
+		relevant := make([]string, 0, len(candidatesForFetch))
+		deferred := []string{}
+		for _, candidate := range candidatesForFetch {
+			_, suppliedByUser := userProvided[candidate]
+			if suppliedByUser || contains(discovered, candidate) || officialHost(candidate) || fetchCandidateRelevant(candidate, titles[candidate], terms) {
+				relevant = append(relevant, candidate)
+				continue
+			}
+			offTopic[candidate] = true
+			deferred = append(deferred, candidate)
+		}
+		candidatesForFetch = append(relevant, deferred...)
+	}
 	available := make([]string, 0, 6)
 	for _, candidate := range candidatesForFetch {
 		if contains(discovered, candidate) {
@@ -680,7 +701,7 @@ func (w *Worker) availableFetchURLs(taskID string, results map[string]any, faile
 			if site == "" {
 				continue
 			}
-			if _, exists := selectedSites[site]; exists || contains(available, candidate) {
+			if _, exists := selectedSites[site]; exists || contains(available, candidate) || offTopic[candidate] {
 				continue
 			}
 			selectedSites[site] = struct{}{}

@@ -840,7 +840,7 @@ func (w *Worker) executeAttempt(ctx context.Context, claimed domain.Task) error 
 			}
 		}
 		if step.Kind == "fetch" {
-			fetchURLs = w.availableFetchURLs(task.ID, state.ToolResults, state.FailedFetchURLs, userProvidedURLs(goal), minimumResearchFetches(task.Title+"\n"+goal) > 1)
+			fetchURLs = w.availableFetchURLs(task.ID, goal, state.ToolResults, state.FailedFetchURLs, userProvidedURLs(goal), minimumResearchFetches(task.Title+"\n"+goal) > 1)
 			if requiredURL {
 				fetchURLs = userProvidedURLs(goal)
 			}

@@ -331,7 +331,7 @@ func TestAvailableFetchURLsPreferUnfetchedDistinctSites(t *testing.T) {
 		"evidence_id": "previous", "requested_url": "https://user.example.org/source", "url": "https://user.example.org/final",
 	})
 	worker := &Worker{tools: registry}
-	urls := worker.availableFetchURLs("task-fetch", map[string]any{
+	urls := worker.availableFetchURLs("task-fetch", "", map[string]any{
 		"search": []research.SearchHit{
 			{URL: "https://alpha-source.com/document-1"},
 			{URL: "https://beta-source.net/document-2"},
@@ -359,7 +359,7 @@ func TestAvailableFetchURLsPreferUnfetchedDistinctSites(t *testing.T) {
 			t.Fatalf("previously fetched user URL reappeared: %#v", urls)
 		}
 	}
-	urls = worker.availableFetchURLs("task-fetch", map[string]any{}, []string{"https://alpha-source.com/document-1"}, nil, false)
+	urls = worker.availableFetchURLs("task-fetch", "", map[string]any{}, []string{"https://alpha-source.com/document-1"}, nil, false)
 	if contains(urls, "https://alpha-source.com/document-1") {
 		t.Fatalf("previously failed fetch URL was offered again: %#v", urls)
 	}
@@ -376,7 +376,7 @@ func TestAvailableFetchURLsRetryFailedUserURLButExcludeFailedDiscoveryURL(t *tes
 	registry.RememberURLs(taskID, []research.SearchHit{{URL: "https://discovery.example.net/page"}})
 	worker := &Worker{tools: registry}
 	failedURLs := []string{"https://docs.example.com/qwen", "https://discovery.example.net/page"}
-	urls := worker.availableFetchURLs(taskID, map[string]any{
+	urls := worker.availableFetchURLs(taskID, "", map[string]any{
 		"search_1": []research.SearchHit{{URL: "https://discovery.example.net/page"}},
 	}, failedURLs, userProvidedURLs(goal), false)
 	if len(urls) != 1 || urls[0] != "https://docs.example.com/qwen" {
@@ -386,7 +386,7 @@ func TestAvailableFetchURLsRetryFailedUserURLButExcludeFailedDiscoveryURL(t *tes
 	registry.RememberFetchedURLs(taskID, map[string]any{
 		"evidence_id": "evidence-user-url", "url": "https://docs.example.com/qwen", "requested_url": "https://docs.example.com/qwen",
 	})
-	urls = worker.availableFetchURLs(taskID, map[string]any{}, failedURLs, userProvidedURLs(goal), false)
+	urls = worker.availableFetchURLs(taskID, "", map[string]any{}, failedURLs, userProvidedURLs(goal), false)
 	if contains(urls, "https://docs.example.com/qwen") {
 		t.Fatalf("successfully fetched user URL was offered again: %#v", urls)
 	}
@@ -431,7 +431,7 @@ func TestAvailableFetchURLsSkipsAlreadyFetchedSourceSite(t *testing.T) {
 		"evidence_id": "prior", "url": "https://same-source.com/already-fetched", "requested_url": "https://same-source.com/already-fetched",
 	})
 	worker := New(nil, &scriptedLLM{}, registry, Options{})
-	urls := worker.availableFetchURLs("task-used-site", map[string]any{}, nil, nil, true)
+	urls := worker.availableFetchURLs("task-used-site", "", map[string]any{}, nil, nil, true)
 	if len(urls) != 2 {
 		t.Fatalf("new fetch candidates should include the two remaining available sites: %#v", urls)
 	}
