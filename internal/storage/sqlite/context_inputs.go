@@ -16,10 +16,15 @@ import (
 	"github.com/slager2/qwenchik/internal/domain"
 )
 
+// Every checkpoint row stores all pinned role inputs, so these limits bound
+// both a single model request and per-run DB growth. 448 KB per pin holds a
+// whole 128k-token request at ~3 bytes/token (the research input cap in the
+// orchestrator scales with the model context and stays below this pin limit);
+// the 16 MB total keeps ~36 maximal pins per run.
 const (
 	MaxRoleContextPins       = 128
-	MaxRoleContextInputBytes = 192 << 10
-	MaxRoleContextTotalBytes = 8 << 20
+	MaxRoleContextInputBytes = 448 << 10
+	MaxRoleContextTotalBytes = 16 << 20
 )
 
 var roleContextSlot = regexp.MustCompile(`^[0-9a-f]{64}$`)

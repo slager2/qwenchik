@@ -19,7 +19,7 @@ import (
 const (
 	checkpointStoragePrefix    = "gz1:"
 	checkpointCompressionLimit = 64 << 10
-	checkpointDecodedLimit     = 16 << 20
+	checkpointDecodedLimit     = 32 << 20 // role inputs (MaxRoleContextTotalBytes) plus the rest of the state
 )
 
 var errCheckpointStorageTooLarge = errors.New("checkpoint decompressed payload exceeds limit")
