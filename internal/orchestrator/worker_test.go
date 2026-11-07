@@ -15,6 +15,7 @@ import (
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/llm"
 	"github.com/slager2/qwenchik/internal/policy"
+	"github.com/slager2/qwenchik/internal/provenance"
 	"github.com/slager2/qwenchik/internal/providers/research"
 	"github.com/slager2/qwenchik/internal/storage/artifacts"
 	"github.com/slager2/qwenchik/internal/storage/sqlite"
@@ -1391,14 +1392,14 @@ func TestToolResultCompactionBoundsModelContextAndKeepsSourceIDs(t *testing.T) {
 	if !strings.Contains(string(encoded), "evidence-123") {
 		t.Fatalf("compaction lost the evidence ID: %s", encoded)
 	}
-	longExcerpt := strings.Repeat("фактические результаты и проверяемые данные; ", 150)
+	longExcerpt := strings.Repeat("фактические результаты и проверяемые данные; ", 200)
 	compactedEvidence, ok := compactToolResult(map[string]any{"evidence_id": "large-evidence", "excerpt": longExcerpt}).(map[string]any)
 	if !ok {
 		t.Fatalf("compacted evidence has type %T", compactToolResult(map[string]any{"evidence_id": "large-evidence", "excerpt": longExcerpt}))
 	}
 	gotExcerpt, _ := compactedEvidence["excerpt"].(string)
-	if got := utf8.RuneCountInString(gotExcerpt); got != 6000 {
-		t.Fatalf("compacted evidence excerpt has %d runes, want 6000", got)
+	if got := utf8.RuneCountInString(gotExcerpt); got != provenance.ExtractExcerptRunes {
+		t.Fatalf("compacted evidence excerpt has %d runes, want %d", got, provenance.ExtractExcerptRunes)
 	}
 	searchHits := make([]research.SearchHit, 10)
 	for index := range searchHits {

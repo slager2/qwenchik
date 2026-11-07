@@ -33,9 +33,18 @@ func TestBuildExtractEvidenceKeepsRankedChunksAsVerbatimSpan(t *testing.T) {
 	if !strings.Contains(evidence.Excerpt, "h = 8 parallel attention layers") || !strings.Contains(evidence.Excerpt, "jointly attend") || utf8.RuneCountInString(evidence.Excerpt) > ExtractExcerptRunes {
 		t.Fatalf("excerpt does not keep both chunks: %q", evidence.Excerpt)
 	}
-	span := evidence.QuoteSpans[0]
-	if string([]rune(text)[span.Start:span.End]) != evidence.Excerpt || span.Text != evidence.Excerpt {
-		t.Fatalf("span %#v is not a verbatim slice", span)
+	if len(evidence.QuoteSpans) != 2 {
+		t.Fatalf("want one span per distant chunk, got %#v", evidence.QuoteSpans)
+	}
+	parts := []string{}
+	for _, span := range evidence.QuoteSpans {
+		if string([]rune(text)[span.Start:span.End]) != span.Text || span.CoordinateSpace != "extracted_text_runes" {
+			t.Fatalf("span %#v is not a verbatim slice", span)
+		}
+		parts = append(parts, span.Text)
+	}
+	if strings.Join(parts, ExcerptSpanSeparator) != evidence.Excerpt {
+		t.Fatalf("excerpt is not the joined spans: %q", evidence.Excerpt)
 	}
 	if !IsExtractEvidence(evidence) || !IsPDFEvidence(evidence) || IsPassageEvidence(evidence) {
 		t.Fatal("extract evidence classification")

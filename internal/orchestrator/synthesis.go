@@ -14,6 +14,7 @@ import (
 
 	"github.com/slager2/qwenchik/internal/domain"
 	"github.com/slager2/qwenchik/internal/llm"
+	"github.com/slager2/qwenchik/internal/provenance"
 	"github.com/slager2/qwenchik/internal/providers/research"
 )
 
@@ -402,9 +403,10 @@ func compactToolResult(value any) any {
 			if text, ok := item.(string); ok {
 				switch key {
 				case "excerpt":
-					// whole stored excerpt: up to 6000 runes for agentSearcher
-					// extracted pages (provenance.ExtractExcerptRunes)
-					item = truncateRunes(text, 6000)
+					// whole stored excerpt: up to provenance.ExtractExcerptRunes
+					// for agentSearcher extracted pages (several verbatim
+					// spans joined by provenance.ExcerptSpanSeparator)
+					item = truncateRunes(text, provenance.ExtractExcerptRunes)
 				case "snippet":
 					// agentSearcher hits carry ranked page passages; keep
 					// them usable while bounding model input.

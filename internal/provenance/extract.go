@@ -21,9 +21,11 @@ const (
 	ExtractEvidenceMethod    = "agentsearcher_extract"
 	ExtractPDFEvidenceMethod = "agentsearcher_extract_pdf"
 	// ExtractExcerptRunes is the stored excerpt bound for extracted pages:
-	// room for the best two or three ranked chunks (about 600 characters
-	// each) with their surrounding context, still one contiguous span.
-	ExtractExcerptRunes = 6000
+	// up to MaxExcerptSpans ranked chunks (about 600 characters each), each
+	// with its neighbouring sentences, as separate verbatim spans joined by
+	// ExcerptSpanSeparator. Facts spread over a page (deadlines on one page
+	// of a call PDF, eligibility on another) then reach the model together.
+	ExtractExcerptRunes = 8000
 	// DefaultExcerptRunes is the excerpt bound of directly fetched and
 	// passage evidence.
 	DefaultExcerptRunes = 4000
@@ -43,23 +45,30 @@ func IsPDFEvidence(evidence domain.Evidence) bool {
 }
 
 // ExtractEvidenceText is the stored text artifact of an agentSearcher
-// extraction. It is the page text itself; only when none of the ranked
-// chunks occur in it (the service cuts long pages at MAX_RAW_CHARS, so the
-// best chunks may lie past the cut) are the chunks appended after a
-// separator line, so the excerpt can still be a verbatim span of the stored
-// text.
+// extraction. It is the page text itself; ranked chunks that do not occur in
+// it (the service cuts long pages at MAX_RAW_CHARS, so good chunks may lie
+// past the cut) are appended after a separator line, so every excerpt span
+// can still be a verbatim range of the stored text. Table of contents
+// chunks are never appended.
 func ExtractEvidenceText(text string, chunks []string) string {
 	if len(chunks) == 0 {
 		return text
 	}
-	if _, _, _, ok := SelectPassageExcerptWithSpan(text, chunks, ExtractExcerptRunes); ok {
-		return text
+	words := newTextWords(text)
+	missing := []string{}
+	for _, chunk := range chunks {
+		if strings.TrimSpace(chunk) == "" || TableOfContentsNoise(chunk) {
+			continue
+		}
+		if _, _, found := words.locate(chunk); !found {
+			missing = append(missing, chunk)
+		}
 	}
-	joined := JoinPassages(chunks)
+	joined := JoinPassages(missing)
 	if joined == "" {
 		return text
 	}
-	return strings.TrimRight(text, "\n") + "\n\n[...]\n\n" + joined
+	return strings.TrimRight(text, "\n") + ExcerptSpanSeparator + joined
 }
 
 // ExtractEvidenceInput describes one agentSearcher extraction to turn into
@@ -79,9 +88,10 @@ type ExtractEvidenceInput struct {
 }
 
 // BuildExtractEvidence builds evidence from text agentSearcher extracted from
-// a page. The excerpt is one verbatim contiguous span of input.Text, located
-// by the ranked chunks, then by the search passages, then by the lexical
-// query selector, at most ExtractExcerptRunes long. HTTPStatus 200 records
+// a page. The excerpt is up to MaxExcerptSpans verbatim spans of input.Text
+// (one QuoteSpan each) located by the ranked chunks, else by the search
+// passages; without a match it is one span chosen by the lexical query
+// selector. It is at most ExtractExcerptRunes long. HTTPStatus 200 records
 // that agentSearcher retrieved the page.
 func BuildExtractEvidence(input ExtractEvidenceInput) (domain.Evidence, error) {
 	canonical, err := CanonicalURL(input.URL)
@@ -95,16 +105,17 @@ func BuildExtractEvidence(input ExtractEvidenceInput) (domain.Evidence, error) {
 	if retrievedAt.IsZero() {
 		retrievedAt = time.Now().UTC()
 	}
-	excerpt, start, end, matched := SelectPassageExcerptWithSpan(input.Text, input.Chunks, ExtractExcerptRunes)
+	excerpt, quotes, matched := SelectMultiSpanExcerpt(input.Text, input.Chunks, MaxExcerptSpans, ExtractExcerptRunes)
 	if !matched {
-		excerpt, start, end, matched = SelectPassageExcerptWithSpan(input.Text, input.Passages, ExtractExcerptRunes)
+		excerpt, quotes, matched = SelectMultiSpanExcerpt(input.Text, input.Passages, MaxExcerptSpans, ExtractExcerptRunes)
 	}
 	if !matched {
+		var start, end int
 		excerpt, start, end = SelectExcerptWithSpan(input.Text, input.Query, ExtractExcerptRunes)
-	}
-	quotes := []domain.QuoteSpan{}
-	if excerpt != "" {
-		quotes = append(quotes, domain.QuoteSpan{Start: start, End: end, Text: excerpt, CoordinateSpace: "extracted_text_runes"})
+		quotes = []domain.QuoteSpan{}
+		if excerpt != "" {
+			quotes = append(quotes, domain.QuoteSpan{Start: start, End: end, Text: excerpt, CoordinateSpace: "extracted_text_runes"})
+		}
 	}
 	method := ExtractEvidenceMethod
 	if input.PDF {

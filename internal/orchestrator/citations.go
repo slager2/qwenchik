@@ -138,10 +138,11 @@ func (w *Worker) citationCatalogue(ctx context.Context, taskID string, results m
 			if !strings.Contains(item.Excerpt, excerpt) {
 				continue
 			}
-			// 8000 bytes hold a whole 4000-rune excerpt and most of a 6000-rune
+			// 8000 bytes hold a whole 4000-rune excerpt and most of an
 			// agentSearcher extract excerpt while the critic catalogue (12-16
-			// sources) still fits the context; it stays a verbatim prefix.
-			excerpt = utf8Prefix(excerpt, 8000)
+			// sources) still fits the context. A multi-span excerpt keeps a
+			// verbatim prefix of every span, so later spans are not lost.
+			excerpt = provenance.FitExcerptBytes(excerpt, 8000)
 			if len(strings.TrimSpace(excerpt)) < 8 {
 				continue
 			}
