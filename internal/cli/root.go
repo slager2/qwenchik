@@ -806,6 +806,7 @@ func serve(parent context.Context) error {
 	apiServer.SetArtifactReader(artifactStore)
 	reportExporter := newReportPDFExporter(cfg, deps.store, artifactStore, deps.store, logger)
 	apiServer.SetReportPDF(reportExporter)
+	apiServer.SetObsidianExportDir(reportExportDir(cfg))
 	sandboxStatus := sandboxRuntime.Doctor(parent)
 	apiServer.SetSandboxStatus(sandboxStatus.Available, sandboxStatus.Message)
 	handler := apiServer.Handler()

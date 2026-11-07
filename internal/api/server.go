@@ -157,6 +157,7 @@ type Server struct {
 	contextProbeOutput        int
 	contextProbeResourceCheck func(context.Context) error
 	reportPDF                 *reportpdf.Exporter
+	obsidianDir               string
 }
 
 func New(service TaskService, worker WorkerControl, dbPing func(context.Context) error, llmURL, llmKey, searchURL string, logger *slog.Logger) *Server {

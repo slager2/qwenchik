@@ -42,3 +42,12 @@ func newReportPDFAutosaver(cfg config.Config, exporter *reportpdf.Exporter, repo
 	}
 	return &reportpdf.Autosaver{Exporter: exporter, Repo: repo, Dir: dir, Mode: mode, Since: time.Now().Add(-10 * time.Minute), Logger: logger}
 }
+
+// reportExportDir is where report exports (auto-saved PDFs, Obsidian
+// vaults) go: REPORT_PDF_DIR, default <XDG documents>/Qwenchik.
+func reportExportDir(cfg config.Config) string {
+	if cfg.ReportPDFDir != "" {
+		return cfg.ReportPDFDir
+	}
+	return reportpdf.DefaultAutosaveDir()
+}

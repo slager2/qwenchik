@@ -106,6 +106,34 @@ func (e *Exporter) readVerified(ctx context.Context, artifact *domain.Artifact) 
 	return data, nil
 }
 
+// ReportFiles returns the newest integrity-checked report Markdown and
+// research_report.json of a run (either may be empty); no renderer is
+// needed. Other exports (Obsidian) build on it.
+func (e *Exporter) ReportFiles(ctx context.Context, runID string) (string, []byte, error) {
+	if e == nil || e.Lister == nil || e.Artifacts == nil {
+		return "", nil, errors.New("report artifact store is unavailable")
+	}
+	items, err := e.Lister.Artifacts(ctx, runID)
+	if err != nil {
+		return "", nil, err
+	}
+	var markdown string
+	var raw []byte
+	if artifact := newestByName(items, JSONArtifactName); artifact != nil {
+		if raw, err = e.readVerified(ctx, artifact); err != nil {
+			return "", nil, err
+		}
+	}
+	if artifact := newestByName(items, MarkdownArtifactName); artifact != nil {
+		data, err := e.readVerified(ctx, artifact)
+		if err != nil {
+			return "", nil, err
+		}
+		markdown = string(data)
+	}
+	return markdown, raw, nil
+}
+
 // Export returns the PDF for run, rendering it at most once per report
 // content and layout version.
 func (e *Exporter) Export(ctx context.Context, run Run) (Result, error) {

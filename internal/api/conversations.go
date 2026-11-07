@@ -50,6 +50,7 @@ func (s *Server) conversationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/runs/{runID}/retry", func(w http.ResponseWriter, r *http.Request) { s.repeatRun(w, r, "retry") })
 	mux.HandleFunc("POST /api/runs/{runID}/continue", func(w http.ResponseWriter, r *http.Request) { s.repeatRun(w, r, "continue") })
 	mux.HandleFunc("GET /api/runs/{runID}/report.pdf", s.runReportPDF)
+	mux.HandleFunc("POST /api/runs/{runID}/report/obsidian", s.runReportObsidian)
 	for _, suffix := range []string{"events", "events/stream", "sources", "evidence", "plan"} {
 		suffix := suffix
 		mux.HandleFunc("GET /api/runs/{runID}/"+suffix, func(w http.ResponseWriter, r *http.Request) { s.runDetail(w, r, suffix) })
