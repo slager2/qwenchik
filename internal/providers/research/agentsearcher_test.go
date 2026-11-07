@@ -38,6 +38,9 @@ func TestAgentSearcherSendsTavilyRequestAndKeepsRankedPassages(t *testing.T) {
 		if body["query"] != "дорожная карта биоинформатика" || body["search_depth"] != "advanced" || body["max_results"] != float64(6) || body["chunks_per_source"] != float64(3) {
 			t.Errorf("request body = %v", body)
 		}
+		if excluded, _ := body["exclude_domains"].([]any); body["max_per_domain"] != float64(2) || len(excluded) == 0 || excluded[0] != "facebook.com" {
+			t.Errorf("domain filters = %v", body)
+		}
 		if body["include_raw_content"] != false || body["include_answer"] != false || body["time_range"] != "year" {
 			t.Errorf("request body = %v", body)
 		}

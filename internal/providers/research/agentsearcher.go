@@ -49,7 +49,16 @@ type agentSearcherRequest struct {
 	IncludePublishedDate bool     `json:"include_published_date"`
 	IncludeAnswer        bool     `json:"include_answer"`
 	IncludeRawContent    bool     `json:"include_raw_content"`
+	ExcludeDomains       []string `json:"exclude_domains,omitempty"`
+	MaxPerDomain         int      `json:"max_per_domain,omitempty"`
 }
+
+// agentSearcherExcludedDomains carry little extractable text (social feeds,
+// video, document mirrors behind sign-in) and crowded out real sources.
+var agentSearcherExcludedDomains = []string{"facebook.com", "instagram.com", "tiktok.com", "youtube.com", "pinterest.com", "x.com", "twitter.com", "scribd.com", "vk.com", "t.me"}
+
+// agentSearcherMaxPerDomain keeps one site from filling a result page.
+const agentSearcherMaxPerDomain = 2
 
 type agentSearcherResponse struct {
 	Results []struct {
@@ -157,6 +166,7 @@ func (a *AgentSearcher) Search(ctx context.Context, options SearchOptions) ([]Se
 		IncludeDomains:  domains, IncludeDomainsMode: domainMode,
 		TimeRange: timeRange, Language: strings.TrimSpace(options.Language),
 		SafeSearch: options.SafeSearch, IncludePublishedDate: true,
+		ExcludeDomains: agentSearcherExcludedDomains, MaxPerDomain: agentSearcherMaxPerDomain,
 	})
 	if err != nil {
 		return nil, errors.New("agentSearcher request could not be encoded")
