@@ -114,10 +114,6 @@ type checkpointState struct {
 	SourceNotes                []domain.SourceNote           `json:"source_notes,omitempty"`
 	Adaptive                   *domain.AdaptiveResearchState `json:"adaptive_research,omitempty"`
 	Completion                 completionState               `json:"completion,omitempty"`
-	// SiteDiscoveryRounds and MappedSites record official site discovery
-	// (map_site): the rounds that ran it and the hosts already mapped.
-	SiteDiscoveryRounds []int    `json:"site_discovery_rounds,omitempty"`
-	MappedSites         []string `json:"mapped_sites,omitempty"`
 	PlanAttempt                int                           `json:"plan_attempt,omitempty"`
 	AttemptStartSeq            int64                         `json:"attempt_start_seq,omitempty"`
 	HistoricalObservations     []planObservations            `json:"historical_observations,omitempty"`
@@ -145,6 +141,10 @@ type checkpointState struct {
 	SkippedSteps               []string                      `json:"skipped_steps,omitempty"`
 	ToolResults                map[string]any                `json:"tool_results,omitempty"`
 	Summary                    string                        `json:"summary,omitempty"`
+	// SiteDiscoveryRounds and MappedSites record official site discovery
+	// (map_site): the rounds that ran it and the hosts already mapped.
+	SiteDiscoveryRounds []int    `json:"site_discovery_rounds,omitempty"`
+	MappedSites         []string `json:"mapped_sites,omitempty"`
 }
 
 type planObservations struct {
