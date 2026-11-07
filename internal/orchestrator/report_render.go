@@ -21,7 +21,7 @@ type reportLayoutLabels struct {
 	Entity, Attribute, Value, Source, Section, Status, Note                   string
 	SourceNo, SourceTitle, SourceSite, SourceOfficial, SourceType, SourceYear string
 	Yes, No, NotFound, NothingFound, NoTLDR, FactsVerified, TLDRModel         string
-	TLDRFallback, ComparisonNote, OfficialNote                                string
+	TLDRFallback, TLDRCount, ComparisonNote, OfficialNote                     string
 }
 
 var reportLayoutRU = reportLayoutLabels{
@@ -30,7 +30,7 @@ var reportLayoutRU = reportLayoutLabels{
 	SourceNo: "№", SourceTitle: "Источник", SourceSite: "Сайт", SourceOfficial: "Офиц.", SourceType: "Тип", SourceYear: "Год",
 	Yes: "да", No: "нет", NotFound: "не найдено в проверенных источниках", NothingFound: "подтверждённых сведений не найдено",
 	NoTLDR:        "Проверенных выводов нет: ни одно утверждение не подтвердилось выдержками источников.",
-	FactsVerified: "фактов проверено: %d", TLDRModel: "выводы проверены по цифрам подтверждённых утверждений", TLDRFallback: "первые подтверждённые утверждения разделов",
+	FactsVerified: "фактов проверено: %d", TLDRModel: "проверено по подтверждённым утверждениям", TLDRFallback: "первые подтверждённые утверждения разделов", TLDRCount: "выводов: %d",
 	ComparisonNote: "Ячейка: значение (год данных) и источник. «—» — значение не найдено в проверенных источниках.",
 	OfficialNote:   "«Офиц.» определяется по домену (государственные, образовательные и сайты программ).",
 }
@@ -41,7 +41,7 @@ var reportLayoutEN = reportLayoutLabels{
 	SourceNo: "#", SourceTitle: "Source", SourceSite: "Site", SourceOfficial: "Official", SourceType: "Type", SourceYear: "Year",
 	Yes: "yes", No: "no", NotFound: "not found in verified sources", NothingFound: "no verified information found",
 	NoTLDR:        "No verified conclusions: no statement was supported by the source excerpts.",
-	FactsVerified: "facts verified: %d", TLDRModel: "conclusions checked against the numbers of verified statements", TLDRFallback: "first verified statement of each section",
+	FactsVerified: "facts verified: %d", TLDRModel: "checked against verified statements", TLDRFallback: "first verified statement of each section", TLDRCount: "conclusions: %d",
 	ComparisonNote: "Cell: value (year of data) and source. \"—\": not found in verified sources.",
 	OfficialNote:   "\"Official\" is derived from the domain (government, education and program sites).",
 }
@@ -241,7 +241,7 @@ func writeFactsTable(b *strings.Builder, facts []domain.ReportFact, layout repor
 	b.WriteString("\n")
 }
 
-var reportYearPattern = regexp.MustCompile(`(?:^|[^0-9])(20[0-3][0-9])(?:[^0-9]|$)`)
+var reportYearPattern = regexp.MustCompile(`\b(20[0-3][0-9])\b`)
 
 // reportSourceYear is the latest year named by the source title or URL.
 func reportSourceYear(source citationEvidence) string {
@@ -455,7 +455,7 @@ func renderSectionedReport(report *domain.ResearchReportState, goal, taskID stri
 	if report.TLDRStatus == "model" {
 		tldrNote = layout.TLDRModel
 	}
-	fmt.Fprintf(&b, "| %s | %d | %s |\n", layout.TLDR, len(report.TLDR), tldrNote)
+	fmt.Fprintf(&b, "| %s | %s | %s |\n", layout.TLDR, tldrNote, fmt.Sprintf(layout.TLDRCount, len(report.TLDR)))
 	for _, section := range report.Sections {
 		notes := []string{}
 		if section.Limitation != "" {
