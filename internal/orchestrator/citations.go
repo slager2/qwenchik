@@ -138,9 +138,8 @@ func (w *Worker) citationCatalogue(ctx context.Context, taskID string, results m
 			if !strings.Contains(item.Excerpt, excerpt) {
 				continue
 			}
-			// 8000 bytes hold a whole 4000-rune excerpt and most of an
-			// agentSearcher extract excerpt while the critic catalogue (12-16
-			// sources) still fits the context. A multi-span excerpt keeps a
+			// The critic catalogue (12-16 sources) must fit the context. A
+			// multi-span excerpt keeps a
 			// verbatim prefix of every span, so later spans are not lost;
 			// 16000 bytes keep a whole 8000-rune Cyrillic excerpt and 16
 			// sources (~256 KB) fit the request budget of a 128k context.
