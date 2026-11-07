@@ -768,6 +768,31 @@ func (w *Worker) writeResearchReport(ctx context.Context, task domain.Task, goal
 				return "", err
 			}
 		}
+		if section.FactsStatus != "" {
+			if validateReportFacts(section.Facts, selected) != nil {
+				return "", sqlite.ErrCheckpointInvalid
+			}
+		} else if !report.ByteBudgetFallback {
+			seen := map[string]bool{}
+			pending := 0
+			for _, earlier := range report.Sections[:index] {
+				for _, fact := range earlier.Facts {
+					seen[reportFactKey(fact)] = true
+				}
+			}
+			for _, later := range report.Sections[index+1:] {
+				if later.Status == "pending" {
+					pending++
+				}
+			}
+			// Later sections keep their writer and critic calls, the TL;DR its one.
+			if err := w.extractReportFacts(ctx, task, goal, inputHash, section, selected, &sourceAliases, report.Entities, reportAttributesInUse(report.Sections[:index]), seen, 2*pending+1); err != nil {
+				return "", err
+			}
+			if _, err := w.repo.SaveCheckpoint(ctx, task.ID, 1, *state); err != nil {
+				return "", err
+			}
+		}
 		if section.Status != "supported" {
 			report.Outcome = "partial"
 		} else {

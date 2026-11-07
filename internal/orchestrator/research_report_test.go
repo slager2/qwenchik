@@ -82,7 +82,8 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 			t.Fatalf("report schema exposes raw evidence IDs: %s", request.JSONSchema)
 		}
 		russian := strings.Contains(request.Messages[0].Content, "in Russian")
-		if len(input.Claims) == 0 && (mode == "russian") != russian {
+		// The fact checker only compares quotes; it writes no report text.
+		if len(input.Claims) == 0 && !strings.Contains(request.Messages[0].Content, "You check fact records") && (mode == "russian") != russian {
 			t.Fatalf("report prompt language does not follow the question: %s", request.Messages[0].Content)
 		}
 		if strings.Contains(request.Messages[0].Content, "Create a small research report outline") {
@@ -92,6 +93,9 @@ func reportModelFixture(t *testing.T, mode string) *researchRunModel {
 			// Duplicate IDs are schema-valid model content, not corrupt durable state.
 			raw, err := json.Marshal(map[string]any{"title": "Research Report Outline: Проверяемый отчёт", "sections": []map[string]any{{"title": "Основные сведения", "evidence_ids": []string{input.Notes[0].EvidenceID, input.Notes[0].EvidenceID}, "criteria": input.IDs}, {"title": "Независимый источник", "evidence_ids": []string{input.Notes[1].EvidenceID}, "criteria": []string{}}}})
 			return string(raw), err
+		}
+		if reply, ok := reportFactsFixtureReply(request, input.Evidence); ok {
+			return reply, nil
 		}
 		if len(input.Claims) > 0 {
 			covered := input.Criteria
@@ -237,11 +241,13 @@ func TestSectionedReportsPersistResumeCorrectAndFallback(t *testing.T) {
 			}
 			// One failed section must not skip the next: section 1 uses its
 			// draft and correction, section 2 still gets its own attempt.
-			if mode == "fallback" && len(model.calls()) != 6 {
+			// Each section also gets a fact extraction and a fact check.
+			if mode == "fallback" && len(model.calls()) != 10 {
 				t.Fatalf("later section was not attempted after one failure: calls=%d", len(model.calls()))
 			}
-			// planner + verifier + outline + two sections + two section critics.
-			if (mode == "valid" || mode == "artifact_recovery") && len(model.calls()) != 7 {
+			// planner + verifier + outline + two sections + two section critics
+			// + two fact extractions + two fact checks.
+			if (mode == "valid" || mode == "artifact_recovery") && len(model.calls()) != 11 {
 				t.Fatalf("completed report calls replayed after reopen: count=%d", len(model.calls()))
 			}
 			items, err := f.store.Artifacts(ctx, f.task.ID)

@@ -13,6 +13,30 @@ type ReportSection struct {
 	Review         json.RawMessage `json:"citation_review,omitempty"`
 	Limitation     string          `json:"limitation,omitempty"`
 	RejectedDraft  string          `json:"rejected_draft,omitempty"`
+	// Facts are verified fact records rendered as tables; FactsStatus is
+	// "" before extraction, then "extracted", "skipped" or "failed".
+	Facts       []ReportFact `json:"facts,omitempty"`
+	FactsStatus string       `json:"facts_status,omitempty"`
+}
+
+// ReportFact is one verified entity/attribute/value record. Quote is an
+// exact span of the cited evidence excerpt; Check says how it was verified
+// ("quote+value": deterministic only, "critic": also confirmed by the
+// fact checker).
+type ReportFact struct {
+	Entity     string `json:"entity"`
+	Attribute  string `json:"attribute"`
+	Value      string `json:"value"`
+	Year       string `json:"year,omitempty"`
+	EvidenceID string `json:"evidence_id"`
+	Quote      string `json:"quote"`
+	Check      string `json:"check"`
+}
+
+// ReportBullet is one TL;DR conclusion built only from verified statements.
+type ReportBullet struct {
+	Text        string   `json:"text"`
+	EvidenceIDs []string `json:"evidence_ids"`
 }
 
 type ResearchReportState struct {
@@ -25,6 +49,9 @@ type ResearchReportState struct {
 	InputHash             string                   `json:"input_hash"`
 	Title                 string                   `json:"title"`
 	ExecutiveSummary      string                   `json:"executive_summary"`
+	TLDR                  []ReportBullet           `json:"tldr,omitempty"`
+	TLDRStatus            string                   `json:"tldr_status,omitempty"`
+	Entities              []string                 `json:"entities,omitempty"`
 	ResearchQuestion      string                   `json:"research_question"`
 	Sections              []ReportSection          `json:"sections"`
 	Unresolved            []string                 `json:"unresolved_criteria"`
