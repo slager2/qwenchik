@@ -7,7 +7,7 @@
 #   qwenchik open                            открыть UI в браузере
 #   qwenchik logs [model|app|search]         хвост журналов
 #   qwenchik install-search                  установить agentSearcher (локальный поиск)
-#   qwenchik model [4b|9b]                   показать или сменить модель (выбор сохраняется)
+#   qwenchik model [4b|9b]                   показать или сменить модель и её контекст (выбор сохраняется)
 #   qwenchik start --model 9b                запустить с выбранной моделью
 #
 # Модель и приложение работают нативно через systemd user units (GPU/Vulkan
@@ -136,37 +136,52 @@ stop_agentsearcher() {
   rm -f "$AGENTSEARCHER_PID"
 }
 
-# Модели: имя -> файл GGUF (рядом с моделью из базового unit) и доп. флаги.
-# 9B занимает почти все 6 ГБ видеопамяти при контексте 64k: --fit off не даёт
-# llama.cpp самой урезать контекст, который приложение ожидает (65536).
+# Модели: имя -> файл GGUF (рядом с моделью из базового unit), контекст,
+# тип KV-кэша и доп. флаги. Обе модели — гибридная архитектура qwen35 (KV-кэш
+# только у каждого 4-го слоя), обучены на 262144 токенах. Замеры на RTX 3050
+# 6 ГБ (README, «On-demand launch»): 9B со сжатым KV turbo3 держит 131072 в
+# 5.5 ГБ без потерь на поиске фактов в 120k токенов; q8_0 не влезает уже на
+# 98304, q4_0 — на 131072, turbo2 искажает цитаты. --fit off не даёт llama.cpp
+# самой урезать контекст, который ждёт приложение. 4B с q8_0 на 131072 — 5.1 ГБ.
 MODEL_UNIT="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/qwenchik-model.service"
 MODEL_DROPIN="$MODEL_UNIT.d/model.conf"
+APP_UNIT="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/qwenchik-app.service"
+APP_DROPIN="$APP_UNIT.d/context.conf"
 MODEL_CHOICE="$CONFIG_DIR/model"
 model_file() { case $1 in 4b) echo Qwen3.5-4B-Q4_K_M.gguf ;; 9b) echo Qwen3.5-9B-IQ4_XS.gguf ;; *) return 1 ;; esac; }
-model_extra() { case $1 in 9b) echo ' "--fit" "off"' ;; *) echo '' ;; esac; }
+model_ctx() { case $1 in 4b) echo 131072 ;; 9b) echo 131072 ;; esac; }
+model_kv() { case $1 in 4b) echo q8_0 ;; 9b) echo turbo3 ;; esac; }
+model_extra() { echo ' "--fit" "off"'; }
 current_model() { [[ -f $MODEL_CHOICE ]] && cat "$MODEL_CHOICE" || echo 4b; }
 
 apply_model() {
-  local name=$1 file base dir line
+  local name=$1 file base dir line ctx kv
   file=$(model_file "$name") || die "неизвестная модель: $name (есть 4b, 9b)"
   [[ -f $MODEL_UNIT ]] || die "нет $MODEL_UNIT: сначала qagent runtime install"
   base=$(grep -m1 '^ExecStart=' "$MODEL_UNIT") || die "в $MODEL_UNIT нет ExecStart"
   dir=$(sed -E 's#.*"-m" "([^"]*)/[^"/]*".*#\1#' <<<"$base")
   [[ -f "$dir/$file" ]] || die "нет файла модели $dir/$file"
-  mkdir -p "$CONFIG_DIR" "$(dirname "$MODEL_DROPIN")"
+  ctx=$(model_ctx "$name") kv=$(model_kv "$name")
+  mkdir -p "$CONFIG_DIR" "$(dirname "$MODEL_DROPIN")" "$(dirname "$APP_DROPIN")"
   echo "$name" >"$MODEL_CHOICE"
-  if [[ $name == 4b && $base == *"/$file\""* ]]; then
-    rm -f "$MODEL_DROPIN"
-  else
-    line=$(sed -E "s#\"-m\" \"[^\"]*\"#\"-m\" \"$dir/$file\"#" <<<"$base")$(model_extra "$name")
-    printf '[Service]\n# Создано qwenchik model %s\nExecStart=\n%s\n' "$name" "$line" >"$MODEL_DROPIN"
-  fi
+  # Модель, контекст и KV-кэш заменяются в строке базового unit; убираем
+  # прежние --fit, чтобы флаг не повторялся.
+  line=$(sed -E -e "s#\"-m\" \"[^\"]*\"#\"-m\" \"$dir/$file\"#" \
+    -e "s#\"-c\" \"[0-9]+\"#\"-c\" \"$ctx\"#" \
+    -e "s#\"-ctk\" \"[^\"]*\"#\"-ctk\" \"$kv\"#" -e "s#\"-ctv\" \"[^\"]*\"#\"-ctv\" \"$kv\"#" \
+    -e 's# "--fit" "[^"]*"##g' <<<"$base")$(model_extra "$name")
+  [[ $line == *"\"-c\" \"$ctx\""* && $line == *"\"-ctk\" \"$kv\""* && $line == *"\"-ctv\" \"$kv\""* ]] ||
+    die "в $MODEL_UNIT нет флагов -c/-ctk/-ctv: переустановите qagent runtime install"
+  printf '[Service]\n# Создано qwenchik model %s\nExecStart=\n%s\n' "$name" "$line" >"$MODEL_DROPIN"
+  # Приложение блокирует запросы, если его LLM_CONTEXT_LENGTH не совпадает с
+  # n_ctx сервера: пишем контекст в drop-in приложения вместе с моделью.
+  printf '[Service]\n# Создано qwenchik model %s: контекст совпадает с -c модели\nEnvironment="LLM_CONTEXT_LENGTH=%s"\n' "$name" "$ctx" >"$APP_DROPIN"
   systemctl --user daemon-reload
 }
 
 cmd_model() {
   if [[ -z ${1:-} ]]; then
-    echo "Текущая модель: $(current_model) ($(model_file "$(current_model)"))"
+    echo "Текущая модель: $(current_model) ($(model_file "$(current_model)"), контекст $(model_ctx "$(current_model)"), KV $(model_kv "$(current_model)"))"
     return 0
   fi
   apply_model "$1"
