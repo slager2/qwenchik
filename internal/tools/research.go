@@ -319,7 +319,11 @@ func RegisterResearchTools(registry *Registry, runtime ResearchTools) error {
 				return passageFallback(extractionFailure(ctx, fetched, research.ErrExtractionEmpty))
 			}
 			if utf8.RuneCountInString(extracted.Text) > pdfPolicy.MaxTextRunes {
-				return nil, extractionFailure(ctx, fetched, pdfextract.ErrTextTooLarge)
+				// Keep the first MaxTextRunes of a long document instead of
+				// rejecting it: official calls and guidelines (e.g. a 356 KB
+				// GKS .docx) were dropped entirely. Excerpts stay verbatim
+				// spans of the stored, truncated text.
+				extracted.Text = string([]rune(extracted.Text)[:pdfPolicy.MaxTextRunes])
 			}
 			if extracted.PageCount > pdfPolicy.MaxPages {
 				return nil, extractionFailure(ctx, fetched, pdfextract.ErrTooManyPages)
